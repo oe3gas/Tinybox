@@ -63,7 +63,8 @@ STATUS_TEXT = {200: "OK", 303: "See Other", 400: "Bad Request", 401: "Unauthoriz
                500: "Internal Server Error"}
 
 STATE_LABEL = {State.COMMAND: "idle", State.SEND_SUBJECT: "writing a message",
-               State.SEND_BODY: "writing a message", State.CLOSED: "closing"}
+               State.SEND_BODY: "writing a message", State.CLOSED: "closing",
+               State.CHAT: "chat"}
 
 
 class HttpError(Exception):
@@ -393,7 +394,8 @@ class WebServer:
 
     def _sessions(self) -> list[dict]:
         return [{"call": s.call, "origin": s.origin, "since": s.started,
-                 "state": STATE_LABEL.get(s.state, s.state.name.lower())}
+                 "state": (f"chat {s.chat_board}" if s.chat_board
+                           else STATE_LABEL.get(s.state, s.state.name.lower()))}
                 for s in self.app.registry]
 
     def _disconnect(self, call: str) -> list[str]:

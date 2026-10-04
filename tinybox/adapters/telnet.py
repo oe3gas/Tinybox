@@ -102,8 +102,8 @@ class TelnetConnection:
                 line.append(b)
                 self._echo(bytes([b]))
 
-    async def _timed_line(self) -> str:
-        timeout = self.app.cfg.mailbox.idle_timeout_min * 60
+    async def _timed_line(self, idle_timeout: bool = True) -> str:
+        timeout = self.app.cfg.mailbox.idle_timeout_min * 60 if idle_timeout else None
         line = await asyncio.wait_for(self.read_line(), timeout)
         await self.writer.drain()
         return line
@@ -143,7 +143,8 @@ class TelnetConnection:
             session.start()
             await self.writer.drain()
             while not session.closed:
-                session.handle_line(await self._timed_line())
+                # reading along in a chat board is allowed: no idle timeout there
+                session.handle_line(await self._timed_line(not session.idle_exempt))
                 await self.writer.drain()
         except asyncio.TimeoutError:
             transport.write(texts.IDLE_TIMEOUT + "\r")

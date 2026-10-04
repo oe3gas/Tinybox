@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4   # 4: chat_lines
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -37,6 +37,14 @@ CREATE TABLE IF NOT EXISTS users (
     call       TEXT PRIMARY KEY,
     last_login TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chat_lines (               -- only boards with history
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    board   TEXT NOT NULL,
+    call    TEXT NOT NULL,
+    text    TEXT NOT NULL,
+    created TEXT NOT NULL                             -- ISO 8601 UTC
+);
+CREATE INDEX IF NOT EXISTS chat_lines_board ON chat_lines (board, created);
 """
 
 
@@ -61,6 +69,14 @@ class Message:
     replace_key: str | None = None
     expires: str | None = None
     brocast: str | None = None          # brocast page (JSON text) delivered with the bulletin
+
+
+@dataclass
+class ChatLine:
+    board: str
+    call: str
+    text: str
+    created: str
 
 
 @dataclass
@@ -180,6 +196,35 @@ class Store:
         with self._db:
             self._db.executemany("DELETE FROM messages WHERE id = ?", [(i,) for i in ids])
         return ids
+
+    # --- chat -----------------------------------------------------------
+
+    def chat_add(self, board: str, call: str, text: str, created: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO chat_lines (board, call, text, created) VALUES (?, ?, ?, ?)",
+                (board, call, text, created))
+
+    def chat_recent(self, board: str, since_iso: str, limit: int) -> list[ChatLine]:
+        """The newest `limit` lines since `since_iso`, oldest first."""
+        rows = self._db.execute(
+            "SELECT board, call, text, created FROM chat_lines"
+            " WHERE board = ? AND created >= ? ORDER BY id DESC LIMIT ?",
+            (board, since_iso, limit)).fetchall()
+        return [ChatLine(**dict(r)) for r in reversed(rows)]
+
+    def chat_purge(self, keep: dict[str, str]) -> int:
+        """keep: board -> oldest allowed ISO time. Lines of other boards
+        (removed from the config or switched to live) are deleted too."""
+        with self._db:
+            n = 0
+            for board, cutoff in keep.items():
+                n += self._db.execute("DELETE FROM chat_lines WHERE board = ? AND created < ?",
+                                      (board, cutoff)).rowcount
+            marks = ",".join("?" * len(keep))
+            n += self._db.execute(f"DELETE FROM chat_lines WHERE board NOT IN ({marks})",
+                                  list(keep)).rowcount
+        return n
 
     # --- JLOG / users ---------------------------------------------------
 

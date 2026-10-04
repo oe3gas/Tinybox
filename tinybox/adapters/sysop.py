@@ -117,7 +117,8 @@ class SysopConsole:
         self.out(texts.WHO_HEADER, *[
             texts.WHO_ROW.format(call=s.call, via=s.origin,
                                  since=s.started[:16].replace("T", " "),
-                                 state=s.state.name.lower().replace("_", " "))
+                                 state=(f"chat {s.chat_board}" if s.chat_board
+                                        else s.state.name.lower().replace("_", " ")))
             for s in sessions])
 
     def cmd_monitor(self, arg: str) -> None:

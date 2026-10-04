@@ -67,6 +67,21 @@ enabled  = yes                 # scripts drop *.txt here, TinyBox makes bulletin
 dir      = eingang             # processed: eingang/erledigt, rejected: eingang/fehler
 poll_sec = 10
 
+[chat]
+enabled       = yes            # command C: chat boards for logged-in users
+history_lines = 20             # max lines shown when joining a board
+max_line      = 200            # max characters per chat line
+
+[chat_boards]
+# Fixed boards, set by the sysop. One line per board:
+#   NAME = keep  description
+# NAME: 1-8 letters/digits. keep: live (nothing stored) or how long the
+# history is kept, e.g. 12h or 7d (max 365d). Order = order in the list.
+TREFF = 7d    General meeting point
+DX    = 24h   DX spots and news
+TECH  = 30d   Technical questions
+RUNDE = live  Live round, nothing is stored
+
 [mqtt]
 enabled       = no             # milestone M5
 host          = 127.0.0.1

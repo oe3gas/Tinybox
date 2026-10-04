@@ -80,6 +80,30 @@ Im TinyBox-Fenster tippen. Es gelten alle Mailbox-Befehle mit Sysop-Rechten
 Nachricht beenden mit `/EX`. Log-Meldungen und Monitor erscheinen
 zwischen den Eingaben – das ist normal.
 
+## Chat
+
+Eingeloggte Benutzer (Funk, Telnet) wechseln mit `C` in den Chat: `C` zeigt die
+Boards, `C TREFF` oder `C 1` betritt eines. Dort ist jede Zeile Chat-Text,
+Befehle beginnen mit `/`: `/Q` (oder `/EX`, `^Z`) zurück zur Mailbox, `/W` wer ist
+da, `/L` Boards, `/J board` wechseln, `/H` Hilfe.
+
+Die Boards legt der Sysop in `tinybox.conf` unter `[chat_boards]` fest
+(`NAME = Aufbewahrung Beschreibung`):
+
+```
+[chat_boards]
+TREFF = 7d    General meeting point
+DX    = 24h   DX spots and news
+RUNDE = live  Live round, nothing is stored
+```
+
+`live` = nichts wird gespeichert, nur wer gerade im Board ist, liest mit.
+`12h`/`7d` = Verlauf so lange aufbewahren; beim Betreten werden die letzten
+`history_lines` Zeilen gezeigt (`[chat]`). Ältere Zeilen löscht TinyBox
+automatisch. Im Chat gilt kein Idle-Timeout (Mitlesen ist erlaubt), zurück in
+der Mailbox wieder `idle_timeout_min`. Änderungen an den Boards wirken nach einem Neustart. Konsole (`W`)
+und Weboberfläche zeigen, wer in welchem Board ist; mitchatten nur über die Mailbox.
+
 ## Tests
 
 Doppelklick auf `runtests.bat`.

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import uuid
 
+from .chat import ChatHub
 from .config import DEST_RE, Config, base_call, is_valid_call, normalize_call
 from .events import EventBus
 from .store import Message, Store, utc_now
@@ -32,6 +33,7 @@ class MessageService:
         self.store = store
         self.bus = bus
         self.cfg = cfg
+        self.chat = ChatHub(store, bus, cfg)
 
     # --- helpers --------------------------------------------------------
 

@@ -37,6 +37,7 @@ class State(Enum):
     SEND_SUBJECT = 2
     SEND_BODY = 3
     CLOSED = 4
+    CHAT = 5
 
 
 class Session:
@@ -52,6 +53,7 @@ class Session:
         self.monitor = monitor  # log traffic to logger "tinybox.monitor"
         self.started = utc_now()
         self.state = State.COMMAND
+        self.chat_board: str | None = None  # set by ChatHub while in a board
         # message being composed
         self._to = ""
         self._type = "P"
@@ -88,6 +90,11 @@ class Session:
     # --- lifecycle ------------------------------------------------------
 
     @property
+    def idle_exempt(self) -> bool:
+        """In a chat board, reading along without typing is allowed."""
+        return self.state == State.CHAT
+
+    @property
     def closed(self) -> bool:
         return self.state == State.CLOSED
 
@@ -99,6 +106,9 @@ class Session:
             lines.append(self.cfg.mailbox.welcome_text)
         n = len(self.service.unread_for(self.call))
         lines.append(texts.NEW_MSGS.format(n=n) if n else texts.NO_NEW_MSGS)
+        chat = self.service.chat
+        if chat.enabled and chat.total_members():
+            lines.append(texts.CHAT_ACTIVE.format(n=chat.total_members()))
         self.out(*lines)
         self.prompt()
 
@@ -113,6 +123,7 @@ class Session:
         if self.state in (State.SEND_SUBJECT, State.SEND_BODY):
             log.info("%s disconnected while sending, message discarded", self.call)
         self.state = State.CLOSED
+        self.service.chat.leave(self, reason=texts.CHAT_REASON_DISC)
         self.service.logout(self.call, self.origin)
 
     # --- input ----------------------------------------------------------
@@ -131,12 +142,16 @@ class Session:
                 self._on_subject(line)
             elif self.state == State.SEND_BODY:
                 self._on_body_line(line)
+            elif self.state == State.CHAT:
+                from . import chatcmd  # local import avoids a cycle
+                chatcmd.handle(self, line)
         except Exception:
             # A bug or a storage error must not kill the connection (or, over
             # AGW, the whole radio link). Log the traceback, tell the user.
             logging.getLogger("tinybox").exception(
                 "%s: internal error handling %r (state %s)", self.call, line, self.state.name)
             if self.state != State.CLOSED:
+                self.service.chat.leave(self)
                 self.state = State.COMMAND
                 self.out(texts.INTERNAL_ERROR)
         if self.state == State.COMMAND:
@@ -148,6 +163,10 @@ class Session:
         self._to, self._type = to_call, type
         self._subject, self._body, self._body_bytes = "", [], 0
         self.state = State.SEND_SUBJECT
+        # written without CR so the user types on the same line -> log it here,
+        # out() would append a line break
+        if self.monitor:
+            log.info("%s > %s", self.call, texts.SUBJECT_PROMPT.rstrip())
         self.transport.write(texts.SUBJECT_PROMPT)
 
     def _on_subject(self, line: str) -> None:

@@ -140,6 +140,57 @@ class InboxCfg:
     poll_sec: int = 10
 
 
+# Chat board name, e.g. TREFF, DX, RUNDE
+BOARD_RE = re.compile(r"^[A-Z0-9]{1,8}$")
+KEEP_RE = re.compile(r"^(\d+)([HD])$")
+MAX_KEEP_HOURS = 365 * 24
+
+
+@dataclass
+class ChatBoard:
+    name: str
+    keep_hours: int        # 0 = live only, nothing is stored
+    description: str = ""
+
+    @property
+    def live(self) -> bool:
+        return self.keep_hours == 0
+
+    @property
+    def keep_label(self) -> str:
+        if self.live:
+            return "live"
+        if self.keep_hours % 24 == 0 and self.keep_hours >= 48:
+            return f"{self.keep_hours // 24}d"
+        return f"{self.keep_hours}h"
+
+
+@dataclass
+class ChatCfg:
+    enabled: bool = False
+    history_lines: int = 20     # max lines replayed when joining a board
+    max_line: int = 200         # max characters per chat line
+    boards: list[ChatBoard] = field(default_factory=list)
+
+    def board(self, name: str) -> ChatBoard | None:
+        name = name.strip().upper()
+        return next((b for b in self.boards if b.name == name), None)
+
+
+def parse_keep(value: str) -> int:
+    """'live' -> 0, '12h' -> 12, '7d' -> 168 (hours)."""
+    value = value.strip().upper()
+    if value == "LIVE":
+        return 0
+    m = KEEP_RE.match(value)
+    if not m:
+        raise ValueError(f"'{value}' must be live, <n>h or <n>d")
+    hours = int(m.group(1)) * (24 if m.group(2) == "D" else 1)
+    if not 1 <= hours <= MAX_KEEP_HOURS:
+        raise ValueError(f"'{value}' must be between 1h and 365d")
+    return hours
+
+
 @dataclass
 class Config:
     path: Path
@@ -154,6 +205,7 @@ class Config:
     mqtt: MqttCfg
     brocast: BrocastCfg = None  # type: ignore[assignment]  # set by load()
     inbox: InboxCfg = None  # type: ignore[assignment]  # set by load()
+    chat: ChatCfg = field(default_factory=ChatCfg)
 
 
 def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
@@ -336,4 +388,36 @@ def load(path: str | Path) -> Config:
 
     return Config(path=path, station=station, direwolf=direwolf, mailbox=mailbox,
                   telnet=telnet, web=web, console=console, storage=storage, logging=logging_cfg,
-                  mqtt=mqtt, brocast=brocast, inbox=inbox)
+                  mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp))
+
+
+def _load_chat(cp: configparser.ConfigParser) -> ChatCfg:
+    """[chat] general settings, [chat_boards] the fixed boards (set by the sysop).
+
+    [chat_boards]
+    TREFF = 7d    Meeting point     (history: last 7 days)
+    RUNDE = live  Live only         (nothing is stored)
+    """
+    chat = ChatCfg(enabled=_get(cp, "chat", "enabled", False, bool),
+                   history_lines=_get(cp, "chat", "history_lines", 20, int),
+                   max_line=_get(cp, "chat", "max_line", 200, int))
+    _check_range("chat", "history_lines", chat.history_lines, 0, 200)
+    _check_range("chat", "max_line", chat.max_line, 40, 1000)
+    if cp.has_section("chat_boards"):
+        for key, value in cp.items("chat_boards", raw=True):
+            if key in cp.defaults():
+                continue
+            name = key.strip().upper()
+            if not BOARD_RE.match(name):
+                raise ConfigError(f"[chat_boards] {key}: board name must be 1-8 letters/digits")
+            parts = value.split(None, 1)
+            if not parts:
+                raise ConfigError(f"[chat_boards] {name}: missing live, <n>h or <n>d")
+            try:
+                keep = parse_keep(parts[0])
+            except ValueError as exc:
+                raise ConfigError(f"[chat_boards] {name}: {exc}") from None
+            chat.boards.append(ChatBoard(name, keep, parts[1].strip() if len(parts) > 1 else ""))
+    if chat.enabled and not chat.boards:
+        raise ConfigError("[chat] enabled = yes, but [chat_boards] defines no boards")
+    return chat

@@ -45,6 +45,7 @@ async def housekeeping(app: App) -> None:
     # every minute: bulletins from the inbox may be valid for only 90 minutes
     while True:
         app.service.purge_expired()
+        app.service.chat.purge()
         await asyncio.sleep(60)
 
 

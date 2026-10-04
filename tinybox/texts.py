@@ -10,13 +10,15 @@ HELLO = "Welcome to TinyBox {mailbox}, hello {call}."
 NEW_MSGS = "You have {n} new message(s)."
 NO_NEW_MSGS = "No new messages."
 
-PROMPT = "TinyBox (A,B,H,J,K,L,R,S,V,?) > "
-PROMPT_SYSOP = "TinyBox SYSOP (A,B,E,H,J,K,L,R,S,V,?) > "
+PROMPT = "TinyBox (A,B,C,H,J,K,L,R,S,V,?) > "
+PROMPT_SYSOP = "TinyBox SYSOP (A,B,C,E,H,J,K,L,R,S,V,?) > "
 
 HELP = [
     "TinyBox commands:",
     "  A          Abort output (stop a long list or message)",
     "  B          Bye (log off)",
+    "  C          Chat: list the chat boards",
+    "  C board    Chat: join a board (name or number)",
     "  DICT       Download the brocast dictionary (text, for the listener import)",
     "  H or ?     This help",
     "  J          Recently connected stations",
@@ -79,6 +81,40 @@ BODY_PROMPT = "Enter message, end with /EX or ^Z  (/AB = cancel):"
 SAVED = "Msg {id} saved."
 CANCELLED = "Message cancelled."
 INTERNAL_ERROR = "*** Internal error, command not completed. Sysop is informed."
+
+# chat boards
+CHAT_OFF = "Chat is not available here."
+CHAT_NOT_CONSOLE = "The chat is for mailbox users (radio/telnet), not on the console."
+CHAT_ACTIVE = "{n} station(s) in the chat right now - type C to see the boards."
+CHAT_LIST_HEADER = " #  BOARD    KEEP  USERS  DESCRIPTION"
+CHAT_LIST_ROW = "{n:>2}  {board:<8} {keep:<5} {users:>5}  {desc}"
+CHAT_LIST_FOOT = "Join with C board (or C n). KEEP: history time, live = not stored."
+CHAT_NO_BOARD = "No such chat board: {board}"
+CHAT_ALREADY = "You are already in {board}."
+CHAT_HEADER = "*** Chat board {board} - {desc} [{keep}]"
+CHAT_LIVE_NOTE = "Live board: nothing is stored, only stations here now read along."
+CHAT_HISTORY = "--- Last messages ({keep}, UTC) ---"
+CHAT_HISTORY_ROW = "{time} {call}: {text}"
+CHAT_HISTORY_END = "--- End of history ---"
+CHAT_HISTORY_NONE = "No messages in the last {keep}."
+CHAT_WHO = "In this board: {calls}"
+CHAT_ALONE = "Nobody else is here right now."
+CHAT_HINT = "Type your text and press Enter. /H help, /Q back to the mailbox."
+CHAT_LINE = "{call}: {text}"
+CHAT_JOINED = "*** {call} joined {board}"
+CHAT_LEFT = "*** {call} left {board}{reason}"
+CHAT_REASON_DISC = " (disconnected)"
+CHAT_BACK = "Left chat {board}, back in the mailbox."
+CHAT_CUT = "(Line cut to {max} characters.)"
+CHAT_UNKNOWN = "Unknown chat command. /H for help."
+CHAT_HELP = [
+    "Chat commands (everything else is sent to the board):",
+    "  /Q         Back to the mailbox (also /EX or ^Z)",
+    "  /W         Who is in this board",
+    "  /L         List all boards",
+    "  /J board   Change to another board",
+    "  /H         This help",
+]
 
 JLOG_HEADER = "Call       Last seen (UTC)   Count"
 JLOG_ROW = "{call:<10} {last:<17} {count:>5}"

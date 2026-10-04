@@ -8,6 +8,7 @@ Events:
     message.created   message.read   message.deleted   message.edited
     message.expired   (ids=[...], bulletins removed by housekeeping)
     session.connected session.disconnected
+    chat.joined chat.left (board, call)   chat.message (board, call, text, created)
 """
 
 from __future__ import annotations

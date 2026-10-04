@@ -6,7 +6,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Callable
 
-from . import dictfile, texts
+from . import chatcmd, dictfile, texts
 from .service import ServiceError
 from .store import Message
 
@@ -186,6 +186,8 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "A": cmd_abort,
     "B": cmd_bye,
     "BYE": cmd_bye,
+    "C": chatcmd.cmd_chat,
+    "CHAT": chatcmd.cmd_chat,
     "DICT": cmd_dict,
     "E": cmd_edit,
     "H": cmd_help,

@@ -328,6 +328,7 @@ class AgwAdapter:
             now = time.monotonic()
             for conn in list(self.conns.values()):
                 if (conn.session and not conn.session.closed
+                        and not conn.session.idle_exempt  # reading along in a chat
                         and now - conn.last_activity > limit):
                     log.info("%s: idle timeout", conn.remote)
                     conn.write(texts.IDLE_TIMEOUT + "\r")
