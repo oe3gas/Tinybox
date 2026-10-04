@@ -6,13 +6,14 @@ Datenbanken (`data/`, `brocast/data/`), Logs, `eingang/`, Tokens,
 `tinybox.conf` und `brocast/brocastd.conf` (Vorlagen: `*.conf.example`).
 
 Voraussetzung auf beiden PCs: Git for Windows (https://git-scm.com/download/win).
+Die Befehle sind für PowerShell.
 
 ## Einmalig auf PC1: ans GitHub-Repo anbinden
 
 ```
-cd /d E:\Tinybox
+cd E:\Tinybox
 git config --global --add safe.directory E:/Tinybox
-git remote add origin https://github.com/<DEIN-USER>/<REPO>.git
+git remote add origin https://github.com/oe3gas/Tinybox.git
 git push -u origin main
 ```
 
@@ -24,9 +25,9 @@ Vorher sichern: `C:\Tinybox\tinybox.conf` und `C:\Tinybox\brocast\brocastd.conf`
 Programme (TinyBox, brocastd) beenden.
 
 ```
-cd /d C:\Tinybox
+cd C:\Tinybox
 git init -b main
-git remote add origin https://github.com/<DEIN-USER>/<REPO>.git
+git remote add origin https://github.com/oe3gas/Tinybox.git
 git fetch origin
 git checkout -f -B main --track origin/main
 ```
@@ -48,7 +49,7 @@ git push
 PC2, Update einspielen:
 
 ```
-cd /d C:\Tinybox
+cd C:\Tinybox
 git pull
 ```
 
