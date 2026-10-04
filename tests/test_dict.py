@@ -41,6 +41,13 @@ class DictFileTests(unittest.TestCase):
         self.assertEqual(framed[0], f"#BROCAST-DICT BEGIN v3 lines=4 sha256={d.sha256}")
         self.assertEqual(framed[-1], "#BROCAST-DICT END")
 
+    def test_plain_scalar_becomes_quoted_ascii(self):
+        self.path.write_text("version: 1\nunits:\n  t:\n    sym: °C   # Grad\n"
+                             "    de: Böe \"stark\"\n", encoding="utf-8")
+        d = dictfile.prepare(self.path)
+        self.assertEqual(d.lines[-2], '    sym: "\\u00b0C"   # Grad')
+        self.assertEqual(d.lines[-1], '    de: "B\\u00f6e \\"stark\\""')
+
     def test_no_version(self):
         self.path.write_text("dictionary: x\n", encoding="utf-8")
         with self.assertRaises(dictfile.DictError):

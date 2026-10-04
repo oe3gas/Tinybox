@@ -103,8 +103,8 @@ class FakeBrocastd:
         await writer.drain()
         writer.close()
 
-    async def wait(self, n: int) -> None:
-        for _ in range(100):
+    async def wait(self, n: int, timeout: float = 2.0) -> None:
+        for _ in range(int(timeout / 0.02)):
             if len(self.requests) >= n:
                 return
             await asyncio.sleep(0.02)
@@ -207,6 +207,14 @@ class DeliveredPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((method, path, body["typ"]), ("PUT", f"/api/v1/pages/tinybox/{msg_id}", "text"))
 
 
+async def wait_offline(app, timeout: float = 10.0) -> None:
+    """A refused connect to localhost takes ~2 s on Windows (SYN retries), not ms."""
+    for _ in range(int(timeout / 0.05)):
+        if not app.brocast.online:
+            return
+        await asyncio.sleep(0.05)
+
+
 class CatchUpTests(unittest.IsolatedAsyncioTestCase):
     async def test_bulletins_arrive_when_brocastd_starts_later(self):
         brocast.RETRY_SEC, saved = 0.2, brocast.RETRY_SEC
@@ -219,10 +227,10 @@ class CatchUpTests(unittest.IsolatedAsyncioTestCase):
         try:
             app.service.create(from_call="OE3XYZ", to_call="WX", type="B", subject="x",
                                body="y", origin="inbox")
-            await asyncio.sleep(0.3)
+            await wait_offline(app)
             self.assertFalse(app.brocast.online)
             fake.server = await asyncio.start_server(fake._client, "127.0.0.1", port)
-            await fake.wait(1)                       # next retry syncs everything
+            await fake.wait(1, timeout=10)           # next retry syncs everything
             method, path, body = fake.requests[0]
             self.assertEqual((method, path), ("PUT", "/api/v1/pages/tinybox"))
             self.assertEqual(len(body["pages"]), 1)
@@ -241,8 +249,8 @@ class UnreachableTests(unittest.IsolatedAsyncioTestCase):
         try:
             msg_id = app.service.create(from_call="OE3XYZ", to_call="DX", type="B",
                                         subject="x", body="y", origin="radio")
-            await asyncio.sleep(0.3)
             self.assertIsNotNone(app.store.get(msg_id))
+            await wait_offline(app)
             self.assertFalse(app.brocast.online)
         finally:
             task.cancel()

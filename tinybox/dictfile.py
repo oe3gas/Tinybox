@@ -41,14 +41,30 @@ class DictText:
                 *self.lines, END]
 
 
+PLAIN_RE = re.compile(r"^(\s*(?:- )?[^\s\"'#][^:\"']*:\s+)([^\s\"'{\[&*!|>%@`#][^#]*?)(\s+#.*)?$")
+
+
+def _escape(ch: str) -> str:
+    return f"\\u{ord(ch):04x}" if ord(ch) <= 0xFFFF else f"\\U{ord(ch):08x}"
+
+
 def _ascii_line(line: str) -> str:
-    """Escape non-ASCII characters inside double quotes; keep everything else."""
+    """Make a YAML line pure ASCII without changing its value.
+
+    Non-ASCII inside "double quotes" becomes \\uXXXX. A plain (unquoted)
+    scalar like `de: Übung` is turned into `de: "\\u00dcbung"` first.
+    """
+    if not line.isascii():
+        m = PLAIN_RE.match(line)
+        if m and not m.group(2).isascii():
+            value = m.group(2).replace("\\", "\\\\").replace('"', '\\"')
+            line = f'{m.group(1)}"{value}"{m.group(3) or ""}'
     out, in_quotes, prev = [], False, ""
     for ch in line:
         if ch == '"' and prev != "\\":
             in_quotes = not in_quotes
         if ord(ch) > 127 and in_quotes:
-            out.append(f"\\u{ord(ch):04x}" if ord(ch) <= 0xFFFF else f"\\U{ord(ch):08x}")
+            out.append(_escape(ch))
         else:
             out.append(ch)
         prev = ch
