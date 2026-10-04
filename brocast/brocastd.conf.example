@@ -1,0 +1,49 @@
+; Vorlage. Kopieren nach brocastd.conf und pro PC anpassen
+; (PC1: mode = listener, PC2: mode = station + callsign).
+; brocastd.conf selbst ist nicht im Repo (.gitignore).
+
+; brocastd – Konfiguration
+; Spezifikation: https://claude.ai/code/artifact/bf4b91a7-7807-42d7-b72e-5739d9c257bd
+
+[brocastd]
+mode       = listener          ; station (senden + empfangen) oder listener (nur empfangen)
+callsign   =                   ; AX.25-Rufzeichen der Station, getrennt von der Mailbox (OE3GAS-1)
+data_dir   = data
+dictionary = brocast-core.yaml
+log_level  = INFO
+
+[direwolf]
+interface     = agw           ; agw (empfohlen) oder kiss – Unterschied: README, „Verbindung zu Direwolf“
+host          = 127.0.0.1
+agw_port      = 8000          ; Direwolf AGWPORT (TinyBox nutzt denselben Port, das geht)
+kiss_port     = 8001          ; Direwolf KISSPORT, nur bei interface = kiss
+channel       = 0             ; Direwolf-Funkkanal
+reconnect_sec = 5
+
+[station]
+ingest_host        = 127.0.0.1
+ingest_port        = 8090
+token              =           ; leer = kein Token nötig
+path               =           ; Digipeater, z. B. WIDE1-1 (leer = lokal)
+airtime_percent    = 15        ; Obergrenze Kanalbelegung durch brocast
+airtime_window_min = 10
+baud               = 1200
+txdelay_ms         = 300       ; wie TXDELAY in direwolf.conf
+burst_frames       = 4         ; höchstens n Frames pro Aussendung (PTT-Zyklus), 0 = keine Aufteilung
+burst_gap_s        = 3         ; Pause nach jeder Aussendung, Kanal frei für andere Stationen
+repeat_minutes     = 0,2,5,10  ; neue Revision sofort, dann nach 2, 5, 10 min ...
+max_interval_min   = 30        ; ... danach alle 30 min
+withdraw_repeats   = 3
+id_auto_start      = 24        ; Seiten 1..23 (1 Byte) bleiben für feste Seiten
+max_subpages       = 40
+dict_source        = Mailbox OE3GAS-1, Befehl DICT   ; wird mit der Dictionary-Version angekündigt (leer = nein)
+dict_broadcast_hours = 24     ; Dictionary gepackt über Funk senden, alle n Stunden (0 = aus)
+
+[logging]
+log_dir   = logs              ; Programm-Log, eine Datei pro Start (leer = nur Konsole)
+txlog_dir = logs              ; Sendeprotokoll (Station): Sendeprotokoll_<JJJJ-MM>.txt,
+                              ; jeder gesendete Frame mit Zeit (UTC); wird nie automatisch gelöscht
+
+[listener]
+web_host = 127.0.0.1
+web_port = 7733               ; Listener-Oberfläche: http://127.0.0.1:7733/

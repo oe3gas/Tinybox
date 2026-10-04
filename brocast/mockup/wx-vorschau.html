@@ -1,0 +1,1588 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>brocast Vorschau</title><style>/* brocast listener – light theme, strong dark text, no pastels (like TinyBox) */
+:root {
+  --ink: #111111; --ink-2: #222222; --ink-3: #4a4a4a;
+  --ground: #E9E9E6; --paper: #FFFFFF; --paper-2: #F6F6F3; --rule: #C9C9C4;
+  --accent: #0B4A8F; --accent-dark: #062F5C;
+  --ok: #0B7A2F; --warn: #9A5B00; --danger: #A3001B;
+  --tt-bg: #000000; --tt-yellow: #FFD400; --tt-cyan: #00D7E6; --tt-white: #FFFFFF;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Cascadia Mono", monospace;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; font: 15px/1.45 var(--sans); color: var(--ink); background: var(--ground);
+       display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; }
+.mono { font-family: var(--mono); }
+.grow { flex-grow: 1; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* top bar */
+.top { height: 64px; flex-shrink: 0; display: flex; align-items: center; gap: 22px; padding: 0 20px;
+       background: var(--paper); border-bottom: 3px solid var(--ink); }
+.logo { font: 700 23px var(--mono); letter-spacing: -0.02em; }
+.badge-call { font: 600 14px var(--mono); padding: 3px 8px; border: 2px solid var(--ink); border-radius: 4px;
+              white-space: nowrap; }
+.stat { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 500; white-space: nowrap; }
+.dot { width: 11px; height: 11px; border-radius: 6px; display: inline-block; background: var(--ink-3); }
+.dot.ok { background: var(--ok); }
+.dot.bad { background: var(--danger); }
+.search { height: 40px; width: 260px; border: 2px solid var(--ink); border-radius: 6px; padding: 0 12px;
+          font: 14px var(--sans); }
+.goto { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.goto input { width: 64px; height: 40px; border: 2px solid var(--ink); border-radius: 6px; text-align: center;
+              font: 700 16px var(--mono); }
+.btn { height: 40px; padding: 0 14px; font-weight: 700; font-size: 14px; background: var(--paper);
+       border: 2px solid var(--ink); border-radius: 6px; cursor: pointer; display: inline-flex;
+       align-items: center; gap: 6px; white-space: nowrap; }
+.btn:hover { background: var(--paper-2); }
+.btn.sm { height: 34px; padding: 0 11px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+.btn.danger:hover { background: var(--danger); color: #fff; }
+.btn.on { background: var(--ink); color: #fff; }
+
+/* alert banner */
+.alert { flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 9px 20px;
+         background: var(--danger); color: #fff; font-weight: 600; }
+.alert .btn { color: #fff; border-color: #fff; background: transparent; height: 32px; }
+
+/* dictionary outdated */
+.infobar { flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 8px 20px;
+           background: var(--tt-yellow); color: #000; font-weight: 600; border-bottom: 2px solid var(--ink); }
+.infobar .btn { height: 32px; }
+
+/* three panes */
+.shell { flex-grow: 1; display: flex; min-height: 0; }
+.side { width: 250px; flex-shrink: 0; background: var(--paper); border-right: 2px solid var(--ink);
+        display: flex; flex-direction: column; min-height: 0; }
+.tabs { display: flex; border-bottom: 2px solid var(--ink); }
+.tabs button { flex: 1; height: 44px; border: 0; background: var(--paper-2); font-weight: 700; cursor: pointer;
+               border-right: 2px solid var(--ink); }
+.tabs button:last-child { border-right: 0; }
+.tabs button.on { background: var(--paper); box-shadow: inset 0 -4px 0 var(--accent); }
+.navlist { overflow-y: auto; padding: 10px 8px; flex-grow: 1; }
+.nav { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 42px;
+       padding: 0 12px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; text-align: left;
+       font-size: 15px; font-weight: 500; }
+.nav:hover { background: var(--paper-2); }
+.nav.on { background: var(--ink); color: #fff; }
+.nav .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav .own { font-size: 11px; font-weight: 700; border: 1.5px solid currentColor; border-radius: 3px; padding: 0 4px;
+            margin-left: 6px; }
+.nav .off { font-size: 11px; font-weight: 700; color: var(--danger); margin-left: 6px; }
+.count { font: 700 13px var(--mono); min-width: 28px; text-align: right; color: var(--ink-3); white-space: nowrap; }
+.count .u { color: var(--accent); }
+.nav.on .count, .nav.on .count .u { color: #fff; }
+.navhead { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3);
+           padding: 14px 12px 6px; }
+.heard { font: 13px var(--mono); color: var(--ink-3); padding: 2px 12px; }
+.side-foot { border-top: 2px solid var(--ink); padding: 10px 8px; }
+
+.list { width: 420px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0;
+        border-right: 2px solid var(--ink); background: var(--paper-2); }
+.listhead { padding: 14px 16px 10px; border-bottom: 2px solid var(--ink); background: var(--paper); }
+.listhead h2 { font-size: 20px; margin: 0 0 10px; }
+.listhead h2 small { font-size: 13px; color: var(--ink-3); font-weight: 600; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+select.sel { height: 34px; border: 2px solid var(--ink); border-radius: 6px; font: 600 13px var(--sans);
+             padding: 0 8px; background: var(--paper); }
+.rows { overflow-y: auto; flex-grow: 1; }
+.row { display: grid; grid-template-columns: 54px 1fr auto; gap: 4px 10px; padding: 11px 16px;
+       border-bottom: 1px solid var(--rule); cursor: pointer; background: var(--paper-2); }
+.row:hover { background: #fff; }
+.row.on { background: #fff; box-shadow: inset 5px 0 0 var(--accent); }
+.row .pno { font: 700 17px var(--mono); grid-row: span 2; padding-top: 1px; }
+.row .ti { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.unread .ti { font-weight: 800; }
+.row.unread .pno::after { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 4px;
+                          background: var(--accent); margin-left: 5px; vertical-align: middle; }
+.row .meta { grid-column: 2 / 4; font-size: 13px; color: var(--ink-3); display: flex; gap: 10px; flex-wrap: wrap;
+             align-items: center; }
+.row .time { font: 600 13px var(--mono); color: var(--ink-3); white-space: nowrap; }
+.tag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px;
+       border-radius: 3px; border: 1.5px solid currentColor; }
+.tag.upd { color: var(--accent); }
+.tag.part { color: var(--warn); }
+.tag.old { color: var(--ink-3); }
+.tag.alarm { color: #fff; background: var(--danger); border-color: var(--danger); }
+.star { color: var(--warn); font-size: 15px; }
+
+/* page view */
+.view { flex-grow: 1; overflow-y: auto; min-width: 0; }
+.tt { background: var(--tt-bg); color: var(--tt-white); font: 700 16px var(--mono); padding: 8px 22px;
+      display: flex; gap: 22px; letter-spacing: .02em; }
+.tt .y { color: var(--tt-yellow); }
+.tt .c { color: var(--tt-cyan); }
+.pagewrap { max-width: 860px; padding: 22px 28px 40px; }
+.pagetitle { font-size: 27px; font-weight: 800; margin: 0 0 6px; line-height: 1.2; overflow-wrap: anywhere; }
+.pmeta { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 14px; color: var(--ink-3); margin-bottom: 14px; }
+.pmeta b { color: var(--ink); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 2px solid var(--ink);
+           margin-bottom: 18px; }
+.subnav { display: flex; align-items: center; gap: 6px; margin: 0 0 16px; font-size: 13px; font-weight: 700; }
+.chip { min-width: 34px; height: 30px; padding: 0 4px; display: inline-flex; align-items: center;
+        justify-content: center; border: 2px solid var(--ink); border-radius: 5px; font: 700 13px var(--mono);
+        background: var(--paper); }
+button.chip { cursor: pointer; }
+button.chip:hover { background: var(--ink); color: #fff; }
+.chip.miss { border-style: dashed; color: var(--ink-3); background: transparent; }
+.partmark { display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; font: 700 12px var(--mono);
+            color: var(--ink-3); scroll-margin-top: 12px; }
+.partmark::after { content: ""; flex-grow: 1; border-top: 1.5px dashed var(--rule); }
+.content > .partmark:first-child { margin-top: 0; }
+.anchor { height: 0; scroll-margin-top: 12px; }
+.chip.on { background: var(--ink); color: #fff; }
+.chip:disabled { opacity: .35; cursor: default; }
+.subnav { flex-wrap: wrap; }
+.seglabel { font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.segment { display: inline-flex; border: 2px solid var(--ink); border-radius: 6px; overflow: hidden; }
+.segment button { height: 30px; padding: 0 10px; border: 0; border-right: 2px solid var(--ink);
+                  background: var(--paper); font: 700 13px var(--sans); cursor: pointer; }
+.segment button:last-child { border-right: 0; }
+.segment button.on { background: var(--ink); color: #fff; }
+.content h3 { font-size: 20px; margin: 18px 0 8px; overflow-wrap: anywhere; }
+.content h4 { font-size: 17px; margin: 14px 0 6px; }
+.content p { margin: 0 0 12px; font-size: 16px; max-width: 70ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.content ul { margin: 0 0 12px; padding-left: 22px; font-size: 16px; }
+.content pre { background: #fff; border: 2px solid var(--ink); border-radius: 6px; padding: 10px 12px;
+               font: 14px/1.4 var(--mono); overflow-x: auto; margin: 0 0 12px; }
+.content hr { border: 0; border-top: 2px solid var(--ink); margin: 18px 0; }
+.missing { border: 2px dashed var(--ink-3); border-radius: 6px; padding: 12px 14px; color: var(--ink-3);
+           font-weight: 600; margin: 0 0 12px; }
+.note { border-left: 6px solid var(--accent); background: #fff; padding: 10px 14px; margin: 0 0 12px;
+        font-weight: 600; white-space: pre-wrap; }
+.note.warn { border-color: var(--warn); }
+.note.alarm { border-color: var(--danger); }
+.link { display: inline-flex; gap: 10px; align-items: center; font-weight: 700; color: var(--accent);
+        border: 2px solid var(--accent); border-radius: 6px; padding: 6px 12px; margin: 0 8px 12px 0; cursor: pointer;
+        background: #fff; }
+.link:hover { background: var(--paper-2); }
+.link .mono { color: var(--ink); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 4px 0 16px; }
+.card { background: #fff; border: 2px solid var(--ink); border-radius: 8px; padding: 10px 14px; }
+.card .l { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.card .v { font: 700 26px var(--mono); overflow-wrap: anywhere; }
+.card .v small { font-size: 15px; font-weight: 600; margin-left: 4px; }
+.card.warn { border-color: var(--warn); }
+.card.alarm { border-color: var(--danger); }
+.series { background: #fff; border: 2px solid var(--ink); border-radius: 8px; padding: 10px 14px 6px; margin: 0 0 16px; }
+.series .l { font-size: 13px; font-weight: 600; color: var(--ink-3); display: flex; justify-content: space-between; }
+.series svg { display: block; width: 100%; height: 78px; }
+.series path { fill: none; stroke: var(--accent); stroke-width: 3; }
+table.tbl { border-collapse: collapse; margin: 4px 0 16px; background: #fff; font-size: 14px; }
+table.tbl th, table.tbl td { border: 1.5px solid var(--ink); padding: 6px 10px; text-align: left; }
+table.tbl th { background: var(--paper-2); }
+.raw { background: #111; color: #e8e8e8; border-radius: 8px; padding: 12px 14px; font: 13px/1.5 var(--mono);
+       white-space: pre-wrap; word-break: break-all; margin-top: 20px; }
+.raw .h { color: var(--tt-yellow); }
+
+/* settings / status */
+.settings { padding: 22px 28px 40px; max-width: 1100px; }
+.settings h2 { font-size: 24px; margin: 0 0 4px; }
+.settings h3 { font-size: 18px; margin: 26px 0 8px; }
+.hint { color: var(--ink-3); font-size: 14px; margin: 0 0 12px; }
+.matrix { overflow-x: auto; }
+table.abo { border-collapse: collapse; background: #fff; }
+table.abo th, table.abo td { border: 1.5px solid var(--ink); padding: 6px 10px; text-align: center; font-size: 14px; }
+table.abo th:first-child, table.abo td:first-child { text-align: left; white-space: nowrap; }
+table.abo th { white-space: nowrap; background: var(--paper-2); }
+table.abo input { width: 18px; height: 18px; accent-color: var(--accent); }
+.fields { display: grid; grid-template-columns: 280px 200px; gap: 10px 16px; align-items: center; }
+.fields input, .fields select { height: 38px; border: 2px solid var(--ink); border-radius: 6px; padding: 0 10px;
+                                font: 600 15px var(--sans); }
+/* dictionary import */
+.importtext { width: 100%; max-width: 900px; height: 220px; border: 2px solid var(--ink); border-radius: 6px;
+              padding: 8px 10px; font: 13px/1.4 var(--mono); margin: 0 0 12px; display: block; }
+.importresult { max-width: 900px; }
+.importresult ul { margin: 6px 0 0; }
+
+/* receive log */
+.settings.wide { max-width: none; }
+.loghead { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; flex-wrap: wrap; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+table.log { width: 100%; font-size: 14px; }
+table.log td { vertical-align: top; }
+table.log tr.click { cursor: pointer; }
+table.log tr.click:hover td { background: var(--paper-2); }
+table.log tr.dim td { color: var(--ink-3); }
+.rchip { display: inline-block; font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 999px;
+         border: 2px solid currentColor; white-space: nowrap; cursor: help; }
+.rchip.new { color: #fff; background: var(--ok); border-color: var(--ok); }
+.rchip.repeat { color: var(--ink-3); background: var(--paper); }
+.rchip.hidden { color: var(--warn); background: #fff; }
+.rchip.withdrawn { color: var(--accent); background: #fff; }
+.rchip.error { color: #fff; background: var(--danger); border-color: var(--danger); }
+.dimtext { color: var(--ink-3); }
+.empty { padding: 40px 28px; color: var(--ink-3); font-size: 16px; }
+.toast { position: fixed; right: 18px; bottom: 18px; background: var(--ink); color: #fff; padding: 10px 16px;
+         border-radius: 6px; font-weight: 600; max-width: 420px; }
+.toast.err { background: var(--danger); }
+
+/* web links in page text (from the air: full address always visible) */
+a.extlink { color: var(--accent); font-weight: 600; text-decoration: underline; overflow-wrap: anywhere; }
+a.extlink:hover { color: var(--accent-dark); }
+
+/* ---------- weather page (typ wx) ---------- */
+.wx { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: dense; gap: 12px; margin: 4px 0 16px; }
+.wx-tile { background: #fff; border: 2px solid var(--ink); border-radius: 10px; padding: 12px 16px 14px; min-width: 0;
+           grid-column: span 2; }
+.wx-tile h5 { margin: 0 0 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+              color: var(--ink-3); display: flex; justify-content: space-between; gap: 8px; }
+.wx-tile h5 span { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.wx-hero { grid-column: span 4; display: grid; grid-template-columns: auto 1fr; gap: 6px 26px; align-items: end; }
+.wx-hero h5 { grid-column: 1 / -1; }
+.wx-wind { grid-row: span 2; }
+.wx-spark { grid-column: span 4; }
+.wx-big { font: 700 52px/1 var(--mono); letter-spacing: -.03em; }
+.wx-big small { font-size: 22px; font-weight: 600; margin-left: 4px; letter-spacing: 0; }
+.wx-mid { font: 700 30px/1.05 var(--mono); }
+.wx-mid small { font-size: 15px; font-weight: 600; margin-left: 4px; }
+.wx-sub { font-size: 14px; color: var(--ink-3); margin-top: 4px; }
+.wx-sub b { color: var(--ink); font-family: var(--mono); }
+.wx-trend { font: 700 14px var(--mono); margin-top: 4px; }
+.wx-cap { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); margin-bottom: 8px; }
+.wx-kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: 14px; margin: 10px 0 0; }
+.wx-kv dt { color: var(--ink-3); }
+.wx-kv dd { margin: 0; font: 600 13px var(--mono); text-align: right; white-space: nowrap; }
+
+.wx-range { padding-bottom: 2px; }
+.wx-range .bar { position: relative; height: 12px; border-radius: 6px; border: 2px solid var(--ink);
+                 background: linear-gradient(90deg, #1F5FBF, #7A5BB0 50%, #C2410C); }
+.wx-range .mk { position: absolute; top: -7px; width: 4px; height: 22px; background: var(--ink); border-radius: 2px;
+                transform: translateX(-50%); box-shadow: 0 0 0 2px #fff; }
+.wx-range .ends { display: flex; justify-content: space-between; font: 600 13px var(--mono); margin-top: 6px; }
+.wx-range .lo { color: #1F5FBF; }
+.wx-range .hi { color: #C2410C; }
+
+.wx-gauge { height: 10px; border: 2px solid var(--ink); border-radius: 5px; position: relative; margin: 10px 0 4px;
+            background: var(--paper-2); }
+.wx-gauge i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 3px 0 0 3px; }
+.wx-gauge .mk { position: absolute; top: -6px; width: 4px; height: 18px; background: var(--ink);
+                transform: translateX(-50%); box-shadow: 0 0 0 2px #fff; }
+.wx-scale { display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--ink-3); }
+
+.wx-bft { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; margin: 12px 0 4px; }
+.wx-bft i { height: 14px; border: 2px solid var(--ink); border-radius: 3px; background: #fff; }
+.wx-bft i.on { background: var(--accent); border-color: var(--accent); }
+.wx-bft i.gust { background: repeating-linear-gradient(45deg, #fff 0 3px, var(--warn) 3px 6px); border-color: var(--warn); }
+.wx-legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-3); flex-wrap: wrap; margin-top: 6px; }
+.wx-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                          margin-right: 5px; vertical-align: -1px; }
+.wx-legend .a::before { background: var(--accent); }
+.wx-legend .g::before { background: repeating-linear-gradient(45deg, #fff 0 2px, var(--warn) 2px 4px); border: 1px solid var(--warn); }
+
+.wx-compass { display: block; width: 100%; max-width: 210px; margin: 2px auto 0; }
+.wx-compass .ring { fill: #fff; stroke: var(--ink); stroke-width: 3; }
+.wx-compass .inner { fill: none; stroke: var(--rule); stroke-width: 1.5; }
+.wx-compass .tick { stroke: var(--ink); stroke-width: 2; }
+.wx-compass .tick.minor { stroke: var(--ink-3); stroke-width: 1.5; }
+.wx-compass .cardinal { font: 700 17px var(--mono); text-anchor: middle; fill: var(--ink); }
+.wx-compass .arrow { fill: var(--accent); stroke: #fff; stroke-width: 2; stroke-linejoin: round; }
+.wx-compass .hub { fill: #fff; stroke: var(--ink); stroke-width: 2.5; }
+.wx-compass .speed { font: 700 19px var(--mono); text-anchor: middle; fill: var(--ink); }
+.wx-compass .unit { font: 10px var(--sans); text-anchor: middle; fill: var(--ink-3); }
+
+.wx-spark svg { display: block; width: 100%; height: 96px; }
+.wx-spark .mid { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 4 5; }
+.wx-spark .area { fill: var(--accent); opacity: .10; }
+.wx-spark .line { fill: none; stroke: var(--accent); stroke-width: 3; vector-effect: non-scaling-stroke; }
+
+/* the page pane width matters, not the window: container query */
+.wx-wrap { container-type: inline-size; }
+@container (max-width: 640px) {
+  .wx { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wx-tile { grid-column: span 1; }
+  .wx-hero, .wx-spark, .wx-wind { grid-column: span 2; }
+  .wx-wind { grid-row: auto; }
+  .wx-hero { grid-template-columns: 1fr; }
+}
+@container (max-width: 380px) {
+  .wx-tile { grid-column: span 2; }
+}
+</style><script>
+/* Offline-Vorschau der Listener-Oberflaeche: die API-Antworten sind eingebettet
+   (Testdaten, erzeugt mit dem echten Codec/Listener). Neu erzeugen: siehe Chat. */
+const MOCK = {"/api/v1/settings": {"max_pages_total": 500, "max_pages_per_cat": 100, "max_age_days": 30, "lang": "de", "alert_sound": true}, "/api/v1/status": {"mode": "listener", "callsign": "", "kiss": {"connected": true}, "pages": 2, "unread": 2, "alerts": 0, "stations": 2, "dictionary": {"local": 2, "hash": "af13ee16", "outdated": false, "newest_heard": 2, "heard_from": null, "first_heard": null, "last_heard": null, "source": null, "hash_mismatch": false}}, "/api/v1/categories": [{"key": "all", "name": "Allgemein", "custom": false, "total": 1, "unread": 1, "alerts": 0}, {"key": "wx", "name": "Wetter", "custom": false, "total": 1, "unread": 1, "alerts": 0}], "/api/v1/stations": [{"call": "OE3GAS-5", "first_heard": "2026-09-21T14:13:20+00:00", "last_heard": "2026-09-21T14:13:20+00:00", "frames": 1, "pages": 1, "unread": 1, "subscribed": true}, {"call": "OE3XYZ-5", "first_heard": "2026-09-21T14:13:20+00:00", "last_heard": "2026-09-21T14:13:20+00:00", "frames": 1, "pages": 1, "unread": 1, "subscribed": true}], "/api/v1/pages": [{"org": "OE3GAS-5", "id": 24, "rev": 0, "t": "2026-09-21T14:13:20+00:00", "typ": "wx", "typ_name": "Wetter", "ti": "Wetter Schöngrabern 18:00", "cats": [{"key": "wx", "name": "Wetter"}], "status": "unread", "updated": false, "favorite": false, "alert": false, "pri": "routine", "sub_total": 1, "sub_present": 1, "expired": false}, {"org": "OE3XYZ-5", "id": 31, "rev": 0, "t": "2026-09-21T14:13:20+00:00", "typ": "wx", "typ_name": "Wetter", "ti": "Wetter Hollabrunn (v1-Felder)", "cats": [{"key": "all", "name": "Allgemein"}], "status": "unread", "updated": false, "favorite": false, "alert": false, "pri": "routine", "sub_total": 1, "sub_present": 1, "expired": false}], "/api/v1/pages?cat=wx": [{"org": "OE3GAS-5", "id": 24, "rev": 0, "t": "2026-09-21T14:13:20+00:00", "typ": "wx", "typ_name": "Wetter", "ti": "Wetter Schöngrabern 18:00", "cats": [{"key": "wx", "name": "Wetter"}], "status": "unread", "updated": false, "favorite": false, "alert": false, "pri": "routine", "sub_total": 1, "sub_present": 1, "expired": false}], "/api/v1/pages/OE3GAS-5/24?raw=1": {"org": "OE3GAS-5", "id": 24, "rev": 0, "t": "2026-09-21T14:13:20+00:00", "typ": "wx", "typ_name": "Wetter", "ti": "Wetter Schöngrabern 18:00", "cats": [{"key": "wx", "name": "Wetter"}], "status": "unread", "updated": false, "favorite": false, "alert": false, "pri": "routine", "sub_total": 1, "sub_present": 1, "expired": false, "txt": null, "to": null, "area": null, "pos": [48.6033, 16.0617, 253], "sym": "/_", "lnk": null, "ref": null, "src": "GeoSphere Austria, TAWES (CC BY 4.0)", "exp_min": 120, "lang": "de", "flags": [], "pri_name": "Routine", "blocks": [{"k": "series", "v": [104, 74, 63, 74, 104, 146, 188, 218, 229, 218, 188, 146, 104], "u": "Cel", "n": "Temperatur 24 h", "dt": 7200, "sc": -1, "sub": 1, "unit": "°C"}], "data": [{"key": "temp", "label": "Lufttemperatur", "value": 21.3, "unit": "°C"}, {"key": "hum", "label": "Relative Feuchte", "value": 31, "unit": "%"}, {"key": "wdir", "label": "Windrichtung", "value": 126, "unit": "°"}, {"key": "wspd", "label": "Windgeschwindigkeit", "value": 1.8, "unit": "m/s"}, {"key": "r24h", "label": "Niederschlag 24 h", "value": 0.0, "unit": "mm"}, {"key": "qfe", "label": "Luftdruck (QFE)", "value": 999.1, "unit": "hPa"}, {"key": "dew", "label": "Taupunkt", "value": 3.6, "unit": "°C"}, {"key": "tmin", "label": "Temperatur-Minimum 24 h", "value": 6.3, "unit": "°C"}, {"key": "tmax", "label": "Temperatur-Maximum 24 h", "value": 22.9, "unit": "°C"}, {"key": "gmax", "label": "Stärkste Böe 24 h", "value": 11.8, "unit": "m/s"}, {"key": "ptnd", "label": "Drucktendenz 3 h", "value": 0.0, "unit": "hPa"}, {"key": "r10m", "label": "Niederschlag 10 min", "value": 0.0, "unit": "mm"}, {"key": "qff", "label": "Luftdruck (QFF)", "value": 1028.5, "unit": "hPa"}, {"key": "gust10", "label": "Windspitze (10 min)", "value": 4.1, "unit": "m/s"}], "dv": 2, "dict_newer": false, "airtime_s": 1.9, "raw": [{"sub": 1, "rev": 0, "bytes": 204, "hex": "ac00020118180200041a6ab13b80051878060108781a57657474657220536368c3b66e6772616265726e2031383a30300c831a004a29aa1a0018821a18fd1281021381a62005228d1868184a183f184a1868189218bc18da18e518da18bc189218682300246f54656d70657261747572203234206825191c202e2014ae0018d501181f03187e04120700091927070a18240e183f0f18e5101876110012001319282d14182915782447656f53706865726520417573747269612c2054415745532028434320425920342e3029", "heard_from": "OE3GAS-5", "received": "2026-09-21T14:13:20+00:00", "decoded": {"dv": 2, "id": 24, "rev": 0, "t": 1790000000, "exp": 120, "typ": "wx", "ti": "Wetter Schöngrabern 18:00", "pos": [48.6033, 16.0617, 253], "cat": ["wx"], "blk": [{"k": "series", "v": [104, 74, 63, 74, 104, 146, 188, 218, 229, 218, 188, 146, 104], "u": "Cel", "n": "Temperatur 24 h", "dt": 7200, "sc": -1}], "dat": {"temp": 21.3, "hum": 31, "wdir": 126, "wspd": 1.8, "r24h": 0.0, "qfe": 999.1, "dew": 3.6, "tmin": 6.3, "tmax": 22.9, "gmax": 11.8, "ptnd": 0.0, "r10m": 0.0, "qff": 1028.5, "gust10": 4.1}, "src": "GeoSphere Austria, TAWES (CC BY 4.0)", "org": "OE3GAS-5", "flg": [], "sym": "/_", "pri": "routine", "lang": "de"}}]}, "/api/v1/pages/OE3XYZ-5/31": {"org": "OE3XYZ-5", "id": 31, "rev": 0, "t": "2026-09-21T14:13:20+00:00", "typ": "wx", "typ_name": "Wetter", "ti": "Wetter Hollabrunn (v1-Felder)", "cats": [{"key": "all", "name": "Allgemein"}], "status": "unread", "updated": false, "favorite": false, "alert": false, "pri": "routine", "sub_total": 1, "sub_present": 1, "expired": false, "txt": null, "to": null, "area": null, "pos": null, "sym": "/_", "lnk": null, "ref": null, "src": null, "exp_min": 60, "lang": "de", "flags": [], "pri_name": "Routine", "blocks": [], "data": [{"key": "temp", "label": "Lufttemperatur", "value": 12.5, "unit": "°C"}, {"key": "hum", "label": "Relative Feuchte", "value": 65, "unit": "%"}, {"key": "qnh", "label": "Luftdruck (QNH)", "value": 1013.2, "unit": "hPa"}, {"key": "wdir", "label": "Windrichtung", "value": 270, "unit": "°"}, {"key": "wspd", "label": "Windgeschwindigkeit", "value": 5.5, "unit": "m/s"}, {"key": "gust", "label": "Böe (5 min)", "value": 9.1, "unit": "m/s"}, {"key": "r1h", "label": "Niederschlag 1 h", "value": 0.4, "unit": "mm"}, {"key": "r24h", "label": "Niederschlag 24 h", "value": 3.2, "unit": "mm"}, {"key": "uv", "label": "UV-Index", "value": 2.0, "unit": ""}], "dv": 2, "dict_newer": false, "airtime_s": 1.0}};
+window.fetch = async (url) => {
+  let d = MOCK[url];
+  if (d === undefined) { const base = url.split("?")[0]; d = MOCK[Object.keys(MOCK).find(k => k.split("?")[0] === base)]; }
+  if (d === undefined) d = url.includes("/pages") ? [] : {};
+  return { ok: true, status: 200, json: async () => d };
+};
+document.addEventListener("DOMContentLoaded", () => setTimeout(() => openPage("OE3GAS-5", 24), 300));
+</script><script>/* brocast listener GUI.
+ * Page contents come from the air and are untrusted: everything is put into
+ * the DOM with textContent / createElement only – never parsed as HTML.
+ * Every write sends X-Brocast-Client: 1 (CSRF barrier, see webserver.py).
+ */
+"use strict";
+
+const API = "/api/v1";
+const POLL_MS = 15000;
+
+const state = {
+  mode: "cat",            // "cat" | "st"  (left pane)
+  cat: null,              // selected rubric key
+  station: null,          // selected station call
+  sub: "*",               // second filter (station in cat mode, rubric in station mode)
+  filter: "all",          // all | unread | fav
+  q: "",                  // full-text search
+  selected: null,         // {org, id} of the open page
+  screen: "pages",        // pages | settings | status
+  raw: false,
+  view: "flow",           // subpage view: flow | parts | teletext
+  part: 1,                // selected subpage in teletext view
+  rxFilter: null,         // receive log: {org, id} of one page, or null = all
+  rxForeign: false,       // receive log: also show non-brocast frames
+  settings: {},
+  status: {},
+  knownAlerts: null,      // Set of "org/id" of unread alerts already seen
+  alertPage: null,
+};
+
+/* ---------- helpers ---------- */
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = String(text);
+  return e;
+}
+
+/* Text from the air with clickable web links. Only http(s) and www. are linked;
+ * the visible text is always the full address, so a link cannot pretend to go
+ * somewhere else. Opens in a new tab without referrer. */
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+function linkified(tag, cls, text) {
+  const e = el(tag, cls);
+  const s = String(text == null ? "" : text);
+  let last = 0;
+  for (const m of s.matchAll(URL_RE)) {
+    let url = m[0].replace(/[.,;:!?)\]]+$/, "");          // no trailing punctuation
+    const start = m.index;
+    e.append(s.slice(last, start));
+    let href = url.toLowerCase().startsWith("www.") ? "http://" + url : url;
+    let ok = false;
+    try { ok = ["http:", "https:"].includes(new URL(href).protocol); } catch (err) { ok = false; }
+    if (ok) {
+      const a = el("a", "extlink", url);
+      a.href = href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.title = "Öffnet " + href + " in einem neuen Tab";
+      e.append(a);
+    } else {
+      e.append(url);
+    }
+    last = start + url.length;
+  }
+  e.append(s.slice(last));
+  return e;
+}
+
+function svg(tag, attrs) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  return e;
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: { "X-Brocast-Client": "1" } };
+  if (body !== undefined) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(API + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || ("HTTP " + res.status));
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function qs(params) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== "" && v !== false) p.set(k, v === true ? "1" : v);
+  const s = p.toString();
+  return s ? "?" + s : "";
+}
+
+let toastTimer = null;
+function toast(text, isError) {
+  const t = $("toast");
+  t.textContent = text;
+  t.className = "toast" + (isError ? " err" : "");
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+}
+
+function num(v) {
+  if (typeof v !== "number") return v === null || v === undefined ? "" : String(v);
+  return v.toLocaleString("de-AT", { maximumFractionDigits: 3, useGrouping: false });
+}
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const hm = d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return hm;
+  return d.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit" }) + " " + hm;
+}
+
+function ttClock() {
+  const d = new Date();
+  const wd = d.toLocaleDateString("de-AT", { weekday: "short" }).replace(".", "").toUpperCase();
+  const date = d.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  return `${wd} ${date} ${d.toLocaleTimeString("de-AT")}`;
+}
+
+function key(p) { return p.org + "/" + p.id; }
+
+/* ---------- header, alert banner ---------- */
+
+async function refreshStatus() {
+  try {
+    state.status = await api("GET", "/status");
+  } catch (e) {
+    $("hdr-kiss").textContent = "brocastd nicht erreichbar";
+    $("hdr-dot").className = "dot bad";
+    return;
+  }
+  const s = state.status;
+  $("hdr-call").textContent = s.mode === "station" ? `${s.callsign} · Station` : "Listener";
+  $("hdr-dot").className = "dot " + (s.kiss_connected ? "ok" : "bad");
+  $("hdr-kiss").textContent = s.kiss_connected ? "Direwolf verbunden" : "Direwolf getrennt";
+  $("hdr-unread").textContent = s.unread;
+  $("hdr-stations").textContent = s.stations;
+
+  const dict = s.dictionary || {};
+  const bar = $("dictbar");
+  if (dict.outdated && state.dictHidden !== dict.newest_heard) {
+    $("dictbar-text").textContent = dict.source && dict.source.text
+      ? `Dictionary v${dict.newest_heard} erhältlich: ${dict.source.text} – danach hier importieren ` +
+        `(installiert: v${dict.local}).`
+      : `Dictionary veraltet: ${dict.heard_from} sendet mit Version ${dict.newest_heard}, ` +
+        `hier ist Version ${dict.local} installiert. Seiten werden angezeigt, neue Felder aber nur roh.`;
+    bar.hidden = false;
+  } else bar.hidden = true;
+}
+
+async function refreshAlerts() {
+  const pages = await api("GET", "/pages" + qs({ unread: true }));
+  const alerts = pages.filter(p => p.alert);
+  const banner = $("alert");
+  if (!alerts.length) { banner.hidden = true; state.alertPage = null; }
+  else {
+    const a = alerts[0];
+    state.alertPage = a;
+    $("alert-text").textContent = `⚠ Warnung: ${a.ti || "Seite " + a.id} (${a.org}, Seite ${a.id})` +
+      (alerts.length > 1 ? ` – und ${alerts.length - 1} weitere` : "");
+    banner.hidden = false;
+  }
+  const keys = new Set(alerts.map(key));
+  if (state.knownAlerts && state.settings.alert_sound && [...keys].some(k => !state.knownAlerts.has(k))) beep();
+  state.knownAlerts = keys;
+}
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 880; g.gain.value = 0.15;
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.35);
+  } catch (e) { /* no audio – ignore */ }
+}
+
+/* ---------- left pane ---------- */
+
+function countNode(unread, total) {
+  const c = el("span", "count");
+  if (unread) c.append(el("span", "u", unread + "/"));
+  c.append(String(total));
+  return c;
+}
+
+async function renderNav() {
+  const nav = $("navlist");
+  const items = [];
+  if (state.mode === "cat") {
+    const cats = await api("GET", "/categories");
+    for (const c of cats) {
+      const b = el("button", "nav" + (state.screen === "pages" && state.cat === c.key && !state.q ? " on" : ""));
+      b.type = "button";
+      const n = el("span", "name", c.name);
+      if (c.custom) n.append(el("span", "own", "eigene"));
+      b.append(n, countNode(c.unread, c.total));
+      b.onclick = () => select({ cat: c.key, station: null });
+      items.push(b);
+    }
+    if (!cats.length) items.push(el("div", "hint", "Noch keine Seiten empfangen."));
+  } else {
+    const stations = await api("GET", "/stations");
+    for (const s of stations) {
+      const b = el("button", "nav" + (state.screen === "pages" && state.station === s.call && !state.q ? " on" : ""));
+      b.type = "button";
+      const n = el("span", "name");
+      n.append(el("span", "mono", s.call));
+      if (!s.subscribed) n.append(el("span", "off", "abgewählt"));
+      b.append(n, countNode(s.unread, s.pages));
+      b.onclick = () => select({ station: s.call, cat: null });
+      items.push(b);
+    }
+    if (stations.length) {
+      items.push(el("div", "navhead", "zuletzt gehört"));
+      for (const s of stations) items.push(el("div", "heard", `${s.call}  ${fmtTime(s.last_heard)} · ${s.frames} Fr.`));
+    } else items.push(el("div", "hint", "Noch keine Station gehört."));
+  }
+  nav.replaceChildren(...items);
+  const favs = await api("GET", "/pages" + qs({ favorite: true }));
+  $("fav-count").textContent = favs.length || "";
+}
+
+function select(sel) {
+  state.cat = sel.cat !== undefined ? sel.cat : state.cat;
+  state.station = sel.station !== undefined ? sel.station : state.station;
+  state.sub = "*";
+  state.q = "";
+  $("search").value = "";
+  state.screen = "pages";
+  if (state.filter === "fav" && (state.cat || state.station)) setFilter("all", false);
+  refreshLists();
+  if (!state.selected) renderEmpty();
+}
+
+/* ---------- middle pane ---------- */
+
+function listParams() {
+  const p = { cat: state.cat, station: state.station, q: state.q,
+              unread: state.filter === "unread", favorite: state.filter === "fav" };
+  if (state.sub !== "*") {
+    if (state.mode === "cat") p.station = state.sub; else p.cat = state.sub;
+  }
+  return p;
+}
+
+async function renderSubFilter() {
+  const s = $("sub-filter");
+  const opts = [];
+  if (state.mode === "cat" && state.cat) {
+    opts.push(new Option("Alle Stationen", "*"));
+    for (const st of await api("GET", "/stations" + qs({ cat: state.cat }))) opts.push(new Option(st.call, st.call));
+  } else if (state.mode === "st" && state.station) {
+    opts.push(new Option("Alle Rubriken", "*"));
+    for (const c of await api("GET", "/categories" + qs({ station: state.station }))) opts.push(new Option(c.name, c.key));
+  }
+  s.replaceChildren(...opts);
+  s.hidden = !opts.length;
+  if (opts.some(o => o.value === state.sub)) s.value = state.sub; else state.sub = "*";
+}
+
+async function renderList() {
+  const pages = await api("GET", "/pages" + qs(listParams()));
+  let title = "Alle Seiten";
+  if (state.q) title = `Suche „${state.q}“`;
+  else if (state.cat) title = (await catName(state.cat));
+  else if (state.station) title = state.station;
+  else if (state.filter === "fav") title = "Gemerkt";
+  $("list-title").textContent = title;
+  const unread = pages.filter(p => p.status === "unread").length;
+  $("list-sub").textContent = `${pages.length} ${pages.length === 1 ? "Seite" : "Seiten"} · ${unread} ungelesen`;
+
+  const rows = pages.map(p => {
+    const sel = state.selected && state.selected.org === p.org && state.selected.id === p.id;
+    const r = el("div", "row" + (p.status === "unread" ? " unread" : "") + (sel ? " on" : ""));
+    r.tabIndex = 0;
+    r.append(el("div", "pno", p.id));
+    const ti = el("div", "ti");
+    if (p.alert) ti.append(el("span", "tag alarm", "Warnung"), " ");
+    ti.append(p.ti || p.typ_name);
+    r.append(ti, el("div", "time", fmtTime(p.t)));
+    const meta = el("div", "meta");
+    meta.append(el("span", "mono", p.org));
+    if (p.updated) meta.append(el("span", "tag upd", "aktualisiert"));
+    if (p.sub_total > 1) meta.append(el("span", "tag part", p.sub_present < p.sub_total ? `${p.sub_present}/${p.sub_total} Teile` : `${p.sub_total} Teile`));
+    if (p.expired) meta.append(el("span", "tag old", "abgelaufen"));
+    if (p.favorite) meta.append(el("span", "star", "★"));
+    r.append(meta);
+    const open = () => openPage(p.org, p.id);
+    r.onclick = open;
+    r.onkeydown = (e) => { if (e.key === "Enter") open(); };
+    return r;
+  });
+  $("rows").replaceChildren(...(rows.length ? rows : [el("div", "empty", state.q ? "Nichts gefunden." : "Keine Seiten.")]));
+}
+
+let rubricCache = null;
+async function catName(k) {
+  if (!rubricCache) rubricCache = await api("GET", "/rubrics");
+  const r = rubricCache.find(r => r.key === k);
+  if (r) return r.name;
+  rubricCache = null;
+  return k.startsWith("x:") ? k.slice(2) : k;
+}
+
+function setFilter(f, reload = true) {
+  state.filter = f;
+  document.querySelectorAll("[data-f]").forEach(b => b.classList.toggle("on", b.dataset.f === f));
+  if (reload) refreshLists();
+}
+
+async function refreshLists() {
+  try {
+    await renderNav();
+    await renderSubFilter();
+    await renderList();
+  } catch (e) {
+    toast("Fehler beim Laden: " + e.message, true);
+  }
+}
+
+/* ---------- page view ---------- */
+
+function renderEmpty() {
+  $("view").replaceChildren(el("div", "empty", "Rubrik und Seite wählen."));
+}
+
+async function openPage(org, id) {
+  let page;
+  try {
+    page = await api("GET", `/pages/${encodeURIComponent(org)}/${id}` + qs({ raw: state.raw }));
+  } catch (e) {
+    toast(e.status === 404 ? `Seite ${id} von ${org} ist (noch) nicht empfangen.` : e.message, true);
+    return;
+  }
+  const samePage = state.selected && state.selected.org === org && state.selected.id === id;
+  if (!samePage) state.part = 1;                   // a new page starts at subpage 1
+  state.selected = { org, id };
+  state.screen = "pages";
+  renderPage(page);
+  refreshLists();
+  refreshStatus();
+  refreshAlerts().catch(() => {});
+}
+
+function metaItem(label, value) {
+  const s = el("span");
+  s.append(label + " ", el("b", null, value));
+  return s;
+}
+
+function renderPage(p) {
+  const v = $("view");
+  const tt = el("div", "tt");
+  tt.append(el("span", "c", p.org), el("span", "y", "S." + p.id), el("span", null, "brocast"),
+            el("span", "grow"), el("span", "y", ttClock()));
+  const w = el("div", "pagewrap");
+  w.append(el("h1", "pagetitle", p.ti || `${p.typ_name} – Seite ${p.id}`));
+
+  const m = el("div", "pmeta");
+  m.append(metaItem("Station", p.org), metaItem("Rubrik", p.cats.map(c => c.name).join(", ")),
+           metaItem("Typ", p.typ_name), metaItem("Stand", fmtTime(p.t)), metaItem("Revision", p.rev));
+  if (p.exp_min) {
+    const until = new Date(new Date(p.t).getTime() + p.exp_min * 60000);
+    m.append(metaItem(p.expired ? "abgelaufen seit" : "gültig bis", fmtTime(until.toISOString())));
+  }
+  if (p.pri && p.pri !== "routine") m.append(metaItem("Priorität", p.pri_name));
+  if (p.flags && p.flags.length) m.append(metaItem("Kennzeichen", p.flags.join(", ")));
+  if (p.to) m.append(metaItem("An", Array.isArray(p.to) ? p.to.join(", ") : p.to));
+  if (p.area) m.append(metaItem("Gebiet", p.area));
+  if (Array.isArray(p.pos) && p.pos.length >= 2) m.append(metaItem("Ort", posText(p.pos)));
+  if (p.airtime_s) m.append(metaItem("Sendezeit ca.", `${num(p.airtime_s)} s`));
+  if (p.src) m.append(metaItem("Quelle", Array.isArray(p.src) ? p.src.join(", ") : p.src));
+  w.append(m);
+
+  const a = el("div", "actions");
+  const fav = el("button", "btn sm", p.favorite ? "★ Gemerkt" : "☆ Merken");
+  fav.onclick = () => action("POST", `/pages/${encodeURIComponent(p.org)}/${p.id}/favorite`, { favorite: !p.favorite }, p);
+  const unr = el("button", "btn sm", "Als ungelesen markieren");
+  unr.onclick = async () => {
+    await action("POST", `/pages/${encodeURIComponent(p.org)}/${p.id}/read`, { read: false }, null);
+    toast("Als ungelesen markiert.");
+  };
+  const raw = el("button", "btn sm" + (state.raw ? " on" : ""), "Rohansicht");
+  raw.onclick = () => { state.raw = !state.raw; openPage(p.org, p.id); };
+  const del = el("button", "btn sm danger", "Löschen");
+  del.onclick = async () => {
+    if (!confirm(`Seite ${p.id} von ${p.org} löschen?\nSie kommt erst mit einer neuen Revision wieder.`)) return;
+    await action("DELETE", `/pages/${encodeURIComponent(p.org)}/${p.id}`, undefined, null);
+    state.selected = null;
+    renderEmpty();
+  };
+  const hist = el("button", "btn sm", "Empfangslog");
+  hist.onclick = () => renderRxlog({ org: p.org, id: p.id }).catch(e => toast(e.message, true));
+  for (const b of [fav, unr, raw, hist, del]) b.type = "button";
+  a.append(fav, unr, raw, hist, el("span", "grow"), del);
+  w.append(a);
+
+  const holder = el("div");
+  const draw = () => holder.replaceChildren(...partsBar(p, draw), renderContent(p));
+  if (!state.part || state.part > p.sub_total) state.part = 1;
+  draw();
+  w.append(holder);
+  if (state.raw && p.raw) w.append(rawView(p.raw));
+  v.replaceChildren(tt, w);
+  v.scrollTop = 0;
+}
+
+/* Subpages can be shown in three ways (remembered in this browser):
+ *   flow     – one continuous text (anchors only, for the chips)
+ *   parts    – with a visible line "Teil 2/4" between subpages
+ *   teletext – only the selected subpage, chips and ◀ ▶ to turn pages
+ */
+const VIEWS = [["flow", "Fließtext"], ["parts", "Mit Trennlinien"], ["teletext", "Teletext"]];
+
+function loadView() {
+  try { return localStorage.getItem("brocast.view") || "flow"; } catch (e) { return "flow"; }
+}
+
+function saveView(view) {
+  try { localStorage.setItem("brocast.view", view); } catch (e) { /* private mode */ }
+}
+
+function partsBar(p, redraw) {
+  if (p.sub_total <= 1) return [];
+  const missing = new Set(p.blocks.filter(b => b.k === "missing").map(b => b.sub));
+  const bar = el("div", "subnav");
+
+  const views = el("div", "segment");
+  for (const [key, label] of VIEWS) {
+    const b = el("button", state.view === key ? "on" : "", label);
+    b.type = "button";
+    b.onclick = () => { state.view = key; saveView(key); redraw(); };
+    views.append(b);
+  }
+
+  const turn = (delta) => {
+    state.part = Math.min(p.sub_total, Math.max(1, state.part + delta));
+    redraw();
+  };
+  bar.append("Teile ");
+  if (state.view === "teletext") {
+    const prev = el("button", "chip", "◀");
+    prev.type = "button"; prev.title = "vorheriger Teil"; prev.disabled = state.part <= 1;
+    prev.onclick = () => turn(-1);
+    bar.append(prev);
+  }
+  for (let i = 1; i <= p.sub_total; i++) {
+    const on = state.view === "teletext" && i === state.part;
+    const chip = el("button", "chip" + (missing.has(i) ? " miss" : "") + (on ? " on" : ""), `${i}/${p.sub_total}`);
+    chip.type = "button";
+    chip.title = missing.has(i) ? `Teil ${i} noch nicht empfangen` : `Teil ${i} anzeigen`;
+    chip.onclick = () => {
+      if (state.view === "teletext") { state.part = i; redraw(); return; }
+      const target = document.getElementById("part-" + i);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    bar.append(chip);
+  }
+  if (state.view === "teletext") {
+    const next = el("button", "chip", "▶");
+    next.type = "button"; next.title = "nächster Teil"; next.disabled = state.part >= p.sub_total;
+    next.onclick = () => turn(1);
+    bar.append(next);
+  }
+  bar.append(el("span", "grow"), el("span", "seglabel", "Ansicht"), views);
+  return [bar];
+}
+
+function renderContent(p) {
+  const c = el("div", "content");
+  if (p.dict_newer) {
+    const local = state.status.dictionary ? state.status.dictionary.local : "?";
+    c.append(el("div", "note warn", `Diese Seite verwendet Dictionary-Version ${p.dv}, installiert ist Version ${local}. ` +
+      "Unbekannte Felder werden roh angezeigt."));
+  }
+  const teletext = state.view === "teletext" && p.sub_total > 1;
+  const showFirst = !teletext || state.part === 1;      // txt and data live on subpage 1
+  if (showFirst && p.txt) c.append(linkified("p", null, p.txt));
+  let used = new Set();                                 // blocks already shown by a special view
+  if (showFirst && p.typ === "wx" && p.data && p.data.length) {
+    const wx = weatherView(p);
+    c.append(wx.node);
+    used = wx.used;
+  } else if (showFirst && p.data && p.data.length) {
+    const cards = el("div", "cards");
+    for (const d of p.data) cards.append(card(d.label, d.value, d.unit));
+    c.append(cards);
+  }
+  let blocks = teletext ? p.blocks.filter(b => b.sub === state.part) : p.blocks;
+  if (used.size) blocks = blocks.filter(b => !used.has(b));
+  renderBlocks(c, blocks, p.sub_total, teletext ? "teletext" : state.view);
+  if (Array.isArray(p.lnk) && p.lnk.length && showFirst) {
+    c.append(el("h4", null, "Verweise"));
+    for (const ref of p.lnk) c.append(linkNode(null, ref));
+  }
+  return c;
+}
+
+async function action(method, path, body, page) {
+  try {
+    const res = await api(method, path, body);
+    if (page) { Object.assign(page, res); renderPage(page); }
+    refreshLists();
+    refreshStatus();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function posText(pos) {
+  const [lat, lon] = pos;
+  return `${Math.abs(lat).toFixed(5)}° ${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(5)}° ${lon >= 0 ? "E" : "W"}`;
+}
+
+function scaled(b) {
+  if (typeof b.v === "number" && typeof b.sc === "number") return b.v * Math.pow(10, b.sc);
+  return b.v;
+}
+
+function card(label, value, unit, stateName) {
+  const c = el("div", "card" + (stateName === "warn" ? " warn" : stateName === "alarm" ? " alarm" : ""));
+  c.append(el("div", "l", label));
+  const v = el("div", "v", num(value));
+  if (unit) v.append(el("small", null, unit));
+  c.append(v);
+  return c;
+}
+
+function linkNode(text, ref) {
+  const lk = el("button", "link");
+  lk.type = "button";
+  const org = Array.isArray(ref) ? ref[0] : "", id = Array.isArray(ref) ? ref[1] : "";
+  lk.append("→ " + (text || `Seite ${id}`), el("span", "mono", `${org} S.${id}`));
+  lk.onclick = () => openPage(org, id);
+  return lk;
+}
+
+function renderBlocks(c, blocks, total, view) {
+  let cards = null;
+  let part = 0;
+  for (const b of blocks) {
+    if (total > 1 && view !== "teletext" && b.sub !== part) {   // boundary between subpages
+      part = b.sub;
+      const mark = view === "parts" ? el("div", "partmark", `Teil ${part}/${total}`) : el("div", "anchor");
+      mark.id = "part-" + part;
+      c.append(mark);
+      if (view === "parts") cards = null;
+    }
+    if (b.k === "value") {
+      if (!cards) { cards = el("div", "cards"); c.append(cards); }
+      cards.append(card(b.n || "", scaled(b), b.unit, b.st));
+      continue;
+    }
+    cards = null;
+    switch (b.k) {
+      case "heading": c.append(el(b.v === 2 || b.v === 3 ? "h4" : "h3", null, b.x || "")); break;
+      case "para": c.append(linkified("p", null, b.x || "")); break;
+      case "list": {
+        const ul = el("ul");
+        for (const r of b.rows || []) ul.append(linkified("li", null, Array.isArray(r) ? r.join(" · ") : r));
+        c.append(ul);
+        break;
+      }
+      case "table": c.append(table(b)); break;
+      case "series": c.append(series(b)); break;
+      case "link": c.append(linkNode(b.x, b.href)); break;
+      case "note": c.append(linkified("div", "note" + (b.st === "warn" ? " warn" : b.st === "alarm" ? " alarm" : ""), b.x || "")); break;
+      case "pre": c.append(el("pre", null, b.x || "")); break;
+      case "mappoint": c.append(el("p", null, `Ort: ${b.x ? b.x + " – " : ""}${Array.isArray(b.pos) ? posText(b.pos) : ""}`)); break;
+      case "sep": c.append(el("hr")); break;
+      case "missing": c.append(el("div", "missing", `Teil ${b.sub}/${total} noch nicht empfangen – wird in der nächsten Runde ergänzt.`)); break;
+      default: c.append(el("pre", null, JSON.stringify(b)));
+    }
+  }
+}
+
+function table(b) {
+  const t = el("table", "tbl");
+  if (Array.isArray(b.hdr) && b.hdr.length) {
+    const tr = el("tr");
+    for (const h of b.hdr) tr.append(el("th", null, h));
+    t.append(tr);
+  }
+  for (const row of b.rows || []) {
+    const tr = el("tr");
+    for (const cell of Array.isArray(row) ? row : [row]) tr.append(typeof cell === "string" ? linkified("td", null, cell) : el("td", null, num(cell)));
+    t.append(tr);
+  }
+  return t;
+}
+
+function series(b) {
+  const box = el("div", "series");
+  const vals = (Array.isArray(b.v) ? b.v : []).filter(x => typeof x === "number")
+    .map(x => typeof b.sc === "number" ? x * Math.pow(10, b.sc) : x);
+  const l = el("div", "l");
+  const unit = b.unit ? " " + b.unit : "";
+  l.append(el("span", null, b.n || "Verlauf"),
+           el("span", "mono", vals.length ? `${num(vals[0])} → ${num(vals[vals.length - 1])}${unit}` : ""));
+  box.append(l);
+  if (vals.length >= 2) {
+    const W = 760, H = 70, min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+    const d = vals.map((x, i) => `${i ? "L" : "M"}${(i / (vals.length - 1) * W).toFixed(1)},${(H - (x - min) / span * H).toFixed(1)}`).join(" ");
+    const s = svg("svg", { viewBox: `0 -4 ${W} ${H + 8}`, preserveAspectRatio: "none", role: "img", "aria-label": b.n || "Verlauf" });
+    s.append(svg("path", { d }));
+    box.append(s);
+  }
+  return box;
+}
+
+/* ---------- weather page (typ wx) ----------
+ * Builds tiles from the known dat fields (dictionary "wx"); every tile only
+ * appears when its values are there. Unknown or extra fields fall back to the
+ * plain value cards below the tiles. A temperature series block is drawn as
+ * a tile, all other blocks are rendered as usual. */
+
+const WX_DIRS = ["N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO",
+                 "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+const WX_TILE_KEYS = ["temp", "dew", "tmin", "tmax", "wdir", "wspd", "gust", "gust10", "gmax",
+                      "qff", "qnh", "qfe", "ptnd", "hum", "r10m", "r1h", "rday", "r24h"];
+
+function wxDir(deg) { return WX_DIRS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16]; }
+function wxBft(ms) {
+  const limits = [0.3, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.7];
+  const i = limits.findIndex(g => ms < g);
+  return i < 0 ? 12 : i;
+}
+function wxNum(v, digits = 1) {
+  return v.toLocaleString("de-AT", { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false });
+}
+function wxClamp(x) { return Math.max(0, Math.min(100, x)); }
+
+function wxTile(cls, title, note) {
+  const t = el("section", "wx-tile " + cls);
+  const h = el("h5", null, title);
+  if (note) h.append(el("span", null, note));
+  t.append(h);
+  return t;
+}
+function wxValue(cls, value, unit) {
+  const v = el("div", cls, value);
+  if (unit) v.append(el("small", null, unit));
+  return v;
+}
+function wxSub(parts) {           // parts: [text, bold, text, bold, ...]
+  const s = el("div", "wx-sub");
+  parts.forEach((p, i) => s.append(i % 2 ? el("b", null, p) : p));
+  return s;
+}
+function wxKv(rows) {
+  const dl = el("dl", "wx-kv");
+  for (const [k, v] of rows) dl.append(el("dt", null, k), el("dd", null, v));
+  return dl;
+}
+function wxGauge(pct, filled) {
+  const g = el("div", "wx-gauge");
+  if (filled) { const i = el("i"); i.style.width = wxClamp(pct) + "%"; g.append(i); }
+  else { const m = el("div", "mk"); m.style.left = wxClamp(pct) + "%"; g.append(m); }
+  return g;
+}
+function wxScale(labels) {
+  const s = el("div", "wx-scale");
+  for (const l of labels) s.append(el("span", null, l));
+  return s;
+}
+
+function wxCompass(deg, speed) {
+  const s = svg("svg", { viewBox: "-110 -110 220 220", class: "wx-compass", role: "img",
+                         "aria-label": deg === null ? "Windrichtung unbekannt" : `Wind aus ${wxDir(deg)}, ${Math.round(deg)} Grad` });
+  s.append(svg("circle", { r: 96, class: "ring" }), svg("circle", { r: 70, class: "inner" }));
+  for (let a = 0; a < 360; a += 45) {
+    const long = a % 90 === 0;
+    s.append(svg("line", { y1: -96, y2: long ? -82 : -88, class: long ? "tick" : "tick minor",
+                           transform: `rotate(${a})` }));
+  }
+  for (const [txt, x, y] of [["N", 0, -60], ["O", 60, 0], ["S", 0, 60], ["W", -60, 0]]) {
+    const t = svg("text", { x, y, dy: 6, class: "cardinal" });
+    t.textContent = txt;
+    s.append(t);
+  }
+  if (deg !== null) {            // marker on the ring where the wind comes from, pointing inwards
+    s.append(svg("path", { d: "M0,-34 L-15,-100 L0,-88 L15,-100 Z", class: "arrow",
+                           transform: `rotate(${deg})` }));
+  }
+  s.append(svg("circle", { r: 27, class: "hub" }));
+  const v = svg("text", { y: 3, class: "speed" });
+  v.textContent = speed === null ? "–" : wxNum(speed);
+  const u = svg("text", { y: 18, class: "unit" });
+  u.textContent = "m/s";
+  s.append(v, u);
+  return s;
+}
+
+function wxSpark(b) {
+  const sc = typeof b.sc === "number" ? Math.pow(10, b.sc) : 1;
+  const vals = (Array.isArray(b.v) ? b.v : []).map(x => typeof x === "number" ? x * sc : null);
+  const ok = vals.filter(x => x !== null);
+  const span = typeof b.dt === "number" ? b.dt * (vals.length - 1) / 3600 : null;
+  // the series is thinned out (e.g. one value per 2 h), so its own min/max is not
+  // the true 24-h extreme: the note shows the step instead
+  const step = typeof b.dt === "number" ? (b.dt >= 3600 ? `${num(b.dt / 3600)} h` : `${num(b.dt / 60)} min`) : "";
+  const t = wxTile("wx-spark", b.n || "Verlauf", step ? `ein Wert je ${step}` : "");
+  const W = 760, H = 84;
+  const min = Math.min(...ok), max = Math.max(...ok), range = (max - min) || 1;
+  const x = i => (i / (vals.length - 1) * W).toFixed(1);
+  const y = v => (H - (v - min) / range * H).toFixed(1);
+  const s = svg("svg", { viewBox: `0 -8 ${W} ${H + 16}`, preserveAspectRatio: "none", role: "img",
+                         "aria-label": b.n || "Verlauf" });
+  s.append(svg("line", { x1: 0, x2: W, y1: H / 2, y2: H / 2, class: "mid" }));
+  // the line breaks at missing values; the area is drawn per connected run
+  let line = "", runs = [], run = [];
+  vals.forEach((v, i) => {
+    if (v === null) { if (run.length) runs.push(run); run = []; return; }
+    line += `${run.length ? "L" : "M"}${x(i)},${y(v)} `;
+    run.push([x(i), y(v)]);
+  });
+  if (run.length) runs.push(run);
+  for (const r of runs) {
+    if (r.length < 2) continue;
+    s.append(svg("path", { d: `M${r[0][0]},${H + 8} L` + r.map(p => p.join(",")).join(" L") +
+                              ` L${r[r.length - 1][0]},${H + 8} Z`, class: "area" }));
+  }
+  s.append(svg("path", { d: line, class: "line" }));
+  t.append(s);
+  if (span) t.append(wxScale([`−${num(span)} h`, `−${num(span / 2)} h`, "jetzt"]));
+  return t;
+}
+
+function weatherView(p) {
+  const D = {};
+  for (const d of p.data) D[d.key] = d;
+  const val = k => (D[k] && typeof D[k].value === "number") ? D[k].value : null;
+  const used = new Set();
+  const grid = el("div", "wx");
+
+  // temperature
+  const temp = val("temp"), dew = val("dew"), tmin = val("tmin"), tmax = val("tmax");
+  if (temp !== null) {
+    const t = wxTile("wx-hero", "Temperatur");
+    const left = el("div");
+    left.append(wxValue("wx-big", wxNum(temp), "°C"));
+    if (dew !== null) left.append(wxSub(["Taupunkt ", `${wxNum(dew)} °C`, " · Spread ", `${wxNum(temp - dew)} K`]));
+    t.append(left);
+    if (tmin !== null && tmax !== null) {
+      const r = el("div", "wx-range");
+      r.append(el("div", "wx-cap", "Letzte 24 h"));
+      const bar = el("div", "bar");
+      const mk = el("div", "mk");
+      mk.style.left = wxClamp(tmax > tmin ? (temp - tmin) / (tmax - tmin) * 100 : 50) + "%";
+      mk.title = `jetzt ${wxNum(temp)} °C`;
+      bar.append(mk);
+      const ends = el("div", "ends");
+      ends.append(el("span", "lo", `▼ ${wxNum(tmin)} °C`), el("span", "hi", `▲ ${wxNum(tmax)} °C`));
+      r.append(bar, ends);
+      t.append(r);
+    }
+    grid.append(t);
+  }
+
+  // wind
+  const wdir = val("wdir"), wspd = val("wspd"), gust = val("gust10") ?? val("gust"), gmax = val("gmax");
+  if (wspd !== null || wdir !== null) {
+    const t = wxTile("wx-wind", "Wind", wdir !== null ? `aus ${wxDir(wdir)}, ${Math.round(wdir)}°` : "");
+    t.append(wxCompass(wdir, wspd));
+    const rows = [];
+    if (wspd !== null) rows.push(["Mittel", `${Math.round(wspd * 3.6)} km/h · Bft ${wxBft(wspd)}`]);
+    if (gust !== null) rows.push(["Spitze", `${wxNum(gust)} m/s · ${Math.round(gust * 3.6)} km/h`]);
+    if (gmax !== null) rows.push(["Böe 24 h", `${wxNum(gmax)} m/s · ${Math.round(gmax * 3.6)} km/h`]);
+    if (rows.length) t.append(wxKv(rows));
+    if (wspd !== null) {
+      const now = wxBft(wspd), peak = gmax !== null ? wxBft(gmax) : 0;
+      const bft = el("div", "wx-bft");
+      bft.title = "Beaufort 1–12";
+      for (let i = 1; i <= 12; i++) bft.append(el("i", i <= now ? "on" : i === peak ? "gust" : null));
+      t.append(bft, wxScale(["Bft 1", "6", "12"]));
+      const lg = el("div", "wx-legend");
+      lg.append(el("span", "a", "jetzt"));
+      if (peak > now) lg.append(el("span", "g", "max. Böe 24 h"));
+      t.append(lg);
+    }
+    grid.append(t);
+  }
+
+  // pressure: QFF or QNH (sea level) on a gauge, station pressure as a note
+  const pKey = ["qff", "qnh", "qfe"].find(k => val(k) !== null);
+  if (pKey) {
+    const pv = val(pKey), ptnd = val("ptnd");
+    const t = wxTile("wx-press", "Luftdruck", pKey.toUpperCase());
+    t.append(wxValue("wx-mid", wxNum(pv), "hPa"));
+    if (ptnd !== null) {
+      const [sym, word] = ptnd > 0.5 ? ["↗", "steigend"] : ptnd < -0.5 ? ["↘", "fallend"] : ["→", "gleichbleibend"];
+      t.append(el("div", "wx-trend", `${sym} ${word}`),
+               wxSub(["Tendenz ", `${ptnd > 0 ? "+" : ptnd < 0 ? "−" : "±"}${wxNum(Math.abs(ptnd))} hPa / 3 h`]));
+    }
+    if (pKey !== "qfe") {
+      t.append(wxGauge((pv - 980) / 60 * 100, false), wxScale(["980", "1010", "1040"]));
+      if (val("qfe") !== null) t.append(wxSub(["Stationsdruck ", `${wxNum(val("qfe"))} hPa`]));
+    }
+    grid.append(t);
+  }
+
+  // humidity
+  const hum = val("hum");
+  if (hum !== null) {
+    const t = wxTile("wx-hum", "Relative Feuchte", hum < 40 ? "trocken" : hum > 85 ? "feucht" : "");
+    t.append(wxValue("wx-mid", Math.round(hum), "%"), wxGauge(hum, true), wxScale(["0", "50", "100 %"]));
+    if (dew !== null) t.append(wxSub(["Taupunkt ", `${wxNum(dew)} °C`]));
+    grid.append(t);
+  }
+
+  // temperature series (block "series" in °C), drawn as its own tile
+  const series = p.blocks.find(b => b.k === "series" && (b.u === "Cel" || b.unit === "°C")
+    && Array.isArray(b.v) && b.v.filter(x => typeof x === "number").length >= 2);
+  if (series) { grid.append(wxSpark(series)); used.add(series); }
+
+  // precipitation: the shortest period is the main value
+  const rain = [["r10m", "letzte 10 min"], ["r1h", "letzte Stunde"], ["rday", "seit Mitternacht"], ["r24h", "letzte 24 h"]]
+    .filter(([k]) => val(k) !== null);
+  if (rain.length) {
+    const t = wxTile("wx-rain", "Niederschlag");
+    const [k0, l0] = rain[0];
+    t.append(wxValue("wx-mid", wxNum(val(k0)), "mm"), el("div", "wx-sub", l0));
+    if (rain.length > 1) t.append(wxKv(rain.slice(1).map(([k, l]) => [l, `${wxNum(val(k))} mm`])));
+    grid.append(t);
+  }
+
+  const node = el("div", "wx-wrap");
+  node.append(grid);
+  // everything else (sun, UV, snow, fields from a newer dictionary ...) as plain cards
+  const rest = p.data.filter(d => !WX_TILE_KEYS.includes(d.key) || typeof d.value !== "number");
+  if (rest.length) {
+    const cards = el("div", "cards");
+    for (const d of rest) cards.append(card(d.label, d.value, d.unit));
+    node.append(cards);
+  }
+  return { node, used };
+}
+
+function rawView(raws) {
+  const r = el("div", "raw");
+  for (const x of raws) {
+    r.append(el("span", "h", `Unterseite ${x.sub} · rev ${x.rev} · ${x.bytes} Bytes · gehört von ${x.heard_from} · ${fmtTime(x.received)}\n`));
+    r.append(x.hex.replace(/(..)/g, "$1 ").trim() + "\n\n");
+    r.append(el("span", "h", "dekodiert\n"), JSON.stringify(x.decoded, null, 1) + "\n\n");
+  }
+  return r;
+}
+
+/* ---------- settings ---------- */
+
+async function renderSettings() {
+  state.screen = "settings";
+  state.selected = null;
+  const [settings, rubrics, stations, subs] = await Promise.all([
+    api("GET", "/settings"), api("GET", "/rubrics"), api("GET", "/stations"), api("GET", "/subscriptions")]);
+  state.settings = settings;
+  const off = new Set(subs.optout.map(o => o.station + "|" + o.cat));
+
+  const s = el("div", "settings");
+  s.append(el("h2", null, "Einstellungen"),
+           el("p", "hint", "Gilt nur für diese brocastd-Instanz. Warnungen und Notfall-Seiten werden immer angezeigt."),
+           el("h3", null, "Abo – was soll angezeigt werden?"),
+           el("p", "hint", "Grundsätzlich wird alles empfangen, auch von neu gehörten Stationen. Haken entfernen = abwählen. Die Auswahl gilt für neu ankommende Seiten."));
+
+  const calls = ["*", ...new Set([...stations.map(x => x.call), ...subs.optout.map(o => o.station).filter(x => x !== "*")])];
+  const t = el("table", "abo");
+  const head = el("tr");
+  head.append(el("th", null, "Station"), el("th", null, "alle Rubriken"));
+  for (const r of rubrics) head.append(el("th", null, r.name));
+  t.append(head);
+  const boxes = [];
+  for (const call of calls) {
+    const tr = el("tr");
+    tr.append(el("td", call === "*" ? null : "mono", call === "*" ? "alle Stationen" : call));
+    const rowBoxes = [];
+    const mk = (cat) => {
+      const td = el("td");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !off.has(call + "|" + cat);
+      cb.dataset.station = call;
+      cb.dataset.cat = cat;
+      cb.setAttribute("aria-label", `${call === "*" ? "alle Stationen" : call} – ${cat === "*" ? "alle Rubriken" : cat}`);
+      if (call === "*" && cat === "*") { cb.checked = true; cb.disabled = true; }
+      td.append(cb);
+      tr.append(td);
+      boxes.push(cb);
+      return cb;
+    };
+    const all = mk("*");
+    for (const r of rubrics) rowBoxes.push(mk(r.key));
+    const sync = () => rowBoxes.forEach(b => { b.disabled = call !== "*" && !all.checked; });
+    all.onchange = sync;
+    sync();
+    t.append(tr);
+  }
+  const matrix = el("div", "matrix");
+  matrix.append(t);
+  s.append(matrix, el("h3", null, "Speicher und Anzeige"));
+
+  const f = el("div", "fields");
+  const numField = (label, name, min, max) => {
+    const i = document.createElement("input");
+    i.type = "number"; i.min = min; i.max = max; i.value = settings[name]; i.id = "set-" + name;
+    const l = el("label", null, label); l.htmlFor = i.id;
+    f.append(l, i);
+    return i;
+  };
+  const total = numField("Höchstzahl Seiten gesamt", "max_pages_total", 10, 100000);
+  const perCat = numField("Höchstzahl Seiten je Rubrik", "max_pages_per_cat", 1, 100000);
+  const age = numField("Maximales Alter (Tage)", "max_age_days", 1, 3650);
+  const lang = document.createElement("select");
+  lang.id = "set-lang";
+  lang.append(new Option("Deutsch", "de"), new Option("English", "en"));
+  lang.value = settings.lang;
+  const ll = el("label", null, "Sprache der Anzeige"); ll.htmlFor = lang.id;
+  const sound = document.createElement("select");
+  sound.id = "set-sound";
+  sound.append(new Option("ein", "1"), new Option("aus", "0"));
+  sound.value = settings.alert_sound ? "1" : "0";
+  const sl = el("label", null, "Hinweiston bei Warnungen"); sl.htmlFor = sound.id;
+  f.append(ll, lang, sl, sound);
+  s.append(f);
+
+  const save = el("button", "btn primary", "Speichern");
+  save.type = "button";
+  save.onclick = async () => {
+    try {
+      state.settings = await api("PUT", "/settings", {
+        max_pages_total: parseInt(total.value, 10), max_pages_per_cat: parseInt(perCat.value, 10),
+        max_age_days: parseInt(age.value, 10), lang: lang.value, alert_sound: sound.value === "1" });
+      const optout = boxes.filter(b => !b.checked && !b.disabled).map(b => ({ station: b.dataset.station, cat: b.dataset.cat }));
+      await api("PUT", "/subscriptions", { optout });
+      rubricCache = null;
+      toast("Gespeichert.");
+      refreshLists();
+    } catch (e) {
+      toast("Nicht gespeichert: " + e.message, true);
+    }
+  };
+  const p = el("p", "hint", "Gelöschte Seiten bleiben gelöscht, bis die Station eine neue Revision sendet. Gemerkte Seiten werden nie verdrängt.");
+  p.style.marginTop = "14px";
+  s.append(save, p);
+  $("view").replaceChildren(s);
+  refreshLists();
+}
+
+/* ---------- status ---------- */
+
+async function renderStatus() {
+  state.screen = "status";
+  state.selected = null;
+  await refreshStatus();
+  const st = state.status;
+  const s = el("div", "settings");
+  s.append(el("h2", null, "Status"));
+  const f = el("div", "fields");
+  const rows = [
+    ["Version", st.version],
+    ["Modus", st.mode === "station" ? `Station ${st.callsign}` : "Listener"],
+    ["Direwolf (KISS)", st.kiss_connected ? "verbunden" : "getrennt"],
+    ["Frames empfangen", st.rx_frames], ["brocast-Seiten empfangen", st.rx_pages],
+    ["Dekodierfehler", st.rx_errors], ["Frames gesendet", st.tx_frames],
+    ["Dictionary installiert", st.dictionary ? `v${st.dictionary.local} · ${st.dictionary.hash}` : ""],
+    ["Dictionary auf der Frequenz", !st.dictionary ? "" : st.dictionary.outdated
+      ? `v${st.dictionary.newest_heard} von ${st.dictionary.heard_from} (zuletzt ${fmtTime(st.dictionary.last_heard)}) – Update nötig`
+      : "keine neuere Version gehört"],
+    ["Seiten gespeichert", st.pages], ["davon ungelesen", st.unread], ["Stationen gehört", st.stations],
+  ];
+  if (st.mode === "station") {
+    rows.push(["Eigene Seiten im Karussell", st.pages_station !== undefined ? st.pages_station : ""]);
+    rows.push(["Airtime (Fenster)", `${num(st.airtime_used_s)} s von ${num(st.airtime_limit_s)} s`]);
+  }
+  if (st.dictionary && st.dictionary.source) rows.push(["Bezugsquelle", st.dictionary.source.text]);
+  if (st.dictionary && st.dictionary.hash_mismatch)
+    rows.push(["Achtung", "Station sendet gleiche Version mit anderer Prüfsumme"]);
+  for (const [k, v] of rows) f.append(el("span", null, k), el("b", "mono", v === undefined ? "" : v));
+  const imp = el("button", "btn", "Dictionary importieren …");
+  imp.type = "button";
+  imp.style.marginTop = "18px";
+  imp.onclick = () => renderImport();
+  s.append(f, imp);
+  $("view").replaceChildren(s);
+  refreshLists();
+}
+
+/* ---------- dictionary import ---------- */
+
+function renderImport() {
+  state.screen = "import";
+  state.selected = null;
+  const s = el("div", "settings");
+  s.append(el("h2", null, "Dictionary importieren"),
+           el("p", "hint", "Mailbox connecten (z. B. OE3GAS-1), Befehl DICT eingeben und die Ausgabe " +
+              "im Terminalprogramm mitschneiden. Den Mitschnitt hier als Datei wählen oder einfügen – " +
+              "Begrüßung und Prompts davor oder danach stören nicht."));
+  const file = document.createElement("input");
+  file.type = "file";
+  file.accept = ".txt,.log,.cap,.yaml,text/plain";
+  const fileLabel = el("label", "check", "Mitschnitt-Datei: ");
+  fileLabel.append(file);
+  const area = el("textarea", "importtext");
+  area.placeholder = "#BROCAST-DICT BEGIN v2 lines=… sha256=…\n…\n#BROCAST-DICT END";
+  area.spellcheck = false;
+  const out = el("div", "importresult");
+  let fileB64 = null;
+  file.onchange = () => {
+    const f = file.files && file.files[0];
+    if (!f) { fileB64 = null; return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const bytes = new Uint8Array(reader.result);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      fileB64 = btoa(bin);
+      area.value = "";
+      out.replaceChildren(el("p", "hint", `Datei „${f.name}“ geladen (${bytes.length} Bytes).`));
+    };
+    reader.readAsArrayBuffer(f);
+  };
+  area.oninput = () => { if (area.value) { fileB64 = null; file.value = ""; } };
+
+  const send = async (dryRun) => {
+    const body = fileB64 ? { data_b64: fileB64 } : { text: area.value };
+    body.dry_run = dryRun;
+    if (!fileB64 && !area.value.trim()) { toast("Bitte Datei wählen oder Text einfügen.", true); return; }
+    let res;
+    try {
+      res = await api("POST", "/dictionary/import", body);
+    } catch (e) {
+      out.replaceChildren(el("div", "note alarm", e.message));
+      return;
+    }
+    const box = el("div", "note" + (res.installed ? "" : " warn"), res.message);
+    out.replaceChildren(box);
+    if (res.added && Object.keys(res.added).length) {
+      const ul = el("ul");
+      for (const [k, v] of Object.entries(res.added)) ul.append(el("li", null, `${k}: +${v}`));
+      out.append(ul);
+    }
+    if (res.installed) {
+      rubricCache = null;
+      await refreshStatus();
+      refreshLists();
+      toast(res.message);
+    }
+  };
+  const check = el("button", "btn", "Prüfen");
+  check.type = "button";
+  check.onclick = () => send(true);
+  const install = el("button", "btn primary", "Prüfen und installieren");
+  install.type = "button";
+  install.onclick = () => send(false);
+  const btns = el("div", "actions");
+  btns.append(check, install);
+  s.append(fileLabel, el("p", "hint", "oder einfügen:"), area, btns, out);
+  $("view").replaceChildren(s);
+  refreshLists();
+}
+
+/* ---------- receive log ---------- */
+
+async function renderRxlog(filter) {
+  if (filter !== undefined) state.rxFilter = filter;          // {org, id} or null
+  state.screen = "rxlog";
+  if (filter && filter.org) state.selected = null;
+  const f = state.rxFilter;
+  const rows = await api("GET", "/rxlog" + qs({
+    limit: 300, org: f && f.org, id: f && f.id, brocast: !state.rxForeign }));
+
+  const s = el("div", "settings wide");
+  const head = el("div", "loghead");
+  head.append(el("h2", null, f ? `Empfangslog – Seite ${f.id} (${f.org})` : "Empfangslog"));
+  if (f) {
+    const all = el("button", "btn sm", "Alle Einträge");
+    all.type = "button";
+    all.onclick = () => renderRxlog(null);
+    head.append(all);
+  }
+  const lbl = el("label", "check");
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!state.rxForeign;
+  cb.onchange = () => { state.rxForeign = cb.checked; renderRxlog(); };
+  lbl.append(cb, " auch andere Frames (APRS, Mailbox …)");
+  head.append(el("span", "grow"), lbl);
+  s.append(head, el("p", "hint",
+    "Jeder gehörte Frame, neueste zuerst. „Wiederholung“ heißt: die Seite ist schon da und ändert " +
+    "sich nicht. Mit der Maus über dem Ergebnis steht der genaue Grund."));
+
+  const t = el("table", "tbl log");
+  const hr = el("tr");
+  for (const h of ["Zeit", "Von", "Seite", "Teil", "Rev", "Titel", "Ergebnis"]) hr.append(el("th", null, h));
+  t.append(hr);
+  for (const r of rows) {
+    const tr = el("tr", r.kind === "foreign" ? "dim" : "");
+    const d = new Date(r.time);
+    tr.append(el("td", "mono", d.toLocaleTimeString("de-AT") + (d.toDateString() !== new Date().toDateString()
+      ? " " + d.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit" }) : "")));
+    const from = el("td", "mono", r.heard_from);
+    if (r.result === "foreign" && r.dest) from.append(el("span", "dimtext", " > " + r.dest));
+    tr.append(from);
+    tr.append(el("td", "mono", r.id === null ? "" : r.id));
+    tr.append(el("td", "mono", r.sub_total > 1 ? `${r.sub}/${r.sub_total}` : ""));
+    tr.append(el("td", "mono", r.rev === null ? "" : r.rev));
+    tr.append(el("td", null, r.ti));
+    const res = el("td");
+    if (r.kind === "foreign") res.append(el("span", "dimtext", r.chip));
+    else {
+      const chip = el("span", "rchip " + r.kind, r.chip);
+      chip.title = r.text;                         // exact reason on hover
+      res.append(chip);
+    }
+    tr.append(res);
+    if (r.visible_now) {
+      tr.classList.add("click");
+      tr.title = "Seite öffnen";
+      tr.onclick = () => openPage(r.org, r.id);
+    }
+    t.append(tr);
+  }
+  if (!rows.length) s.append(el("div", "empty", "Noch nichts empfangen."));
+  else s.append(t);
+  $("view").replaceChildren(s);
+}
+
+/* ---------- search, goto, wiring ---------- */
+
+let searchTimer = null;
+function onSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.q = $("search").value.trim();
+    if (state.q) { state.cat = null; state.station = null; state.sub = "*"; }
+    state.screen = "pages";
+    refreshLists();
+  }, 300);
+}
+
+async function onGoto(e) {
+  if (e.key !== "Enter") return;
+  const n = parseInt($("goto").value, 10);
+  if (!n) return;
+  const all = await api("GET", "/pages");
+  const hits = all.filter(p => p.id === n);
+  if (!hits.length) { toast(`Seite ${n} ist nicht vorhanden.`, true); return; }
+  const prefer = state.station || (state.selected && state.selected.org);
+  const hit = hits.find(p => p.org === prefer) || hits[0];
+  $("goto").value = "";
+  openPage(hit.org, hit.id);
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  $("tab-cat").classList.toggle("on", mode === "cat");
+  $("tab-st").classList.toggle("on", mode === "st");
+  state.cat = null; state.station = null; state.sub = "*";
+  refreshLists();
+}
+
+async function poll() {
+  await refreshStatus();
+  try { await refreshAlerts(); } catch (e) { /* offline */ }
+  if (state.screen === "status") renderStatus();
+  else if (state.screen === "rxlog") { renderRxlog().catch(() => {}); refreshLists(); }
+  else if (document.activeElement && document.activeElement.tagName !== "SELECT") refreshLists();
+}
+
+async function init() {
+  state.view = loadView();
+  $("tab-cat").onclick = () => setMode("cat");
+  $("tab-st").onclick = () => setMode("st");
+  $("sub-filter").onchange = () => { state.sub = $("sub-filter").value; renderList().catch(e => toast(e.message, true)); };
+  document.querySelectorAll("[data-f]").forEach(b => { b.onclick = () => setFilter(b.dataset.f); });
+  $("btn-settings").onclick = () => renderSettings().catch(e => toast(e.message, true));
+  $("nav-status").onclick = () => renderStatus().catch(e => toast(e.message, true));
+  $("nav-rxlog").onclick = () => renderRxlog(null).catch(e => toast(e.message, true));
+  $("dictbar-details").onclick = () => renderStatus().catch(e => toast(e.message, true));
+  $("dictbar-import").onclick = () => renderImport();
+  $("dictbar-hide").onclick = () => {          // hidden until an even newer version is heard
+    state.dictHidden = state.status.dictionary && state.status.dictionary.newest_heard;
+    $("dictbar").hidden = true;
+  };
+  $("nav-fav").onclick = () => { state.cat = null; state.station = null; state.q = ""; setFilter("fav"); };
+  $("alert-open").onclick = () => { if (state.alertPage) openPage(state.alertPage.org, state.alertPage.id); };
+  $("search").oninput = onSearch;
+  $("goto").onkeydown = (e) => onGoto(e).catch(err => toast(err.message, true));
+
+  try { state.settings = await api("GET", "/settings"); } catch (e) { /* shown by status */ }
+  await refreshStatus();
+  await refreshAlerts().catch(() => {});
+  await refreshLists();
+  renderEmpty();
+  setInterval(() => { poll().catch(() => {}); }, POLL_MS);
+}
+
+document.addEventListener("DOMContentLoaded", init);
+</script></head><body>
+
+<header class="top">
+  <div class="logo">brocast</div>
+  <span class="badge-call" id="hdr-call">…</span>
+  <span class="stat"><span class="dot" id="hdr-dot"></span><span id="hdr-kiss">Direwolf …</span></span>
+  <span class="stat"><b id="hdr-unread">0</b>&nbsp;ungelesen</span>
+  <span class="stat"><b id="hdr-stations">0</b>&nbsp;Stationen gehört</span>
+  <span class="grow"></span>
+  <input class="search" id="search" type="search" placeholder="Suchen in allen Seiten …" autocomplete="off">
+  <label class="goto">Seite <input id="goto" class="mono" maxlength="5" inputmode="numeric" autocomplete="off"></label>
+  <button class="btn" id="btn-settings" type="button">Einstellungen</button>
+</header>
+
+<div class="alert" id="alert" hidden>
+  <span id="alert-text"></span>
+  <span class="grow"></span>
+  <button class="btn sm" id="alert-open" type="button">Anzeigen</button>
+</div>
+
+<div class="infobar" id="dictbar" hidden>
+  <span id="dictbar-text"></span>
+  <span class="grow"></span>
+  <button class="btn sm" id="dictbar-import" type="button">Importieren</button>
+  <button class="btn sm" id="dictbar-details" type="button">Details</button>
+  <button class="btn sm" id="dictbar-hide" type="button">Ausblenden</button>
+</div>
+
+<div class="shell">
+  <nav class="side">
+    <div class="tabs">
+      <button id="tab-cat" class="on" type="button">Rubriken</button>
+      <button id="tab-st" type="button">Stationen</button>
+    </div>
+    <div class="navlist" id="navlist"></div>
+    <div class="side-foot">
+      <button class="nav" id="nav-fav" type="button"><span class="name">★ Gemerkt</span><span class="count" id="fav-count"></span></button>
+      <button class="nav" id="nav-rxlog" type="button"><span class="name">Empfangslog</span><span class="count"></span></button>
+      <button class="nav" id="nav-status" type="button"><span class="name">Status</span><span class="count"></span></button>
+    </div>
+  </nav>
+
+  <section class="list">
+    <div class="listhead">
+      <h2><span id="list-title">Alle Seiten</span> <small id="list-sub"></small></h2>
+      <div class="filters">
+        <button class="btn sm on" data-f="all" type="button">Alle</button>
+        <button class="btn sm" data-f="unread" type="button">Ungelesen</button>
+        <button class="btn sm" data-f="fav" type="button">Gemerkt</button>
+        <select class="sel" id="sub-filter"></select>
+      </div>
+    </div>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <main class="view" id="view"></main>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+</body></html>

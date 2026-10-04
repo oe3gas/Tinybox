@@ -1,0 +1,206 @@
+# brocast Kern-Dictionary
+#
+# Gibt jeder Nummer auf der Luft ihre Bedeutung. Gesendet werden nur die
+# Nummern; Namen, Einheiten, Skalierung und Anzeigetexte stehen hier.
+#
+# Regeln:
+#  - Eine vergebene Nummer wird nie umgedeutet (nur "deprecated: true").
+#  - Neue Einträge nur in neuer Version; Versionen sind additiv.
+#  - scale: Zehnerpotenz. Wert auf der Luft = round(Wert / 10**scale).
+#    Beispiel scale -1: 12.5 °C -> 125.
+#  - Eine Seite ist genau ein Frame (max. 240 Bytes CBOR); lange Inhalte
+#    werden von brocastd in Unterseiten geteilt (Key 23 sub).
+#
+# Spezifikation: https://claude.ai/code/artifact/bf4b91a7-7807-42d7-b72e-5739d9c257bd
+#
+# VERSION 1 IST EINGEFROREN (02.10.2026, Prüfsumme 1b082f65).
+# Inhaltliche Änderungen nur noch als Version 2 (version: 2, nur Ergänzungen),
+# verteilt über TinyBox DICT. Kommentare dürfen geändert werden – sie gehen
+# nicht in die Prüfsumme ein. Der Test test_v1_is_frozen wacht darüber.
+
+dictionary: brocast-core
+version: 2
+languages: [de, en]
+
+# ---------------------------------------------------------------------------
+# Seiten-Umschlag: positive Keys 0..23, in jeder Seite gleich
+# ---------------------------------------------------------------------------
+envelope:
+  0:  { name: dv,   type: uint,      required: true, de: "Dictionary-Version", en: "Dictionary version" }
+  1:  { name: id,   type: uint,      required: true, de: "Seiten-ID", en: "Page ID" }
+  2:  { name: rev,  type: uint,      default: 0, de: "Revision", en: "Revision" }
+  3:  { name: org,  type: callsign,  default: "@ax25_src", de: "Urheber", en: "Originator" }
+  4:  { name: t,    type: time,      required: true, de: "Erstellt", en: "Created" }
+  5:  { name: exp,  type: uint, unit: min, default: "@typ", de: "Gültig für", en: "Valid for" }
+  6:  { name: typ,  type: enum, enum: typ, required: true, de: "Seitentyp", en: "Page type" }
+  7:  { name: flg,  type: bits, enum: flg, default: 0, de: "Kennzeichen", en: "Flags" }
+  8:  { name: ti,   type: tstr, max: 40, de: "Titel", en: "Title" }
+  9:  { name: txt,  type: tstr, de: "Kurztext", en: "Summary" }
+  10: { name: to,   type: any,  de: "Adressat", en: "Addressee" }
+  11: { name: area, type: tstr, de: "Gebiet", en: "Area" }
+  12: { name: pos,  type: position, de: "Ort", en: "Position" }
+  13: { name: sym,  type: tstr, max: 2, default: "@typ", de: "Symbol", en: "Symbol" }
+  14: { name: lnk,  type: pagerefs, de: "Links", en: "Links" }
+  15: { name: ref,  type: pageref,  de: "Bezug", en: "Reference" }
+  16: { name: pri,  type: enum, enum: pri, default: 0, de: "Priorität", en: "Priority" }
+  17: { name: lang, type: enum, enum: lang, default: 0, de: "Sprache", en: "Language" }
+  18: { name: cat,  type: enums, enum: cat, free_text: 20, de: "Rubriken", en: "Categories" }   # eigene Rubriken als Text, max. 20 Zeichen
+  19: { name: blk,  type: blocks, de: "Inhalt", en: "Content" }
+  20: { name: dat,  type: data, de: "Daten", en: "Data" }
+  21: { name: src,  type: any,  de: "Quelle", en: "Source" }
+  22: { name: crit, type: any,  de: "Muss verstanden werden", en: "Critical keys" }
+  23: { name: sub,  type: subpage, de: "Unterseite", en: "Subpage" }   # [n, gesamt], nur bei geteilten Seiten
+
+# ---------------------------------------------------------------------------
+# Darstellungs-Bausteine: negative Keys -1..-24, in blk (und dat) verwendbar
+# ---------------------------------------------------------------------------
+block_keys:
+  -1:  { name: k,    type: enum, enum: block, de: "Blockart", en: "Block kind" }
+  -2:  { name: x,    type: tstr, de: "Text", en: "Text" }
+  -3:  { name: v,    type: any,  de: "Wert", en: "Value" }
+  -4:  { name: u,    type: enum, enum: unit, de: "Einheit", en: "Unit" }
+  -5:  { name: n,    type: any,  de: "Bezeichnung", en: "Label" }
+  -6:  { name: dt,   type: int,  unit: s, de: "Zeitversatz", en: "Time offset" }
+  -7:  { name: pos,  type: position, de: "Ort", en: "Position" }
+  -8:  { name: href, type: pageref, de: "Linkziel", en: "Link target" }
+  -9:  { name: rows, type: any,  de: "Zeilen", en: "Rows" }
+  -10: { name: hdr,  type: any,  de: "Spaltenköpfe", en: "Header" }
+  -11: { name: lo,   type: any,  de: "Minimum", en: "Minimum" }
+  -12: { name: hi,   type: any,  de: "Maximum", en: "Maximum" }
+  -13: { name: st,   type: enum, enum: state, de: "Zustand", en: "State" }
+  -14: { name: acc,  type: any,  de: "Genauigkeit", en: "Accuracy" }
+  -15: { name: sc,   type: int,  de: "Skalierung", en: "Scale" }
+  # -16..-24: Reserve
+
+# ---------------------------------------------------------------------------
+# Aufzählungen (Werte 0..23 kosten 1 Byte)
+# ---------------------------------------------------------------------------
+enums:
+  typ:
+    0:  { name: text,  de: "Textseite / Bulletin", en: "Text / bulletin", exp: 1440, sym: "/B" }
+    1:  { name: wx,    de: "Wetter",               en: "Weather",         exp: 60,   sym: "/_" }
+    2:  { name: tlm,   de: "Telemetrie",           en: "Telemetry",       exp: 60,   sym: "/T" }
+    3:  { name: msg,   de: "Nachricht",            en: "Message",         exp: 1440 }
+    4:  { name: ack,   de: "Quittung",             en: "Acknowledgement", exp: 60 }
+    5:  { name: obj,   de: "Objekt / Ort",         en: "Object / place",  exp: 1440 }
+    6:  { name: node,  de: "Stationsstatus",       en: "Station status",  exp: 120 }
+    7:  { name: dx,    de: "DX-Spot",              en: "DX spot",         exp: 30 }
+    8:  { name: alert, de: "Warnung / Notfunk",    en: "Alert",           exp: 360 }
+    9:  { name: index, de: "Inhaltsverzeichnis",   en: "Index",           exp: 1440 }
+    10: { name: dict,  de: "Dictionary-Seite",     en: "Dictionary page", exp: 10080 }
+    11: { name: formreply, de: "Formularantwort",  en: "Form reply", reserved: v2 }
+    # 12..23: Reserve
+
+  flg:            # Bitnummern
+    0: { name: withdrawn,    de: "zurückgezogen",      en: "withdrawn" }
+    1: { name: test,         de: "Test",               en: "test" }
+    2: { name: exercise,     de: "Übung",              en: "exercise" }
+    3: { name: reply_wanted, de: "Antwort erwünscht",  en: "reply wanted" }
+
+  pri:
+    0: { name: routine,  de: "Routine",   en: "Routine" }
+    1: { name: welfare,  de: "Wohlfahrt", en: "Welfare" }
+    2: { name: priority, de: "Vorrang",   en: "Priority" }
+    3: { name: emergency, de: "Notfall",  en: "Emergency" }
+
+  lang:
+    0: { name: de, de: "Deutsch",  en: "German" }
+    1: { name: en, de: "Englisch", en: "English" }
+
+  cat:
+    0:  { name: all,     de: "Allgemein",   en: "General" }
+    1:  { name: dx,      de: "DX",          en: "DX" }
+    2:  { name: wx,      de: "Wetter",      en: "Weather" }
+    3:  { name: keps,    de: "Bahndaten",   en: "Keplerians" }
+    4:  { name: contest, de: "Contest",     en: "Contest" }
+    5:  { name: amsat,   de: "Satelliten",  en: "Satellites" }
+    6:  { name: notfunk, de: "Notfunk",     en: "Emergency comms" }
+    7:  { name: sota,    de: "SOTA",        en: "SOTA" }
+    8:  { name: pota,    de: "POTA",        en: "POTA" }
+    9:  { name: club,    de: "Club / Verband", en: "Club" }
+    10: { name: tech,    de: "Technik",     en: "Technical" }
+    11: { name: sale,    de: "Flohmarkt",   en: "For sale" }
+    12: { name: net,     de: "Funkrunde",   en: "Net" }
+
+  block:
+    0:  { name: para,    de: "Absatz",        en: "Paragraph" }
+    1:  { name: heading, de: "Überschrift",   en: "Heading" }
+    2:  { name: list,    de: "Liste",         en: "List" }
+    3:  { name: table,   de: "Tabelle",       en: "Table" }
+    4:  { name: value,   de: "Messwert",      en: "Value" }
+    5:  { name: series,  de: "Zeitreihe",     en: "Series" }
+    6:  { name: link,    de: "Link",          en: "Link" }
+    7:  { name: note,    de: "Hinweis",       en: "Note" }
+    8:  { name: pre,     de: "Vorformatiert", en: "Preformatted" }
+    9:  { name: mappoint, de: "Kartenpunkt",  en: "Map point" }
+    10: { name: sep,     de: "Trenner",       en: "Separator" }
+    # 16..23: Formularfelder, reserviert für Version 2
+
+  state:
+    0: { name: ok,    de: "normal",  en: "ok" }
+    1: { name: info,  de: "Info",    en: "info" }
+    2: { name: warn,  de: "Warnung", en: "warning" }
+    3: { name: alarm, de: "Alarm",   en: "alarm" }
+
+  unit:             # Codes nach SenML (RFC 8428), wo vorhanden
+    0:  { name: Cel,  sym: "°C" }
+    1:  { name: "%RH", sym: "%" }
+    2:  { name: hPa,  sym: "hPa" }
+    3:  { name: deg,  sym: "°" }
+    4:  { name: m/s,  sym: "m/s" }
+    5:  { name: mm,   sym: "mm" }
+    6:  { name: m,    sym: "m" }
+    7:  { name: km,   sym: "km" }
+    8:  { name: V,    sym: "V" }
+    9:  { name: A,    sym: "A" }
+    10: { name: W,    sym: "W" }
+    11: { name: "%",  sym: "%" }
+    12: { name: Hz,   sym: "Hz" }
+    13: { name: kHz,  sym: "kHz" }
+    14: { name: MHz,  sym: "MHz" }
+    15: { name: dB,   sym: "dB" }
+    16: { name: dBm,  sym: "dBm" }
+    17: { name: s,    sym: "s" }
+    18: { name: min,  sym: "min" }
+    19: { name: ppm,  sym: "ppm" }
+    20: { name: W/m2, sym: "W/m²" }
+    21: { name: cm,   sym: "cm" }
+    22: { name: lx,   sym: "lx" }
+
+# ---------------------------------------------------------------------------
+# Themen-Dictionaries: Keys in dat, je typ eigener Namensraum
+# ---------------------------------------------------------------------------
+types:
+  wx:
+    0:  { name: temp, type: int,  scale: -1, unit: Cel,  de: "Lufttemperatur",      en: "Air temperature" }
+    1:  { name: hum,  type: uint,            unit: "%RH", de: "Relative Feuchte",   en: "Relative humidity" }
+    2:  { name: qnh,  type: uint, scale: -1, unit: hPa,  de: "Luftdruck (QNH)",     en: "Pressure (QNH)" }
+    3:  { name: wdir, type: uint,            unit: deg,  de: "Windrichtung",        en: "Wind direction" }
+    4:  { name: wspd, type: uint, scale: -1, unit: m/s,  de: "Windgeschwindigkeit", en: "Wind speed" }
+    5:  { name: gust, type: uint, scale: -1, unit: m/s,  de: "Böe (5 min)",         en: "Gust (5 min)" }
+    6:  { name: r1h,  type: uint, scale: -1, unit: mm,   de: "Niederschlag 1 h",    en: "Rain 1 h" }
+    7:  { name: r24h, type: uint, scale: -1, unit: mm,   de: "Niederschlag 24 h",   en: "Rain 24 h" }
+    8:  { name: rday, type: uint, scale: -1, unit: mm,   de: "Niederschlag seit Mitternacht", en: "Rain since midnight" }
+    9:  { name: qfe,  type: uint, scale: -1, unit: hPa,  de: "Luftdruck (QFE)",     en: "Pressure (QFE)" }
+    10: { name: dew,  type: int,  scale: -1, unit: Cel,  de: "Taupunkt",            en: "Dew point" }
+    11: { name: sol,  type: uint,            unit: W/m2, de: "Globalstrahlung",     en: "Solar radiation" }
+    12: { name: uv,   type: uint, scale: -1,             de: "UV-Index",            en: "UV index" }
+    13: { name: snow, type: uint,            unit: cm,   de: "Schneehöhe",          en: "Snow depth" }
+    # ab Version 2
+    14: { name: tmin, type: int,  scale: -1, unit: Cel,  de: "Temperatur-Minimum 24 h", en: "Min. temperature 24 h" }
+    15: { name: tmax, type: int,  scale: -1, unit: Cel,  de: "Temperatur-Maximum 24 h", en: "Max. temperature 24 h" }
+    16: { name: gmax, type: uint, scale: -1, unit: m/s,  de: "Stärkste Böe 24 h",   en: "Max. gust 24 h" }
+    17: { name: ptnd, type: int,  scale: -1, unit: hPa,  de: "Drucktendenz 3 h",    en: "Pressure tendency 3 h" }
+    18: { name: r10m, type: uint, scale: -1, unit: mm,   de: "Niederschlag 10 min", en: "Rain 10 min" }
+    19: { name: qff,  type: uint, scale: -1, unit: hPa,  de: "Luftdruck (QFF)",     en: "Pressure (QFF)" }
+    20: { name: gust10, type: uint, scale: -1, unit: m/s, de: "Windspitze (10 min)", en: "Peak wind (10 min)" }
+
+  # typ 10: Ankündigung, welche Dictionary-Version die Station nutzt und wo es sie gibt
+  dict:
+    0:  { name: version, type: uint, de: "Version",      en: "Version" }
+    1:  { name: hash,    type: tstr, de: "Prüfsumme",    en: "Checksum" }
+    2:  { name: source,  type: tstr, de: "Bezugsquelle", en: "Available from" }
+    # ab Version 2, Dictionary über Funk. Fest im Programm (Bootstrap), hier nur zur Anzeige:
+    3:  { name: zdata,   type: bstr, de: "Gepackte Daten (Teil)", en: "Packed data (part)" }
+    4:  { name: zlen,    type: uint, de: "Länge der gepackten Daten", en: "Packed data length" }
+    5:  { name: zint,    type: uint, de: "Aussendung über Funk alle … Stunden", en: "Sent over the air every … hours" }

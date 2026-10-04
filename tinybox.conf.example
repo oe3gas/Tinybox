@@ -1,0 +1,78 @@
+# Vorlage. Kopieren nach tinybox.conf und pro PC anpassen.
+# tinybox.conf selbst ist nicht im Repo (.gitignore).
+
+# TinyBox configuration
+# Relative paths are relative to this file.
+
+[station]
+mailbox_call = OE3GAS-1        # callsign + SSID the mailbox answers on
+sysop_call   = OE3GAS          # this call (any SSID) gets sysop rights
+sysop_via_radio = no           # no: sysop rights only locally (callsigns
+                               # on the air are not authenticated)
+
+[direwolf]
+agw_host        = 127.0.0.1    # Direwolf runs on the same PC
+agw_port        = 8000         # AGWPORT in direwolf.conf
+agw_radio_port  = 0            # Direwolf channel (0 = first radio)
+reconnect_sec   = 5
+paclen          = 128          # max bytes per packet sent
+max_outstanding = 4            # max unacknowledged packets in Direwolf
+
+[mailbox]
+welcome_enabled      = yes
+welcome_text         = Amateur radio use only. No encryption, no business traffic.
+third_party          = yes     # yes: everybody may write to everybody
+max_users            = 3
+max_msg_bytes        = 8192
+idle_timeout_min     = 10
+bulletin_expire_days = 30      # 0 = keep bulletins forever
+
+[telnet]
+enabled = yes                  # local test port without radio
+host    = 127.0.0.1            # loopback only
+port    = 6300
+
+[web]
+enabled = yes                  # sysop web GUI in the browser
+host    = 127.0.0.1            # loopback only
+port    = 8080                 # login link is shown in the TinyBox window
+
+[console]
+enabled = yes                  # sysop console in the TinyBox window
+monitor = yes                  # show live session traffic there (toggle: MON)
+
+[storage]
+data_dir = data
+
+[logging]
+level   = INFO                 # DEBUG, INFO, WARNING, ERROR
+monitor = yes                  # include session traffic in the log file
+log_dir =                      # empty = no log file. Otherwise an existing,
+                               # writable folder, e.g. logs or D:\Logs\Tinybox.
+                               # Each start creates Tinybox_log_<date>_<time>.log
+
+[brocast]
+dict_file  = brocast/brocast-core.yaml  # DICT command; empty = not offered
+publish    = yes                         # report bulletins to brocastd (never private mail)
+ingest_url = http://127.0.0.1:8090/api/v1
+token      =                             # same as [station] token in brocastd.conf
+max_bytes  = 4096                        # longer bulletins are cut, with a hint "R n"
+destinations =                           # empty = all bulletins, e.g. DX WX ALL
+rubrics    =                             # extra DEST:rubric pairs, e.g. FUCHS:Fuchsjagd
+sync_min   = 60                          # full sync with brocastd every n minutes
+alert_destinations = WARN                # these bulletins become warning pages in brocast
+
+[inbox]
+enabled  = yes                 # scripts drop *.txt here, TinyBox makes bulletins
+dir      = eingang             # processed: eingang/erledigt, rejected: eingang/fehler
+poll_sec = 10
+
+[mqtt]
+enabled       = no             # milestone M5
+host          = 127.0.0.1
+port          = 8883
+tls           = yes
+client_id     = tinybox-oe3gas
+username      = tinybox
+password_file = secrets/mqtt.pw
+topic_root    = tinybox/OE3GAS-1

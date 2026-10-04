@@ -1,0 +1,8 @@
+{
+  "typ": "wx",
+  "ti": "Wetter Hollabrunn (Test)",
+  "flg": ["test"],
+  "pos": [48.5613, 16.0797],
+  "exp": 120,
+  "dat": {"temp": 12.5, "hum": 65, "qnh": 1013.2, "wdir": 270, "wspd": 3.6}
+}

@@ -1,0 +1,188 @@
+"""Local sysop console in the TinyBox window.
+
+All mailbox commands work here with sysop rights (L, R, K, E, S, SB ...),
+plus console commands: W, MON, DISC, STATUS, SHUTDOWN.
+Input comes from a background thread reading the keyboard, so the
+mailbox keeps running while the sysop types.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import sys
+import threading
+import time
+from typing import Callable
+
+from .. import VERSION, commands, texts
+from ..app import App
+from ..config import base_call, normalize_call
+from ..session import Session, State
+
+log = logging.getLogger(__name__)
+
+
+class MonitorFilter(logging.Filter):
+    """Hides 'tinybox.monitor' records on a handler unless enabled."""
+
+    def __init__(self, enabled: bool) -> None:
+        super().__init__()
+        self.enabled = enabled
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return self.enabled or not record.name.startswith("tinybox.monitor")
+
+
+def _stdout_write(text: str) -> None:
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+
+class ConsoleTransport:
+    def __init__(self, write_fn: Callable[[str], None]) -> None:
+        self.write_fn = write_fn
+
+    def write(self, text: str) -> None:
+        self.write_fn(text.replace("\r", "\n"))
+
+    def close(self) -> None:
+        pass
+
+    def abort_output(self) -> None:
+        pass
+
+
+class SysopConsole:
+    def __init__(self, app: App, monitor_filter: MonitorFilter | None = None,
+                 write_fn: Callable[[str], None] | None = None) -> None:
+        self.app = app
+        self.filter = monitor_filter or MonitorFilter(app.cfg.console.monitor)
+        self.transport = ConsoleTransport(write_fn or _stdout_write)
+        self.session = Session(app.cfg.station.sysop_call, app.service, app.cfg,
+                               self.transport, origin="sysop", sysop=True, monitor=False)
+
+    def out(self, *lines: str) -> None:
+        self.session.out(*lines)
+
+    def start(self) -> None:
+        self.out(texts.CONSOLE_BANNER)
+        self.session.start()
+
+    # --- keyboard thread ----------------------------------------------------
+
+    def start_stdin(self) -> None:
+        loop = asyncio.get_running_loop()
+        interactive = sys.stdin is not None and sys.stdin.isatty()
+
+        def reader() -> None:
+            while True:
+                line = sys.stdin.readline()
+                if line == "":
+                    if not interactive:
+                        return  # input redirected and finished
+                    line = "\x1a"  # Windows: CTRL-Z + Enter = end of message
+                    time.sleep(0.2)  # guard against a busy loop on a dead console
+                loop.call_soon_threadsafe(self.handle_line, line.rstrip("\r\n"))
+
+        threading.Thread(target=reader, name="sysop-console", daemon=True).start()
+
+    # --- input --------------------------------------------------------------
+
+    def handle_line(self, line: str) -> None:
+        if self.session.state == State.COMMAND:
+            word, _, arg = line.strip().partition(" ")
+            handler = self.COMMANDS.get(word.upper())
+            if handler is not None:
+                handler(self, arg.strip())
+                if not (self.app.stop_event and self.app.stop_event.is_set()):
+                    self.session.prompt()
+                return
+        self.session.handle_line(line)
+
+    # --- console commands -----------------------------------------------------
+
+    def cmd_help(self, arg: str) -> None:
+        commands.cmd_help(self.session, "")
+        self.out(*texts.HELP_CONSOLE)
+
+    def cmd_bye(self, arg: str) -> None:
+        self.out(texts.CONSOLE_NO_BYE)
+
+    def cmd_who(self, arg: str) -> None:
+        sessions = list(self.app.registry)
+        if not sessions:
+            self.out(texts.WHO_EMPTY)
+            return
+        self.out(texts.WHO_HEADER, *[
+            texts.WHO_ROW.format(call=s.call, via=s.origin,
+                                 since=s.started[:16].replace("T", " "),
+                                 state=s.state.name.lower().replace("_", " "))
+            for s in sessions])
+
+    def cmd_monitor(self, arg: str) -> None:
+        arg = arg.upper()
+        if arg in ("ON", "OFF"):
+            self.filter.enabled = arg == "ON"
+        elif arg == "":
+            self.filter.enabled = not self.filter.enabled
+        self.out(texts.MON_STATE.format(state="ON" if self.filter.enabled else "OFF"))
+
+    def cmd_disc(self, arg: str) -> None:
+        if not arg:
+            self.out(texts.USAGE_DISC)
+            return
+        call = normalize_call(arg)
+        sessions = list(self.app.registry)
+        targets = [s for s in sessions if s.call == call] or \
+                  [s for s in sessions if "-" not in call and base_call(s.call) == call]
+        if not targets:
+            self.out(texts.DISC_NONE.format(call=call))
+            return
+        for s in targets:
+            s.out(texts.DISC_BY_SYSOP)
+            s.close()
+            log.info("%s disconnected by sysop", s.call)
+            self.out(texts.DISC_DONE.format(call=s.call))
+
+    def cmd_status(self, arg: str) -> None:
+        cfg = self.app.cfg
+        msgs = self.app.store.list_messages()
+        agw = self.app.agw
+        if agw is None:
+            agw_state = "not started"
+        elif agw.connected.is_set():
+            agw_state = f"connected ({cfg.direwolf.agw_host}:{cfg.direwolf.agw_port})"
+        else:
+            agw_state = f"NOT connected ({cfg.direwolf.agw_host}:{cfg.direwolf.agw_port})"
+        values = dict(
+            version=VERSION, mailbox=cfg.station.mailbox_call, sysop=cfg.station.sysop_call,
+            since=self.app.started[:16].replace("T", " ") + " UTC", agw=agw_state,
+            users=len(self.app.registry), max_users=cfg.mailbox.max_users,
+            msgs=len(msgs), private=sum(m.type == "P" for m in msgs),
+            bulletins=sum(m.type == "B" for m in msgs),
+            unread=sum(m.type == "P" and m.status == "N" for m in msgs),
+            data_dir=cfg.storage.data_dir,
+        )
+        self.out(*[line.format(**values) for line in texts.STATUS_LINES])
+
+    def cmd_web(self, arg: str) -> None:
+        # shown on the console only - it contains the secret token
+        self.out(f"Web GUI login: {self.app.web_login_url}" if self.app.web_login_url
+                 else "Web GUI is disabled ([web] enabled = no).")
+
+    def cmd_shutdown(self, arg: str) -> None:
+        self.out(texts.SHUTTING_DOWN)
+        if self.app.stop_event is not None:
+            self.app.stop_event.set()
+
+    COMMANDS: dict[str, Callable[["SysopConsole", str], None]] = {
+        "H": cmd_help, "?": cmd_help, "HELP": cmd_help,
+        "B": cmd_bye, "BYE": cmd_bye,
+        "W": cmd_who, "WHO": cmd_who,
+        "MON": cmd_monitor,
+        "DISC": cmd_disc,
+        "STATUS": cmd_status,
+        "WEB": cmd_web,
+        "SHUTDOWN": cmd_shutdown,
+    }

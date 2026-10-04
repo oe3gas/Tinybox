@@ -1,0 +1,14 @@
+{
+  "typ": "text",
+  "ti": "brocast Testbulletin",
+  "flg": ["test"],
+  "cat": ["tech"],
+  "exp": 1440,
+  "src": ["Test", "OE3GAS"],
+  "blk": [
+    {"k": "heading", "x": "brocast Funktest Hollabrunn"},
+    {"k": "para", "x": "Dies ist ein Testbulletin von brocastd auf 144,9625 MHz. Es ist absichtlich laenger als ein AX.25-Frame, damit brocastd es in mehrere Unterseiten teilt. Jede Unterseite ist fuer sich lesbar und traegt den Titel. Die Unterseiten werden direkt hintereinander gesendet, nicht verteilt ueber mehrere Karussell-Runden."},
+    {"k": "para", "x": "Ein Listener zeigt vorhandene Unterseiten sofort an. Fehlt eine, wird sie in der naechsten Runde ergaenzt. Stationen ohne brocast sehen im Monitor nur ein UI-Paket an BROCST mit binaerem Inhalt."},
+    {"k": "para", "x": "73 de OE3GAS"}
+  ]
+}

@@ -1,0 +1,38 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- Betriebsdaten: gehoeren jeder Maschine selbst, nie ins Repo ---------
+data/
+brocast/data/
+brocast/logs/
+logs/
+brocast/funktest/data/
+brocast/funktest/ergebnis_listener.txt
+brocast/funktest/log_listener.txt
+eingang/
+.geosphere_warnungen_state.json
+*.db
+*.db-journal
+*.log
+
+# --- Geheimnisse -----------------------------------------------------------
+secrets/
+*.token
+*.pw
+
+# --- PC-spezifische Konfiguration ------------------------------------------
+# Im Repo liegen nur die Vorlagen *.conf.example
+tinybox.conf
+brocast/brocastd.conf
+brocast/brocastd.conf.neu
+
+# --- Editor / Betriebssystem ----------------------------------------------
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+~$*
+.~lock.*#

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>brocast Listener – Mockup</title>
+<style>
+/* brocast listener – light theme, strong dark text, no pastels (like TinyBox) */
+:root {
+  --ink: #111111; --ink-2: #222222; --ink-3: #4a4a4a;
+  --ground: #E9E9E6; --paper: #FFFFFF; --paper-2: #F6F6F3; --rule: #C9C9C4;
+  --accent: #0B4A8F; --accent-dark: #062F5C;
+  --ok: #0B7A2F; --warn: #9A5B00; --danger: #A3001B;
+  --tt-bg: #000000; --tt-yellow: #FFD400; --tt-cyan: #00D7E6; --tt-white: #FFFFFF;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Cascadia Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; font: 15px/1.45 var(--sans); color: var(--ink); background: var(--ground);
+       display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; }
+.mono { font-family: var(--mono); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* top bar */
+.top { height: 64px; flex-shrink: 0; display: flex; align-items: center; gap: 22px; padding: 0 20px;
+       background: var(--paper); border-bottom: 3px solid var(--ink); }
+.logo { font: 700 23px var(--mono); letter-spacing: -0.02em; }
+.badge-call { font: 600 14px var(--mono); padding: 3px 8px; border: 2px solid var(--ink); border-radius: 4px; }
+.stat { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 500; white-space: nowrap; }
+.dot { width: 11px; height: 11px; border-radius: 6px; display: inline-block; background: var(--ink-3); }
+.dot.ok { background: var(--ok); }
+.grow { flex-grow: 1; }
+.search { height: 40px; width: 260px; border: 2px solid var(--ink); border-radius: 6px; padding: 0 12px;
+          font: 14px var(--sans); }
+.goto { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.goto input { width: 64px; height: 40px; border: 2px solid var(--ink); border-radius: 6px; text-align: center;
+              font: 700 16px var(--mono); }
+.btn { height: 40px; padding: 0 14px; font-weight: 700; font-size: 14px; background: var(--paper);
+       border: 2px solid var(--ink); border-radius: 6px; cursor: pointer; display: inline-flex;
+       align-items: center; gap: 6px; white-space: nowrap; }
+.btn:hover { background: var(--paper-2); }
+.btn.sm { height: 34px; padding: 0 11px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+.btn.on { background: var(--ink); color: #fff; }
+
+/* alert banner */
+.alert { flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 9px 20px;
+         background: var(--danger); color: #fff; font-weight: 600; }
+.alert .btn { color: #fff; border-color: #fff; background: transparent; height: 32px; }
+
+/* three panes */
+.shell { flex-grow: 1; display: flex; min-height: 0; }
+.side { width: 250px; flex-shrink: 0; background: var(--paper); border-right: 2px solid var(--ink);
+        display: flex; flex-direction: column; min-height: 0; }
+.tabs { display: flex; border-bottom: 2px solid var(--ink); }
+.tabs button { flex: 1; height: 44px; border: 0; background: var(--paper-2); font-weight: 700; cursor: pointer;
+               border-right: 2px solid var(--ink); }
+.tabs button:last-child { border-right: 0; }
+.tabs button.on { background: var(--paper); box-shadow: inset 0 -4px 0 var(--accent); }
+.navlist { overflow-y: auto; padding: 10px 8px; flex-grow: 1; }
+.nav { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 42px;
+       padding: 0 12px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; text-align: left;
+       font-size: 15px; font-weight: 500; }
+.nav:hover { background: var(--paper-2); }
+.nav.on { background: var(--ink); color: #fff; }
+.nav .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav .own { font-size: 11px; font-weight: 700; border: 1.5px solid currentColor; border-radius: 3px; padding: 0 4px;
+            margin-left: 6px; }
+.count { font: 700 13px var(--mono); min-width: 28px; text-align: right; color: var(--ink-3); }
+.count .u { color: var(--accent); }
+.nav.on .count, .nav.on .count .u { color: #fff; }
+.navhead { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3);
+           padding: 14px 12px 6px; }
+.side-foot { border-top: 2px solid var(--ink); padding: 10px 8px; }
+
+.list { width: 420px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0;
+        border-right: 2px solid var(--ink); background: var(--paper-2); }
+.listhead { padding: 14px 16px 10px; border-bottom: 2px solid var(--ink); background: var(--paper); }
+.listhead h2 { font-size: 20px; margin: 0 0 10px; display: flex; align-items: baseline; gap: 10px; }
+.listhead h2 small { font-size: 13px; color: var(--ink-3); font-weight: 600; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+select.sel { height: 34px; border: 2px solid var(--ink); border-radius: 6px; font: 600 13px var(--sans);
+             padding: 0 8px; background: var(--paper); }
+.rows { overflow-y: auto; flex-grow: 1; }
+.row { display: grid; grid-template-columns: 54px 1fr auto; gap: 4px 10px; padding: 11px 16px;
+       border-bottom: 1px solid var(--rule); cursor: pointer; background: var(--paper-2); }
+.row:hover { background: #fff; }
+.row.on { background: #fff; box-shadow: inset 5px 0 0 var(--accent); }
+.row .pno { font: 700 17px var(--mono); grid-row: span 2; padding-top: 1px; }
+.row .ti { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.unread .ti { font-weight: 800; }
+.row.unread .pno::after { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 4px;
+                          background: var(--accent); margin-left: 5px; vertical-align: middle; }
+.row .meta { grid-column: 2 / 4; font-size: 13px; color: var(--ink-3); display: flex; gap: 10px; flex-wrap: wrap; }
+.row .time { font: 600 13px var(--mono); color: var(--ink-3); }
+.tag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px;
+       border-radius: 3px; border: 1.5px solid currentColor; }
+.tag.upd { color: var(--accent); }
+.tag.part { color: var(--warn); }
+.tag.alarm { color: #fff; background: var(--danger); border-color: var(--danger); }
+.star { color: var(--warn); font-size: 15px; }
+
+/* page view */
+.view { flex-grow: 1; overflow-y: auto; min-width: 0; }
+.tt { background: var(--tt-bg); color: var(--tt-white); font: 700 16px var(--mono); padding: 8px 22px;
+      display: flex; gap: 22px; letter-spacing: .02em; }
+.tt .y { color: var(--tt-yellow); } .tt .c { color: var(--tt-cyan); }
+.pagewrap { max-width: 860px; padding: 22px 28px 40px; }
+.pagetitle { font-size: 27px; font-weight: 800; margin: 0 0 6px; line-height: 1.2; }
+.pmeta { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 14px; color: var(--ink-3); margin-bottom: 14px; }
+.pmeta b { color: var(--ink); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 2px solid var(--ink);
+           margin-bottom: 18px; }
+.subnav { display: flex; align-items: center; gap: 6px; margin: 0 0 16px; font-size: 13px; font-weight: 700; }
+.chip { min-width: 34px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+        border: 2px solid var(--ink); border-radius: 5px; font: 700 13px var(--mono); background: var(--paper); }
+.chip.miss { border-style: dashed; color: var(--ink-3); background: transparent; }
+.content h3 { font-size: 20px; margin: 18px 0 8px; }
+.content p { margin: 0 0 12px; font-size: 16px; max-width: 70ch; }
+.missing { border: 2px dashed var(--ink-3); border-radius: 6px; padding: 12px 14px; color: var(--ink-3);
+           font-weight: 600; margin: 0 0 12px; }
+.note { border-left: 6px solid var(--warn); background: #fff; padding: 10px 14px; margin: 0 0 12px; font-weight: 600; }
+.note.alarm { border-color: var(--danger); }
+.link { display: inline-flex; gap: 10px; align-items: center; font-weight: 700; color: var(--accent);
+        border: 2px solid var(--accent); border-radius: 6px; padding: 6px 12px; margin: 0 8px 12px 0; cursor: pointer;
+        background: #fff; }
+.link .mono { color: var(--ink); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 4px 0 16px; }
+.card { background: #fff; border: 2px solid var(--ink); border-radius: 8px; padding: 10px 14px; }
+.card .l { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.card .v { font: 700 26px var(--mono); }
+.card .v small { font-size: 15px; font-weight: 600; margin-left: 4px; }
+.series { background: #fff; border: 2px solid var(--ink); border-radius: 8px; padding: 10px 14px 6px; margin: 0 0 16px; }
+.series .l { font-size: 13px; font-weight: 600; color: var(--ink-3); display: flex; justify-content: space-between; }
+table.tbl { border-collapse: collapse; margin: 4px 0 16px; background: #fff; font-size: 14px; }
+table.tbl th, table.tbl td { border: 1.5px solid var(--ink); padding: 6px 10px; text-align: left; }
+table.tbl th { background: var(--paper-2); }
+table.tbl td.num { font-family: var(--mono); text-align: right; }
+.raw { background: #111; color: #e8e8e8; border-radius: 8px; padding: 12px 14px; font: 13px/1.5 var(--mono);
+       white-space: pre-wrap; word-break: break-all; margin-top: 20px; }
+.raw .h { color: var(--tt-yellow); }
+
+/* settings */
+.settings { padding: 22px 28px 40px; max-width: 1000px; }
+.settings h2 { font-size: 24px; margin: 0 0 4px; }
+.settings h3 { font-size: 18px; margin: 26px 0 8px; }
+.hint { color: var(--ink-3); font-size: 14px; margin: 0 0 12px; }
+table.abo { border-collapse: collapse; background: #fff; }
+table.abo th, table.abo td { border: 1.5px solid var(--ink); padding: 6px 10px; text-align: center; font-size: 14px; }
+table.abo th:first-child, table.abo td:first-child { text-align: left; }
+table.abo th.rot { white-space: nowrap; }
+table.abo input { width: 18px; height: 18px; accent-color: var(--accent); }
+.fields { display: grid; grid-template-columns: 260px 140px; gap: 10px 16px; align-items: center; }
+.fields input, .fields select { height: 38px; border: 2px solid var(--ink); border-radius: 6px; padding: 0 10px;
+                                font: 600 15px var(--sans); }
+.empty { padding: 40px 28px; color: var(--ink-3); font-size: 16px; }
+.mocknote { position: fixed; right: 12px; bottom: 12px; background: var(--tt-yellow); color: #000; font: 700 12px var(--mono);
+            padding: 6px 10px; border: 2px solid #000; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="logo">brocast</div>
+  <span class="badge-call">OE3GAS-5 · Station</span>
+  <span class="stat"><span class="dot ok"></span>Direwolf verbunden</span>
+  <span class="stat"><b id="st-unread">0</b>&nbsp;ungelesen</span>
+  <span class="stat"><b>3</b>&nbsp;Stationen gehört</span>
+  <span class="grow"></span>
+  <input class="search" id="search" placeholder="Suchen in allen Seiten …">
+  <label class="goto">Seite <input id="goto" class="mono" value="" maxlength="5"></label>
+  <button class="btn" id="btn-settings">Einstellungen</button>
+</header>
+
+<div class="alert" id="alert">
+  <span>⚠ Warnung: Unwetterwarnung Weinviertel – Sturmböen bis 90 km/h (OE3XSR-5, Seite 8)</span>
+  <span class="grow"></span>
+  <button class="btn sm" id="alert-open">Anzeigen</button>
+</div>
+
+<div class="shell">
+  <nav class="side">
+    <div class="tabs">
+      <button id="tab-cat" class="on">Rubriken</button>
+      <button id="tab-st">Stationen</button>
+    </div>
+    <div class="navlist" id="navlist"></div>
+    <div class="side-foot">
+      <button class="nav" id="nav-fav"><span class="name">★ Gemerkt</span><span class="count" id="fav-count"></span></button>
+      <button class="nav" id="nav-status"><span class="name">Status</span><span class="count"></span></button>
+    </div>
+  </nav>
+
+  <section class="list">
+    <div class="listhead">
+      <h2 id="list-title">DX <small id="list-sub"></small></h2>
+      <div class="filters">
+        <button class="btn sm on" data-f="all">Alle</button>
+        <button class="btn sm" data-f="unread">Ungelesen</button>
+        <button class="btn sm" data-f="fav">Gemerkt</button>
+        <select class="sel" id="sub-filter"></select>
+      </div>
+    </div>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <main class="view" id="view"></main>
+</div>
+
+<div class="mocknote">MOCKUP – Beispieldaten</div>
+
+<script>
+const STATIONS = [
+  {call: "OE3GAS-5", qth: "Hollabrunn", last: "18:04", frames: 412},
+  {call: "OE3XSR-5", qth: "Wienerwald", last: "17:58", frames: 96},
+  {call: "OE1XYZ-5", qth: "Wien", last: "16:21", frames: 33},
+];
+const CATS = [
+  {key: "all", name: "Allgemein"}, {key: "dx", name: "DX"}, {key: "wx", name: "Wetter"},
+  {key: "keps", name: "Bahndaten"}, {key: "notfunk", name: "Notfunk"}, {key: "tech", name: "Technik"},
+  {key: "net", name: "Funkrunde"}, {key: "x:fuchsjagd", name: "Fuchsjagd", own: true},
+];
+const PAGES = [
+  {org:"OE3XSR-5", id:8, cats:["notfunk","wx"], ti:"Unwetterwarnung Weinviertel", t:"17:58", unread:true, alert:true, typ:"alert", sub:[1,1], present:[1]},
+  {org:"OE3GAS-5", id:24, cats:["wx"], ti:"Wetter Hollabrunn", t:"18:00", unread:true, upd:true, typ:"wx", sub:[1,1], present:[1]},
+  {org:"OE3GAS-5", id:142, cats:["dx"], ti:"DX-News KW 40", t:"17:41", unread:true, typ:"text", sub:[1,5], present:[1,2,4,5], fav:true},
+  {org:"OE3GAS-5", id:143, cats:["dx","contest"], ti:"CQ WW DX SSB – Hinweise", t:"16:55", unread:false, typ:"text", sub:[1,2], present:[1,2]},
+  {org:"OE3XSR-5", id:61, cats:["dx"], ti:"DX-Spots 2 m / 70 cm", t:"17:50", unread:true, typ:"dx", sub:[1,1], present:[1]},
+  {org:"OE1XYZ-5", id:30, cats:["dx"], ti:"3B8 – Mauritius aktiv", t:"15:10", unread:false, typ:"text", sub:[1,1], present:[1]},
+  {org:"OE3GAS-5", id:1, cats:["all"], ti:"Startseite OE3GAS-5", t:"12:00", unread:false, typ:"index", sub:[1,1], present:[1]},
+  {org:"OE3GAS-5", id:150, cats:["keps"], ti:"Bahndaten ISS, SO-50, AO-91", t:"06:00", unread:false, typ:"text", sub:[1,3], present:[1,2,3]},
+  {org:"OE3GAS-5", id:160, cats:["net"], ti:"Weinviertel-Runde Mi 20:00", t:"Gestern", unread:false, typ:"text", sub:[1,1], present:[1]},
+  {org:"OE3GAS-5", id:170, cats:["tech"], ti:"brocast Testbulletin", t:"17:33", unread:false, typ:"text", sub:[1,4], present:[1,2,3,4]},
+  {org:"OE3XSR-5", id:90, cats:["x:fuchsjagd"], ti:"Fuchsjagd Kahlenberg Sa", t:"14:02", unread:true, typ:"text", sub:[1,1], present:[1]},
+  {org:"OE1XYZ-5", id:12, cats:["x:fuchsjagd"], ti:"Ergebnisse 2-m-Peilen", t:"Gestern", unread:false, typ:"text", sub:[1,1], present:[1]},
+];
+const OWN_LABEL = {contest: "Contest"};
+
+let mode = "cat", selCat = "dx", selStation = null, selPage = PAGES[2], filter = "all", showRaw = false, screen = "pages";
+
+const $ = (id) => document.getElementById(id);
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function catName(k) { const c = CATS.find(c => c.key === k); return c ? c.name : (OWN_LABEL[k] || k); }
+
+function renderNav() {
+  const nav = $("navlist"); nav.replaceChildren();
+  if (mode === "cat") {
+    for (const c of CATS) {
+      const pages = PAGES.filter(p => p.cats.includes(c.key));
+      if (!pages.length) continue;
+      const b = el("button", "nav" + (selCat === c.key && screen === "pages" && !selStation ? " on" : ""));
+      const n = el("span", "name", c.name); if (c.own) n.append(el("span", "own", "eigene"));
+      const cnt = el("span", "count"); const u = pages.filter(p => p.unread).length;
+      if (u) { cnt.append(el("span", "u", u + "/")); } cnt.append(String(pages.length));
+      b.append(n, cnt); b.onclick = () => { selCat = c.key; selStation = null; screen = "pages"; render(); };
+      nav.append(b);
+    }
+  } else {
+    for (const s of STATIONS) {
+      const pages = PAGES.filter(p => p.org === s.call);
+      const b = el("button", "nav" + (selStation === s.call && screen === "pages" ? " on" : ""));
+      const n = el("span", "name"); n.append(el("span", "mono", s.call), " " + s.qth);
+      const cnt = el("span", "count"); const u = pages.filter(p => p.unread).length;
+      if (u) cnt.append(el("span", "u", u + "/")); cnt.append(String(pages.length));
+      b.append(n, cnt); b.onclick = () => { selStation = s.call; selCat = null; screen = "pages"; render(); };
+      nav.append(b);
+    }
+    nav.append(el("div", "navhead", "zuletzt gehört"));
+    for (const s of STATIONS) nav.append(el("div", "hint", `  ${s.call}  ${s.last} · ${s.frames} Frames`));
+  }
+  $("fav-count").textContent = PAGES.filter(p => p.fav).length;
+  $("st-unread").textContent = PAGES.filter(p => p.unread).length;
+}
+
+function currentPages() {
+  let pages = PAGES.slice();
+  if (selCat) pages = pages.filter(p => p.cats.includes(selCat));
+  if (selStation) pages = pages.filter(p => p.org === selStation);
+  const sub = $("sub-filter").value;
+  if (sub && sub !== "*") pages = pages.filter(p => mode === "cat" ? p.org === sub : p.cats.includes(sub));
+  if (filter === "unread") pages = pages.filter(p => p.unread);
+  if (filter === "fav") pages = pages.filter(p => p.fav);
+  return pages.sort((a, b) => (b.alert ? 1 : 0) - (a.alert ? 1 : 0));
+}
+
+function renderSubFilter() {
+  const s = $("sub-filter"); const keep = s.value; s.replaceChildren();
+  if (mode === "cat") {
+    s.append(new Option("Alle Stationen", "*"));
+    for (const st of STATIONS) if (PAGES.some(p => p.org === st.call && (!selCat || p.cats.includes(selCat)))) s.append(new Option(st.call, st.call));
+  } else {
+    s.append(new Option("Alle Rubriken", "*"));
+    for (const c of CATS) if (PAGES.some(p => p.cats.includes(c.key) && p.org === selStation)) s.append(new Option(c.name, c.key));
+  }
+  if ([...s.options].some(o => o.value === keep)) s.value = keep;
+}
+
+function renderList() {
+  $("list-title").firstChild.textContent =
+    (selCat ? catName(selCat) : selStation || (filter === "fav" ? "Gemerkt" : "Alle Seiten")) + " ";
+  const pages = currentPages();
+  $("list-sub").textContent = `${pages.length} ${pages.length === 1 ? "Seite" : "Seiten"} · ${pages.filter(p => p.unread).length} ungelesen`;
+  const rows = $("rows"); rows.replaceChildren();
+  for (const p of pages) {
+    const r = el("div", "row" + (p.unread ? " unread" : "") + (selPage === p ? " on" : ""));
+    r.append(el("div", "pno", p.id));
+    const ti = el("div", "ti"); if (p.alert) ti.append(el("span", "tag alarm", "Warnung"), " "); ti.append(p.ti);
+    const right = el("div", "time", p.t);
+    const meta = el("div", "meta");
+    meta.append(el("span", "mono", p.org));
+    if (p.upd) meta.append(el("span", "tag upd", "aktualisiert"));
+    if (p.sub[1] > 1) meta.append(el("span", "tag part", p.present.length < p.sub[1] ? `${p.present.length}/${p.sub[1]} Teile` : `${p.sub[1]} Teile`));
+    if (p.fav) meta.append(el("span", "star", "★"));
+    r.append(ti, right, meta);
+    r.onclick = () => { selPage = p; p.unread = false; p.upd = false; screen = "pages"; showRaw = false; render(); };
+    rows.append(r);
+  }
+  if (!pages.length) rows.append(el("div", "empty", "Keine Seiten."));
+}
+
+function ttHeader(p) {
+  const tt = el("div", "tt");
+  tt.append(el("span", "c", p.org), el("span", "y", "S." + p.id), el("span", null, "brocast"),
+            el("span", "grow"), el("span", "y", "DO 01.10.26 18:04:12"));
+  return tt;
+}
+
+function renderPage() {
+  const v = $("view"); v.replaceChildren();
+  const p = selPage; if (!p) { v.append(el("div", "empty", "Seite wählen.")); return; }
+  v.append(ttHeader(p));
+  const w = el("div", "pagewrap");
+  w.append(el("h1", "pagetitle", p.ti));
+  const m = el("div", "pmeta");
+  const add = (l, val) => { const s = el("span"); s.append(l + " ", el("b", null, val)); m.append(s); };
+  add("Station", p.org); add("Rubrik", p.cats.map(catName).join(", ")); add("Stand", p.t + " UTC");
+  add("Revision", p.upd ? "3" : "2"); add("gültig bis", p.typ === "wx" ? "19:00" : "08.10. 17:41");
+  w.append(m);
+  const a = el("div", "actions");
+  const fav = el("button", "btn sm", p.fav ? "★ Gemerkt" : "☆ Merken"); fav.onclick = () => { p.fav = !p.fav; render(); };
+  const unr = el("button", "btn sm", "Als ungelesen markieren"); unr.onclick = () => { p.unread = true; render(); };
+  const raw = el("button", "btn sm" + (showRaw ? " on" : ""), "Rohansicht"); raw.onclick = () => { showRaw = !showRaw; renderPage(); };
+  const del = el("button", "btn sm danger", "Löschen");
+  a.append(fav, unr, raw, el("span", "grow"), del); w.append(a);
+
+  if (p.sub[1] > 1) {
+    const sn = el("div", "subnav"); sn.append("Teile ");
+    for (let i = 1; i <= p.sub[1]; i++) sn.append(el("span", "chip" + (p.present.includes(i) ? "" : " miss"), i + "/" + p.sub[1]));
+    w.append(sn);
+  }
+  const c = el("div", "content");
+  if (p.typ === "wx") wxContent(c);
+  else if (p.alert) alertContent(c);
+  else if (p.id === 142) dxContent(c, p);
+  else if (p.typ === "index") indexContent(c);
+  else { c.append(el("p", null, "Beispieltext dieser Seite. Absätze, Listen und Tabellen werden wie hier als reiner Text dargestellt – Inhalte aus dem Funk werden nie als HTML interpretiert.")); }
+  w.append(c);
+  if (showRaw) {
+    const r = el("div", "raw");
+    r.append(el("span", "h", "Unterseite 1/1 · rev 2 · 79 Bytes · gehört von " + p.org + " · 18:00:03\n"),
+             "a9 00 01 01 18 18 02 02 04 1a 6a b1 3b 80 05 18 78 06 01 07 02 08 78 18 57 65 74 74 65 72 20 48 6f 6c 6c 61 62 72 75 6e 6e 0c 82 1a 00 4a 18 7d 1a 00 18 89 1d 14 a5 00 18 7d 01 18 41 02 19 27 94 03 19 01 0e 04 18 24\n\n",
+             el("span", "h", "dekodiert\n"), '{ "dv": 1, "id": 24, "rev": 2, "t": 1790000000, "exp": 120, "typ": "wx", "flg": ["test"], "ti": "Wetter Hollabrunn", "pos": [48.5613, 16.0797], "dat": { "temp": 12.5, "hum": 65, "qnh": 1013.2, "wdir": 270, "wspd": 3.6 } }');
+    w.append(r);
+  }
+  v.append(w);
+}
+
+function card(l, v, u) { const c = el("div", "card"); c.append(el("div", "l", l)); const val = el("div", "v", v); if (u) val.append(el("small", null, u)); c.append(val); return c; }
+
+function wxContent(c) {
+  const cards = el("div", "cards");
+  cards.append(card("Lufttemperatur", "12,5", "°C"), card("Relative Feuchte", "65", "%"), card("Luftdruck (QNH)", "1013,2", "hPa"),
+               card("Windrichtung", "270", "° W"), card("Windgeschwindigkeit", "3,6", "m/s"), card("Böe (5 min)", "5,4", "m/s"),
+               card("Niederschlag 24 h", "1,2", "mm"), card("Taupunkt", "6,1", "°C"));
+  c.append(cards);
+  const s = el("div", "series"); const l = el("div", "l"); l.append(el("span", null, "Luftdruck letzte 12 h"), el("span", "mono", "1009,8 → 1013,2 hPa ▲"));
+  s.append(l);
+  const pts = [1009.8,1010.1,1010.0,1010.6,1011.0,1011.2,1011.9,1012.2,1012.4,1012.9,1013.0,1013.2];
+  const W = 760, H = 70, min = 1009.5, max = 1013.5;
+  const path = pts.map((p, i) => `${i ? "L" : "M"}${(i / (pts.length - 1) * W).toFixed(1)},${(H - (p - min) / (max - min) * H).toFixed(1)}`).join(" ");
+  s.insertAdjacentHTML("beforeend", `<svg viewBox="0 -4 ${W} ${H + 8}" width="100%" height="78" preserveAspectRatio="none" aria-label="Luftdruckverlauf"><path d="${path}" fill="none" stroke="#0B4A8F" stroke-width="3"/></svg>`);
+  c.append(s);
+  c.append(el("p", null, "Station Hollabrunn, 210 m ü. A. Werte alle 10 Minuten aktualisiert."));
+}
+
+function alertContent(c) {
+  const n = el("div", "note alarm", "Sturmböen 70–90 km/h, lokal Gewitter. Gültig bis heute 23:00."); c.append(n);
+  c.append(el("h3", null, "Betroffene Bezirke"));
+  const ul = el("p", null, "Hollabrunn · Korneuburg · Mistelbach · Horn"); c.append(ul);
+  c.append(el("p", null, "Notfunk-Bereitschaft: Relais OE3XSR, Kanal R3 (145,675 MHz) wird beobachtet."));
+}
+
+function dxContent(c, p) {
+  c.append(el("h3", null, "DX-News KW 40"));
+  c.append(el("p", null, "3B8/DL1ABC ist ab 5.10. QRV auf 20 und 17 m in CW und FT8. Die Aktivität dauert zwei Wochen."));
+  const t = el("table", "tbl");
+  t.insertAdjacentHTML("beforeend", "<tr><th>Rufzeichen</th><th>Land</th><th>Bänder</th><th>Zeitraum</th></tr>");
+  for (const r of [["3B8/DL1ABC","Mauritius","20, 17 m","05.–19.10."],["TX5S","Clipperton","160–10 m","12.–25.10."],["VP8/G3XYZ","Falkland","40–15 m","bis 30.10."]]) {
+    const tr = el("tr"); r.forEach((x, i) => tr.append(el("td", i === 2 ? "" : "", x))); t.append(tr);
+  }
+  c.append(t);
+  c.append(el("div", "missing", "Teil 3/5 noch nicht empfangen – wird in der nächsten Runde ergänzt."));
+  c.append(el("p", null, "QSL via LoTW und ClubLog OQRS. Spots bitte mit Angabe der Betriebsart."));
+  const lk = el("div", "link"); lk.append("→ DX-Spots 2 m / 70 cm", el("span", "mono", "OE3XSR-5 S.61")); c.append(lk);
+}
+
+function indexContent(c) {
+  c.append(el("p", null, "Willkommen bei brocast OE3GAS-5 Hollabrunn, 144,9625 MHz."));
+  for (const [t, s] of [["Wetter Hollabrunn","S.24"],["DX-News","S.142"],["Bahndaten","S.150"],["Weinviertel-Runde","S.160"]]) {
+    const lk = el("div", "link"); lk.append("→ " + t, el("span", "mono", s)); c.append(lk);
+  }
+}
+
+function renderSettings() {
+  const v = $("view"); v.replaceChildren();
+  const s = el("div", "settings");
+  s.append(el("h2", null, "Einstellungen"));
+  s.append(el("p", "hint", "Gilt nur für diese brocastd-Instanz. Warnungen und Notfall-Seiten werden immer angezeigt."));
+  s.append(el("h3", null, "Abo – was soll angezeigt werden?"));
+  s.append(el("p", "hint", "Grundsätzlich wird alles empfangen (auch neu gehörte Stationen). Haken entfernen = abwählen."));
+  const t = el("table", "abo");
+  const head = el("tr"); head.append(el("th", null, "Station"), el("th", "rot", "alle Rubriken"));
+  const cats = CATS.filter(c => PAGES.some(p => p.cats.includes(c.key)));
+  for (const c of cats) head.append(el("th", "rot", c.name));
+  t.append(head);
+  const rowFor = (label, offAll, offs) => {
+    const tr = el("tr"); tr.append(el("td", "mono", label));
+    const all = el("td"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !offAll; all.append(cb); tr.append(all);
+    for (const c of cats) { const td = el("td"); const x = document.createElement("input"); x.type = "checkbox"; x.checked = !offs.includes(c.key) && !offAll; x.disabled = offAll; td.append(x); tr.append(td); }
+    return tr;
+  };
+  t.append(rowFor("alle Stationen", false, ["x:fuchsjagd"]), rowFor("OE3GAS-5", false, []), rowFor("OE3XSR-5", false, ["dx"]), rowFor("OE1XYZ-5", true, []));
+  s.append(t);
+  s.append(el("h3", null, "Speicher"));
+  const f = el("div", "fields");
+  const field = (label, val, suffix) => { f.append(el("label", null, label)); const i = document.createElement("input"); i.value = val; f.append(i); };
+  field("Höchstzahl Seiten gesamt", "500"); field("Höchstzahl Seiten je Rubrik", "100"); field("Maximales Alter (Tage)", "30");
+  f.append(el("label", null, "Sprache der Anzeige")); const sel = document.createElement("select"); sel.append(new Option("Deutsch"), new Option("English")); f.append(sel);
+  f.append(el("label", null, "Hinweiston bei Warnungen")); const ch = document.createElement("select"); ch.append(new Option("ein"), new Option("aus")); f.append(ch);
+  s.append(f);
+  const save = el("button", "btn primary", "Speichern"); save.style.marginTop = "22px"; s.append(save);
+  s.append(el("p", "hint", "Gelöschte Seiten bleiben gelöscht, bis die Station eine neue Revision sendet. Gemerkte Seiten werden nie verdrängt."));
+  v.append(s);
+}
+
+function renderStatus() {
+  const v = $("view"); v.replaceChildren();
+  const s = el("div", "settings");
+  s.append(el("h2", null, "Status"));
+  const f = el("div", "fields");
+  for (const [k, val] of [["Modus","Station OE3GAS-5"],["Direwolf (KISS 127.0.0.1:8001)","verbunden"],["Frames empfangen","541"],["brocast-Seiten","412"],["Dekodierfehler","0"],["Dictionary","brocast-core v1 · c5ca224a"],["Airtime (10 min)","38 s von 90 s"],["Seiten gespeichert","12 von 500"]]) {
+    f.append(el("span", null, k)); f.append(el("b", "mono", val));
+  }
+  s.append(f); v.append(s);
+}
+
+function render() {
+  renderNav(); renderSubFilter(); renderList();
+  if (screen === "settings") renderSettings(); else if (screen === "status") renderStatus(); else renderPage();
+}
+
+$("tab-cat").onclick = () => { mode = "cat"; $("tab-cat").classList.add("on"); $("tab-st").classList.remove("on"); selStation = null; selCat = selCat || "dx"; $("sub-filter").value = "*"; render(); };
+$("tab-st").onclick = () => { mode = "st"; $("tab-st").classList.add("on"); $("tab-cat").classList.remove("on"); selStation = selStation || "OE3GAS-5"; selCat = null; $("sub-filter").value = "*"; render(); };
+$("sub-filter").onchange = render;
+document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { filter = b.dataset.f; document.querySelectorAll("[data-f]").forEach(x => x.classList.toggle("on", x === b)); renderList(); });
+$("btn-settings").onclick = () => { screen = "settings"; render(); };
+$("nav-status").onclick = () => { screen = "status"; render(); };
+$("nav-fav").onclick = () => { filter = "fav"; selCat = null; selStation = null; screen = "pages"; document.querySelectorAll("[data-f]").forEach(x => x.classList.toggle("on", x.dataset.f === "fav")); $("list-title").firstChild.textContent = "Gemerkt "; render(); };
+$("alert-open").onclick = () => { selPage = PAGES[0]; PAGES[0].unread = false; screen = "pages"; render(); };
+render();
+</script>
+</body>
+</html>

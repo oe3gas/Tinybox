@@ -1,0 +1,173 @@
+"""Web GUI tests: API and the security checks."""
+
+from __future__ import annotations
+
+import asyncio
+import dataclasses
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from tinybox.adapters import web
+from tests.test_tinybox import make_app
+
+
+async def request(port, method, path, *, host=None, cookie=None, csrf=None,
+                  body=None, origin=None, read_all=True):
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    data = json.dumps(body).encode() if body is not None else b""
+    lines = [f"{method} {path} HTTP/1.1", f"Host: {host or f'127.0.0.1:{port}'}",
+             f"Content-Length: {len(data)}"]
+    if cookie:
+        lines.append(f"Cookie: tb_session={cookie}")
+    if csrf:
+        lines.append(f"X-CSRF-Token: {csrf}")
+    if origin:
+        lines.append(f"Origin: {origin}")
+    writer.write(("\r\n".join(lines) + "\r\n\r\n").encode() + data)
+    await writer.drain()
+    if not read_all:
+        return reader, writer
+    raw = await asyncio.wait_for(reader.read(), 5)
+    writer.close()
+    head, _, payload = raw.partition(b"\r\n\r\n")
+    head_lines = head.decode("latin-1").split("\r\n")
+    status = int(head_lines[0].split()[1])
+    headers = {k.lower(): v.strip() for k, v in
+               (l.split(":", 1) for l in head_lines[1:] if ":" in l)}
+    return status, headers, payload
+
+
+class WebTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.app = make_app()
+        self.app.cfg.storage = dataclasses.replace(self.app.cfg.storage, data_dir=Path(self.tmp.name))
+        self.app.cfg.web = dataclasses.replace(self.app.cfg.web, port=0)
+        self.app.stop_event = asyncio.Event()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_async(self, coro_fn):
+        async def wrapper():
+            server = await web.start(self.app)
+            try:
+                return await coro_fn(server)
+            finally:
+                server.close()
+                await server.server.wait_closed()
+        return asyncio.run(wrapper())
+
+    async def login(self, server):
+        status, headers, _ = await request(server.port, "GET", f"/login?token={server.token}")
+        self.assertEqual(status, 303)
+        cookie = headers["set-cookie"].split(";")[0].split("=", 1)[1]
+        self.assertIn("HttpOnly", headers["set-cookie"])
+        self.assertIn("SameSite=Strict", headers["set-cookie"])
+        _, _, payload = await request(server.port, "GET", "/api/session", cookie=cookie)
+        return cookie, json.loads(payload)["csrf"]
+
+    def test_token_is_persistent(self):
+        t1 = self.run_async(lambda s: asyncio.sleep(0, s.token))
+        t2 = self.run_async(lambda s: asyncio.sleep(0, s.token))
+        self.assertEqual(t1, t2)
+        self.assertGreaterEqual(len(t1), 32)
+
+    def test_security_checks(self):
+        async def scenario(s):
+            results = {}
+            results["no_login"] = (await request(s.port, "GET", "/api/status"))[0]
+            results["root_redirect"] = (await request(s.port, "GET", "/"))[0]
+            results["bad_token"] = (await request(s.port, "GET", "/login?token=wrong"))[0]
+            results["rebinding"] = (await request(s.port, "GET", "/api/status",
+                                                  host=f"evil.example:{s.port}"))[0]
+            cookie, csrf = await self.login(s)
+            results["status"] = (await request(s.port, "GET", "/api/status", cookie=cookie))[0]
+            results["post_no_csrf"] = (await request(s.port, "POST", "/api/messages", cookie=cookie,
+                                                     body={"to": "ALL"}))[0]
+            results["post_bad_origin"] = (await request(
+                s.port, "POST", "/api/messages", cookie=cookie, csrf=csrf,
+                origin="http://evil.example", body={"to": "ALL"}))[0]
+            st, hdrs, _ = await request(s.port, "GET", "/app.js")
+            results["static"] = st
+            results["csp"] = hdrs.get("content-security-policy", "")
+            results["xfo"] = hdrs.get("x-frame-options")
+            return results
+
+        r = self.run_async(scenario)
+        self.assertEqual(r["no_login"], 401)
+        self.assertEqual(r["root_redirect"], 303)
+        self.assertEqual(r["bad_token"], 403)
+        self.assertEqual(r["rebinding"], 421)
+        self.assertEqual(r["status"], 200)
+        self.assertEqual(r["post_no_csrf"], 403)
+        self.assertEqual(r["post_bad_origin"], 403)
+        self.assertEqual(r["static"], 200)
+        self.assertIn("script-src 'self'", r["csp"])
+        self.assertIn("frame-ancestors 'none'", r["csp"])
+        self.assertEqual(r["xfo"], "DENY")
+
+    def test_message_workflow(self):
+        async def scenario(s):
+            cookie, csrf = await self.login(s)
+            post = lambda path, body: request(s.port, "POST", path, cookie=cookie, csrf=csrf,
+                                              body=body, origin=f"http://127.0.0.1:{s.port}")
+            get = lambda path: request(s.port, "GET", path, cookie=cookie)
+            out = {}
+            st, _, p = await post("/api/messages", {"type": "B", "to": "all", "subject": "Net",
+                                                    "body": "<script>alert(1)</script>\r\nline 2"})
+            out["create"] = (st, json.loads(p))
+            out["bad_call"] = await post("/api/messages", {"type": "P", "to": "NOCALL",
+                                                           "subject": "x", "body": "x"})
+            st, _, p = await get("/api/messages")
+            out["list"] = json.loads(p)
+            st, _, p = await get("/api/messages/1")
+            out["read"] = json.loads(p)
+            st, _, p = await post("/api/messages/1/edit", {"field": "SUBJ", "value": "Net tonight"})
+            out["edit"] = json.loads(p)
+            out["kill"] = (await post("/api/messages/1/kill", {}))[0]
+            out["gone"] = (await get("/api/messages/1"))[0]
+            st, _, p = await get("/api/config")
+            out["config"] = json.loads(p)
+            out["shutdown"] = (await post("/api/shutdown", {}))[0]
+            await asyncio.sleep(0.5)
+            out["stopped"] = self.app.stop_event.is_set()
+            return out
+
+        o = self.run_async(scenario)
+        self.assertEqual(o["create"], (200, {"id": 1}))
+        self.assertEqual(o["bad_call"][0], 400)
+        self.assertEqual(json.loads(o["bad_call"][2])["error"], "invalid_call")
+        self.assertEqual(o["list"][0]["to"], "ALL")
+        self.assertNotIn("body", o["list"][0])
+        self.assertEqual(o["read"]["body"], "<script>alert(1)</script>\nline 2")
+        self.assertEqual((o["read"]["origin"], o["read"]["from"]), ("sysop", "OE3GAS"))
+        self.assertEqual(o["edit"]["subject"], "Net tonight")
+        self.assertEqual(o["kill"], 200)
+        self.assertEqual(o["gone"], 400)
+        self.assertEqual(o["config"]["station"]["mailbox_call"], "OE3GAS-1")
+        self.assertEqual(o["shutdown"], 200)
+        self.assertTrue(o["stopped"])
+
+    def test_feed_delivers_events(self):
+        async def scenario(s):
+            cookie, _ = await self.login(s)
+            reader, writer = await request(s.port, "GET", "/api/feed", cookie=cookie, read_all=False)
+            await asyncio.sleep(0.1)
+            self.app.service.create(from_call="OE1ABC", to_call="ALL", type="B",
+                                    subject="s", body="b", origin="radio")
+            data = b""
+            while b"message.created" not in data:
+                data += await asyncio.wait_for(reader.read(4096), 5)
+            writer.close()
+            return data
+
+        data = self.run_async(scenario)
+        self.assertIn(b"text/event-stream", data)
+        self.assertIn(b'"name": "message.created"', data)
+
+
+if __name__ == "__main__":
+    unittest.main()

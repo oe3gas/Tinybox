@@ -1,0 +1,125 @@
+"""All user-facing (English) texts in one place.
+
+Lines are joined with CR by the session; adapters translate line endings.
+"""
+
+from . import VERSION
+
+BANNER = "TinyBox {version} - {mailbox}"
+HELLO = "Welcome to TinyBox {mailbox}, hello {call}."
+NEW_MSGS = "You have {n} new message(s)."
+NO_NEW_MSGS = "No new messages."
+
+PROMPT = "TinyBox (A,B,H,J,K,L,R,S,V,?) > "
+PROMPT_SYSOP = "TinyBox SYSOP (A,B,E,H,J,K,L,R,S,V,?) > "
+
+HELP = [
+    "TinyBox commands:",
+    "  A          Abort output (stop a long list or message)",
+    "  B          Bye (log off)",
+    "  DICT       Download the brocast dictionary (text, for the listener import)",
+    "  H or ?     This help",
+    "  J          Recently connected stations",
+    "  K n        Kill message n (K n n ... for several)",
+    "  KM         Kill all read messages to you",
+    "  L          List messages",
+    "             TS = Type (P private, B bulletin) + Status (N new, Y read)",
+    "  LM         List messages to you",
+    "  R n        Read message n (R n n ... for several)",
+    "  RM         Read all unread messages to you",
+    "  S call     Send private message (same as SP call)",
+    "  SB call    Send bulletin, e.g. SB ALL",
+    "  V          Version",
+]
+HELP_SYSOP = [
+    "Sysop:",
+    "  E n field value   Edit header, field = TO, FROM, TYPE, STATUS, SUBJ",
+]
+
+VERSION_TEXT = f"TinyBox {VERSION} - local mailbox, no forwarding."
+DICT_NONE = "No brocast dictionary available here."
+DICT_INTRO = ("brocast dictionary v{version}, {lines} lines. Save this output (capture/log) "
+              "and import it in the brocast listener.")
+DICT_DONE = "Dictionary sent. Import the saved text under Status > Dictionary importieren."
+BYE = "73, bye from TinyBox."
+ABORTED = "Output aborted."
+
+UNKNOWN_CMD = "Unknown command. Type H for help."
+NO_SUCH_MSG = "No such message: {id}"
+NOT_ALLOWED = "Not allowed."
+INVALID_CALL = "Invalid callsign: {call}"
+INVALID_VALUE = "Invalid value: {value}"
+TOO_LARGE = "Message too long (max {max} bytes), discarded."
+THIRD_PARTY_OFF = "Sorry, you can only send messages to the sysop {sysop}."
+
+USAGE_R = "Usage: R n"
+USAGE_K = "Usage: K n"
+USAGE_S = "Usage: S call  or  SB ALL"
+USAGE_E = "Usage: E n field value  (field = TO, FROM, TYPE, STATUS, SUBJ)"
+
+NO_MESSAGES = "No messages."
+LIST_HEADER = " MSG# TS  SIZE TO        FROM      DATE   UTC   SUBJECT"
+LIST_ROW = "{id:>5} {type}{status} {size:>5} {to:<9} {frm:<9} {date} {time} {subject}"
+
+READ_HEADER = [
+    "Msg# {id}  Type/Status: {type}{status}",
+    "From: {frm}  To: {to}",
+    "Date: {date}",
+    "Subject: {subject}",
+    "",
+]
+READ_END = "[End of message {id}]"
+
+KILLED = "Msg {id} killed."
+KILLED_NONE = "No read messages to kill."
+EDITED = "Msg {id} updated."
+
+SUBJECT_PROMPT = "Subject: "
+BODY_PROMPT = "Enter message, end with /EX or ^Z  (/AB = cancel):"
+SAVED = "Msg {id} saved."
+CANCELLED = "Message cancelled."
+INTERNAL_ERROR = "*** Internal error, command not completed. Sysop is informed."
+
+JLOG_HEADER = "Call       Last seen (UTC)   Count"
+JLOG_ROW = "{call:<10} {last:<17} {count:>5}"
+JLOG_EMPTY = "No stations logged yet."
+
+BUSY = "Sorry, TinyBox is busy. Please try again later."
+IDLE_TIMEOUT = "Idle timeout, disconnecting. 73."
+
+DISC_BY_SYSOP = "Disconnected by sysop. 73."
+SHUTDOWN = "TinyBox is shutting down. 73."
+
+# sysop console only
+CONSOLE_BANNER = "*** TinyBox sysop console - type H for help ***"
+HELP_CONSOLE = [
+    "Console:",
+    "  W          Who is connected",
+    "  MON [ON|OFF]  Live monitor of user sessions",
+    "  DISC call  Disconnect a user",
+    "  STATUS     Mailbox status",
+    "  WEB        Show the web GUI login link",
+    "  SHUTDOWN   Stop TinyBox",
+]
+CONSOLE_NO_BYE = "This is the local console. Use SHUTDOWN to stop TinyBox."
+WHO_HEADER = "Call       Via     Since (UTC)       State"
+WHO_ROW = "{call:<10} {via:<7} {since:<17} {state}"
+WHO_EMPTY = "No users connected."
+MON_STATE = "Monitor is {state}."
+DISC_DONE = "{call} disconnected."
+DISC_NONE = "{call} is not connected."
+USAGE_DISC = "Usage: DISC call"
+STATUS_LINES = [
+    "TinyBox {version}  mailbox {mailbox}  sysop {sysop}",
+    "Up since:  {since}",
+    "Direwolf:  {agw}",
+    "Users:     {users} of {max_users}",
+    "Messages:  {msgs} ({private} private, {bulletins} bulletins, {unread} unread)",
+    "Data:      {data_dir}",
+]
+SHUTTING_DOWN = "Shutting down ..."
+
+# telnet test port only
+TELNET_LOGIN = "Callsign: "
+TELNET_BAD_CALL = "Invalid callsign."
+TELNET_TEST_NOTE = "*** TinyBox telnet test port (local only) ***"

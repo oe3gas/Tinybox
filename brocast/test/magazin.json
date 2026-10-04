@@ -1,0 +1,25 @@
+{
+  "typ": "text",
+  "ti": "OE3 Wochenmagazin KW 40",
+  "flg": ["test"],
+  "cat": ["club"],
+  "exp": 10080,
+  "src": ["Test", "OE3GAS"],
+  "parts": [
+    [
+      {"k": "heading", "x": "DX-Vorschau"},
+      {"k": "para", "x": "3B8/DL1ABC funkt ab 5.10. von Mauritius, 20 und 17 m, CW/FT8."},
+      {"k": "table", "hdr": ["Call", "Land"], "rows": [["TX5S", "Clipperton"], ["VP8/G3XYZ", "Falkland"]]}
+    ],
+    [
+      {"k": "heading", "x": "Contest am Wochenende"},
+      {"k": "para", "x": "Oktober-Contest 2 m/70 cm, Sa 14 bis So 14 UTC."},
+      {"k": "list", "rows": ["Logabgabe binnen 7 Tagen", "Single-OP und Multi-OP"]}
+    ],
+    [
+      {"k": "heading", "x": "Aus dem Ortsverband"},
+      {"k": "para", "x": "Clubabend Do 19:30. Thema: brocast."},
+      {"k": "note", "x": "OE3XSR Sa 8-12 Uhr abgeschaltet (Wartung).", "st": "warn"}
+    ]
+  ]
+}
