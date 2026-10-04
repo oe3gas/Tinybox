@@ -722,22 +722,37 @@ function wxCompass(deg, speed) {
   return s;
 }
 
-function wxSpark(b) {
+function wxNiceStep(range, maxTicks) {   // 1-2-5 steps, at most maxTicks intervals
+  const raw = range / maxTicks, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 5, 10]) if (m * mag >= raw) return m * mag;
+  return 10 * mag;
+}
+
+function wxSpark(b, pageTime) {
   const sc = typeof b.sc === "number" ? Math.pow(10, b.sc) : 1;
   const vals = (Array.isArray(b.v) ? b.v : []).map(x => typeof x === "number" ? x * sc : null);
   const ok = vals.filter(x => x !== null);
-  const span = typeof b.dt === "number" ? b.dt * (vals.length - 1) / 3600 : null;
+  const unit = b.u === "Cel" || b.unit === "°C" ? "°C" : (b.unit || "");
   // the series is thinned out (e.g. one value per 2 h), so its own min/max is not
   // the true 24-h extreme: the note shows the step instead
   const step = typeof b.dt === "number" ? (b.dt >= 3600 ? `${num(b.dt / 3600)} h` : `${num(b.dt / 60)} min`) : "";
   const t = wxTile("wx-spark", b.n || "Verlauf", step ? `ein Wert je ${step}` : "");
-  const W = 760, H = 84;
-  const min = Math.min(...ok), max = Math.max(...ok), range = (max - min) || 1;
-  const x = i => (i / (vals.length - 1) * W).toFixed(1);
-  const y = v => (H - (v - min) / range * H).toFixed(1);
-  const s = svg("svg", { viewBox: `0 -8 ${W} ${H + 16}`, preserveAspectRatio: "none", role: "img",
+  const W = 760, H = 96, n = vals.length;
+
+  // y axis: rounded limits and 1-2-5 ticks
+  const yStep = wxNiceStep((Math.max(...ok) - Math.min(...ok)) || 1, 5);
+  const min = Math.floor(Math.min(...ok) / yStep) * yStep;
+  let max = Math.ceil(Math.max(...ok) / yStep) * yStep;
+  if (max === min) max = min + yStep;
+  const x = i => (i / (n - 1) * W).toFixed(1);
+  const y = v => (H - (v - min) / (max - min) * H).toFixed(1);
+  const yTicks = [];
+  for (let v = min; v <= max + yStep / 2; v += yStep) yTicks.push(+v.toFixed(6));
+  const yDigits = yStep < 1 ? 1 : 0;
+
+  const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img",
                          "aria-label": b.n || "Verlauf" });
-  s.append(svg("line", { x1: 0, x2: W, y1: H / 2, y2: H / 2, class: "mid" }));
+  for (const v of yTicks) s.append(svg("line", { x1: 0, x2: W, y1: y(v), y2: y(v), class: "grid" }));
   // the line breaks at missing values; the area is drawn per connected run
   let line = "", runs = [], run = [];
   vals.forEach((v, i) => {
@@ -748,12 +763,39 @@ function wxSpark(b) {
   if (run.length) runs.push(run);
   for (const r of runs) {
     if (r.length < 2) continue;
-    s.append(svg("path", { d: `M${r[0][0]},${H + 8} L` + r.map(p => p.join(",")).join(" L") +
-                              ` L${r[r.length - 1][0]},${H + 8} Z`, class: "area" }));
+    s.append(svg("path", { d: `M${r[0][0]},${H} L` + r.map(p => p.join(",")).join(" L") +
+                              ` L${r[r.length - 1][0]},${H} Z`, class: "area" }));
   }
   s.append(svg("path", { d: line, class: "line" }));
-  t.append(s);
-  if (span) t.append(wxScale([`−${num(span)} h`, `−${num(span / 2)} h`, "jetzt"]));
+
+  const yax = el("div", "wx-yax");
+  for (const v of yTicks) {
+    const lb = el("span", null, wxNum(v, yDigits));
+    lb.style.top = (y(v) / H * 100) + "%";
+    yax.append(lb);
+  }
+  yax.append(el("span", "u", unit));
+
+  // x axis: clock times; the last value is the measurement at page time,
+  // rounded down to the 10-min grid of the TAWES stations
+  const xax = el("div", "wx-xax");
+  const end = pageTime ? Math.floor(new Date(pageTime).getTime() / 600000) * 600000 : NaN;
+  if (typeof b.dt === "number" && !isNaN(end)) {
+    const every = Math.max(1, Math.ceil((n - 1) / 6));   // at most ~7 labels
+    for (let i = n - 1; i >= 0; i -= every) {
+      const d = new Date(end - (n - 1 - i) * b.dt * 1000);
+      const lb = el("span", null, d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" }));
+      lb.style.left = (i / (n - 1) * 100) + "%";
+      if (i === n - 1) lb.style.transform = "translateX(-100%)";   // keep the edge labels inside
+      else if (i === 0) lb.style.transform = "none";
+      xax.append(lb);
+      s.append(svg("line", { x1: x(i), x2: x(i), y1: 0, y2: H, class: "vgrid" }));
+    }
+  }
+
+  const chart = el("div", "wx-chart");
+  chart.append(yax, s, el("div"), xax);
+  t.append(chart);
   return t;
 }
 
@@ -842,7 +884,7 @@ function weatherView(p) {
   // temperature series (block "series" in °C), drawn as its own tile
   const series = p.blocks.find(b => b.k === "series" && (b.u === "Cel" || b.unit === "°C")
     && Array.isArray(b.v) && b.v.filter(x => typeof x === "number").length >= 2);
-  if (series) { grid.append(wxSpark(series)); used.add(series); }
+  if (series) { grid.append(wxSpark(series, p.t)); used.add(series); }
 
   // precipitation: the shortest period is the main value
   const rain = [["r10m", "letzte 10 min"], ["r1h", "letzte Stunde"], ["rday", "seit Mitternacht"], ["r24h", "letzte 24 h"]]

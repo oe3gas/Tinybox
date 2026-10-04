@@ -286,8 +286,15 @@ a.extlink:hover { color: var(--accent-dark); }
 .wx-compass .speed { font: 700 19px var(--mono); text-anchor: middle; fill: var(--ink); }
 .wx-compass .unit { font: 10px var(--sans); text-anchor: middle; fill: var(--ink-3); }
 
-.wx-spark svg { display: block; width: 100%; height: 96px; }
-.wx-spark .mid { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 4 5; }
+.wx-spark svg { display: block; width: 100%; height: 110px; overflow: visible; }
+.wx-chart { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; margin-top: 22px; }
+.wx-yax { position: relative; min-width: 34px; font: 12px var(--mono); color: var(--ink-3); }
+.wx-yax span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+.wx-yax .u { top: -18px; transform: none; }
+.wx-xax { position: relative; height: 18px; margin-top: 4px; font: 12px var(--mono); color: var(--ink-3); }
+.wx-xax span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.wx-spark .grid, .wx-spark .vgrid { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+.wx-spark .vgrid { opacity: .6; }
 .wx-spark .area { fill: var(--accent); opacity: .10; }
 .wx-spark .line { fill: none; stroke: var(--accent); stroke-width: 3; vector-effect: non-scaling-stroke; }
 
