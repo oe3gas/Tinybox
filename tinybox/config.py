@@ -42,6 +42,59 @@ class StationCfg:
     mailbox_call: str
     sysop_call: str
     sysop_via_radio: bool
+    haddress: str = ""        # hierarchical address, e.g. OE3XTC.#NOE.AUT.EU ('' = call only)
+    qth: str = ""             # shown in the R: line
+
+    @property
+    def bbs_call(self) -> str:
+        """Mailbox call as it appears in addresses, BIDs and R: lines (no SSID)."""
+        return base_call(self.mailbox_call)
+
+    @property
+    def address(self) -> str:
+        return self.haddress or self.bbs_call
+
+
+@dataclass
+class PartnerCfg:
+    """[partner.CALL] - one neighbouring mailbox."""
+    call: str                       # mailbox call without SSID (addresses, R: lines)
+    transport: str = "agw"          # agw | tcp
+    ax25_call: str = ""             # agw: call to connect to / that calls us ('' = call)
+    via: list[str] = field(default_factory=list)   # agw: digipeaters / nodes
+    host: str = ""                  # tcp: partner's forward port
+    port: int = 0
+    login: list[str] = field(default_factory=list)  # tcp: lines sent after connecting
+    password: str = ""              # tcp: password this partner gives when calling us
+    haddress: str = ""
+    routes: list[str] = field(default_factory=list)  # personal mail: HR patterns
+    areas: list[str] = field(default_factory=list)   # bulletins: flood areas, * = all
+    protocol: str = "fbb"           # fbb | ascii - the most we offer this partner
+    timeout: int = 120              # seconds without data
+
+    @property
+    def radio_call(self) -> str:
+        return self.ax25_call or self.call
+
+
+@dataclass
+class ForwardCfg:
+    enabled: bool = False     # the optional forward module (adapters/forward.py, from F2)
+    bid_days: int = 60        # how long BIDs are remembered; older mail is held
+    aliases: dict[str, str] = field(default_factory=dict)   # e.g. ALLOE -> AUT
+    listen_host: str = "127.0.0.1"   # incoming TCP forwards (partners call us)
+    listen_port: int = 0             # 0 = no incoming TCP forwards
+    partners: dict[str, PartnerCfg] = field(default_factory=dict)
+
+    def partner(self, call: str) -> PartnerCfg | None:
+        return self.partners.get(base_call(call.strip().upper()))
+
+    def partner_by_radio_call(self, call: str) -> PartnerCfg | None:
+        call = call.strip().upper()
+        for p in self.partners.values():
+            if p.radio_call == call:
+                return p
+        return None
 
 
 @dataclass
@@ -206,6 +259,7 @@ class Config:
     brocast: BrocastCfg = None  # type: ignore[assignment]  # set by load()
     inbox: InboxCfg = None  # type: ignore[assignment]  # set by load()
     chat: ChatCfg = field(default_factory=ChatCfg)
+    forward: ForwardCfg = field(default_factory=ForwardCfg)
 
 
 def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
@@ -271,7 +325,20 @@ def load(path: str | Path) -> Config:
         sysop_call=_require_call("station", "sysop_call",
                                  _get(cp, "station", "sysop_call", None)),
         sysop_via_radio=_get(cp, "station", "sysop_via_radio", False, bool),
+        qth=_get(cp, "station", "qth", "").strip(),
     )
+    haddress = _get(cp, "station", "haddress", "").strip()
+    if haddress:
+        from .addressing import AddressError, addr_call, normalize
+        try:
+            haddress = normalize(haddress)
+        except AddressError:
+            raise ConfigError(f"[station] haddress: '{haddress}' is not a valid "
+                              "hierarchical address (e.g. OE3XTC.#NOE.AUT.EU)") from None
+        if addr_call(haddress) != station.bbs_call:
+            raise ConfigError(f"[station] haddress must start with {station.bbs_call} "
+                              "(the mailbox call without SSID)")
+        station.haddress = haddress
 
     direwolf = DirewolfCfg(
         agw_host=_get(cp, "direwolf", "agw_host", "127.0.0.1"),
@@ -386,9 +453,79 @@ def load(path: str | Path) -> Config:
                      poll_sec=_get(cp, "inbox", "poll_sec", 10, int))
     _check_range("inbox", "poll_sec", inbox.poll_sec, 1, 3600)
 
+    forward = ForwardCfg(enabled=_get(cp, "forward", "enabled", False, bool),
+                         bid_days=_get(cp, "forward", "bid_days", 60, int))
+    _check_range("forward", "bid_days", forward.bid_days, 1, 3650)
+    for item in _get(cp, "forward", "aliases", "").replace(",", " ").split():
+        if ":" not in item:
+            raise ConfigError(f"[forward] aliases: '{item}' must look like ALIAS:AREA")
+        alias, area = item.split(":", 1)
+        forward.aliases[alias.strip().upper()] = area.strip().upper()
+    forward.listen_host = _get(cp, "forward", "listen_host", "127.0.0.1").strip()
+    forward.listen_port = _get(cp, "forward", "listen_port", 0, int)
+    if forward.listen_port:
+        _check_port("forward", "listen_port", forward.listen_port)
+        if telnet.enabled and forward.listen_port == telnet.port:
+            raise ConfigError("[forward] listen_port and [telnet] port must differ")
+    for sec in cp.sections():
+        if sec.lower().startswith("partner."):
+            p = _load_partner(cp, sec)
+            forward.partners[p.call] = p
+    if forward.enabled and not station.haddress:
+        raise ConfigError("[forward] enabled = yes needs [station] haddress "
+                          "(e.g. OE3XTC.#NOE.AUT.EU)")
+    if (forward.listen_port and forward.listen_host not in LOOPBACK_HOSTS
+            and any(p.transport == "tcp" and not p.password
+                    for p in forward.partners.values())):
+        raise ConfigError("[forward] listen_host is reachable from outside: every TCP "
+                          "partner needs a password")
+
     return Config(path=path, station=station, direwolf=direwolf, mailbox=mailbox,
                   telnet=telnet, web=web, console=console, storage=storage, logging=logging_cfg,
-                  mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp))
+                  mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp),
+                  forward=forward)
+
+
+def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
+    """[partner.OE3GAS]  transport = agw | tcp, see tinybox.conf.example"""
+    from .addressing import AddressError, normalize
+    call = normalize_call(sec.split(".", 1)[1])
+    if not is_valid_call(call) or "-" in call:
+        raise ConfigError(f"[{sec}]: '{call}' must be a callsign without SSID")
+
+    def words(key: str) -> list[str]:
+        return [w.upper() for w in _get(cp, sec, key, "").replace(",", " ").split()]
+
+    p = PartnerCfg(call=call,
+                   transport=_get(cp, sec, "transport", "agw").strip().lower(),
+                   ax25_call=normalize_call(_get(cp, sec, "ax25_call", "")),
+                   via=words("via"),
+                   host=_get(cp, sec, "host", "").strip(),
+                   port=_get(cp, sec, "port", 0, int),
+                   login=[x.strip() for x in _get(cp, sec, "login", "").split("|") if x.strip()],
+                   password=_get(cp, sec, "password", "").strip(),
+                   routes=words("routes"), areas=words("areas"),
+                   protocol=_get(cp, sec, "protocol", "fbb").strip().lower(),
+                   timeout=_get(cp, sec, "timeout", 120, int))
+    if p.transport not in ("agw", "tcp"):
+        raise ConfigError(f"[{sec}] transport must be agw or tcp")
+    if p.protocol not in ("fbb", "ascii"):
+        raise ConfigError(f"[{sec}] protocol must be fbb or ascii")
+    if p.ax25_call and not is_valid_call(p.ax25_call):
+        raise ConfigError(f"[{sec}] ax25_call: '{p.ax25_call}' is not a valid callsign")
+    for v in p.via:
+        if not is_valid_call(v):
+            raise ConfigError(f"[{sec}] via: '{v}' is not a valid callsign")
+    if p.transport == "tcp":
+        if not p.host:
+            raise ConfigError(f"[{sec}] transport = tcp needs host")
+        _check_port(sec, "port", p.port)
+    _check_range(sec, "timeout", p.timeout, 10, 3600)
+    try:
+        p.haddress = normalize(_get(cp, sec, "haddress", "").strip()) or call
+    except AddressError as exc:
+        raise ConfigError(f"[{sec}] haddress: '{exc}' is not a valid address") from None
+    return p
 
 
 def _load_chat(cp: configparser.ConfigParser) -> ChatCfg:

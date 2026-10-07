@@ -45,6 +45,7 @@ async def housekeeping(app: App) -> None:
     # every minute: bulletins from the inbox may be valid for only 90 minutes
     while True:
         app.service.purge_expired()
+        app.service.purge_bids()
         app.service.chat.purge()
         await asyncio.sleep(60)
 
@@ -82,6 +83,9 @@ async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter) -> None:
         tasks.append(await brocast.start(app))
     if cfg.inbox.enabled:
         tasks.append(await inbox.start(app))
+    if cfg.forward.enabled:                 # optional: without it a standalone mailbox
+        from .adapters import forward
+        tasks.append(await forward.start(app))
     if cfg.mqtt.enabled:
         log.warning("[mqtt] enabled = yes, but MQTT follows in milestone M5 - ignored.")
 

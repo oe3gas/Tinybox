@@ -9,6 +9,9 @@ mailbox_call = OE3GAS-1        # callsign + SSID the mailbox answers on
 sysop_call   = OE3GAS          # this call (any SSID) gets sysop rights
 sysop_via_radio = no           # no: sysop rights only locally (callsigns
                                # on the air are not authenticated)
+haddress     =                 # hierarchical address of this mailbox, without SSID,
+                               # e.g. OE3GAS.#NOE.AUT.EU (needed for [forward])
+qth          =                 # place name shown in R: lines, e.g. Hollabrunn
 
 [direwolf]
 agw_host        = 127.0.0.1    # Direwolf runs on the same PC
@@ -81,6 +84,36 @@ TREFF = 7d    General meeting point
 DX    = 24h   DX spots and news
 TECH  = 30d   Technical questions
 RUNDE = live  Live round, nothing is stored
+
+[forward]
+enabled  = no                  # exchange mail with other mailboxes (module from F2 on);
+                               # no = standalone mailbox, @ addresses only for bulletins
+bid_days = 60                  # BIDs are remembered this long; older mail is held
+aliases  =                     # short names for areas, e.g. ALLOE:AUT EUROPA:EU
+listen_host = 127.0.0.1        # incoming TCP forwards (partners call us);
+listen_port = 0                # 0 = none. Not loopback: every TCP partner needs a password.
+                               # Login: TinyBox asks "Callsign:" and "Password:".
+
+# One section per neighbouring mailbox (call without SSID). Examples:
+#
+# [partner.OE3GAS]             # over the air via Direwolf
+# transport = agw
+# ax25_call = OE3GAS           # call to connect to / that calls us (may have an SSID)
+# via       =                  # digipeaters / nodes, e.g. OE3XNR
+# haddress  = OE3GAS.#OOE.AUT.EU
+# routes    = WW               # personal mail: address patterns, WW = default route
+# areas     = WW EU AUT        # bulletins: flood areas, * = all
+# protocol  = fbb              # fbb or ascii (W0RLI)
+# timeout   = 300              # seconds without data
+#
+# [partner.OE3XAB]             # over TCP (HAMNET), e.g. LinBPQ FBBPORT
+# transport = tcp
+# host      = 44.143.0.1
+# port      = 8011
+# login     = OE3XTC | password  # lines sent after connecting, separated by |
+# password  =                    # what this partner sends when it calls us
+# routes    = WW
+# areas     = WW EU AUT
 
 [mqtt]
 enabled       = no             # milestone M5

@@ -26,19 +26,28 @@ HELP = [
     "  KM         Kill all read messages to you",
     "  L          List messages",
     "             TS = Type (P private, B bulletin) + Status (N new, Y read)",
+    "             3rd letter: $ waiting for forward, F forwarded, H held",
+    "  LB / LP    List bulletins / private messages only",
+    "  L@ area    List messages @ area or mailbox, e.g. L@ WW",
+    "  L> call    List messages to call (L< call: from call)",
     "  LM         List messages to you",
     "  R n        Read message n (R n n ... for several)",
     "  RM         Read all unread messages to you",
     "  S call     Send private message (same as SP call)",
-    "  SB call    Send bulletin, e.g. SB ALL",
+    "  SP call @ mailbox   Private message to a user of another mailbox,",
+    "             e.g. SP OE1ABC @ OE1XAB.#WIE.AUT.EU",
+    "  SB topic   Send bulletin, e.g. SB ALL  (SB ALL @ WW: to the whole network)",
+    "             Optional at the end: $BID, e.g. SB DX @ EU $DX0815",
     "  V          Version",
 ]
 HELP_SYSOP = [
     "Sysop:",
-    "  E n field value   Edit header, field = TO, FROM, TYPE, STATUS, SUBJ",
+    "  E n field value   Edit header, field = TO, FROM, TYPE, STATUS, SUBJ, AT",
 ]
 
-VERSION_TEXT = f"TinyBox {VERSION} - local mailbox, no forwarding."
+VERSION_TEXT = f"TinyBox {VERSION} - {{mode}}."
+VERSION_LOCAL = "local mailbox, no forwarding"
+VERSION_FWD = "mailbox {address}, forwarding on"
 DICT_NONE = "No brocast dictionary available here."
 DICT_INTRO = ("brocast dictionary v{version}, {lines} lines. Save this output (capture/log) "
               "and import it in the brocast listener.")
@@ -53,23 +62,28 @@ INVALID_CALL = "Invalid callsign: {call}"
 INVALID_VALUE = "Invalid value: {value}"
 TOO_LARGE = "Message too long (max {max} bytes), discarded."
 THIRD_PARTY_OFF = "Sorry, you can only send messages to the sysop {sysop}."
+INVALID_ADDRESS = "Invalid address: {addr}  (e.g. OE1XAB.#WIE.AUT.EU or WW)"
+DUPLICATE_BID = "BID {bid} is already known here - message not sent."
+NO_FORWARD = "This mailbox does not forward. Leave out @ {addr} for local mail."
 
 USAGE_R = "Usage: R n"
 USAGE_K = "Usage: K n"
-USAGE_S = "Usage: S call  or  SB ALL"
-USAGE_E = "Usage: E n field value  (field = TO, FROM, TYPE, STATUS, SUBJ)"
+USAGE_S = "Usage: S call [@ mailbox] [$BID]  or  SB topic [@ area] [$BID]"
+USAGE_E = "Usage: E n field value  (field = TO, FROM, TYPE, STATUS, SUBJ, AT)"
 
 NO_MESSAGES = "No messages."
-LIST_HEADER = " MSG# TS  SIZE TO        FROM      DATE   UTC   SUBJECT"
-LIST_ROW = "{id:>5} {type}{status} {size:>5} {to:<9} {frm:<9} {date} {time} {subject}"
+LIST_HEADER = " MSG# TS   SIZE TO        @BBS    FROM      DATE   UTC   SUBJECT"
+LIST_ROW = ("{id:>5} {type}{status}{fwd} {size:>5} {to:<9} {at:<7} {frm:<9} {date} {time} "
+            "{subject}")
 
 READ_HEADER = [
-    "Msg# {id}  Type/Status: {type}{status}",
-    "From: {frm}  To: {to}",
+    "Msg# {id}  Type/Status: {type}{status}{fwd}  BID: {bid}",
+    "From: {frm}  To: {to}{at}",
     "Date: {date}",
     "Subject: {subject}",
     "",
 ]
+HELD_NOTE = "*** Held: {note}"
 READ_END = "[End of message {id}]"
 
 KILLED = "Msg {id} killed."
@@ -135,6 +149,9 @@ HELP_CONSOLE = [
     "  DISC call  Disconnect a user",
     "  STATUS     Mailbox status",
     "  WEB        Show the web GUI login link",
+    "  FWD        Forward status of all partners",
+    "  FWD call   Connect to a partner mailbox now",
+    "  FWQ        Messages waiting for forwarding",
     "  SHUTDOWN   Stop TinyBox",
 ]
 CONSOLE_NO_BYE = "This is the local console. Use SHUTDOWN to stop TinyBox."
@@ -154,6 +171,13 @@ STATUS_LINES = [
     "Data:      {data_dir}",
 ]
 SHUTTING_DOWN = "Shutting down ..."
+FWD_OFF = "Forwarding is off ([forward] enabled = no)."
+FWD_START = "Connecting to {call} ..."
+FWD_DONE = "Forward {call}: {result}"
+FWD_FAILED = "Forward {call} failed: {error}"
+FWQ_EMPTY = "Forward queue is empty."
+FWQ_HEADER = "Partner  Msg#  State  Since (UTC)"
+FWQ_ROW = "{partner:<8} {id:>4}  {state:<6} {changed}"
 
 # telnet test port only
 TELNET_LOGIN = "Callsign: "

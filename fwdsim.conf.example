@@ -1,0 +1,45 @@
+# Vorlage fuer fwdsim, den Forward-Testpartner. Kopieren nach fwdsim.conf
+# und pro PC anpassen. fwdsim.conf selbst ist nicht im Repo (.gitignore).
+#
+# Konvention:  TinyBox = OE3XTC   Hop = OE3GAS   dahinter DL0XTC (sendet nie auf Funk)
+# Adressen, R:-Zeilen und BIDs ohne SSID, wie im echten Netz.
+
+[fwdsim]
+db               = data/fwdsim.db   # Postfaecher von OE3GAS und DL0XTC
+tcp_listen_host  = 127.0.0.1        # hier ruft TinyBox OE3GAS per TCP an
+tcp_listen_port  = 6311
+hop_ax25_call    = OE3GAS           # Funk-Call von OE3GAS (darf eine SSID haben)
+timeout_tcp      = 30               # s ohne Antwort, dann Abbruch
+timeout_radio    = 300
+wait_for_tinybox = 120              # so lange wartet ein Test, bis TinyBox anruft
+
+[hop]
+call      = OE3GAS
+haddress  = OE3GAS.#OOE.AUT.EU
+qth       = Linz
+
+[remote]
+call      = DL0XTC
+haddress  = DL0XTC.#BAY.DEU.EU
+qth       = Muenchen
+
+[tinybox]
+call         = OE3XTC               # wie in Adressen/R:-Zeilen, ohne SSID
+haddress     = OE3XTC.#NOE.AUT.EU
+ax25_call    = OE3XTC-1             # = mailbox_call in tinybox.conf
+forward_host = 127.0.0.1            # eingehender Forward-Port von TinyBox,
+forward_port = 0                    # 0 = keiner (dann nur Faelle, in denen TinyBox anruft)
+forward_password =                  # Passwort von [partner.OE3GAS] in tinybox.conf
+telnet_host  = 127.0.0.1            # zum Eintippen der Testmails
+telnet_port  = 6300
+telnet_user  = OE3XTC
+db           =                      # z. B. data/tinybox.db - nur lesend, fuer die Pruefungen
+
+[agw]
+enabled         = no                # Funktest ueber Direwolf (Option --agw)
+host            = 127.0.0.1
+port            = 8000
+radio_port      = 0
+paclen          = 128
+max_outstanding = 4
+via             =                   # Digis/Knoten zu TinyBox, z. B. OE3XNR

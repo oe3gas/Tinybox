@@ -9,6 +9,10 @@ from __future__ import annotations
 import logging
 import uuid
 
+from datetime import datetime, timedelta, timezone
+
+from . import addressing
+from .addressing import AddressError
 from .chat import ChatHub
 from .config import DEST_RE, Config, base_call, is_valid_call, normalize_call
 from .events import EventBus
@@ -16,12 +20,15 @@ from .store import Message, Store, utc_now
 
 log = logging.getLogger(__name__)
 
-ORIGINS = {"radio", "telnet", "sysop", "mqtt", "inbox"}
-MAX_SUBJECT = 60
+ORIGINS = {"radio", "telnet", "sysop", "mqtt", "inbox", "forward"}
+MAX_SUBJECT = 60          # what local users may type
+MAX_SUBJECT_FWD = 80      # what partner mailboxes may send (FBB limit)
+FWD_STATES = {"", "$", "F", "H"}
 
 
 class ServiceError(Exception):
-    """code: not_found, not_allowed, invalid_call, invalid_value, too_large"""
+    """code: not_found, not_allowed, invalid_call, invalid_value, too_large,
+    invalid_address, duplicate, no_forward"""
 
     def __init__(self, code: str, detail: str = "") -> None:
         super().__init__(detail or code)
@@ -49,6 +56,8 @@ class MessageService:
         return base_call(msg.from_call) == base_call(call)
 
     def can_see(self, msg: Message, call: str, sysop: bool) -> bool:
+        if msg.fwd == "H" and not sysop:          # held mail waits for the sysop
+            return False
         return (sysop or msg.type == "B"
                 or self._is_addressee(msg, call) or self._is_author(msg, call))
 
@@ -82,26 +91,53 @@ class MessageService:
             raise ServiceError("not_allowed", "third party traffic is disabled")
         return to_call
 
+    def check_address(self, type: str, at_addr: str, bid: str | None = None,
+                      origin: str = "telnet") -> tuple[str, str | None]:
+        """Normalize the @ address and an optional BID given by the user.
+        Returns (at_addr, bid). '' = local."""
+        try:
+            at_addr = addressing.normalize(at_addr, self.cfg.forward.aliases)
+        except AddressError as exc:
+            raise ServiceError("invalid_address", str(exc)) from None
+        if (origin != "forward" and type.upper() == "P" and not self.cfg.forward.enabled
+                and not addressing.is_local(at_addr, self.cfg.station.mailbox_call)):
+            raise ServiceError("no_forward", at_addr)
+        if bid:
+            try:
+                bid = addressing.check_bid(bid)
+            except AddressError as exc:
+                raise ServiceError("invalid_value", f"BID {exc}") from None
+            if self.store.bid_known(bid):
+                raise ServiceError("duplicate", bid)
+        return at_addr, bid or None
+
     def create(self, *, from_call: str, to_call: str, type: str, subject: str,
                body: str, origin: str, sysop: bool = False,
                msgid: str | None = None, created: str | None = None,
                replace_key: str | None = None, expires: str | None = None,
-               brocast: str | None = None) -> int:
+               brocast: str | None = None, at_addr: str = "", bid: str | None = None,
+               rlines: list[str] | None = None, bid_kind: str | None = None) -> int:
         """replace_key/expires/brocast: inbox folder only (bulletins). An existing
         bulletin with the same replace_key gets the new content under its old number.
         brocast: a ready brocast page (JSON text) that the brocast adapter sends
-        instead of turning the text into a text page."""
+        instead of turning the text into a text page.
+        at_addr/bid/rlines: forwarding. A partner mailbox (origin "forward") passes
+        the R: lines it received; TinyBox adds its own on top."""
         if origin not in ORIGINS:
             raise ServiceError("invalid_value", f"origin {origin}")
         from_call = normalize_call(from_call)
         if not is_valid_call(from_call):
             raise ServiceError("invalid_call", from_call)
         type = type.upper()
-        to_call = self.check_send(from_call, to_call, type, sysop)
+        forwarded = origin == "forward"
+        # third-party rule is for local users, not for mail arriving from partners
+        to_call = self.check_send(from_call, to_call, type, sysop or forwarded)
+        at_addr, bid = self.check_address(type, at_addr, bid, origin)
 
         if len(body.encode("utf-8")) > self.cfg.mailbox.max_msg_bytes:
             raise ServiceError("too_large")
-        subject = " ".join(subject.split())[:MAX_SUBJECT] or "(no subject)"
+        max_subject = MAX_SUBJECT_FWD if forwarded else MAX_SUBJECT
+        subject = " ".join(subject.split())[:max_subject] or "(no subject)"
 
         if replace_key and type == "B":
             old = self.store.get_by_replace_key(replace_key)
@@ -135,10 +171,92 @@ class MessageService:
             replace_key=replace_key if type == "B" else None,
             expires=expires if type == "B" else None,
             brocast=brocast if type == "B" else None,
+            at_addr=at_addr, bid=bid,
         )
-        log.info("msg %d created: %s %s -> %s (%s)", msg_id, type, from_call, to_call, origin)
+        self._forward_fields(msg_id, type, at_addr, bid, rlines or [], origin, bid_kind)
+        log.info("msg %d created: %s %s -> %s%s (%s)", msg_id, type, from_call, to_call,
+                 f" @ {at_addr}" if at_addr else "", origin)
         self.bus.publish("message.created", message=self.store.get(msg_id))
         return msg_id
+
+    # --- forwarding fields (core part; the forward module comes later) -----
+
+    def _forward_fields(self, msg_id: int, type: str, at_addr: str, bid: str | None,
+                        incoming: list[str], origin: str, bid_kind: str | None) -> None:
+        """BID, own R: line, forward state ($ / H) of a new message.
+
+        bid_kind (W0RLI): 'B' = real BID (bulletins, or given by the sender),
+        'M' = generated MID of personal mail. A partner mailbox may pass the kind;
+        otherwise a received P counts as MID, a B as BID."""
+        st = self.cfg.station
+        if bid_kind not in ("B", "M"):
+            if bid is not None and origin != "forward":
+                bid_kind = "B"                     # the user typed $BID
+            else:
+                bid_kind = "B" if type == "B" else "M"
+        if bid is None:
+            bid = addressing.make_bid(msg_id, st.mailbox_call)
+            if self.store.bid_known(bid):          # only after 100000 messages
+                log.warning("msg %d: BID %s already used, message has no BID", msg_id, bid)
+                bid = None
+        if bid:
+            self.store.bid_add(bid, origin)
+        forwarded = origin == "forward"
+        leaves = bool(at_addr) and not addressing.is_local(at_addr, st.mailbox_call)
+        rlines: list[str] = []
+        fwd, note = "", ""
+        if forwarded or leaves:
+            rlines = [addressing.make_rline(datetime.now(timezone.utc), st.address, st.qth,
+                                            msg_id, bid or "")] + incoming
+        if forwarded:
+            note = self._hold_reason(incoming)
+            if note:
+                fwd = "H"
+                log.warning("msg %d (%s) held: %s", msg_id, bid, note)
+        if not fwd and leaves and self.cfg.forward.enabled:
+            fwd = "$"
+        self.store.set_forward_fields(msg_id, bid=bid or "", rlines="\n".join(rlines),
+                                      fwd=fwd, note=note, bid_kind=bid_kind if bid else "")
+
+    def _hold_reason(self, incoming: list[str]) -> str:
+        own = self.cfg.station.bbs_call
+        if own in {addressing.rline_call(x) for x in incoming}:
+            return "loop: own call in R: lines"
+        times = [t for t in (addressing.rline_time(x) for x in incoming) if t]
+        days = self.cfg.forward.bid_days
+        if times and datetime.now(timezone.utc) - min(times) > timedelta(days=days):
+            return f"older than {days} days (BID lifetime)"
+        return ""
+
+    def bid_known(self, bid: str) -> bool:
+        return self.store.bid_known(bid.upper())
+
+    def set_fwd_state(self, msg_id: int, fwd: str, note: str = "") -> None:
+        if fwd not in FWD_STATES:
+            raise ServiceError("invalid_value", f"fwd {fwd}")
+        self.store.set_forward_fields(msg_id, fwd=fwd, note=note)
+        self.bus.publish("message.edited", message=self.store.get(msg_id), by="forward")
+
+    def assign_missing_bids(self) -> int:
+        """Schema 4 -> 5: give existing messages a BID (they stay local)."""
+        n = 0
+        for msg_id in self.store.ids_without_bid():
+            bid = addressing.make_bid(msg_id, self.cfg.station.mailbox_call)
+            if self.store.bid_known(bid):
+                continue
+            self.store.set_forward_fields(msg_id, bid=bid)
+            self.store.bid_add(bid, "migration")
+            n += 1
+        self.store.fill_bid_kind()                # B for bulletins, M for personal mail
+        if n:
+            log.info("schema 5: %d existing message(s) got a BID", n)
+        return n
+
+    def purge_bids(self) -> int:
+        n = self.store.purge_bids(self.cfg.forward.bid_days)
+        if n:
+            log.info("%d BID(s) older than %d days forgotten", n, self.cfg.forward.bid_days)
+        return n
 
     # --- reading / listing ----------------------------------------------
 
@@ -184,7 +302,7 @@ class MessageService:
         return ids
 
     _EDIT_FIELDS = {"TO": "to_call", "FROM": "from_call", "TYPE": "type",
-                    "STATUS": "status", "SUBJ": "subject"}
+                    "STATUS": "status", "SUBJ": "subject", "AT": "at_addr"}
 
     def edit(self, msg_id: int, field: str, value: str, call: str, sysop: bool) -> Message:
         if not sysop:
@@ -208,6 +326,12 @@ class MessageService:
             value = value.upper()
             if value not in ("N", "Y"):
                 raise ServiceError("invalid_value", value)
+        elif column == "at_addr":
+            value = "" if value in ("-", "") else value
+            try:
+                value = addressing.normalize(value, self.cfg.forward.aliases)
+            except AddressError as exc:
+                raise ServiceError("invalid_address", str(exc)) from None
         else:
             value = " ".join(value.split())[:MAX_SUBJECT] or "(no subject)"
         self.store.update_field(msg_id, column, value)

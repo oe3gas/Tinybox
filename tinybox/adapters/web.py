@@ -371,9 +371,12 @@ class WebServer:
     def _msg(m, body: bool = False) -> dict:
         d = {"id": m.id, "msgid": m.msgid, "type": m.type, "status": m.status,
              "to": m.to_call, "from": m.from_call, "subject": m.subject, "size": m.size,
-             "origin": m.origin, "created": m.created}
+             "origin": m.origin, "created": m.created,
+             "at": m.at_addr, "bid": m.bid, "bid_kind": m.bid_kind, "fwd": m.fwd}
         if body:
             d["body"] = m.body
+            d["rlines"] = m.rline_list
+            d["note"] = m.note
         return d
 
     def _status(self) -> dict:

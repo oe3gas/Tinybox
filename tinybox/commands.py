@@ -6,7 +6,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Callable
 
-from . import chatcmd, dictfile, texts
+from . import addressing, chatcmd, dictfile, texts
 from .service import ServiceError
 from .store import Message
 
@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from .session import Session
 
 CMD_RE = re.compile(r"^\s*([A-Za-z?]+)\s*(.*?)\s*$")
+# S/SP/SB arguments:  call [@ address] [$BID]   ("call@address" works too)
+SEND_RE = re.compile(r"^(?P<to>[^\s@$]+)\s*(?:@\s*(?P<at>[^\s$]+))?\s*(?:\$(?P<bid>\S+))?$")
 log = logging.getLogger(__name__)
 
 
@@ -35,17 +37,23 @@ def _list(s: Session, msgs: list[Message]) -> None:
     rows = [texts.LIST_HEADER]
     for m in msgs:
         rows.append(texts.LIST_ROW.format(
-            id=m.id, type=m.type, status=m.status, size=m.size, to=m.to_call,
-            frm=m.from_call, date=_yymmdd(m.created), time=m.created[11:16],
-            subject=m.subject[:30]))
+            id=m.id, type=m.type, status=m.status, fwd=m.fwd or " ", size=m.size,
+            to=m.to_call, at=addressing.addr_call(m.at_addr), frm=m.from_call,
+            date=_yymmdd(m.created), time=m.created[11:16], subject=m.subject[:30]))
     s.out(*rows)
 
 
 def _show(s: Session, m: Message) -> None:
-    head = [line.format(id=m.id, type=m.type, status=m.status, frm=m.from_call,
-                        to=m.to_call, date=m.created.replace("T", " "),
+    head = [line.format(id=m.id, type=m.type, status=m.status, fwd=m.fwd, bid=m.bid or "-",
+                        frm=m.from_call, to=m.to_call,
+                        at=f" @ {m.at_addr}" if m.at_addr else "",
+                        date=m.created.replace("T", " "),
                         subject=m.subject) for line in texts.READ_HEADER]
-    s.out(*head, *m.body.split("\n"), texts.READ_END.format(id=m.id))
+    if m.fwd == "H" and m.note:
+        head.insert(-1, texts.HELD_NOTE.format(note=m.note))
+    rl = m.rline_list
+    s.out(*head, *rl, *([""] if rl else []), *m.body.split("\n"),
+          texts.READ_END.format(id=m.id))
 
 
 # --- commands ---------------------------------------------------------------
@@ -96,7 +104,30 @@ def cmd_kill_mine(s: Session, arg: str) -> None:
 
 
 def cmd_list(s: Session, arg: str) -> None:
-    _list(s, s.service.list_for(s.call, s.sysop))
+    """L, L@ area, L> call, L< call"""
+    msgs = s.service.list_for(s.call, s.sysop)
+    arg = arg.strip().upper()
+    if arg[:1] in ("@", ">", "<"):
+        op, value = arg[0], arg[1:].strip()
+        if not value:
+            s.out(texts.UNKNOWN_CMD)
+            return
+        if op == "@":
+            msgs = [m for m in msgs if value in addressing.parts(m.at_addr)
+                    or addressing.addr_call(m.at_addr) == addressing.base_call(value)]
+        elif op == ">":
+            msgs = [m for m in msgs if m.to_call == value]
+        else:
+            msgs = [m for m in msgs if m.from_call == value]
+    _list(s, msgs)
+
+
+def cmd_list_bulletins(s: Session, arg: str) -> None:
+    _list(s, [m for m in s.service.list_for(s.call, s.sysop) if m.type == "B"])
+
+
+def cmd_list_private(s: Session, arg: str) -> None:
+    _list(s, [m for m in s.service.list_for(s.call, s.sysop) if m.type == "P"])
 
 
 def cmd_list_mine(s: Session, arg: str) -> None:
@@ -124,15 +155,18 @@ def cmd_read_mine(s: Session, arg: str) -> None:
 
 
 def _send(s: Session, arg: str, type: str) -> None:
-    if not arg or len(arg.split()) != 1:
+    m = SEND_RE.match(arg.strip())
+    if not arg or m is None:
         s.out(texts.USAGE_S)
         return
     try:
-        to_call = s.service.check_send(s.call, arg, type, s.sysop)
+        to_call = s.service.check_send(s.call, m.group("to"), type, s.sysop)
+        at_addr, bid = s.service.check_address(type, m.group("at") or "", m.group("bid"),
+                                               s.origin)
     except ServiceError as exc:
         s.error(exc)
         return
-    s.begin_send(to_call, type)
+    s.begin_send(to_call, type, at_addr, bid)
 
 
 def cmd_send(s: Session, arg: str) -> None:
@@ -144,7 +178,9 @@ def cmd_send_bulletin(s: Session, arg: str) -> None:
 
 
 def cmd_version(s: Session, arg: str) -> None:
-    s.out(texts.VERSION_TEXT)
+    mode = (texts.VERSION_FWD.format(address=s.cfg.station.address)
+            if s.cfg.forward.enabled else texts.VERSION_LOCAL)
+    s.out(texts.VERSION_TEXT.format(mode=mode))
 
 
 def cmd_dict(s: Session, arg: str) -> None:
@@ -197,7 +233,9 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "K": cmd_kill,
     "KM": cmd_kill_mine,
     "L": cmd_list,
+    "LB": cmd_list_bulletins,
     "LM": cmd_list_mine,
+    "LP": cmd_list_private,
     "R": cmd_read,
     "RM": cmd_read_mine,
     "S": cmd_send,

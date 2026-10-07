@@ -1,0 +1,28 @@
+17:32:58 INFO    Log-Datei: C:\Tinybox\brocast\funktest\log_station.txt
+17:32:58 INFO    brocastd 0.1 (M1), Modus station, Rufzeichen OE3GAS-5
+17:32:58 INFO    Ingest-API auf http://127.0.0.1:8090/api/v1
+17:32:58 INFO    KISS verbunden mit 127.0.0.1:8001
+17:32:58 INFO    gesendet: Seite 24 rev 0 (1 Frames, 1.0 s)
+17:32:58 INFO    [Min  0] Wetterseite -> HTTP 200 {'id': 24, 'rev': 0, 'changed': True, 'subpages': 1}
+17:32:58 INFO    gesendet: Seite 25 rev 0 (4 Frames, 7.8 s)
+17:32:58 INFO    [Min  0] Bulletin -> HTTP 200 {'id': 25, 'rev': 0, 'changed': True, 'subpages': 4}
+17:32:58 INFO    ... nächster Schritt in 10 min
+17:34:58 INFO    gesendet: Seite 24 rev 0 (1 Frames, 1.0 s)
+17:34:58 INFO    gesendet: Seite 25 rev 0 (4 Frames, 7.8 s)
+17:39:58 INFO    gesendet: Seite 24 rev 0 (1 Frames, 1.0 s)
+17:39:58 INFO    gesendet: Seite 25 rev 0 (4 Frames, 7.8 s)
+17:42:58 INFO    gesendet: Seite 24 rev 1 (1 Frames, 1.0 s)
+17:42:58 INFO    [Min 10] Wetterseite geändert -> HTTP 200 {'id': 24, 'rev': 1, 'changed': True, 'subpages': 1}
+17:42:58 INFO    ... nächster Schritt in 2 min
+17:44:58 INFO    gesendet: Seite 24 rev 1 (1 Frames, 1.0 s)
+17:44:58 INFO    gesendet: Seite 25 rev 1 (1 Frames, 0.6 s) [zurückgezogen]
+17:44:58 INFO    [Min 12] Bulletin zurückziehen -> HTTP 200 {'id': 25, 'rev': 1, 'changed': True, 'subpages': 1}
+17:44:58 INFO    ... nächster Schritt in 6 min
+17:46:58 INFO    gesendet: Seite 25 rev 1 (1 Frames, 0.6 s) [zurückgezogen]
+17:48:58 INFO    gesendet: Seite 25 rev 1 (1 Frames, 0.6 s) [zurückgezogen]
+17:49:58 INFO    gesendet: Seite 24 rev 1 (1 Frames, 1.0 s)
+17:50:58 INFO    gesendet: Seite 26 rev 0 (1 Frames, 1.1 s)
+17:50:58 INFO    [Min 18] Ende-Seite -> HTTP 200 {'id': 26, 'rev': 0, 'changed': True, 'subpages': 1}
+17:50:58 INFO    ... nächster Schritt in 3 min
+17:52:58 INFO    gesendet: Seite 26 rev 0 (1 Frames, 1.1 s)
+17:53:58 WARNING KISS-Verbindung verloren

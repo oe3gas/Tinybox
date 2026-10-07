@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def make_app(**mailbox_overrides) -> App:
-    cfg = config.load(ROOT / "tinybox.conf")
+    # the template from the repo, not the PC-specific tinybox.conf
+    cfg = config.load(ROOT / "tinybox.conf.example")
     cfg.logging.monitor = False
     cfg.mailbox = dataclasses.replace(cfg.mailbox, **mailbox_overrides)
     return App.create(cfg, db_path=":memory:")
@@ -58,7 +59,7 @@ def type_lines(s: Session, *lines: str) -> None:
 
 class ConfigTests(unittest.TestCase):
     def test_sample_config_loads(self):
-        cfg = config.load(ROOT / "tinybox.conf")
+        cfg = config.load(ROOT / "tinybox.conf.example")
         self.assertEqual(cfg.station.mailbox_call, "OE3GAS-1")
         self.assertTrue(cfg.mailbox.third_party)
         self.assertEqual(cfg.storage.data_dir, ROOT / "data")

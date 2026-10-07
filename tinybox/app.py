@@ -25,10 +25,12 @@ class App:
     stop_event: asyncio.Event | None = None
     web_login_url: str | None = None     # set when the web GUI runs
     brocast: Any = None                  # BrocastPublisher, set when publishing
+    forward: Any = None                  # ForwardModule, only with [forward] enabled = yes
 
     @classmethod
     def create(cls, cfg: Config, db_path: str | None = None) -> "App":
         store = Store(db_path or cfg.storage.data_dir / "tinybox.db")
         bus = EventBus()
         service = MessageService(store, bus, cfg)
+        service.assign_missing_bids()          # schema 4 -> 5, no-op afterwards
         return cls(cfg, store, bus, service, SessionRegistry(cfg.mailbox.max_users))

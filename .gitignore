@@ -26,6 +26,7 @@ secrets/
 # --- PC-spezifische Konfiguration ------------------------------------------
 # Im Repo liegen nur die Vorlagen *.conf.example
 tinybox.conf
+fwdsim.conf
 brocast/brocastd.conf
 brocast/brocastd.conf.neu
 

@@ -199,6 +199,7 @@ class AgwAdapter:
         self.mycall = app.cfg.station.mailbox_call
         self.radio_port = app.cfg.direwolf.agw_radio_port
         self.conns: dict[str, AgwConnection] = {}
+        self._pending: dict[str, asyncio.Future] = {}   # outgoing connects (forward)
         self._writer: asyncio.StreamWriter | None = None
         self.connected = asyncio.Event()  # AGW link up (used by tests)
 
@@ -266,13 +267,22 @@ class AgwAdapter:
             else:
                 log.error("Direwolf refused to register %s - already in use?", self.mycall)
         elif f.kind == "C":
-            self._on_connect(self._remote_of(f))
+            remote = normalize_call(self._remote_of(f))
+            fut = self._pending.pop(remote, None)
+            if fut is not None and not fut.done():
+                self._on_outgoing_connected(remote, fut)
+            else:
+                self._on_connect(remote)
         elif f.kind == "D":
             conn = self.conns.get(self._remote_of(f))
             if conn:
                 conn.feed(f.data)
         elif f.kind == "d":
-            self._on_disconnect(self._remote_of(f))
+            remote = normalize_call(self._remote_of(f))
+            fut = self._pending.pop(remote, None)
+            if fut is not None and not fut.done():
+                fut.set_exception(ConnectionError(f"connect to {remote} failed"))
+            self._on_disconnect(remote)
         elif f.kind == "Y":
             conn = self.conns.get(self._remote_of(f))
             if conn and len(f.data) >= 4:
@@ -293,6 +303,10 @@ class AgwAdapter:
             conn.write(texts.INVALID_CALL.format(call=remote) + "\r")
             conn.close()
             return
+        fwd = self.app.forward
+        if fwd is not None and fwd.partner_for_radio(remote) is not None:
+            fwd.attach_agw(conn, remote)           # a partner mailbox: forward session
+            return
         sysop = self.cfg.station.sysop_via_radio and self.app.service.is_sysop_call(remote)
         session = Session(remote, self.app.service, self.cfg, conn, origin="radio", sysop=sysop)
         if not self.app.registry.add(session):
@@ -303,6 +317,42 @@ class AgwAdapter:
         conn.session = session
         log.info("radio connect %s%s", remote, " (sysop)" if sysop else "")
         session.start()
+
+    # --- outgoing connects (forward module) ------------------------------------
+
+    async def connect(self, remote: str, attach, via: list[str] | None = None,
+                      timeout: float = 120) -> AgwConnection:
+        """Connect to another station (a partner mailbox). attach(conn) is called the
+        moment the link is up and must set conn.session to a line sink - before the
+        first data frame is handled. Raises ConnectionError / asyncio.TimeoutError."""
+        remote = normalize_call(remote)
+        if not self.connected.is_set():
+            raise ConnectionError("Direwolf AGW is not connected")
+        if remote in self.conns or remote in self._pending:
+            raise ConnectionError(f"already connected to {remote}")
+        fut: asyncio.Future = asyncio.get_running_loop().create_future()
+        fut.attach = attach  # type: ignore[attr-defined]
+        self._pending[remote] = fut
+        port = self.radio_port
+        if via:
+            data = bytes([len(via)]) + b"".join(
+                normalize_call(v).encode("ascii").ljust(10, b"\0") for v in via)
+            self.send(Frame("v", port, PID_NO_L3, self.mycall, remote, data))
+        else:
+            self.send(Frame("C", port, PID_NO_L3, self.mycall, remote))
+        log.info("connecting to %s%s", remote, f" via {','.join(via)}" if via else "")
+        try:
+            return await asyncio.wait_for(fut, timeout)
+        finally:
+            self._pending.pop(remote, None)
+
+    def _on_outgoing_connected(self, remote: str, fut: asyncio.Future) -> None:
+        conn = AgwConnection(self, remote)
+        self.conns[remote] = conn
+        conn.pump_task = asyncio.create_task(conn.pump())
+        fut.attach(conn)             # sink in place before the next frame arrives
+        log.info("connected to %s", remote)
+        fut.set_result(conn)
 
     def _on_disconnect(self, remote: str) -> None:
         conn = self.conns.pop(remote, None)

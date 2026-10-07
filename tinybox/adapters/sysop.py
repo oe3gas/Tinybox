@@ -172,6 +172,41 @@ class SysopConsole:
         self.out(f"Web GUI login: {self.app.web_login_url}" if self.app.web_login_url
                  else "Web GUI is disabled ([web] enabled = no).")
 
+    def cmd_fwd(self, arg: str) -> None:
+        """FWD: forward status; FWD call: connect to that partner now."""
+        fwd = self.app.forward
+        if fwd is None:
+            self.out(texts.FWD_OFF)
+            return
+        if not arg:
+            self.out(*fwd.status_lines())
+            return
+        call = normalize_call(arg.split()[0])
+
+        async def go() -> None:
+            try:
+                r = await fwd.call(call)
+                self.out(texts.FWD_DONE.format(call=call, result=r.summary()))
+            except Exception as exc:          # tell the sysop, keep the console alive
+                self.out(texts.FWD_FAILED.format(call=call, error=exc or type(exc).__name__))
+            self.session.prompt()
+
+        self.out(texts.FWD_START.format(call=call))
+        fwd._spawn(go())
+
+    def cmd_fwq(self, arg: str) -> None:
+        """FWQ: messages waiting for forwarding."""
+        if self.app.forward is None:
+            self.out(texts.FWD_OFF)
+            return
+        rows = self.app.store.fwd_queue_list()
+        if not rows:
+            self.out(texts.FWQ_EMPTY)
+            return
+        self.out(texts.FWQ_HEADER, *[texts.FWQ_ROW.format(partner=p, id=i, state=s,
+                                                          changed=c[:16].replace("T", " "))
+                                     for p, i, s, c in rows])
+
     def cmd_shutdown(self, arg: str) -> None:
         self.out(texts.SHUTTING_DOWN)
         if self.app.stop_event is not None:
@@ -185,5 +220,7 @@ class SysopConsole:
         "DISC": cmd_disc,
         "STATUS": cmd_status,
         "WEB": cmd_web,
+        "FWD": cmd_fwd,
+        "FWQ": cmd_fwq,
         "SHUTDOWN": cmd_shutdown,
     }

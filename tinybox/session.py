@@ -57,6 +57,8 @@ class Session:
         # message being composed
         self._to = ""
         self._type = "P"
+        self._at = ""
+        self._bid: str | None = None
         self._subject = ""
         self._body: list[str] = []
         self._body_bytes = 0
@@ -84,6 +86,12 @@ class Session:
             self.out(texts.INVALID_CALL.format(call=str(exc)))
         elif exc.code == "too_large":
             self.out(texts.TOO_LARGE.format(max=self.cfg.mailbox.max_msg_bytes))
+        elif exc.code == "invalid_address":
+            self.out(texts.INVALID_ADDRESS.format(addr=str(exc)))
+        elif exc.code == "duplicate":
+            self.out(texts.DUPLICATE_BID.format(bid=str(exc)))
+        elif exc.code == "no_forward":
+            self.out(texts.NO_FORWARD.format(addr=str(exc)))
         else:
             self.out(texts.INVALID_VALUE.format(value=str(exc)))
 
@@ -159,8 +167,10 @@ class Session:
 
     # --- composing a message -------------------------------------------
 
-    def begin_send(self, to_call: str, type: str) -> None:
+    def begin_send(self, to_call: str, type: str, at_addr: str = "",
+                   bid: str | None = None) -> None:
         self._to, self._type = to_call, type
+        self._at, self._bid = at_addr, bid
         self._subject, self._body, self._body_bytes = "", [], 0
         self.state = State.SEND_SUBJECT
         # written without CR so the user types on the same line -> log it here,
@@ -205,6 +215,7 @@ class Session:
                     from_call=self.call, to_call=self._to, type=self._type,
                     subject=self._subject, body="\n".join(self._body),
                     origin=self.origin, sysop=self.sysop,
+                    at_addr=self._at, bid=self._bid,
                 )
             except ServiceError as exc:
                 self.error(exc)
