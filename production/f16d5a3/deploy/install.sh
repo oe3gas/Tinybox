@@ -47,7 +47,11 @@ if [ ! -f "$DEST/tinybox.conf" ]; then
     cp "$DEST/tinybox.conf.example" "$DEST/tinybox.conf"; FIRST=1
 fi
 if [ ! -f "$DEST/brocast/brocastd.conf" ]; then
-    cp "$DEST/brocast/brocastd.conf.example" "$DEST/brocast/brocastd.conf"; FIRST=1
+    # program log only to the journal (no log file per start on the eMMC);
+    # the Sendeprotokoll (txlog_dir) stays on disk
+    sed 's/^log_dir *=.*/log_dir   =                   ; NanoPi: leer = nur Journal (journalctl -u brocastd)/' \
+        "$DEST/brocast/brocastd.conf.example" > "$DEST/brocast/brocastd.conf"
+    FIRST=1
 fi
 [ -f "$DEST/brocast/brocast-core.yaml" ] || cp "$SRC/brocast/brocast-core.yaml" "$DEST/brocast/"
 
@@ -56,6 +60,12 @@ python3 -m compileall -q "$DEST/tinybox" "$DEST/brocast/brocast" "$DEST"/geosphe
 chown -R "$SVC_USER:$SVC_USER" "$DEST"
 
 # --- systemd -----------------------------------------------------------------
+# cap the journal: all program output goes there, the eMMC is small
+if [ ! -f /etc/systemd/journald.conf.d/tinybox.conf ]; then
+    mkdir -p /etc/systemd/journald.conf.d
+    install -m 644 "$SRC/deploy/journald-tinybox.conf" /etc/systemd/journald.conf.d/tinybox.conf
+    systemctl restart systemd-journald
+fi
 for u in $UNITS; do install -m 644 "$SRC/deploy/systemd/$u" /etc/systemd/system/; done
 systemctl daemon-reload
 systemctl enable $ENABLE
