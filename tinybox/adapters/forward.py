@@ -6,15 +6,21 @@ Started by __main__ only when enabled; without it TinyBox is a standalone mailbo
   partner(s) the router picks; deleted / expired mail leaves the queue
 - answers partner connects: over AGW (the AGW adapter hands them over) and on
   the TCP forward port ([forward] listen_port, with callsign + password login)
-- calls partners: FWD <call> on the sysop console (automatic schedule: F4)
+- calls partners: FWD <call> on the sysop console, or by itself (scheduler):
+  when mail waits for a partner with auto = yes, every interval_min minutes if
+  set, only inside the partner's window; after a failure, and for mail the
+  partner wanted "later", it waits retry_min
+- HOLD n / REL n (sysop): keep a message from forwarding / release it again
 
-F3: sessions receive mail (tinybox/fwd/session.py, receive.py); sending follows in F4.
+Sessions receive (F3) and send (F4), see tinybox/fwd/.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from datetime import datetime
 from typing import Any
 
 from ..app import App
@@ -26,13 +32,19 @@ from ..fwd.session import ForwardSession, SessionResult
 log = logging.getLogger("tinybox.forward")
 
 LOGIN_TIMEOUT = 60
+SCHED_SEC = 30          # scheduler round
+SETTLE_SEC = 2          # after new mail: wait a moment, then call
 
 
 class ForwardModule:
     def __init__(self, app: App) -> None:
         self.app = app
         self.cfg = app.cfg.forward
-        self.router = Router(self.cfg)
+        self.router = Router(self.cfg, app.cfg.station.address)
+        self.wake = asyncio.Event()
+        self.last_call: dict[str, float] = {}             # monotonic time of the last call
+        self.failed_at: dict[str, float] = {}             # monotonic time of the last failure
+        self._loop: asyncio.AbstractEventLoop | None = None
         self.busy: set[str] = set()                       # partners in a session now
         self.last: dict[str, SessionResult] = {}          # last result per partner
         self.server: asyncio.AbstractServer | None = None
@@ -62,10 +74,54 @@ class ForwardModule:
             for partner in targets:
                 store.fwd_enqueue(msg.id, partner)
             log.info("msg %d (%s) queued for %s", msg.id, msg.bid, ", ".join(targets))
+            self._wake()
         elif name == "message.deleted":
             store.fwd_remove([data["message"].id])
         elif name == "message.expired":
             store.fwd_remove(list(data.get("ids", [])))
+
+    def _wake(self) -> None:
+        """Wake the scheduler - also when the event came from another thread."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            if self._loop is not None:
+                self._loop.call_soon_threadsafe(self.wake.set)
+            return
+        self.wake.set()
+
+    # --- sysop: hold / release ---------------------------------------------------------
+
+    def hold(self, msg_id: int) -> str:
+        msg = self.app.store.get(msg_id)
+        if msg is None:
+            raise KeyError(msg_id)
+        self.app.service.set_fwd_state(msg_id, "H", "held by sysop")
+        return "H"
+
+    def release(self, msg_id: int) -> str:
+        """Back into the queue if it has to leave, else simply local. Returns the new state."""
+        store, st = self.app.store, self.app.cfg.station
+        msg = store.get(msg_id)
+        if msg is None:
+            raise KeyError(msg_id)
+        from .. import addressing
+        if not msg.at_addr or addressing.is_local(msg.at_addr, st.mailbox_call):
+            self.app.service.set_fwd_state(msg_id, "", "")
+            return ""
+        targets = self.router.targets(msg)
+        if not targets:
+            if msg.type == "B":
+                self.app.service.set_fwd_state(msg_id, "", "")
+                return ""
+            self.app.service.set_fwd_state(msg_id, "H", "no route to " + msg.at_addr)
+            return "H"
+        for partner in targets:
+            store.fwd_enqueue(msg_id, partner)
+            store.fwd_set(msg_id, partner, "open")
+        self.app.service.set_fwd_state(msg_id, "$", "")
+        self._wake()
+        return "$"
 
     # --- partners ----------------------------------------------------------------
 
@@ -88,6 +144,11 @@ class ForwardModule:
         finally:
             self.busy.discard(partner.call)
         self.last[partner.call] = result
+        self.last_call[partner.call] = time.monotonic()
+        if result.ok:
+            self.failed_at.pop(partner.call, None)
+        else:
+            self.failed_at[partner.call] = time.monotonic()
         return result
 
     # --- incoming ------------------------------------------------------------------
@@ -164,10 +225,61 @@ class ForwardModule:
             self.listen_port = self.server.sockets[0].getsockname()[1]
             log.info("forward port listening on %s:%d", self.cfg.listen_host, self.listen_port)
 
-    async def run(self) -> None:
-        """Keeps the module alive; the automatic schedule follows in F4."""
+    # --- scheduler ---------------------------------------------------------------------
+
+    def due(self, p: PartnerCfg, now: float, minute_of_day: int) -> bool:
+        """Should we call this partner now?"""
+        if not p.auto or p.call in self.busy or not p.in_window(minute_of_day):
+            return False
+        failed = self.failed_at.get(p.call)
+        if failed is not None and now - failed < p.retry_min * 60:
+            return False
+        last = self.last_call.get(p.call)
+        pending = self.app.store.fwd_pending(p.call)
+        if pending:
+            states = {self.app.store.fwd_states(m.id).get(p.call) for m in pending}
+            if "open" in states:
+                return True
+            # only mail the partner wanted "later": try again after retry_min
+            if last is None or now - last >= p.retry_min * 60:
+                return True
+        return bool(p.interval_min) and (last is None or now - last >= p.interval_min * 60)
+
+    async def _call_logged(self, call: str) -> None:
         try:
-            await asyncio.Event().wait()
+            await self.call(call)
+        except Exception as exc:              # unreachable partner etc.: retry later
+            log.warning("forward call %s failed: %s", call, exc or type(exc).__name__)
+            if call not in self.busy:          # not just "partner is calling us right now"
+                self.failed_at[call] = time.monotonic()
+
+    def tick(self) -> list[str]:
+        """One scheduler round: start sessions with every partner that is due."""
+        now, local = time.monotonic(), datetime.now()
+        started = []
+        for p in self.cfg.partners.values():
+            if self.due(p, now, local.hour * 60 + local.minute):
+                self.busy.add(p.call)          # reserve now; _run takes it over
+                self._spawn(self._start(p.call))
+                started.append(p.call)
+        return started
+
+    async def _start(self, call: str) -> None:
+        self.busy.discard(call)
+        await self._call_logged(call)
+
+    async def run(self) -> None:
+        """Scheduler: looks every SCHED_SEC seconds, and soon after new mail was queued."""
+        self._loop = asyncio.get_running_loop()
+        try:
+            while True:
+                try:
+                    await asyncio.wait_for(self.wake.wait(), SCHED_SEC)
+                    await asyncio.sleep(SETTLE_SEC)        # collect a few messages first
+                except asyncio.TimeoutError:
+                    pass
+                self.wake.clear()
+                self.tick()
         finally:
             if self.server is not None:
                 self.server.close()
@@ -183,7 +295,10 @@ class ForwardModule:
             n = sum(1 for q in queue if q[0] == p.call)
             last = self.last.get(p.call)
             state = "in session" if p.call in self.busy else (last.summary() if last else "-")
-            out.append(f"  {p.call:<7} {p.transport:<3} {p.protocol:<5} queued {n:>3}  {state}")
+            mode = ("auto" + (f"/{p.interval_min}m" if p.interval_min else "")
+                    + (" window" if p.window else "")) if p.auto else "manual"
+            out.append(f"  {p.call:<7} {p.transport:<3} {p.protocol:<5} {mode:<12} "
+                       f"queued {n:>3}  {state}")
         return out
 
 

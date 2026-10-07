@@ -5,8 +5,9 @@ the @ address best, compared from the right. The partner's own call scores
 highest, 'WW' matches everything with the lowest score (default route).
 
 Bulletins: every partner whose area list contains the distribution, the first
-element of the @ field ('*' = all). Directed bulletins outside our own area
-(@FRA.EU from Austria) are refined in F4. Never
+element of the @ field ('*' = all). A bulletin for an area we are not part of
+(@FRA.EU from Austria) travels directed like personal mail until it reaches
+its area (W0RLI appendix C); WW and our own areas are flooded. Never
 to a partner that already appears in the R: lines (it came from there or has
 seen it), which also stops ping-pong between two mailboxes.
 
@@ -40,13 +41,18 @@ def score(addr: str, pattern: str, partner_call: str) -> float:
 
 
 class Router:
-    def __init__(self, cfg: ForwardCfg) -> None:
+    def __init__(self, cfg: ForwardCfg, own_address: str = "") -> None:
         self.cfg = cfg
+        self.own = set(_elems(own_address))      # e.g. OE3XTC #NOE AUT EU
 
     def targets(self, msg: Message) -> list[str]:
         """Partner calls for this message ([] = none)."""
         been = {addressing.rline_call(x) for x in msg.rline_list}
         if msg.type == "B":
+            area = (_elems(msg.at_addr) or [""])[0]
+            if self.own and area and area != "WW" and area not in self.own:
+                best = self._best(msg.at_addr)       # directed towards its area
+                return [best.call] if best and best.call not in been else []
             return self._flood(msg, been)
         best = self._best(msg.at_addr)
         return [best.call] if best and best.call not in been else []

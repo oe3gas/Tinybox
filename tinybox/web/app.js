@@ -105,6 +105,13 @@ async function refreshStatus() {
   $("hdr-msgs").textContent = st.messages;
   $("hdr-unread").textContent = st.unread + " unread";
   $("hdr-since").textContent = sinceText(st.started);
+  const fwdBox = $("hdr-fwd-box");
+  fwdBox.hidden = !st.forward;
+  if (st.forward) {
+    $("hdr-fwd").textContent = st.forward.queued + " queued" +
+      (st.forward.held ? " · " + st.forward.held + " held" : "");
+    fwdBox.title = st.forward.lines.join("\n");   // partners and last session on hover
+  }
   $("nav-msgs").textContent = st.messages;
   $("nav-users").textContent = st.users || "";
   $("nav-ver").replaceChildren("TinyBox " + st.version, h("br"), st.web + " · local only");

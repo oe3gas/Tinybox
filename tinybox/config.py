@@ -71,6 +71,16 @@ class PartnerCfg:
     areas: list[str] = field(default_factory=list)   # bulletins: flood areas, * = all
     protocol: str = "fbb"           # fbb | ascii - the most we offer this partner
     timeout: int = 120              # seconds without data
+    auto: bool = True               # call by itself when mail waits (default: tcp yes, agw no)
+    interval_min: int = 0           # also call every n minutes to fetch mail (0 = only to send)
+    window: tuple[int, int] | None = None   # (from, to) minutes of the day, local time
+    retry_min: int = 10             # after a failed call wait this long
+
+    def in_window(self, minute_of_day: int) -> bool:
+        if self.window is None:
+            return True
+        a, b = self.window
+        return a <= minute_of_day < b if a <= b else (minute_of_day >= a or minute_of_day < b)
 
     @property
     def radio_call(self) -> str:
@@ -509,6 +519,19 @@ def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
                    routes=words("routes"), areas=words("areas"),
                    protocol=_get(cp, sec, "protocol", "fbb").strip().lower(),
                    timeout=_get(cp, sec, "timeout", 120, int))
+    transport_default_auto = p.transport == "tcp"     # no unattended calls over the air by default
+    p.auto = _get(cp, sec, "auto", transport_default_auto, bool)
+    p.interval_min = _get(cp, sec, "interval_min", 0, int)
+    p.retry_min = _get(cp, sec, "retry_min", 10, int)
+    _check_range(sec, "interval_min", p.interval_min, 0, 10080)
+    _check_range(sec, "retry_min", p.retry_min, 1, 1440)
+    window = _get(cp, sec, "window", "").strip()
+    if window:
+        m = re.match(r"^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$", window)
+        if not m or int(m.group(1)) > 23 or int(m.group(3)) > 24 \
+                or int(m.group(2)) > 59 or int(m.group(4)) > 59:
+            raise ConfigError(f"[{sec}] window must look like 22:00-06:00")
+        p.window = (int(m.group(1)) * 60 + int(m.group(2)), int(m.group(3)) * 60 + int(m.group(4)))
     if p.transport not in ("agw", "tcp"):
         raise ConfigError(f"[{sec}] transport must be agw or tcp")
     if p.protocol not in ("fbb", "ascii"):

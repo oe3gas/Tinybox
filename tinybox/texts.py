@@ -152,6 +152,8 @@ HELP_CONSOLE = [
     "  FWD        Forward status of all partners",
     "  FWD call   Connect to a partner mailbox now",
     "  FWQ        Messages waiting for forwarding",
+    "  HOLD n     Keep message n from forwarding (held, only the sysop sees it)",
+    "  REL n      Release message n: forward it, or make it a normal local message",
     "  SHUTDOWN   Stop TinyBox",
 ]
 CONSOLE_NO_BYE = "This is the local console. Use SHUTDOWN to stop TinyBox."
@@ -178,6 +180,11 @@ FWD_FAILED = "Forward {call} failed: {error}"
 FWQ_EMPTY = "Forward queue is empty."
 FWQ_HEADER = "Partner  Msg#  State  Since (UTC)"
 FWQ_ROW = "{partner:<8} {id:>4}  {state:<6} {changed}"
+USAGE_HOLD = "Usage: HOLD n  /  REL n"
+HELD = "Msg {id} held."
+RELEASED = {"$": "Msg {id} released, queued for forwarding.",
+            "": "Msg {id} released, local message.",
+            "H": "Msg {id}: no partner for {at} - still held."}
 
 # telnet test port only
 TELNET_LOGIN = "Callsign: "

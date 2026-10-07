@@ -2,9 +2,10 @@
 
 F2: connection, SID exchange, choice of protocol, clean end.
 F3: receiving. Offers are answered and taken (see receive.py); a message is
-    stored only when it arrived completely. When TinyBox calls, it asks for the
-    partner's mail in the same session (FBB: our FF; ASCII: F>).
-F4 adds sending.
+    stored only when it arrived completely.
+F4: sending (see send.py) and both directions in one session: FBB takes turns
+    block by block; in ASCII the caller sends its S commands, then asks for the
+    other side's mail with F> (reverse forwarding, W0RLI).
 
 Choice of protocol (concept, section W0RLI):
     both SIDs with F           -> FBB batch
@@ -27,9 +28,11 @@ from dataclasses import dataclass, field
 from ..config import PartnerCfg
 from ..service import MessageService
 from .link import Link
-from .protocol import (CTRL_Z, MAX_BLOCK, Proposal, ProtocolError, block_end_ok, own_sid,
-                       parse_proposal, parse_send_cmd, parse_sid)
+from .protocol import (CTRL_Z, MAX_BLOCK, Proposal, ProtocolError, block_end_ok, checksum,
+                       own_sid, parse_fs, parse_proposal, parse_rli_reply, parse_send_cmd,
+                       parse_sid)
 from .receive import ACCEPT, Receiver
+from .send import Sender
 
 log = logging.getLogger("tinybox.forward")
 
@@ -50,17 +53,24 @@ class SessionResult:
     received: list[str] = field(default_factory=list)   # BIDs stored here
     rejected: list[str] = field(default_factory=list)   # BIDs we answered with - / NO
     deferred: list[str] = field(default_factory=list)   # BIDs answered with = (later)
+    sent: dict[str, str] = field(default_factory=dict)  # our BIDs -> done/rejected/later
     error: str = ""
 
     @property
     def ok(self) -> bool:
         return not self.error
 
+    def _sent_text(self) -> str:
+        if not self.sent:
+            return "0"
+        n = {s: sum(1 for v in self.sent.values() if v == s) for s in ("done", "rejected", "later")}
+        return f"{n['done']} (rejected {n['rejected']}, later {n['later']})"
+
     def summary(self) -> str:
         role = "called" if self.master else "was called by"
         return (f"{role} {self.partner} via {self.transport}, mode {self.mode or '-'}, "
                 f"SID {self.peer_sid or '-'}, received {len(self.received)}, "
-                f"rejected {len(self.rejected)}"
+                f"rejected {len(self.rejected)}, sent {self._sent_text()}"
                 + (f", deferred {len(self.deferred)}" if self.deferred else "")
                 + (f", ERROR {self.error}" if self.error else ""))
 
@@ -75,6 +85,7 @@ class ForwardSession:
         self.r = SessionResult(partner.call, master, transport)
         self.sid = own_sid(partner.protocol)
         self.rx = Receiver(service, partner.call)
+        self.tx = Sender(service, partner.call)
         self.in_message = False
 
     # --- helpers ----------------------------------------------------------------
@@ -140,7 +151,9 @@ class ForwardSession:
         else:
             self._set_mode("ascii", line)
             await self._wait_prompt()               # short prompt after our SID
-            # F4: our own S commands go here
+            for m in self.tx.pending():
+                await self._ascii_send(m)
+                await self._wait_prompt()           # '>' after each message (also after NO)
             await self._ascii_reverse()
 
     async def _slave(self) -> None:
@@ -205,14 +218,21 @@ class ForwardSession:
     async def _fbb(self, our_turn: bool) -> None:
         while True:
             if our_turn:
-                self._w("FF")                       # F4: our own proposals go here
-                await self.link.drain()
+                block = self.tx.block(MAX_BLOCK)
+                if block:
+                    await self._send_block(block)
+                else:
+                    self._w("FF")                   # nothing (more) to send
+                    await self.link.drain()
                 our_turn = False
             line = await self._command()
             u = line.upper()
             if u == "FQ":
                 return
-            if u == "FF":
+            if u == "FF":                           # partner has nothing more
+                if self.tx.block(MAX_BLOCK):
+                    our_turn = True
+                    continue
                 self._w("FQ")
                 await self.link.drain()
                 return
@@ -250,7 +270,40 @@ class ForwardSession:
                 self.r.rejected.append(p.bid)
         self._count()
 
+    async def _send_block(self, block) -> None:
+        props = [self.tx.proposal(m) for m in block]
+        lines = [self.tx.fb_line(p) for p in props]
+        self._w(*lines, f"F> {checksum(lines)}")
+        await self.link.drain()
+        answers = parse_fs(await self._command(), len(block))
+        for m, a in zip(block, answers):
+            if a == "+":
+                self._w(*self.tx.message_lines(m))
+                await self.link.drain()
+                state = "done"
+            else:
+                state = "rejected" if a == "-" else "later"
+            self.tx.mark(m, state)
+            self.r.sent[m.bid or str(m.id)] = state
+
     # --- W0RLI ASCII --------------------------------------------------------------
+
+    async def _ascii_send(self, m) -> None:
+        """S command, answer, message. The caller waits for the prompt afterwards."""
+        self._w(self.tx.send_cmd(m))
+        await self.link.drain()
+        reply = await self._command()
+        answer = parse_rli_reply(reply)
+        if answer is None:
+            raise ProtocolError(f"expected OK/NO, got {reply!r}")
+        if answer == "+":
+            self._w(*self.tx.message_lines(m))
+            await self.link.drain()
+            state = "done"
+        else:
+            state = "rejected" if answer == "-" else "later"
+        self.tx.mark(m, state)
+        self.r.sent[m.bid or str(m.id)] = state
 
     async def _ascii_offer(self, cmd: Proposal) -> None:
         """Answer one S command with OK/NO and take the message after OK."""
@@ -273,8 +326,13 @@ class ForwardSession:
             u = line.upper()
             if cmd:
                 await self._ascii_offer(cmd)
-            elif u.startswith("F>"):
-                return                              # reverse: nothing to send yet (F4)
+            elif u.startswith("F>"):                # reverse: the caller asks for our mail
+                todo = self.tx.pending()
+                if not todo:
+                    return                          # nothing to send: hang up (W0RLI)
+                await self._ascii_send(todo[0])
+                line = None                         # the caller confirms with F> again
+                continue
             elif u in ("B", "BYE", "*** DONE"):
                 return
             self._w(">")

@@ -34,6 +34,7 @@ class Link:
         self._buf = bytearray()
         self._lines: list[str] = []
         self._last_cr = False
+        self._after_z = False
         self._eof = False
         self.closed = False
 
@@ -58,14 +59,18 @@ class Link:
                     self._last_cr = False
                     continue
                 self._last_cr = b == 13
+                if self._after_z:             # the line end right after Ctrl-Z
+                    self._after_z = False
+                    continue
                 self._emit()
                 continue
             if b == CTRL_Z:
                 self._buf.append(b)
                 self._emit()
-                self._last_cr = True          # swallow the CR that usually follows
+                self._last_cr = False
+                self._after_z = True          # Ctrl-Z already ended the line
                 continue
-            self._last_cr = False
+            self._last_cr = self._after_z = False
             if len(self._buf) < MAX_LINE:
                 self._buf.append(b)
 

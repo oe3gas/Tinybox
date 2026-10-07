@@ -207,6 +207,36 @@ class SysopConsole:
                                                           changed=c[:16].replace("T", " "))
                                      for p, i, s, c in rows])
 
+    def _hold_rel(self, arg: str, release: bool) -> None:
+        fwd = self.app.forward
+        if fwd is None:
+            self.out(texts.FWD_OFF)
+            return
+        nums = arg.split()
+        if not nums or not all(x.isdigit() for x in nums):
+            self.out(texts.USAGE_HOLD)
+            return
+        for x in nums:
+            msg_id = int(x)
+            try:
+                if release:
+                    state = fwd.release(msg_id)
+                    msg = self.app.store.get(msg_id)
+                    self.out(texts.RELEASED[state].format(id=msg_id, at=msg.at_addr if msg else ""))
+                else:
+                    fwd.hold(msg_id)
+                    self.out(texts.HELD.format(id=msg_id))
+            except KeyError:
+                self.out(texts.NO_SUCH_MSG.format(id=msg_id))
+
+    def cmd_hold(self, arg: str) -> None:
+        """HOLD n: keep a message from forwarding."""
+        self._hold_rel(arg, release=False)
+
+    def cmd_rel(self, arg: str) -> None:
+        """REL n: release a held message."""
+        self._hold_rel(arg, release=True)
+
     def cmd_shutdown(self, arg: str) -> None:
         self.out(texts.SHUTTING_DOWN)
         if self.app.stop_event is not None:
@@ -222,5 +252,7 @@ class SysopConsole:
         "WEB": cmd_web,
         "FWD": cmd_fwd,
         "FWQ": cmd_fwq,
+        "HOLD": cmd_hold,
+        "REL": cmd_rel,
         "SHUTDOWN": cmd_shutdown,
     }

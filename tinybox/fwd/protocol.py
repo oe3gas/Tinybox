@@ -86,3 +86,24 @@ def parse_send_cmd(line: str) -> Proposal | None:
     typ, to, at, frm, bid = m.groups()
     return Proposal("S", typ.upper(), (frm or "").upper(), (at or "").upper(), to.upper(),
                     (bid or "").upper(), 0)
+
+
+FS_SYMBOLS = {"+": "+", "Y": "+", "H": "+",          # H: accepted, will be held
+              "-": "-", "N": "-", "R": "-", "E": "-",  # R reject, E error
+              "=": "=", "L": "="}                      # later
+
+
+def parse_fs(line: str, n: int) -> list[str]:
+    """'FS +-=' -> ['+', '-', '=']; exactly n answers, else a protocol error."""
+    if not line.upper().startswith("FS"):
+        raise ProtocolError(f"expected FS, got {line!r}")
+    syms = line[2:].strip()
+    if len(syms) != n or any(c.upper() not in FS_SYMBOLS for c in syms):
+        raise ProtocolError(f"bad FS answer {line!r} for {n} proposal(s)")
+    return [FS_SYMBOLS[c.upper()] for c in syms]
+
+
+def parse_rli_reply(line: str) -> str | None:
+    """W0RLI answer to an S command: only the first letter counts.
+    OK -> '+', NO / REJECT -> '-', LATER -> '='; None = not an answer."""
+    return {"O": "+", "N": "-", "R": "-", "L": "="}.get(line.strip()[:1].upper())

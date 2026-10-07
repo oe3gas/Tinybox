@@ -393,6 +393,10 @@ class WebServer:
             "unread": sum(m.status == "N" for m in msgs),
             "max_msg_bytes": cfg.mailbox.max_msg_bytes,
             "web": f"127.0.0.1:{self.port}",
+            "forward": (None if self.app.forward is None else
+                        {"queued": len(self.app.store.fwd_queue_list()),
+                         "held": sum(m.fwd == "H" for m in msgs),
+                         "lines": self.app.forward.status_lines()}),
         }
 
     def _sessions(self) -> list[dict]:
