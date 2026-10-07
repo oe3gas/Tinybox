@@ -8,8 +8,9 @@ Type=oneshot
 User=tinybox
 Group=tinybox
 WorkingDirectory=/opt/tinybox
-# --tinybox without a folder = /opt/tinybox/eingang; messages go to the journal
-ExecStart=/usr/bin/python3 /opt/tinybox/geosphere_station.py --tinybox
+# inbox in RAM (/run/tinybox/eingang, see tmpfiles-tinybox.conf); messages go to the journal
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/tinybox/geosphere_station.py --tinybox /run/tinybox/eingang
 TimeoutStartSec=120
 NoNewPrivileges=yes
 ProtectSystem=full

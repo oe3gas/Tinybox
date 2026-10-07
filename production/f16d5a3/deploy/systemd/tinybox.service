@@ -9,7 +9,7 @@ User=tinybox
 Group=tinybox
 WorkingDirectory=/opt/tinybox
 ExecStart=/usr/bin/python3 -m tinybox -c /opt/tinybox/tinybox.conf
-Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 # SIGINT = Ctrl+C: TinyBox closes sessions and the database cleanly
 KillSignal=SIGINT
 TimeoutStopSec=30
