@@ -41,6 +41,7 @@ A build is about 0.8 MB, compared with 3.7 MB for the full repository.
 | `build_production.sh` | Builds `production/<short-hash>/` from a git commit. Its `INCLUDE` list says what is shipped. |
 | `deploy/install.sh` | Installs or updates the build on the NanoPi into `/opt/tinybox`. |
 | `deploy/systemd/*` | The systemd units and timers that replace the `.bat` files and Windows scheduled tasks. |
+| `deploy/journald-tinybox.conf` | Limits the systemd journal to 50 MB on the NanoPi. |
 
 The existing program code is never changed for production.
 
@@ -53,6 +54,8 @@ The existing program code is never changed for production.
    ./build_production.sh            # builds from HEAD
    ./build_production.sh 3547e37    # or from any other commit
    ```
+
+   After a `production/...` commit, HEAD is that commit and not the code commit. In that case, always pass the source commit explicitly.
 
    The result is `production/<short-hash>/`, for example `production/f16d5a3/`. `VERSION` inside it records the full hash, the commit date and the build time.
 3. Read the script's warnings:
@@ -81,9 +84,11 @@ The script does the following:
 On a first install it does **not** start the services. Edit the configuration first:
 
 - `/opt/tinybox/tinybox.conf`: callsigns, sysop and `[chat_boards]`.
-- `/opt/tinybox/brocast/brocastd.conf`:
-  - set `mode = station` (the template defaults to `listener`) and the callsign
-  - recommended: `log_dir =` (empty). systemd already writes the program output to the journal, so the extra log file only adds eMMC writes.
+- `/opt/tinybox/brocast/brocastd.conf`: set `mode = station` (the template defaults to `listener`) and the callsign. brocastd won't start without a valid callsign.
+
+To protect the eMMC, the first install also does two things:
+- It creates `brocastd.conf` with `log_dir` empty, so the program log only goes to the journal instead of one file per start. The Sendeprotokoll (`txlog_dir = logs`) stays on disk.
+- It limits the journal to 50 MB (`/etc/systemd/journald.conf.d/tinybox.conf`, from `deploy/journald-tinybox.conf`). An existing file is left alone.
 
 Then start everything:
 
@@ -120,7 +125,7 @@ To see what is installed: `cat /opt/tinybox/VERSION`.
 
 `SHUTDOWN` makes systemd restart TinyBox after 15 s, just like `tinybox_dauerbetrieb.bat` did. To stop it for good, run `sudo systemctl stop tinybox`.
 
-**Keep the eMMC healthy.** Limit the journal size in `/etc/systemd/journald.conf`, for example with `SystemMaxUse=50M`.
+The web GUI deliberately stays on 127.0.0.1, so it is never exposed on the LAN; use the SSH tunnel above. The login link contains the secret token and is written to the journal, which only root and the `adm` group can read. To invalidate it, delete `/opt/tinybox/data/web.token` and restart TinyBox.
 
 ## Checklist for each revision
 
