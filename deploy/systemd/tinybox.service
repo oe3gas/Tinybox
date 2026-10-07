@@ -1,0 +1,24 @@
+[Unit]
+Description=TinyBox packet radio mailbox
+After=network.target direwolf.service brocastd.service
+Wants=brocastd.service
+
+[Service]
+Type=simple
+User=tinybox
+Group=tinybox
+WorkingDirectory=/opt/tinybox
+ExecStart=/usr/bin/python3 -m tinybox -c /opt/tinybox/tinybox.conf
+Environment=PYTHONUNBUFFERED=1
+# SIGINT = Ctrl+C: TinyBox closes sessions and the database cleanly
+KillSignal=SIGINT
+TimeoutStopSec=30
+# like tinybox_dauerbetrieb.bat: restart after a crash (and after SHUTDOWN)
+Restart=always
+RestartSec=15
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

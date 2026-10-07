@@ -1,0 +1,16 @@
+[Unit]
+Description=GeoSphere weather bulletin into the TinyBox inbox
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tinybox
+Group=tinybox
+WorkingDirectory=/opt/tinybox
+# --tinybox without a folder = /opt/tinybox/eingang; messages go to the journal
+ExecStart=/usr/bin/python3 /opt/tinybox/geosphere_station.py --tinybox
+TimeoutStartSec=120
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
