@@ -4,7 +4,8 @@
 #
 # Program files are replaced on every run. Never overwritten (machine data):
 #   tinybox.conf, brocast/brocastd.conf, brocast/brocast-core.yaml,
-#   data/, brocast/data/, eingang/, logs/, .geosphere_warnungen_*.json
+#   data/, brocast/data/, .geosphere_warnungen_*.json
+# Transient files (inbox, Sendeprotokoll, journal) live in RAM, see PRODUCTION.md.
 set -eu
 
 SRC=$(cd "$(dirname "$0")/.." && pwd)
@@ -43,13 +44,15 @@ cp "$SRC/brocast/brocastd.conf.example" "$SRC/brocast/requirements.txt" "$DEST/b
 
 # --- machine files (only on first install) -----------------------------------
 FIRST=0
+# eMMC: transient files go to the RAM folders from tmpfiles-tinybox.conf
 if [ ! -f "$DEST/tinybox.conf" ]; then
-    cp "$DEST/tinybox.conf.example" "$DEST/tinybox.conf"; FIRST=1
+    sed 's|^dir *=.*|dir      = /run/tinybox/eingang  # NanoPi: RAM, same folder as the geosphere units|' \
+        "$DEST/tinybox.conf.example" > "$DEST/tinybox.conf"
+    FIRST=1
 fi
 if [ ! -f "$DEST/brocast/brocastd.conf" ]; then
-    # program log only to the journal (no log file per start on the eMMC);
-    # the Sendeprotokoll (txlog_dir) stays on disk
-    sed 's/^log_dir *=.*/log_dir   =                   ; NanoPi: leer = nur Journal (journalctl -u brocastd)/' \
+    sed -e 's/^log_dir *=.*/log_dir   =                   ; NanoPi: leer = nur Journal (journalctl -u brocastd)/' \
+        -e 's|^txlog_dir *=.*|txlog_dir = /run/tinybox/sendeprotokoll  ; NanoPi: RAM, weg nach Neustart|' \
         "$DEST/brocast/brocastd.conf.example" > "$DEST/brocast/brocastd.conf"
     FIRST=1
 fi
@@ -60,15 +63,26 @@ python3 -m compileall -q "$DEST/tinybox" "$DEST/brocast/brocast" "$DEST"/geosphe
 chown -R "$SVC_USER:$SVC_USER" "$DEST"
 
 # --- systemd -----------------------------------------------------------------
-# cap the journal: all program output goes there, the eMMC is small
-if [ ! -f /etc/systemd/journald.conf.d/tinybox.conf ]; then
-    mkdir -p /etc/systemd/journald.conf.d
-    install -m 644 "$SRC/deploy/journald-tinybox.conf" /etc/systemd/journald.conf.d/tinybox.conf
+# RAM folders under /run (recreated at every boot)
+install -m 644 "$SRC/deploy/tmpfiles-tinybox.conf" /etc/tmpfiles.d/tinybox.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/tinybox.conf
+# journal only in RAM
+JCONF=/etc/systemd/journald.conf.d/tinybox.conf
+if ! cmp -s "$SRC/deploy/journald-tinybox.conf" "$JCONF"; then
+    mkdir -p "$(dirname "$JCONF")"
+    install -m 644 "$SRC/deploy/journald-tinybox.conf" "$JCONF"
     systemctl restart systemd-journald
 fi
 for u in $UNITS; do install -m 644 "$SRC/deploy/systemd/$u" /etc/systemd/system/; done
 systemctl daemon-reload
 systemctl enable $ENABLE
+
+# --- eMMC hints (system settings, not changed here) --------------------------
+findmnt -no OPTIONS / | grep -q noatime \
+    || echo "HINT: root filesystem without noatime - add it in /etc/fstab (fewer eMMC writes)."
+if swapon --noheadings --show=NAME 2>/dev/null | grep -qv zram; then
+    echo "HINT: swap on a disk is active - prefer zram or no swap (eMMC wear)."
+fi
 
 echo
 echo "Installed $(grep '^commit=' "$DEST/VERSION") to $DEST"

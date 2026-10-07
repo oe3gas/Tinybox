@@ -8,7 +8,7 @@ User=tinybox
 Group=tinybox
 WorkingDirectory=/opt/tinybox/brocast
 ExecStart=/usr/bin/python3 -m brocast.daemon -c /opt/tinybox/brocast/brocastd.conf
-Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 KillSignal=SIGINT
 TimeoutStopSec=30
 # like brocastd_dauerbetrieb.bat: restart after a crash

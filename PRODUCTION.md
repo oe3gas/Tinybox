@@ -41,7 +41,8 @@ A build is about 0.8 MB, compared with 3.7 MB for the full repository.
 | `build_production.sh` | Builds `production/<short-hash>/` from a git commit. Its `INCLUDE` list says what is shipped. |
 | `deploy/install.sh` | Installs or updates the build on the NanoPi into `/opt/tinybox`. |
 | `deploy/systemd/*` | The systemd units and timers that replace the `.bat` files and Windows scheduled tasks. |
-| `deploy/journald-tinybox.conf` | Limits the systemd journal to 50 MB on the NanoPi. |
+| `deploy/journald-tinybox.conf` | Keeps the systemd journal in RAM only (16 MB). |
+| `deploy/tmpfiles-tinybox.conf` | Creates the RAM folders under `/run/tinybox` at every boot and deletes old files in them. |
 
 The existing program code is never changed for production.
 
@@ -86,9 +87,7 @@ On a first install it does **not** start the services. Edit the configuration fi
 - `/opt/tinybox/tinybox.conf`: callsigns, sysop and `[chat_boards]`.
 - `/opt/tinybox/brocast/brocastd.conf`: set `mode = station` (the template defaults to `listener`) and the callsign. brocastd won't start without a valid callsign.
 
-To protect the eMMC, the first install also does two things:
-- It creates `brocastd.conf` with `log_dir` empty, so the program log only goes to the journal instead of one file per start. The Sendeprotokoll (`txlog_dir = logs`) stays on disk.
-- It limits the journal to 50 MB (`/etc/systemd/journald.conf.d/tinybox.conf`, from `deploy/journald-tinybox.conf`). An existing file is left alone.
+The install also sets everything up to keep eMMC writes to a minimum. See [eMMC wear](#emmc-wear) for the details.
 
 Then start everything:
 
@@ -105,10 +104,12 @@ Copy the new build folder and run its `install.sh` again. The script stops the s
 It never overwrites these:
 - `tinybox.conf` and `brocast/brocastd.conf`
 - `brocast/brocast-core.yaml` (brocastd can update this itself through a dictionary import)
-- `data/`, `brocast/data/`, `eingang/`, `logs/`
+- `data/`, `brocast/data/`
 - the GeoSphere state files
 
 If a new version adds config options, compare your config with the new `*.conf.example` in `/opt/tinybox`.
+
+The RAM paths in the configs are set only on the **first** install. On an existing device, set them by hand once (see [eMMC wear](#emmc-wear)).
 
 To see what is installed: `cat /opt/tinybox/VERSION`.
 
@@ -126,6 +127,33 @@ To see what is installed: `cat /opt/tinybox/VERSION`.
 `SHUTDOWN` makes systemd restart TinyBox after 15 s, just like `tinybox_dauerbetrieb.bat` did. To stop it for good, run `sudo systemctl stop tinybox`.
 
 The web GUI deliberately stays on 127.0.0.1, so it is never exposed on the LAN; use the SSH tunnel above. The login link contains the secret token and is written to the journal, which only root and the `adm` group can read. To invalidate it, delete `/opt/tinybox/data/web.token` and restart TinyBox.
+
+## eMMC wear
+
+The goal is to write to the eMMC only when real data changes. Reads don't wear the eMMC, so only writes matter. Everything transient lives in RAM (`/run` is tmpfs) and is gone after a reboot or power cut.
+
+| What | Where | Set by |
+|---|---|---|
+| systemd journal (all program output) | RAM, max 16 MB (`Storage=volatile`) | `deploy/journald-tinybox.conf` |
+| brocastd program log | journal only (`log_dir` empty) | `brocastd.conf`, first install |
+| Sendeprotokoll | `/run/tinybox/sendeprotokoll`, files older than 7 days deleted | `txlog_dir` in `brocastd.conf`, first install |
+| Inbox (GeoSphere → TinyBox) | `/run/tinybox/eingang`. `erledigt/` is cleaned after 2 days, `fehler/` after 7 days | `[inbox] dir` in `tinybox.conf` (first install) and `--tinybox` in the geosphere units. Both must match. |
+| Python bytecode | precompiled once by `install.sh`, never written at runtime | `PYTHONDONTWRITEBYTECODE=1` in the units |
+| TinyBox mail database | **eMMC**. It holds mail and must survive power cuts. It is written only on logins, messages and chat. | – |
+| brocastd database | **eMMC**, but it currently writes on every radio frame. See **PLANUNG.md, open point 9 / P1 (major fix)**. | – |
+| GeoSphere warning state | eMMC, a tiny file written only when the warnings change | – |
+
+To switch a device that was installed earlier, set these by hand:
+- In `tinybox.conf`, under `[inbox]`, set `dir = /run/tinybox/eingang`.
+- In `brocastd.conf`, set `log_dir =` (empty) and `txlog_dir = /run/tinybox/sendeprotokoll`.
+- Run `install.sh` again to install the units, the tmpfiles and the journald files.
+
+System settings are outside `install.sh`, which only prints hints:
+- Mount the root filesystem with `noatime`.
+- Use no swap on the eMMC. zram is fine.
+- On Armbian, `armbian-ramlog` already keeps `/var/log` in RAM.
+
+The journal is in RAM, so logs from before a crash or reboot are lost. To keep them for troubleshooting, temporarily set `Storage=persistent` in `/etc/systemd/journald.conf.d/tinybox.conf` and run `systemctl restart systemd-journald`.
 
 ## Checklist for each revision
 
