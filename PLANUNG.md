@@ -1,10 +1,26 @@
 # TinyBox – Planung
 
 Kleine, eigenständige Packet-Radio-Mailbox für Direwolf.
-Bedienersprache: **Englisch**. Kein Forwarding. Speicherung komplett am PC.
-Vorbereitet für die Anbindung an MQTT-Broker.
+Bedienersprache: **Englisch**. Speicherung komplett am PC.
+Forwarding mit anderen Mailboxen als optionales Modul (Abschnitt 13). Vorbereitet für die Anbindung an MQTT-Broker.
+Eigener TinyBox-Client mit Sonderfunktionen in Planung (Abschnitt 12).
 
-Stand: 01.10.2026 (Rev. 3) · OE3GAS
+Stand: 07.10.2026 (Rev. 4) · OE3GAS
+
+**Überblick: zwei Projektteile neben dem Kern**
+
+| Teil | Zweck | Stand | Details |
+|---|---|---|---|
+| Forwarding (F0–F7) | TinyBox tauscht Post und Bulletins mit anderen Mailboxen (LinBPQ, FBB, openBCM) | F1 und F2 fertig (06.10.2026). Als Nächstes F3 (Empfänger) | Abschnitt 13 und Konzept-Doc |
+| TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | Konzept, noch kein Code | Abschnitt 12 |
+
+**Änderungen gegenüber Rev. 3**
+
+- Planung an den Code angeglichen (Stand Commit 329e67d).
+- Forwarding ist jetzt im Umfang, als abschaltbares Modul (Abschnitt 13). Der Kern ist auf Schema 5: hierarchische Adressen, BID, R:-Zeilen.
+- Chat-Boards (Befehl `C`) sind fertig und jetzt beschrieben (Abschnitt 2a).
+- Client: Web-GUI im LAN/WAN erreichbar, ohne Anmeldung, mobile Oberfläche (Abschnitt 12.1).
+- Befehlssatz, Ereignisse, Konfiguration, Datenhaltung, Projektstruktur und Meilensteine nachgezogen. Entwickelt wird auf PC2 in `C:\Tinybox`, PC1 (`E:\Tinybox`) holt per `git pull`.
 
 **Änderungen gegenüber Rev. 2**
 
@@ -28,12 +44,14 @@ Stand: 01.10.2026 (Rev. 3) · OE3GAS
 - Nachrichten lesen, schreiben, löschen und auflisten.
 - SYSOP-Zugang lokal am PC (Konsole), ohne Funk.
 - Persistente Speicherung am PC.
+- Chat-Boards für eingeloggte Stationen (Abschnitt 2a).
+- Optional: Austausch mit anderen Mailboxen (Forwarding, Abschnitt 13).
 - Nachrichten können später auch über MQTT eingespielt und ausgegeben werden.
 - Einfacher, gut lesbarer Code (Lernprojekt).
 
 **Nicht im Umfang (v1)**
 
-- Kein BBS-Forwarding (keine SID-Aushandlung, kein Austausch mit anderen Mailboxen über Funk).
+- BBS-Forwarding gehört nicht zum Kern. Es kommt als eigenes, abschaltbares Modul dazu (Abschnitt 13). Ohne Modul bleibt TinyBox eine Standalone-Mailbox.
 - Keine Dateiablage / kein YAPP.
 - MQTT: in v1 nur die Schnittstellen vorbereiten, die Umsetzung folgt in einem eigenen Meilenstein.
 
@@ -47,18 +65,23 @@ Orientiert sich am klassischen WORLI/MailDrop-Stil, den Packet-Nutzer kennen. Di
 |---|---|
 | `A` | Laufende Ausgabe abbrechen |
 | `B` | Abmelden, Verbindung trennen |
+| `C` / `C board` | Chat: Boards auflisten / Board betreten (Name oder Nummer), Abschnitt 2a |
 | `H` / `?` | Hilfe |
 | `J` | Zuletzt verbundene Stationen |
 | `K n` | Nachricht n löschen (eigene oder an mich) |
 | `KM` | Alle gelesenen Nachrichten an mich löschen |
 | `L` | Nachrichten auflisten |
+| `LB` / `LP` | Nur Bulletins / nur private Nachrichten |
+| `L@ gebiet` | Nachrichten @ Gebiet oder Mailbox, z. B. `L@ WW` |
+| `L> call` / `L< call` | Nachrichten an / von `call` |
 | `LM` | Nur Nachrichten an mich |
 | `R n` | Nachricht n lesen |
 | `RM` | Alle ungelesenen Nachrichten an mich lesen |
 | `S call` / `SP call` | Private Nachricht an `call` |
-| `SB call` | Bulletin (z. B. `SB ALL`) |
+| `SP call @ mailbox` | Private Nachricht an einen User einer anderen Mailbox, z. B. `SP OE1ABC @ OE1XAB.#WIE.AUT.EU` (nur mit Forwarding) |
+| `SB rubrik [@ gebiet]` | Bulletin, z. B. `SB ALL` oder `SB ALL @ WW`; optional am Ende `$BID` |
 | `V` | Version |
-| `E n` | Nachrichtenkopf ändern (nur SYSOP) |
+| `E n feld wert` | Nachrichtenkopf ändern (nur SYSOP), Felder TO, FROM, TYPE, STATUS, SUBJ, AT |
 | `DICT` | brocast-Dictionary als Text ausgeben (für den Import im brocast-Listener) |
 
 **`DICT` (Zusammenarbeit mit brocast):** TinyBox bleibt eine Textmailbox ohne Dateiablage. Das brocast-Dictionary ist reiner Text (YAML) und wird deshalb einfach ausgegeben: zwischen den Zeilen `#BROCAST-DICT BEGIN v<Version> lines=<n> sha256=<Prüfsumme>` und `#BROCAST-DICT END`, ohne Kommentar- und Leerzeilen, rein ASCII (Umlaute in Anführungszeichen als `\uXXXX`). Der Nutzer speichert den Mitschnitt seines Terminals und importiert ihn im brocast-Listener, der Zeilenzahl und SHA-256 prüft. Die Datei liest TinyBox direkt von der Platte (`[brocast] dict_file` in `tinybox.conf`), eine neue Version ist sofort verfügbar.
@@ -71,7 +94,15 @@ Eingabe einer Nachricht: zuerst wird der Betreff abgefragt, dann der Text. Ende 
 - **SYSOP** (lokal): darf alles lesen und löschen, dazu `E n`.
 - `third_party = yes` (Standard): jeder darf an jeden schreiben. Mit `no` dürfen Remote-User nur an den Sysop schreiben.
 
-**Typ/Status**: Typ `P` (privat) oder `B` (Bulletin); Status `N` (ungelesen) oder `Y` (gelesen).
+**Typ/Status**: Typ `P` (privat) oder `B` (Bulletin); Status `N` (ungelesen) oder `Y` (gelesen). Ein dritter Buchstabe im Listing zeigt den Forward-Zustand: `$` wartet, `F` weitergeleitet, `H` gehalten (gehaltene Nachrichten sieht nur der Sysop).
+
+## 2a. Chat-Boards (fertig, Commit 33c2259)
+
+- Feste Boards, vom Sysop in `[chat_boards]` festgelegt: `NAME = Aufbewahrung Beschreibung`. Aufbewahrung `live` (nichts wird gespeichert) oder z. B. `12h` / `7d` (max. `365d`). Die Reihenfolge in der Datei ist die Nummer des Boards.
+- `C` listet die Boards, `C board` betritt eines. Im Board ist jede Zeile Chattext, Befehle beginnen mit `/`: `/Q`, `/EX` oder CTRL-Z zurück in die Mailbox, `/W` wer ist da, `/L` alle Boards, `/J board` wechseln, `/H` Hilfe.
+- Beim Betreten zeigt TinyBox bis zu `history_lines` alte Zeilen (Tabelle `chat_lines`). Zeilenlänge max. `max_line`.
+- Der `ChatHub` (`chat.py`) verteilt die Zeilen und meldet `chat.joined`, `chat.left`, `chat.message` an den Event-Bus. Sysop-Konsole und Web-GUI zeigen den Chat an.
+- Grenze: Jede Zeile geht per I-Frame einzeln an jeden Teilnehmer (1 Eingabe = n Ausgaben auf der Frequenz). Das soll der Client mit UI-Broadcast lösen (Abschnitt 12, C2).
 
 ---
 
@@ -129,6 +160,11 @@ Interne Ereignisse (ab v1 vorhanden, auch ohne MQTT):
 | `message.read` | Nachricht gelesen |
 | `message.deleted` | Nachricht gelöscht |
 | `session.connected` / `session.disconnected` | Verbindung auf- oder abgebaut |
+| `message.edited` | Nachricht geändert (`E n`, Eingang mit `Replace:`) |
+| `message.expired` | Nachrichten abgelaufen und gelöscht (Aufräumroutine) |
+| `chat.joined` / `chat.left` / `chat.message` | Chat-Boards (Abschnitt 2a) |
+
+**Adapter heute (Rev. 4):** AGW (Funk), Telnet (Test), Sysop-Konsole, Sysop-Web-GUI, Eingangsordner (`inbox`), brocast und das Forward-Modul (nur bei `[forward] enabled = yes`). Der Chat läuft über den `ChatHub` neben dem MessageService. MQTT fehlt noch (M5).
 
 ### 4.1 Direwolf über das AGW-Protokoll
 
@@ -153,91 +189,24 @@ Telnet-Testport auf `127.0.0.1`. Er nutzt dieselbe Sitzungslogik, das Rufzeichen
 
 ## 5. Konfiguration: `tinybox.conf`
 
-INI-Format (Python `configparser`, Standardbibliothek). Beispiel:
+INI-Format (Python `configparser`, Standardbibliothek). Die vollständige, kommentierte Vorlage ist `tinybox.conf.example` im Repo. `tinybox.conf` selbst ist PC-spezifisch und liegt nicht im Repo.
 
-```ini
-[station]
-mailbox_call   = OE3GAS-1
-sysop_call     = OE3GAS
-
-sysop_via_radio = no           ; Sysop-Rechte nur lokal (Rufzeichen über Funk sind nicht authentisiert)
-
-[direwolf]
-agw_host        = 127.0.0.1
-agw_port        = 8000
-agw_radio_port  = 0
-reconnect_sec   = 5
-paclen          = 128          ; max. Bytes pro gesendetem Paket
-max_outstanding = 4            ; max. unbestätigte Pakete bei Direwolf
-
-[mailbox]
-welcome_enabled = yes
-welcome_text    = Welcome to TinyBox. Amateur radio use only, no encryption.
-third_party     = yes
-max_users       = 3
-max_msg_bytes   = 8192
-idle_timeout_min = 10
-bulletin_expire_days = 30
-
-[telnet]
-enabled = yes
-host    = 127.0.0.1
-port    = 6300
-
-[storage]
-data_dir = data                ; relativ zur tinybox.conf
-
-[logging]
-level   = INFO
-monitor = yes
-
-[brocast]
-dict_file  = brocast/brocast-core.yaml   # Befehl DICT; leer = nicht angeboten
-publish    = yes                         # Bulletins an brocastd melden
-ingest_url = http://127.0.0.1:8090/api/v1
-max_bytes  = 4096                        # längere Bulletins gekürzt
-destinations =                           # leer = alle Bulletins
-rubrics    =                             # zusätzliche Paare ZIEL:Rubrik
-sync_min   = 60                          # Abgleich alle n Minuten
-alert_destinations = WARN                # diese Bulletins werden Warnseiten in brocast
-
-[inbox]
-enabled  = yes                 # Skripte legen *.txt ab, TinyBox macht Bulletins
-dir      = eingang
-poll_sec = 10
-
-[mqtt]
-enabled   = no
-host      = 127.0.0.1
-port      = 8883
-tls       = yes
-client_id = tinybox-oe3gas
-username  = tinybox
-password_file = E:\Tinybox\secrets\mqtt.pw
-topic_root = tinybox/OE3GAS-1
-```
-
-Die Datei wird beim Start geprüft: Rufzeichen-Format, Ports, Pfade. Fehler werden klar gemeldet, dann bricht TinyBox ab. Passwörter stehen nicht in der `.conf`, sondern in einer eigenen Datei.
-
----
-
-## 6b. brocast-Anbindung (Bulletins als Seiten)
-
-Ein Adapter meldet sich am Event-Bus an und ruft die Ingest-API von brocastd auf demselben PC auf (`[brocast] ingest_url`, nur Standardbibliothek). **Private Nachrichten gehen nie auf die Luft.**
-
-| Ereignis | Aufruf |
+| Abschnitt | Inhalt |
 |---|---|
-| Bulletin erstellt / geändert | `PUT /pages/tinybox/<Nr>` |
-| Bulletin gelöscht / abgelaufen (`message.expired`, neu) / zu privat geändert | `DELETE /pages/tinybox/<Nr>` |
-| Start und alle `sync_min` Minuten | `PUT /pages/tinybox` mit allen Bulletins (Abgleich) |
+| `[station]` | Mailbox-Call, Sysop-Call, `sysop_via_radio`; neu `haddress` (z. B. `OE3XTC.#NOE.AUT.EU`) und `qth` für die R:-Zeilen |
+| `[direwolf]` | AGW-Host und -Port, Funkkanal, Reconnect, `paclen`, `max_outstanding` |
+| `[mailbox]` | Begrüßung, `third_party`, `max_users`, Größen, Idle-Timeout, `bulletin_expire_days` (0 = nie löschen) |
+| `[telnet]` | Testport, nur Loopback |
+| `[web]` | Sysop-Web-GUI, nur Loopback, Port 8080 |
+| `[console]` | Sysop-Konsole und Monitor |
+| `[storage]`, `[logging]` | Datenordner; Loglevel, optional Logordner |
+| `[brocast]` | Datei für `DICT`, Bulletins an brocastd melden (Abschnitt 6b) |
+| `[inbox]` | Eingangsordner für Skripte (Abschnitt 6c) |
+| `[chat]`, `[chat_boards]` | Chat ein/aus, Verlauf, Zeilenlänge; die festen Boards (Abschnitt 2a) |
+| `[forward]` | Modul ein/aus (Standard `no`), `bid_days`, Aliase, eingehender TCP-Port (Abschnitt 13) |
+| `[partner.CALL]` | je Partner-Mailbox: Transport `agw`/`tcp`, Funk-Call, Digis, Login, Passwort, Routen, Gebiete, Protokoll, Timeout |
+| `[mqtt]` | vorbereitet, Standard `no` (M5) |
 
-Abbildung: Titel = Betreff (max. 40 Zeichen, sonst voller Betreff als Überschrift), Rubrik aus dem Bulletin-Ziel (`[brocast] rubrics`, unbekannte Ziele = eigene Rubrik), Quelle „TinyBox, Autor“, Gültigkeit = Lebensdauer der Bulletins, Text in Absätzen. Über `max_bytes` (4 kB) wird gekürzt, mit Hinweis „Vollständig in der Mailbox OE3GAS-1: R n“. Optional nur bestimmte Ziele (`destinations`). Läuft brocastd nicht, schreibt TinyBox eine Warnung und gleicht beim nächsten Abgleich nach.
-
-## 6c. Eingangsordner für Skripte (`[inbox]`)
-
-Skripte auf diesem PC (z. B. GeoSphere-Wetter und -Warnungen) legen Textdateien in `eingang\` ab, TinyBox macht daraus Bulletins (Herkunft `inbox`). Nur Bulletins, keine privaten Nachrichten. Format wie eine E-Mail, UTF-8:
-
-```
 To: WX                        Pflicht: Bulletin-Ziel
 Subject: Wetter 19:00         Pflicht: Betreff (max. 60)
 From: OE3GAS                  optional, Standard: Sysop-Rufzeichen
@@ -326,10 +295,14 @@ Brocast: {"typ":"wx","dat":{"temp":21.3,"hum":31,"qff":1028.5},"blk":[{"k":"seri
 
 ## 7. Datenhaltung
 
-`data_dir` (Standard `E:\Tinybox\data\`)
+`data_dir` (Standard `data\` neben der `tinybox.conf`)
 
-- `tinybox.db` (SQLite)
-  - `messages(id, msgid, type, status, to_call, from_call, subject, body, size, origin, created, read_at, replace_key, expires, brocast)`
+- `tinybox.db` (SQLite, Schema 5, ältere Datenbanken werden beim Start migriert)
+  - `messages(id, msgid, type, status, to_call, from_call, subject, body, size, origin, created, read_at, replace_key, expires, brocast, at_addr, bid, bid_kind, rlines, fwd, note)`
+    - Schema 5 (Forwarding): `at_addr` (@-Adresse bzw. Verteilgebiet, leer = lokal), `bid` (max. 12 Zeichen, eindeutig), `bid_kind` (B echte BID, M erzeugte MID), `rlines` (R:-Zeilen, getrennt vom Text), `fwd` (leer, `$`, `F`, `H`), `note` (Grund fürs Halten)
+  - `bids(bid, first_seen, origin)` – jede je gesehene BID, Aufbewahrung `bid_days`
+  - `fwd_queue(msg_id, partner, state, changed)` – nur vom Forward-Modul befüllt; Zustände open, later, done, rejected
+  - `chat_lines(id, board, call, text, created)` – nur Boards mit Verlauf
   - `jlog(call, first_seen, last_seen, count)`
   - `users(call, last_login)`
 - Log-Datei optional: `[logging] log_dir` (Ordner muss existieren und beschreibbar sein), pro Start eine Datei `Tinybox_log_<JJJJ-MM-TT_hh-mm-ss>.log`, reiner Text
@@ -341,27 +314,40 @@ Nachrichtennummern laufen fortlaufend und werden nie wiederverwendet. Für ein B
 ## 8. Projektstruktur
 
 ```
-E:\Tinybox\
-  PLANUNG.md
-  tinybox.conf
-  tinybox.bat            Start
+C:\Tinybox\                PC2 (Entwicklung); PC1: E:\Tinybox, per git pull
+  PLANUNG.md  README.md  GIT-ANLEITUNG.md
+  tinybox.conf              PC-spezifisch, nicht im Repo (Vorlage tinybox.conf.example)
+  tinybox.bat  tinybox_dauerbetrieb.bat  start_alles.bat  runtests.bat
   tinybox\
-    __main__.py          Start, Konfiguration laden
-    config.py            tinybox.conf lesen und prüfen
-    events.py            Event-Bus
-    service.py           MessageService (Regeln, Rechte)
-    store.py             SQLite
-    session.py           Sitzungs-Zustandsautomat
-    commands.py          Befehle
-    texts.py             englische Ausgabetexte
+    __main__.py             Start, Konfiguration laden, Adapter starten
+    app.py                  verbindet die Bausteine
+    config.py               tinybox.conf lesen und prüfen
+    events.py               Event-Bus
+    service.py              MessageService (Regeln, Rechte, BID-Prüfung)
+    store.py                SQLite, Schema 5 mit Migration
+    addressing.py           hierarchische Adressen, BID, R:-Zeilen
+    session.py              Sitzungs-Zustandsautomat
+    commands.py             Befehle
+    chat.py  chatcmd.py     Chat-Boards (ChatHub, Befehl C, /-Kommandos)
+    dictfile.py             Befehl DICT
+    texts.py                englische Ausgabetexte
     adapters\
-      agw.py             Direwolf/AGW
-      telnet.py          Testport
-      sysop.py           lokale Konsole
-      mqtt.py            (später)
+      agw.py                Direwolf/AGW (annehmen und anrufen)
+      telnet.py             Testport
+      sysop.py              lokale Konsole
+      web.py                Sysop-Web-GUI (Dateien in tinybox\web\)
+      inbox.py              Eingangsordner
+      brocast.py            Bulletins an brocastd
+      forward.py            Forward-Modul (nur bei [forward] enabled)
+      mqtt.py               (später, M5)
+    fwd\                    Forwarding: protocol, link (AGW/TCP), router, session
+    web\                    HTML/CSS/JS der Sysop-Web-GUI
+  fwdsim\                   Forward-Testpartner, eigenständig (Abschnitt 13)
+  brocast\                  brocast (eigenes Projekt, siehe brocast\README.md)
+  geosphere_*.py            Wetter- und Warnungs-Skripte für den Eingangsordner
   tests\
-  data\
-  secrets\
+  docs\                     W0RLI-Spezifikation, Fachartikel
+  data\  logs\  eingang\     Betriebsdaten, nicht im Repo
 ```
 
 Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. Wird die Verbindung während `SEND_BODY` getrennt, wird die Nachricht verworfen.
@@ -391,23 +377,29 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M3d ✅ | brocast-Adapter: Bulletins an brocastd melden (Abschnitt 6b) | Fertig 02.10.2026, 55 Tests grün |
 | M3e ✅ | Eingangsordner für Skripte mit `Replace:` und `Valid:` (Abschnitt 6c) | Fertig 02.10.2026, 65 Tests grün |
 | M3f ✅ | Kopfzeile `Brocast:` im Eingang, Seite statt Text an brocastd (Abschnitt 6d) | Fertig 03.10.2026 |
+| M3g ✅ | Chat-Boards mit Aufbewahrung, Befehl `C`, /-Kommandos, Anzeige in Konsole und Web (Abschnitt 2a) | Fertig 04.10.2026 |
 | M4 | Limits, Timeouts, Logging, Tests | Dauerbetrieb |
 | M5 | MQTT-Adapter (Ein-/Ausgang) | Anbindung an Broker |
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
-| C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast, Offline-Mailbox |
+| F0–F7 | Forwarding-Modul (Abschnitt 13) | F1 und F2 fertig 06.10.2026, F0 teilweise. Als Nächstes F3 (Empfänger) |
+| C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast, Offline-Mailbox. Konzept fertig, noch kein Code |
 
 ---
 
 ## 11. Offene Punkte
 
 1. ~~`third_party`~~ → entschieden: `yes` (Standard).
-2. Bulletins nach X Tagen automatisch löschen (Vorschlag: 30)?
+2. ~~Bulletins nach X Tagen automatisch löschen~~ → umgesetzt: `bulletin_expire_days = 30` (0 = nie).
 3. MQTT: Welcher Broker (lokaler Mosquitto oder extern)? Wofür konkret, also woher kommen die Nachrichten und wer liest die Ausgänge?
 4. MQTT-Eingang: Nur Bulletins oder auch Privatnachrichten an einzelne Calls?
+5. Client-Web-GUI im WAN ohne Anmeldung (Abschnitt 12.1): Wer die Adresse kennt, kann unter dem Rufzeichen des Client-Betreibers senden (Chat, Post). Zu klären, wie das abgesichert wird, z. B. nur über VPN/HAMNET erreichbar oder ein einfaches Zugangstoken.
+6. Direwolf: Wie viele Programme gleichzeitig am AGW-Port (`MAX_NET_CLIENTS`)? Relevant für PC2 mit TinyBox, brocastd und ggf. Client.
+7. Forwarding über Funk ohne Aufsicht ist vermutlich eine Relaisfunkstelle mit Clubrufzeichen: mit Fernmeldebüro oder ÖVSV klären (F0). Bis dahin Forwarding nur über TCP/HAMNET.
+8. Forwarding: OE-Hub-Partner finden, eigene Region für `haddress` mit dem Hub-Sysop abstimmen (F0/F6).
 
 ---
 
-## 12. TinyBox-Client (Konzept, Entwurf 07.10.2026)
+## 12. TinyBox-Client (Konzept, Stand 07.10.2026)
 
 Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt von brocast.
 
@@ -415,7 +407,8 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
 
 ### 12.1 Technik
 
-- Python-Dienst mit **lokaler Web-GUI** (127.0.0.1), gleiche Bauart wie der brocastd-Listener.
+- Python-Dienst mit **Web-GUI**, gleiche Bauart wie der brocastd-Listener.
+- Die Web-GUI ist im **LAN und WAN** erreichbar (vor allem für den Chat am Handy), **ohne Anmeldung**, mit **mobiler Oberfläche**. Absicherung: offener Punkt 5. Die Sysop-Web-GUI der TinyBox bleibt davon unberührt auf 127.0.0.1.
 - Anbindung an Direwolf über **AGW**, nicht KISS. Direwolf erledigt die AX.25-Verbindung (`C`/`D`/`d`). Der Client sendet UI-Frames (`M`/`V`) und liest alle Frames roh mit (`k`).
 - Zu prüfen: Wie viele Anwendungen Direwolf gleichzeitig am AGW-Port zulässt (`MAX_NET_CLIENTS`), relevant für PC2 mit TinyBox + brocastd.
 
@@ -434,7 +427,7 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
 |---|---|---|
 | C0 | Grundgerüst + Handshake | AGW-Anbindung, Verbinden, UI mitlesen, `//CLIENT` |
 | C1 | Post-Benachrichtigung | Die TinyBox sendet ein UI-Frame „neue Post für <Call>“. Der Client zeigt einen Hinweis an, ohne verbunden zu sein. |
-| C2 | Chat mit UI-Broadcast | Beitrag als I-Frame an die TinyBox, die ihn einmal als UI an `TBCHAT-x` sendet (x = Board 0–15). Client-Sitzungen bekommen die Zeile nicht zusätzlich per I-Frame. |
+| C2 | Chat mit UI-Broadcast | Beitrag als I-Frame an die TinyBox, die ihn einmal als UI an `TBCHAT-x` sendet (x = Board 0–15). Client-Sitzungen bekommen die Zeile nicht zusätzlich per I-Frame. Vorschlag: x = Nummer des Boards in `[chat_boards]`, damit höchstens 16 Boards. |
 | C3 | Offline-Mailbox mit Delta-Sync | Neue Nachrichten/Bulletins komprimiert in einem Durchgang holen, offline lesen und schreiben, gesammelt senden, nach Abbruch fortsetzen |
 
 ### 12.4 Chat-Frame (Vorschlag)
@@ -447,15 +440,56 @@ Typ:    Zeile | Betreten | Verlassen | System
 
 - Der Client erkennt Lücken an der Folgenummer und fordert über seine Sitzung nach (`//RESEND <Board> <von>-<bis>`). Die Antwort kommt nur an ihn, per I-Frame.
 - Teilnehmer mit Terminalprogramm sowie Verbindungen über Digi oder Node bekommen die Zeilen wie bisher einzeln per I-Frame.
-- Voraussetzung: Der bestehende Chat-Code (aus einem anderen Chat) muss zuerst ins Repo.
+- Voraussetzung erfüllt: Der Chat-Code ist seit Commit 33c2259 im Repo (Abschnitt 2a).
+- Zu klären: Live-Boards speichern nichts. Woher nimmt `//RESEND` dort die fehlenden Zeilen (kleiner Puffer im Speicher)?
 
-### 12.5 Später
+### 12.5 Bezug zum Forwarding
+
+- Client und Forward-Modul sind getrennt. Ein Client ist ein User und meldet sich mit `//CLIENT` an, eine Partner-Mailbox mit ihrer SID. Die Partnerliste (`[partner.CALL]`) entscheidet, wer Forward-Sitzungen bekommt.
+- Wiederverwendbar aus F2: ausgehender AGW-Connect (`AgwAdapter.connect`) und die Link-Abstraktion (`tinybox/fwd/link.py`).
+- C3 (Delta-Sync) braucht eindeutige Kennungen je Nachricht. Dafür eignen sich `msgid` bzw. die BID aus Schema 5.
+
+### 12.6 Später
 
 Strukturierter Modus (CBOR statt Menütext), Formulare, kleine Dateien, Sysop-Fernverwaltung mit Challenge-Response (keine Verschlüsselung), Anzeige der Verbindungsqualität, zeitgesteuertes Abholen.
 
 ---
 
+## 13. Forwarding-Modul (optional)
+
+Ausführliches Konzept mit Protokollen, Routing, Testfällen und Quellen: Claude-Doc „Tinybox als Packet-Radio-BBS: Forwarding-Konzept“ (https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a). Hier nur der Überblick.
+
+**Grundsatz:** Das Nachrichtenmodell (Adresse, BID, R:-Zeilen) gehört zum Kern, der Austausch ist ein abschaltbares Modul (`[forward] enabled`). Ohne Modul bleibt TinyBox eine Standalone-Mailbox, `@`-Adressen gibt es dann nur für Bulletins.
+
+**Zielbild in drei Stufen:** Standalone → Empfänger (Leaf an einem Hub, Standardroute WW) → Forwarder (mehrere Partner).
+
+- **Protokolle:** SID-Austausch, FBB-ASCII-Batch (`FB`, `F>`, `FS +-=`, `FF`/`FQ`) als Hauptprotokoll, MBL/RLI-ASCII nach der W0RLI-Spezifikation (12.10.1998, `docs/w0rli/`) als Rückfall, später FBB B1 (LZHUF). TinyBox kündigt `FH$` an, ohne `M`.
+- **Transport:** AX.25 über Direwolf/AGW (annehmen und anrufen, auch über Digis) und transparentes TCP (z. B. LinBPQ FBBPORT). Eingehender TCP-Port mit `Callsign:`/`Password:`-Login, standardmäßig aus.
+- **Routing (BPQ-Modell):** Persönliche Post an den Partner mit dem besten Treffer von rechts, Bulletins an alle Partner mit passendem Verteilgebiet (erstes Element des @-Feldes). Nie zurück an einen Partner aus den R:-Zeilen. Ohne Treffer Status `H`.
+- **Duplikate:** Tabelle `bids` mit Aufbewahrung `bid_days`. Umgang mit bekannter BID/MID je nach SID der Gegenseite (Entscheidung 06.10.2026, siehe Konzept-Doc).
+- **brocast:** Fremd-Bulletins gehen nur ins Karussell, wenn `publish_to_brocast` es erlaubt (kommt mit F3, Standard aus).
+- **Sysop:** `FWD` (Partner anzeigen), `FWD call` (Forward anstoßen), `FWQ` (Warteschlange). `HOLD`/`REL` und die Anzeige in der Web-GUI folgen mit F4.
+
+**Stand der Meilensteine**
+
+| # | Inhalt | Stand |
+|---|---|---|
+| F0 | Vorbereitung: PLANUNG Rev. 4, LinBPQ als Testpartner, Mitschnitte echter Sitzungen, Hub-Suche, Rechtsfrage, Test-Tool fwdsim | teilweise: fwdsim fertig, PLANUNG Rev. 4 erledigt (07.10.2026). Offen: LinBPQ, Mitschnitte, Hub, Rechtsfrage |
+| F1 ✅ | Kern: Schema 5, `addressing.py`, `SP/SB … @ … $BID`, `LB`/`LP`/`L@`/`L>`/`L<`, Lesekopf mit BID und R:-Zeilen, `E n AT`, Halten bei Schleife oder zu alter Nachricht | Fertig 06.10.2026 |
+| F2 ✅ | Modul-Gerüst: `tinybox/fwd/`, `adapters/forward.py`, `[partner.CALL]`, AGW- und TCP-Verbindungen in beide Richtungen, SID-Aushandlung, Warteschlange, `FWD`/`FWQ` | Fertig 06.10.2026, 144 Tests grün. Angebotenes wird noch zurückgestellt (`=` bzw. Trennen), damit nichts verloren geht |
+| F3 | Empfänger: ASCII- und FBB-Empfang, R:-Zeilen, Loop-Erkennung, BID/MID-Regel, Partner-Whitelist, Grenzen, `publish_to_brocast` | **als Nächstes** |
+| F4 | Forwarder: Senden, Reverse Forward, Routing-Feinschliff, Scheduler, Prompt-Skip je Partner, `HOLD`/`REL`, Web-Anzeige | offen |
+| F5 | B1 komprimiert (LZHUF, Resume) | offen |
+| F6 | Anschluss ans Netz: Leaf an einem OE-Hub über TCP/HAMNET, Probebetrieb | offen |
+| F7 (opt.) | Mehrere Partner, White Pages, MQTT und Forwarding gemeinsam, Doku für Partner-Sysops | offen |
+
+**Test-Tool fwdsim** (`fwdsim\`, Start mit `fwdsim.bat`, Bedienung in `fwdsim/README.md`): spielt die Partner OE3GAS (`#OOE`, Endstation und Hop) und DL0XTC (`#BAY`, nur über OE3GAS erreichbar, sendet nie auf Funk). TinyBox läuft im Test als OE3XTC (`#NOE`). Testfälle T01–T28 über TCP oder Direwolf, mit Fehlerinjektion. Gegen einen fwdsim-Stellvertreter laufen alle automatischen Fälle grün; gegen die echte TinyBox werden die Empfangsfälle mit F3 grün, die Sendefälle mit F4. Noch offen: fwdsim nimmt TCP-Anrufe ohne Login an.
+
+---
+
 ## Quellen
 
+- Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a
+- W0RLI-BBS-Spezifikation vom 12.10.1998: `docs/w0rli/w0rli-bbs-spec-12oct1998.pdf`
 - AEA PK-232MBX Operating Manual, Kap. 5 (nur Orientierung): https://www.dl0bn.de/dc7xj/Anleitungen/AEA%20PK-232MBX_Manual.pdf
 - Direwolf-Dokumentation (AGW-Interface): https://github.com/wb2osz/direwolf/tree/master/doc

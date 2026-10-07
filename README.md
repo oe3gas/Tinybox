@@ -114,4 +114,10 @@ Doppelklick auf `runtests.bat`.
 - M2 (Direwolf über AGW): fertig, Funktest erfolgreich
 - M3 (Sysop-Konsole, Monitor): fertig
 - M3b (Sysop-Weboberfläche): fertig
-- M4 (Limits, Rate-Limit, Dauerbetrieb): als Nächstes
+- M3c–M3f (DICT, brocast-Anbindung, Eingangsordner, Kopfzeile Brocast:): fertig
+- Chat-Boards (Befehl C): fertig
+- Forwarding (optionales Modul): F1 Kern und F2 Modul-Gerüst fertig, als Nächstes F3 (Empfänger)
+- M4 (Limits, Rate-Limit, Dauerbetrieb): offen
+- TinyBox-Client (C0–C3): Konzept
+
+Details und Meilensteine: `PLANUNG.md` (Rev. 4).
