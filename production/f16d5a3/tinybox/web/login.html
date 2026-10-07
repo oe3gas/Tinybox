@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyBox Sysop - Login</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body class="login-body">
+<form class="card login" method="post" action="/login">
+  <div class="card-head"><h1 class="logo">TinyBox</h1></div>
+  <div class="login-inner">
+    <p>Open the login link shown in the TinyBox window,<br>or paste the token here.</p>
+    <label class="field">
+      <span class="label">Token</span>
+      <input type="password" name="token" autocomplete="off" required autofocus>
+    </label>
+    <button class="btn primary" type="submit">Log in</button>
+    <p class="hint">The token is stored in <span class="mono">data\web.token</span>.<br>Console command <span class="mono">WEB</span> shows the login link again.</p>
+  </div>
+</form>
+</body>
+</html>

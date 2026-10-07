@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>brocast</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+
+<header class="top">
+  <div class="logo">brocast</div>
+  <span class="badge-call" id="hdr-call">…</span>
+  <span class="stat"><span class="dot" id="hdr-dot"></span><span id="hdr-kiss">Direwolf …</span></span>
+  <span class="stat"><b id="hdr-unread">0</b>&nbsp;ungelesen</span>
+  <span class="stat"><b id="hdr-stations">0</b>&nbsp;Stationen gehört</span>
+  <span class="grow"></span>
+  <input class="search" id="search" type="search" placeholder="Suchen in allen Seiten …" autocomplete="off">
+  <label class="goto">Seite <input id="goto" class="mono" maxlength="5" inputmode="numeric" autocomplete="off"></label>
+  <button class="btn" id="btn-settings" type="button">Einstellungen</button>
+</header>
+
+<div class="alert" id="alert" hidden>
+  <span id="alert-text"></span>
+  <span class="grow"></span>
+  <button class="btn sm" id="alert-open" type="button">Anzeigen</button>
+</div>
+
+<div class="infobar" id="dictbar" hidden>
+  <span id="dictbar-text"></span>
+  <span class="grow"></span>
+  <button class="btn sm primary" id="dictbar-install" type="button" hidden>Installieren</button>
+  <button class="btn sm" id="dictbar-import" type="button">Importieren</button>
+  <button class="btn sm" id="dictbar-details" type="button">Details</button>
+  <button class="btn sm" id="dictbar-hide" type="button">Ausblenden</button>
+</div>
+
+<div class="shell">
+  <nav class="side">
+    <div class="tabs">
+      <button id="tab-cat" class="on" type="button">Rubriken</button>
+      <button id="tab-st" type="button">Stationen</button>
+    </div>
+    <div class="navlist" id="navlist"></div>
+    <div class="side-foot">
+      <button class="nav" id="nav-fav" type="button"><span class="name">★ Gemerkt</span><span class="count" id="fav-count"></span></button>
+      <button class="nav" id="nav-rxlog" type="button"><span class="name">Empfangslog</span><span class="count"></span></button>
+      <button class="nav" id="nav-status" type="button"><span class="name">Status</span><span class="count"></span></button>
+    </div>
+  </nav>
+
+  <section class="list">
+    <div class="listhead">
+      <h2><span id="list-title">Alle Seiten</span> <small id="list-sub"></small></h2>
+      <div class="filters">
+        <button class="btn sm on" data-f="all" type="button">Alle</button>
+        <button class="btn sm" data-f="unread" type="button">Ungelesen</button>
+        <button class="btn sm" data-f="fav" type="button">Gemerkt</button>
+        <select class="sel" id="sub-filter"></select>
+      </div>
+    </div>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <main class="view" id="view"></main>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+</body>
+</html>
