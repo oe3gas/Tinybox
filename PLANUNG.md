@@ -394,6 +394,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M4 | Limits, Timeouts, Logging, Tests | Dauerbetrieb |
 | M5 | MQTT-Adapter (Ein-/Ausgang) | Anbindung an Broker |
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
+| C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast, Offline-Mailbox |
 
 ---
 
@@ -403,6 +404,54 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 2. Bulletins nach X Tagen automatisch löschen (Vorschlag: 30)?
 3. MQTT: Welcher Broker (lokaler Mosquitto oder extern)? Wofür konkret, also woher kommen die Nachrichten und wer liest die Ausgänge?
 4. MQTT-Eingang: Nur Bulletins oder auch Privatnachrichten an einzelne Calls?
+
+---
+
+## 12. TinyBox-Client (Konzept, Entwurf 07.10.2026)
+
+Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt von brocast.
+
+**Grundsatz:** Der Client ist ein Zusatz, keine Voraussetzung. Alles Wesentliche funktioniert weiterhin mit jedem Terminalprogramm, über Digi und über Node.
+
+### 12.1 Technik
+
+- Python-Dienst mit **lokaler Web-GUI** (127.0.0.1), gleiche Bauart wie der brocastd-Listener.
+- Anbindung an Direwolf über **AGW**, nicht KISS. Direwolf erledigt die AX.25-Verbindung (`C`/`D`/`d`). Der Client sendet UI-Frames (`M`/`V`) und liest alle Frames roh mit (`k`).
+- Zu prüfen: Wie viele Anwendungen Direwolf gleichzeitig am AGW-Port zulässt (`MAX_NET_CLIENTS`), relevant für PC2 mit TinyBox + brocastd.
+
+### 12.2 Handshake (Vorschlag)
+
+- Der Client sendet nach dem Login `//CLIENT TB1 caps=NOTE,CHAT,SYNC`.
+- Die TinyBox antwortet `//OK TB1 caps=…` mit dem gemeinsamen Funktionsumfang.
+- Die TinyBox merkt sich je Sitzung, ob ein Client angemeldet ist.
+- **UI-Modus nur bei direkter Verbindung:**
+  - Hat die Sitzung einen Digi-Pfad (`via`), bleibt sie immer im I-Frame-Modus.
+  - Der Client meldet sich nur für den UI-Modus an, wenn er die TinyBox selbst hört. Damit sind Node-Verbindungen abgedeckt.
+
+### 12.3 Funktionen v1 (Reihenfolge = Umsetzungsreihenfolge)
+
+| # | Funktion | Kern |
+|---|---|---|
+| C0 | Grundgerüst + Handshake | AGW-Anbindung, Verbinden, UI mitlesen, `//CLIENT` |
+| C1 | Post-Benachrichtigung | Die TinyBox sendet ein UI-Frame „neue Post für <Call>“. Der Client zeigt einen Hinweis an, ohne verbunden zu sein. |
+| C2 | Chat mit UI-Broadcast | Beitrag als I-Frame an die TinyBox, die ihn einmal als UI an `TBCHAT-x` sendet (x = Board 0–15). Client-Sitzungen bekommen die Zeile nicht zusätzlich per I-Frame. |
+| C3 | Offline-Mailbox mit Delta-Sync | Neue Nachrichten/Bulletins komprimiert in einem Durchgang holen, offline lesen und schreiben, gesammelt senden, nach Abbruch fortsetzen |
+
+### 12.4 Chat-Frame (Vorschlag)
+
+```
+Ziel:   TBCHAT-x        Quelle: <TinyBox-Call>     PID: 0xF0
+Info:   [Version][Folgenummer][Typ][Autor-Call][Text UTF-8]
+Typ:    Zeile | Betreten | Verlassen | System
+```
+
+- Der Client erkennt Lücken an der Folgenummer und fordert über seine Sitzung nach (`//RESEND <Board> <von>-<bis>`). Die Antwort kommt nur an ihn, per I-Frame.
+- Teilnehmer mit Terminalprogramm sowie Verbindungen über Digi oder Node bekommen die Zeilen wie bisher einzeln per I-Frame.
+- Voraussetzung: Der bestehende Chat-Code (aus einem anderen Chat) muss zuerst ins Repo.
+
+### 12.5 Später
+
+Strukturierter Modus (CBOR statt Menütext), Formulare, kleine Dateien, Sysop-Fernverwaltung mit Challenge-Response (keine Verschlüsselung), Anzeige der Verbindungsqualität, zeitgesteuertes Abholen.
 
 ---
 
