@@ -8,7 +8,7 @@ Started by __main__ only when enabled; without it TinyBox is a standalone mailbo
   the TCP forward port ([forward] listen_port, with callsign + password login)
 - calls partners: FWD <call> on the sysop console (automatic schedule: F4)
 
-F2: sessions only shake hands (see tinybox/fwd/session.py).
+F3: sessions receive mail (tinybox/fwd/session.py, receive.py); sending follows in F4.
 """
 
 from __future__ import annotations
@@ -50,6 +50,11 @@ class ForwardModule:
             if msg is None or msg.fwd != "$":
                 return
             targets = self.router.targets(msg)
+            if not targets and msg.type == "B":
+                # a bulletin nobody else needs (e.g. all partners already had it):
+                # it is simply ours now, nothing to forward - not held
+                self.app.service.set_fwd_state(msg.id, "", "")
+                return
             if not targets:
                 log.warning("msg %d (%s) @ %s: no partner - held", msg.id, msg.bid, msg.at_addr)
                 self.app.service.set_fwd_state(msg.id, "H", "no route to " + msg.at_addr)
@@ -78,7 +83,7 @@ class ForwardModule:
         self.busy.add(partner.call)
         try:
             s = ForwardSession(self.app.cfg.station.bbs_call, partner, link, master=master,
-                               transport=transport)
+                               transport=transport, service=self.app.service)
             result = await s.run()
         finally:
             self.busy.discard(partner.call)

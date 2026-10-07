@@ -152,6 +152,8 @@ def to_page(msg: Message, app: App) -> dict[str, Any]:
 
 def wanted(msg: Message, app: App) -> bool:
     dests = app.cfg.brocast.destinations
+    if msg.origin == "forward" and not app.cfg.forward.publish_to_brocast:
+        return False                    # bulletins from other mailboxes stay off the air
     return msg.type == "B" and (not dests or msg.to_call in dests)
 
 

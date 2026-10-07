@@ -95,6 +95,7 @@ class AgwConnection:
         self._y_reply = asyncio.Event()
         self._rx = bytearray()
         self._last_cr = False
+        self._after_z = False
         self.pump_task: asyncio.Task | None = None
 
     # --- Transport interface -------------------------------------------
@@ -128,12 +129,17 @@ class AgwConnection:
                     self._last_cr = False
                     continue
                 self._last_cr = b == 13
+                if self._after_z:              # the line end right after Ctrl-Z
+                    self._after_z = False
+                    continue
                 self._line()
                 continue
             self._last_cr = False
+            self._after_z = False
             if b == CTRL_Z:
                 self._rx.append(b)
                 self._line()
+                self._after_z = True           # Ctrl-Z already ended the line
             elif len(self._rx) < MAX_LINE:
                 self._rx.append(b)
 

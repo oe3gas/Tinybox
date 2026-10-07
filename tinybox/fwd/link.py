@@ -62,6 +62,7 @@ class TcpLink(Link):
     async def _read(self, reader: asyncio.StreamReader) -> None:
         buf = bytearray()
         last_cr = False
+        after_z = False
         try:
             while True:
                 data = await reader.read(1024)
@@ -73,15 +74,18 @@ class TcpLink(Link):
                             last_cr = False
                             continue
                         last_cr = b == 13
+                        if after_z:               # the line end right after Ctrl-Z
+                            after_z = False
+                            continue
                         self.lines.put_nowait(_decode(bytes(buf)))
                         buf.clear()
                     elif b == 0x1A:
                         buf.append(b)
                         self.lines.put_nowait(_decode(bytes(buf)))
                         buf.clear()
-                        last_cr = True            # the CR after Ctrl-Z
+                        last_cr, after_z = False, True   # Ctrl-Z already ended the line
                     else:
-                        last_cr = False
+                        last_cr = after_z = False
                         if len(buf) < MAX_LINE:
                             buf.append(b)
         except (ConnectionError, OSError, asyncio.CancelledError):

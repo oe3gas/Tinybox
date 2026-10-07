@@ -18,7 +18,7 @@ from .config import Config
 from .link import TcpLink
 from .session import ForwardSession, SessionResult
 
-Found = dict[str, Any]   # bid, type, status, subject, body, rlines, origin
+Found = dict[str, Any]   # bid, type, status, subject, body, rlines, origin, fwd (H = held)
 
 
 class StubTarget:
@@ -55,7 +55,8 @@ class StubTarget:
     def find(self, *, bid: str | None = None, subject: str | None = None) -> list[Found] | None:
         return [{"bid": m.bid, "type": m.type, "status": m.status, "subject": m.subject,
                  "body": m.body, "rlines": m.rlines,
-                 "origin": "forward" if m.received_from else "local"}
+                 "origin": "forward" if m.received_from else "local",
+                 "fwd": "H" if m.status == "H" else ""}
                 for m in self.bbs.find(bid=bid, subject=subject)]
 
 

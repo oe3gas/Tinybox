@@ -190,7 +190,7 @@ async def t09(h: Harness) -> list[Check]:
     m = h.hop.create("P", "OE1ABC", h.target.haddr, h.tag("T09"), BODY, extra_rlines=[fake])
     r = await h.hop_calls_target()
     got = h.target.find(bid=m.bid)
-    return [session_ok(r), field_is("held (H)", got, "status", "H")]
+    return [session_ok(r), field_is("held (H)", got, "fwd", "H")]
 
 
 @case("T10", "Split Horizon: Bulletin nicht zurueck an OE3GAS", "F4")
@@ -306,7 +306,7 @@ async def t18(h: Harness) -> list[Check]:
     r = await h.target_calls_hop(wait=min(h.cfg.wait_for_tinybox, 60))
     local = h.target.find(subject=s)
     at_hop = hop_msgs(h, s)
-    held_local = bool(local) and local[0]["status"] == "H"
+    held_local = bool(local) and local[0].get("fwd") == "H"
     held_hop = bool(at_hop) and at_hop[0]["status"] == "H"
     if local is None and not at_hop:
         return [Check("held at TinyBox or default route", None,
@@ -320,7 +320,7 @@ async def t19(h: Harness) -> list[Check]:
     old = utc_now() - timedelta(days=400)
     m = h.hop.create("P", "OE1ABC", h.target.haddr, h.tag("T19"), BODY, when=old)
     r = await h.hop_calls_target()
-    return [session_ok(r), field_is("held (H)", h.target.find(bid=m.bid), "status", "H")]
+    return [session_ok(r), field_is("held (H)", h.target.find(bid=m.bid), "fwd", "H")]
 
 
 @case("T20", "Prompt-Falle: Knoten-Text mit '>'", "F4")
@@ -372,7 +372,7 @@ async def t27(h: Harness) -> list[Check]:
     old = f"R:{when:%y%m%d/%H%M} 1530@{h.target.haddr}"
     m = h.hop.create("P", "OE1ABC", h.target.haddr, h.tag("T27"), BODY, extra_rlines=[old])
     r = await h.hop_calls_target()
-    return [session_ok(r), field_is("held (H) as loop", h.target.find(bid=m.bid), "status", "H")]
+    return [session_ok(r), field_is("held (H) as loop", h.target.find(bid=m.bid), "fwd", "H")]
 
 
 @case("T28", "Ende mit /EX und ';'-Nullzeilen (Feature I)", "F3")
@@ -399,5 +399,5 @@ async def t25(h: Harness) -> list[Check]:
     got = h.target.find(bid=m.bid)
     checks = [session_ok(r), count("delivered", got, 1)]
     if got:
-        checks.append(Check("not held", got[0]["status"] != "H", f"status {got[0]['status']}"))
+        checks.append(Check("not held", got[0].get("fwd") != "H", f"fwd {got[0].get('fwd')!r}"))
     return checks

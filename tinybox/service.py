@@ -116,13 +116,15 @@ class MessageService:
                msgid: str | None = None, created: str | None = None,
                replace_key: str | None = None, expires: str | None = None,
                brocast: str | None = None, at_addr: str = "", bid: str | None = None,
-               rlines: list[str] | None = None, bid_kind: str | None = None) -> int:
+               rlines: list[str] | None = None, bid_kind: str | None = None,
+               hold: str = "") -> int:
         """replace_key/expires/brocast: inbox folder only (bulletins). An existing
         bulletin with the same replace_key gets the new content under its old number.
         brocast: a ready brocast page (JSON text) that the brocast adapter sends
         instead of turning the text into a text page.
         at_addr/bid/rlines: forwarding. A partner mailbox (origin "forward") passes
-        the R: lines it received; TinyBox adds its own on top."""
+        the R: lines it received; TinyBox adds its own on top.
+        hold: forward module only - keep the message held (H) with this reason."""
         if origin not in ORIGINS:
             raise ServiceError("invalid_value", f"origin {origin}")
         from_call = normalize_call(from_call)
@@ -173,7 +175,7 @@ class MessageService:
             brocast=brocast if type == "B" else None,
             at_addr=at_addr, bid=bid,
         )
-        self._forward_fields(msg_id, type, at_addr, bid, rlines or [], origin, bid_kind)
+        self._forward_fields(msg_id, type, at_addr, bid, rlines or [], origin, bid_kind, hold)
         log.info("msg %d created: %s %s -> %s%s (%s)", msg_id, type, from_call, to_call,
                  f" @ {at_addr}" if at_addr else "", origin)
         self.bus.publish("message.created", message=self.store.get(msg_id))
@@ -182,7 +184,8 @@ class MessageService:
     # --- forwarding fields (core part; the forward module comes later) -----
 
     def _forward_fields(self, msg_id: int, type: str, at_addr: str, bid: str | None,
-                        incoming: list[str], origin: str, bid_kind: str | None) -> None:
+                        incoming: list[str], origin: str, bid_kind: str | None,
+                        hold: str = "") -> None:
         """BID, own R: line, forward state ($ / H) of a new message.
 
         bid_kind (W0RLI): 'B' = real BID (bulletins, or given by the sender),
@@ -209,7 +212,7 @@ class MessageService:
             rlines = [addressing.make_rline(datetime.now(timezone.utc), st.address, st.qth,
                                             msg_id, bid or "")] + incoming
         if forwarded:
-            note = self._hold_reason(incoming)
+            note = hold or self._hold_reason(incoming)
             if note:
                 fwd = "H"
                 log.warning("msg %d (%s) held: %s", msg_id, bid, note)

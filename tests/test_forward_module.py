@@ -1,4 +1,4 @@
-"""F2: forward module - config, routing, queue, and real handshakes against fwdsim
+"""F2/F3: forward module - config, routing, queue, and real sessions against fwdsim
 over TCP and over a simulated Direwolf (AGW), in both directions."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from fwdsim.config import Config as SimConfig
 from fwdsim.harness import tinybox_login
 from fwdsim.link import TcpLink as SimTcpLink, tcp_connect
 from fwdsim.net import SimNet
-from fwdsim.protocol import LATER
+from fwdsim.protocol import ACCEPT
 from fwdsim.session import Faults, ForwardSession as SimSession
 from fwdsim.store import Store as SimStore
 
@@ -151,10 +151,11 @@ class TcpTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.1)
             self.assertTrue(r.ok, r.error)
             self.assertEqual(r.mode, "fbb")
-            self.assertEqual(r.sent, {m.bid: LATER})              # F2: deferred, not lost
+            self.assertEqual(r.sent, {m.bid: ACCEPT})             # F3: taken
             last = module.last["OE3GAS"]
             self.assertTrue(last.ok, last.error)
-            self.assertEqual(last.deferred, [m.bid])
+            self.assertEqual(last.received, [m.bid])
+            self.assertEqual(app.store.get_by_bid(m.bid).origin, "forward")
             self.assertIn("TINYBOX", r.peer_sid)
         finally:
             module.server.close()
@@ -198,7 +199,7 @@ class TcpTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(r.ok, r.error)
             self.assertTrue(sim.ok, sim.error)
             self.assertEqual(r.mode, "fbb")
-            self.assertEqual(len(r.deferred), 1)        # offered in reverse, deferred
+            self.assertEqual(len(r.received), 1)        # taken in reverse (our FF)
         finally:
             server.close()
 
@@ -247,7 +248,8 @@ class AgwTests(unittest.IsolatedAsyncioTestCase):
         r = await SimSession(self.net.hop, link, "OE3XTC", master=True, timeout=5).run()
         await asyncio.sleep(0.3)
         self.assertTrue(r.ok, r.error)
-        self.assertEqual(r.sent, {m.bid: LATER})
+        self.assertEqual(r.sent, {m.bid: ACCEPT})
+        self.assertIsNotNone(self.app.store.get_by_bid(m.bid))
         self.assertEqual(len(self.app.registry), 0)          # no user session was made
         self.assertTrue(self.module.last["OE3GAS"].ok)
 

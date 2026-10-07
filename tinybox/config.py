@@ -84,6 +84,7 @@ class ForwardCfg:
     aliases: dict[str, str] = field(default_factory=dict)   # e.g. ALLOE -> AUT
     listen_host: str = "127.0.0.1"   # incoming TCP forwards (partners call us)
     listen_port: int = 0             # 0 = no incoming TCP forwards
+    publish_to_brocast: bool = False # bulletins from partners also go to brocastd
     partners: dict[str, PartnerCfg] = field(default_factory=dict)
 
     def partner(self, call: str) -> PartnerCfg | None:
@@ -461,6 +462,7 @@ def load(path: str | Path) -> Config:
             raise ConfigError(f"[forward] aliases: '{item}' must look like ALIAS:AREA")
         alias, area = item.split(":", 1)
         forward.aliases[alias.strip().upper()] = area.strip().upper()
+    forward.publish_to_brocast = _get(cp, "forward", "publish_to_brocast", False, bool)
     forward.listen_host = _get(cp, "forward", "listen_host", "127.0.0.1").strip()
     forward.listen_port = _get(cp, "forward", "listen_port", 0, int)
     if forward.listen_port:

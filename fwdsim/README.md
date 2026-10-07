@@ -51,7 +51,7 @@ Die Konfiguration steht in `fwdsim.conf`. Als Vorlage dient `fwdsim.conf.example
 ## Prüfungen
 
 - Was bei OE3GAS und DL0XTC angekommen ist, prüft fwdsim immer selbst.
-- Was in TinyBox angekommen ist, prüft es nur, wenn `[tinybox] db` bzw. `--tinybox-db` gesetzt ist. Es liest dabei die Spalten aus Schema 5 (`bid`, `status`, `rlines`, `origin`). Ohne Datenbank werden diese Prüfungen als SKIP gemeldet.
+- Was in TinyBox angekommen ist, prüft es nur, wenn `[tinybox] db` bzw. `--tinybox-db` gesetzt ist. Es liest dabei die Spalten aus Schema 5 (`bid`, `status`, `fwd`, `rlines`, `origin`); gehalten heißt dort `fwd = H`. Ohne Datenbank werden diese Prüfungen als SKIP gemeldet.
 
 ## Fehlerinjektion
 

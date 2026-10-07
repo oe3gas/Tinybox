@@ -90,6 +90,7 @@ enabled  = no                  # exchange mail with other mailboxes (module from
                                # no = standalone mailbox, @ addresses only for bulletins
 bid_days = 60                  # BIDs are remembered this long; older mail is held
 aliases  =                     # short names for areas, e.g. ALLOE:AUT EUROPA:EU
+publish_to_brocast = no        # yes: bulletins from partner mailboxes also go to brocastd
 listen_host = 127.0.0.1        # incoming TCP forwards (partners call us);
 listen_port = 0                # 0 = none. Not loopback: every TCP partner needs a password.
                                # Login: TinyBox asks "Callsign:" and "Password:".

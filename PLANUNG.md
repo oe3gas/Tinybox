@@ -11,7 +11,7 @@ Stand: 07.10.2026 (Rev. 4) · OE3GAS
 
 | Teil | Zweck | Stand | Details |
 |---|---|---|---|
-| Forwarding (F0–F7) | TinyBox tauscht Post und Bulletins mit anderen Mailboxen (LinBPQ, FBB, openBCM) | F1 und F2 fertig (06.10.2026). Als Nächstes F3 (Empfänger) | Abschnitt 13 und Konzept-Doc |
+| Forwarding (F0–F7) | TinyBox tauscht Post und Bulletins mit anderen Mailboxen (LinBPQ, FBB, openBCM) | F1–F3 fertig, TinyBox nimmt Post von Partnern an (F3 am 07.10.2026). Als Nächstes F4 (Senden) | Abschnitt 13 und Konzept-Doc |
 | TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | Konzept, noch kein Code | Abschnitt 12 |
 
 **Änderungen gegenüber Rev. 3**
@@ -381,7 +381,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M4 | Limits, Timeouts, Logging, Tests | Dauerbetrieb |
 | M5 | MQTT-Adapter (Ein-/Ausgang) | Anbindung an Broker |
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
-| F0–F7 | Forwarding-Modul (Abschnitt 13) | F1 und F2 fertig 06.10.2026, F0 teilweise. Als Nächstes F3 (Empfänger) |
+| F0–F7 | Forwarding-Modul (Abschnitt 13) | F1 und F2 fertig 06.10.2026, F3 fertig 07.10.2026, F0 teilweise. Als Nächstes F4 (Senden) |
 | C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast, Offline-Mailbox. Konzept fertig, noch kein Code |
 
 ---
@@ -467,7 +467,7 @@ Ausführliches Konzept mit Protokollen, Routing, Testfällen und Quellen: Claude
 - **Transport:** AX.25 über Direwolf/AGW (annehmen und anrufen, auch über Digis) und transparentes TCP (z. B. LinBPQ FBBPORT). Eingehender TCP-Port mit `Callsign:`/`Password:`-Login, standardmäßig aus.
 - **Routing (BPQ-Modell):** Persönliche Post an den Partner mit dem besten Treffer von rechts, Bulletins an alle Partner mit passendem Verteilgebiet (erstes Element des @-Feldes). Nie zurück an einen Partner aus den R:-Zeilen. Ohne Treffer Status `H`.
 - **Duplikate:** Tabelle `bids` mit Aufbewahrung `bid_days`. Umgang mit bekannter BID/MID je nach SID der Gegenseite (Entscheidung 06.10.2026, siehe Konzept-Doc).
-- **brocast:** Fremd-Bulletins gehen nur ins Karussell, wenn `publish_to_brocast` es erlaubt (kommt mit F3, Standard aus).
+- **brocast:** Fremd-Bulletins gehen nur ins Karussell, wenn `[forward] publish_to_brocast = yes` (Standard `no`).
 - **Sysop:** `FWD` (Partner anzeigen), `FWD call` (Forward anstoßen), `FWQ` (Warteschlange). `HOLD`/`REL` und die Anzeige in der Web-GUI folgen mit F4.
 
 **Stand der Meilensteine**
@@ -477,13 +477,23 @@ Ausführliches Konzept mit Protokollen, Routing, Testfällen und Quellen: Claude
 | F0 | Vorbereitung: PLANUNG Rev. 4, LinBPQ als Testpartner, Mitschnitte echter Sitzungen, Hub-Suche, Rechtsfrage, Test-Tool fwdsim | teilweise: fwdsim fertig, PLANUNG Rev. 4 erledigt (07.10.2026). Offen: LinBPQ, Mitschnitte, Hub, Rechtsfrage |
 | F1 ✅ | Kern: Schema 5, `addressing.py`, `SP/SB … @ … $BID`, `LB`/`LP`/`L@`/`L>`/`L<`, Lesekopf mit BID und R:-Zeilen, `E n AT`, Halten bei Schleife oder zu alter Nachricht | Fertig 06.10.2026 |
 | F2 ✅ | Modul-Gerüst: `tinybox/fwd/`, `adapters/forward.py`, `[partner.CALL]`, AGW- und TCP-Verbindungen in beide Richtungen, SID-Aushandlung, Warteschlange, `FWD`/`FWQ` | Fertig 06.10.2026, 144 Tests grün. Angebotenes wird noch zurückgestellt (`=` bzw. Trennen), damit nichts verloren geht |
-| F3 | Empfänger: ASCII- und FBB-Empfang, R:-Zeilen, Loop-Erkennung, BID/MID-Regel, Partner-Whitelist, Grenzen, `publish_to_brocast` | **als Nächstes** |
-| F4 | Forwarder: Senden, Reverse Forward, Routing-Feinschliff, Scheduler, Prompt-Skip je Partner, `HOLD`/`REL`, Web-Anzeige | offen |
+| F3 ✅ | Empfänger: ASCII- und FBB-Empfang, R:-Zeilen, Loop-Erkennung, BID/MID-Regel, Partner-Whitelist, Grenzen, `publish_to_brocast` | Fertig 07.10.2026, 168 Tests grün |
+| F4 | Forwarder: Senden, Reverse Forward, Routing-Feinschliff, Scheduler, Prompt-Skip je Partner, `HOLD`/`REL`, Web-Anzeige | **als Nächstes** |
 | F5 | B1 komprimiert (LZHUF, Resume) | offen |
 | F6 | Anschluss ans Netz: Leaf an einem OE-Hub über TCP/HAMNET, Probebetrieb | offen |
 | F7 (opt.) | Mehrere Partner, White Pages, MQTT und Forwarding gemeinsam, Doku für Partner-Sysops | offen |
 
-**Test-Tool fwdsim** (`fwdsim\`, Start mit `fwdsim.bat`, Bedienung in `fwdsim/README.md`): spielt die Partner OE3GAS (`#OOE`, Endstation und Hop) und DL0XTC (`#BAY`, nur über OE3GAS erreichbar, sendet nie auf Funk). TinyBox läuft im Test als OE3XTC (`#NOE`). Testfälle T01–T28 über TCP oder Direwolf, mit Fehlerinjektion. Gegen einen fwdsim-Stellvertreter laufen alle automatischen Fälle grün; gegen die echte TinyBox werden die Empfangsfälle mit F3 grün, die Sendefälle mit F4. Noch offen: fwdsim nimmt TCP-Anrufe ohne Login an.
+**F3 im Detail (07.10.2026)**
+
+- Neues Modul `tinybox/fwd/receive.py`: entscheidet je Angebot (`+`/`-` bzw. `OK`/`NO`) und speichert über den MessageService (Origin `forward`, eigene R:-Zeile oben, Schleife oder zu alt → `H`).
+- Abgelehnt werden: Typ T (NTS) und unbekannte Typen, ungültige Calls oder Adressen, zu große Nachrichten (Größe aus dem Vorschlag), dieselbe BID zweimal im Block, bekannte BIDs. Ausnahme nach W0RLI: Eine bekannte MID persönlicher Post von einer ASCII-Gegenseite ohne `M` wird angenommen und für den Sysop gehalten.
+- Gespeichert wird erst nach vollständigem Empfang (Ctrl-Z oder `/EX`); ein Abbruch mitten in der Nachricht hinterlässt nichts. `'/EX'` im Text wird wieder zu `/EX`.
+- Ruft TinyBox selbst an, holt sie die Post des Partners in derselben Sitzung ab (FBB: eigenes `FF`, ASCII: `F>`).
+- Ein empfangenes Bulletin, das kein weiterer Partner braucht, ist einfach lokal (nicht gehalten).
+- Korrektur in AGW-Adapter und TCP-Link: Das CR nach Ctrl-Z erzeugt keine leere Zeile mehr (sonst wurde die leere Zeile als Betreff der nächsten Nachricht gelesen).
+- Grenzen je Sitzung: höchstens 500 Nachrichten, Text höchstens doppelte `max_msg_bytes` plus 8 kB, sonst Trennen.
+
+**Test-Tool fwdsim** (`fwdsim\`, Start mit `fwdsim.bat`, Bedienung in `fwdsim/README.md`): spielt die Partner OE3GAS (`#OOE`, Endstation und Hop) und DL0XTC (`#BAY`, nur über OE3GAS erreichbar, sendet nie auf Funk). TinyBox läuft im Test als OE3XTC (`#NOE`). Testfälle T01–T28 über TCP oder Direwolf, mit Fehlerinjektion. Gegen einen fwdsim-Stellvertreter laufen alle automatischen Fälle grün. Gegen die echte TinyBox (TCP) laufen seit F3 alle Empfangsfälle grün (T04–T06, T08, T09, T11–T13, T15, T16, T19, T24, T25, T27, T28); die Sendefälle folgen mit F4. Manuell offen: T17, T22, T23. Noch offen: fwdsim nimmt TCP-Anrufe ohne Login an.
 
 ---
 
