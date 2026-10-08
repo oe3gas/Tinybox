@@ -12,7 +12,7 @@ Stand: 07.10.2026 (Rev. 4) · OE3GAS
 | Teil | Zweck | Stand | Details |
 |---|---|---|---|
 | Forwarding (F0–F7) | TinyBox tauscht Post und Bulletins mit anderen Mailboxen (LinBPQ, FBB, openBCM) | F1–F5 fertig: TinyBox empfängt und sendet (ASCII, FBB, B1 komprimiert), ruft Partner selbst an; mit LinBPQ getestet. Als Nächstes F6 (Anschluss ans Netz) | Abschnitt 13 und Konzept-Doc |
-| TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | C0 + C2 umgesetzt (08.10.2026): Grundgerüst, Handshake, Chat mit UI-Broadcast, Web-GUI im Messenger-Stil. Offen: C1, C3 | Abschnitt 12 |
+| TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | C0, C1, C2 umgesetzt (08.10.2026): Grundgerüst, Handshake, Post-Hinweis, Chat mit UI-Broadcast, Web-GUI im Messenger-Stil (Handy und PC). Offen: C3 | Abschnitt 12 |
 
 **Änderungen gegenüber Rev. 3**
 
@@ -446,7 +446,7 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
 | # | Funktion | Kern |
 |---|---|---|
 | C0 | Grundgerüst + Handshake | AGW-Anbindung, Verbinden, UI mitlesen, `//CLIENT` |
-| C1 | Post-Benachrichtigung | Die TinyBox sendet ein UI-Frame „neue Post für <Call>“. Der Client zeigt einen Hinweis an, ohne verbunden zu sein. |
+| C1 | Post-Benachrichtigung | Die TinyBox sendet ein UI-Frame „neue Post für <Call>“. Der Client zeigt einen Hinweis an, ohne verbunden zu sein. **Umgesetzt:** UI an `TBMAIL`, Text `OE3ABC 2 new` (Rufzeichen ohne SSID, Zahl ungelesener Privatnachrichten). Nur lokale Post (nicht zum Weiterleiten oder angehalten), höchstens ein Frame pro Rufzeichen und Minute; mehr Post in dieser Minute wird am Ende einmal mit neuer Zahl gemeldet. Abschaltbar: `[client] mail_notify = no`. Der Client wertet zusätzlich die Login-Zeile „You have n new message(s)“ aus. |
 | C2 | Chat mit UI-Broadcast | Beitrag als I-Frame an die TinyBox, die ihn einmal als UI an `TBCHAT-x` sendet (x = Nummer des Boards in `[chat_boards]`, 1–15 = SSID). Client-Sitzungen im UI-Modus bekommen die Zeile nicht zusätzlich per I-Frame. Ab Board 16 gehen die Ereignisse per I-Frame. **Umgesetzt.** |
 | C3 | Offline-Mailbox mit Delta-Sync | Neue Nachrichten/Bulletins komprimiert in einem Durchgang holen, offline lesen und schreiben, gesammelt senden, nach Abbruch fortsetzen |
 

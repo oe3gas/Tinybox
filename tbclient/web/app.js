@@ -144,6 +144,7 @@ function render() {
   const inBoard = !!S.board;
   $("input").disabled = !inBoard; $("btn-send").disabled = !inBoard;
   $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
+  renderMail();
   renderBoards();
   renderNav();
   renderPeople();
@@ -173,6 +174,22 @@ function renderBoards() {
     c.onclick = () => { if (!active) api("join", { board: b.n }); };
     nav.append(c);
   }
+}
+
+let mailDismissed = 0;
+try { mailDismissed = +localStorage.getItem("tbc-mail-dismissed") || 0; } catch (e) { /* none */ }
+
+function renderMail() {
+  const n = S.mail ? S.mail.count : 0;
+  $("nav-mail").textContent = String(n);
+  $("nav-mail").classList.toggle("hidden", !n);
+  const show = n > 0 && S.mail.at > mailDismissed;
+  $("mail-banner").classList.toggle("hidden", !show);
+  if (show) {
+    $("mb-count").textContent = `${n} new message${n === 1 ? "" : "s"}`;
+    $("mb-text").textContent = `for ${S.mycall.split("-")[0]} at ${S.tinybox} · ${hhmm(S.mail.at)}`;
+  }
+  document.title = (n ? `(${n}) ` : "") + "TinyBox chat";
 }
 
 function renderNav() {
@@ -418,6 +435,11 @@ async function start() {
   $("nav-monitor").onclick = () => openSheet("console");
   $("status-text").onclick = () => $("app").classList.toggle("show-people");
   $("people-close").onclick = () => $("app").classList.remove("show-people");
+  $("mb-close").onclick = () => {
+    mailDismissed = S && S.mail ? S.mail.at : 0;
+    try { localStorage.setItem("tbc-mail-dismissed", String(mailDismissed)); } catch (e) { /* ok */ }
+    render();
+  };
   $("btn-close").onclick = () => $("sheet").classList.add("hidden");
   $("sheet").onclick = (e) => { if (e.target === $("sheet")) $("sheet").classList.add("hidden"); };
   $("sym-search").oninput = renderSymbols;

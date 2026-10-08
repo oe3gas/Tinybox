@@ -8,7 +8,7 @@ import logging
 import sys
 from datetime import datetime
 
-from . import VERSION, config, texts
+from . import VERSION, config, notify, texts
 from .adapters import agw, brocast, inbox, sysop, telnet, web
 from .app import App
 
@@ -77,6 +77,7 @@ async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter) -> None:
         # the login link contains the secret token: console only, never the log file
         print(f"\n[tinyb]   Web GUI login:  {app.web_login_url}\n", flush=True)
     app.agw = agw.AgwAdapter(app)
+    notify.MailNotifier(app)
     tasks = [asyncio.create_task(app.agw.run()),
              asyncio.create_task(housekeeping(app))]
     if cfg.brocast.publish:

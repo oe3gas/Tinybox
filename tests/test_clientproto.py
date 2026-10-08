@@ -111,5 +111,36 @@ class ClientProtoTests(unittest.TestCase):
         self.assertIn("OE3GAS: b", ct.take())
 
 
+class MailNotifyTests(unittest.TestCase):
+    def setUp(self):
+        from tinybox import notify
+        self.app = chat_app()
+        self.ui = []
+        self.app.service.chat.ui_send = lambda dest, text: self.ui.append((dest, text))
+        self.n = notify.MailNotifier(self.app)
+
+    def mail(self, to, type="P", **kw):
+        return self.app.service.create(from_call="OE3XYZ", to_call=to, type=type,
+                                       subject="s", body="b", origin="telnet", **kw)
+
+    def test_private_mail_once_per_minute(self):
+        self.mail("OE3ABC-7")
+        self.assertEqual(self.ui, [("TBMAIL", "OE3ABC 1 new")])
+        self.mail("OE3ABC")                   # within the minute, no loop: not repeated
+        self.assertEqual(len(self.ui), 1)
+        self.mail("OE1DEF")
+        self.assertEqual(self.ui[-1], ("TBMAIL", "OE1DEF 1 new"))
+
+    def test_no_bulletins_and_switch_off(self):
+        self.mail("ALL", type="B")
+        self.assertEqual(self.ui, [])
+        self.app.cfg.client.mail_notify = False
+        self.mail("OE3ABC")
+        self.assertEqual(self.ui, [])
+
+    def test_example_config(self):
+        self.assertTrue(self.app.cfg.client.mail_notify)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -46,6 +46,7 @@ class ClientCore:
         self.console: deque[str] = deque(maxlen=200)
         self.heard: dict[str, str] = {}           # call -> APRS symbol from a beacon
         self.heard_at: dict[str, float] = {}      # call -> last frame heard (any kind)
+        self.mail: dict | None = None             # {"count": n, "at": unix} - C1 notice
         self.tinybox_direct_at = 0.0
         self.unwrap = proto.Unwrapper()
         self.seen: set[int] = set()
@@ -188,6 +189,9 @@ class ClientCore:
             self._event(ev)
         else:
             self.console.append(line)
+            m = re.match(r"^You have (\d+) new message", line)
+            if m or line.startswith("No new messages"):
+                self._set_mail(int(m.group(1)) if m else 0)
             if not self.handshake_done and line.startswith("Welcome to TinyBox"):
                 asyncio.get_event_loop().call_later(1.0, self._handshake)
         self._touch()
@@ -205,6 +209,9 @@ class ClientCore:
         if sym:
             self.heard[f.src] = sym
             self._touch()
+        if f.src == self.cfg.tinybox_call and f.dest == "TBMAIL":
+            self._mail_notice(f.info.decode("utf-8", "replace"))
+            return
         if f.src != self.cfg.tinybox_call or "UI" not in self.caps:
             return
         ev = proto.parse_event(f.info.decode("utf-8", "replace"))
@@ -272,6 +279,19 @@ class ClientCore:
         elif cmd == "ERR":
             self.console.append(line)
         # //CLIENT etc. echoed by a terminal: ignore
+
+    def _mail_notice(self, text: str) -> None:
+        """UI frame to TBMAIL: '<call> <n> new' (sent by the TinyBox, C1)."""
+        m = re.match(r"^([A-Z0-9]{1,6})(?:-\d{1,2})? (\d+) new$", text.strip())
+        if m and m.group(1) == self.cfg.mycall.split("-")[0]:
+            self._set_mail(int(m.group(2)))
+            self.console.append(f"*** mail notice: {m.group(2)} new")
+
+    def _set_mail(self, count: int) -> None:
+        old = self.mail["count"] if self.mail else 0
+        self.mail = {"count": count, "at": int(time.time()) if count != old else
+                     (self.mail or {}).get("at", int(time.time()))}
+        self._touch()
 
     def _replay_early(self, events: list[proto.Event], last: int | None) -> None:
         for ev in events:
@@ -348,6 +368,7 @@ class ClientCore:
             "ui": "UI" in self.caps,
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),
+            "mail": self.mail,
             "heard": [{"call": c, "symbol": self.heard.get(c, ""), "ago": int(now - t)}
                       for c, t in sorted(self.heard_at.items(), key=lambda kv: -kv[1])[:30]
                       if c not in self.members and c != self.cfg.tinybox_call],

@@ -169,6 +169,8 @@ class EndToEndTests(unittest.TestCase):
                                                    reconnect_sec=1)
             adapter = tb_agw.AgwAdapter(app)
             app.agw = adapter
+            from tinybox import notify
+            notify.MailNotifier(app)
             t1 = asyncio.create_task(adapter.run())
             await asyncio.wait_for(adapter.connected.wait(), 5)
             term, tt = login(app, "OE3XYZ")
@@ -195,8 +197,15 @@ class EndToEndTests(unittest.TestCase):
                 # every chat event came once as UI, never as I-frame to the client
                 self.assertEqual(dw.chat_iframes, [])
                 self.assertIn(("TBCHAT-1", "#2 OE3XYZ: Servus :+1"), dw.ui_sent)
+                # C1: private mail -> UI frame to TBMAIL -> notice in the client
+                self.assertEqual(core.mail["count"], 0)     # "No new messages." at login
+                app.service.create(from_call="OE3XYZ", to_call="OE3GAS", type="P",
+                                   subject="Test", body="x", origin="telnet")
+                await until(lambda: core.mail and core.mail["count"] == 1)
+                self.assertIn(("TBMAIL", "OE3GAS 1 new"), dw.ui_sent)
                 snap = core.snapshot()
                 self.assertTrue(snap["ui"])
+                self.assertEqual(snap["mail"]["count"], 1)
                 self.assertEqual(snap["symbols"]["OE3GAS"], "/-")
                 core.leave()
                 await until(lambda: core.board is None)

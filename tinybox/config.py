@@ -230,6 +230,11 @@ class ChatBoard:
 
 
 @dataclass
+class ClientCfg:
+    mail_notify: bool = True    # UI frame to TBMAIL when private mail arrives (PLANUNG 12, C1)
+
+
+@dataclass
 class ChatCfg:
     enabled: bool = False
     history_lines: int = 20     # max lines replayed when joining a board
@@ -271,6 +276,7 @@ class Config:
     inbox: InboxCfg = None  # type: ignore[assignment]  # set by load()
     chat: ChatCfg = field(default_factory=ChatCfg)
     forward: ForwardCfg = field(default_factory=ForwardCfg)
+    client: ClientCfg = field(default_factory=ClientCfg)
 
 
 def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
@@ -495,7 +501,8 @@ def load(path: str | Path) -> Config:
     return Config(path=path, station=station, direwolf=direwolf, mailbox=mailbox,
                   telnet=telnet, web=web, console=console, storage=storage, logging=logging_cfg,
                   mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp),
-                  forward=forward)
+                  forward=forward,
+                  client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)))
 
 
 def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:

@@ -25,7 +25,7 @@
     <div class="nav-h">Chat boards</div>
     <div id="nav-boards"></div>
     <div class="nav-h">Mailbox</div>
-    <button class="nav-item off" disabled><span>✉ Mail</span><span class="soon">C3</span></button>
+    <button class="nav-item off" disabled><span>✉ Mail</span><span><span id="nav-mail" class="cnt hidden"></span> <span class="soon">C3</span></span></button>
     <button class="nav-item off" disabled><span>▤ Bulletins</span><span class="soon">C3</span></button>
     <div class="nav-h">Station</div>
     <button id="nav-monitor" class="nav-item"><span>▸ Monitor</span></button>
@@ -35,6 +35,11 @@
   <div class="main-col">
   <nav id="boards" class="boards" aria-label="Chat boards"></nav>
   <div id="board-head" class="board-head hidden"><b id="bh-name"></b> <span id="bh-desc" class="muted"></span></div>
+
+  <div id="mail-banner" class="mail-banner hidden" role="status">
+    <span>✉ <b id="mb-count"></b> <span id="mb-text"></span></span>
+    <button id="mb-close" class="icon-btn" aria-label="Dismiss">✕</button>
+  </div>
 
   <main id="chat" class="chat">
     <section id="offline" class="card center hidden">

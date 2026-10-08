@@ -70,6 +70,10 @@ enabled  = yes                 # scripts drop *.txt here, TinyBox makes bulletin
 dir      = eingang             # processed: eingang/erledigt, rejected: eingang/fehler
 poll_sec = 10
 
+[client]
+mail_notify   = yes            # TinyBox clients: a UI frame to TBMAIL ("OE3ABC 2 new")
+                               # tells the addressee about new private mail, without connecting
+
 [chat]
 enabled       = yes            # command C: chat boards for logged-in users
 history_lines = 20             # max lines shown when joining a board
