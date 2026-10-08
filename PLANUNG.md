@@ -445,13 +445,24 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
 | C2 | Chat mit UI-Broadcast | Beitrag als I-Frame an die TinyBox, die ihn einmal als UI an `TBCHAT-x` sendet (x = Board 0–15). Client-Sitzungen bekommen die Zeile nicht zusätzlich per I-Frame. Vorschlag: x = Nummer des Boards in `[chat_boards]`, damit höchstens 16 Boards. |
 | C3 | Offline-Mailbox mit Delta-Sync | Neue Nachrichten/Bulletins komprimiert in einem Durchgang holen, offline lesen und schreiben, gesammelt senden, nach Abbruch fortsetzen |
 
-### 12.4 Chat-Frame (Vorschlag)
+### 12.4 Chat-Frame (entschieden 08.10.2026: lesbarer Text)
 
 ```
 Ziel:   TBCHAT-x        Quelle: <TinyBox-Call>     PID: 0xF0
-Info:   [Version][Folgenummer][Typ][Autor-Call][Text UTF-8]
-Typ:    Zeile | Betreten | Verlassen | System
+Info:   lesbarer Text, Folgenummer hexadezimal (1–2 Zeichen)
 ```
+
+| Typ | Info-Feld | Beispiel |
+|---|---|---|
+| Beitrag | `#<nr> <Call>: <Text>` | `#4F OE3GAS: Servus, Wetter passt :+1` |
+| Betreten | `#<nr> +<Call> [<APRS-Symbol>]` | `#50 +OE3GAS /-` |
+| Verlassen | `#<nr> -<Call>` | `#51 -OE3GAS` |
+| Reaktion | `#<nr> <Call> *<Bezug-nr> <Emoji>` | `#52 OE3TEC *4F :+1` |
+| System | `#<nr> !<Text>` | `#53 !Board schließt um 22:00` |
+
+- Keine Steuerbytes: Mithörer mit Terminalprogramm oder Direwolf lesen den Chat ohne Client mit.
+- Keine Version im Frame; Client und TinyBox tauschen sie beim `//CLIENT`-Handshake aus (12.2).
+- Emojis und Avatare: siehe 12.6.
 
 - Der Client erkennt Lücken an der Folgenummer und fordert über seine Sitzung nach (`//RESEND <Board> <von>-<bis>`). Die Antwort kommt nur an ihn, per I-Frame.
 - Teilnehmer mit Terminalprogramm sowie Verbindungen über Digi oder Node bekommen die Zeilen wie bisher einzeln per I-Frame.
@@ -464,7 +475,47 @@ Typ:    Zeile | Betreten | Verlassen | System
 - Wiederverwendbar aus F2: ausgehender AGW-Connect (`AgwAdapter.connect`) und die Link-Abstraktion (`tinybox/fwd/link.py`).
 - C3 (Delta-Sync) braucht eindeutige Kennungen je Nachricht. Dafür eignen sich `msgid` bzw. die BID aus Schema 5.
 
-### 12.6 Später
+### 12.6 Chat-Oberfläche im Messenger-Stil (Stand 08.10.2026)
+
+Der Chat im Client sieht aus wie ein heutiger Messenger: Avatare, Sprechblasen, Emojis. **Grundsatz: Alles Optische entsteht lokal im Client, über Funk geht nur das Nötigste.** Bei 1200 Bd zählt vor allem die Zahl der Frames (jeder UI-Frame hat ≥ 16 Byte Kopf plus TXDelay), erst danach die Bytes.
+
+**Was über Funk geht – und was nicht**
+
+| Element | Über Funk | Umsetzung |
+|---|---|---|
+| Avatar | nein | Lokal aus dem Rufzeichen erzeugt (siehe unten) |
+| Autor | ja, als Text | Im TBCHAT-Frame sendet die TinyBox, also muss der Autor in die Nutzdaten |
+| Zeitstempel | nein | Empfangszeit; beim Verlauf aus der BBS liefert die TinyBox die Zeit (connected) |
+| Sprechblasen links/rechts | nein | Eigene Beiträge rechts, fremde links |
+| „Tippt gerade …“, Gelesen-Häkchen | **bewusst nicht** | Wären je ein Frame pro Teilnehmer |
+| Bilder, Sticker, GIFs | nein | Nicht vorgesehen |
+| Folgenummer | ja, 1–2 Zeichen | Lückenerkennung, `//RESEND`, Bezug für Reaktionen |
+
+**Nutzdaten als lesbarer Text** (Frame-Schema in 12.4): Terminal-User und Mithörer verstehen den Chat weiterhin. CBOR würde nur 3–5 Byte pro Frame sparen, Kompression bringt unter ~80 Byte nichts.
+
+```
+UI an TBCHAT-1:   #4F OE3GAS: Servus, Wetter passt :+1 ~1K
+```
+
+**Emojis – nie als Unicode über Funk** (👍 = 4 Byte, mit Hautton 8, Familien-Sequenzen bis 18 Byte):
+
+- **Stufe 1, klassische Emoticons (2–3 Byte):** `:)` `:(` `;)` `:D` `:P` `:O` `<3` `:+1` `:-1` … Der Client zeigt 😊 🙁 😉 😄 😛 😮 ❤️ 👍 👎. Terminal-User verstehen sie ohne Client.
+- **Stufe 2, Code-Tabelle (3 Byte):** Escape-Zeichen + 2 Zeichen Base36, z. B. `~1K` = 📻; 1296 Plätze; `~~` = echte Tilde. Die Tabelle wird wie das brocast-Dictionary versioniert mit dem Client ausgeliefert. Grundstock funkerspezifisch (📻 📡 🔋 ⚡ ☕ 🍺 🌧 ☀️ 👋 …).
+- Der Emoji-Picker bietet **nur** Emojis aus Stufe 1 und 2 an; jedes Emoji kostet damit höchstens 3 Byte. Ein eingefügtes unbekanntes Emoji wird nicht gesendet, der Client zeigt einen Hinweis.
+- **Reaktionen** (👍 auf einen Beitrag, ab v1): eigener Typ mit Folgenummer + Emoji-Code, ca. 5 Byte Nutzdaten.
+
+**Avatar – aus dem Rufzeichen, 0 Byte über Funk**
+
+- Kreis mit **Präfix klein oben, Suffix groß darunter** (z. B. `OE3` / `GAS`). Im lokalen Chat haben fast alle dasselbe Präfix, unterscheidbar macht das Suffix.
+- **Füllfarbe** aus einem Hash (FNV-1a) des Rufzeichens **ohne SSID und ohne /-Zusatz**, feste Palette mit 8 Farben, Schrift in der dunklen Stufe derselben Farbe. Jeder Client zeigt für jedes Rufzeichen dasselbe Bild. Kein Farbring.
+- **APRS-Symbol als Plakette links oben** (frei wählbar): Über Funk geht wie bei APRS nur der 2-Zeichen-Code (z. B. `/-` Haus, `/>` Auto, `/y` Yagi, `/#` Digi). Herkunft in dieser Reihenfolge: eigene Wahl im Client → APRS-Bake, die der Client von diesem Rufzeichen gehört hat (0 Byte) → Code aus der Betreten-Meldung (2 Byte).
+- Mit Plakette rückt das Präfix ca. 5 px nach rechts, **ohne Plakette steht es mittig**.
+- Die SSID wird dadurch nützlich: OE3GAS (Haus) und OE3GAS-9 (Auto) haben dieselbe Farbe, aber verschiedene Symbole.
+- Grafiken: aprs.fi-Symbolsatz von OH7LZB (github.com/hessu/aprs-symbols, PNG-Sprites 24/48/64/128 px), lokal im Client; Quellenhinweis auf der „Über“-Seite. Namen für die Auswahlliste aus dessen Symbol-Index (JSON).
+
+**Entschieden (08.10.2026):** Escape-Zeichen für Stufe 2 ist `~`. Reaktionen kommen schon in v1.
+
+### 12.7 Später
 
 Strukturierter Modus (CBOR statt Menütext), Formulare, kleine Dateien, Sysop-Fernverwaltung mit Challenge-Response (keine Verschlüsselung), Anzeige der Verbindungsqualität, zeitgesteuertes Abholen.
 
