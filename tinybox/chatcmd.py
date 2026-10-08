@@ -5,14 +5,20 @@ Inside a board every line is chat text, except lines starting with "/":
     /W            who is in this board
     /L            list all boards
     /J board      change to another board
+    /R n emoji    reaction to event #n (used by TinyBox clients)
     /H            help
+    //...         client protocol (clientproto.py)
+
+TinyBox clients (session.client set) get machine-readable lines instead
+of the human headers - see clientproto.py.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from . import texts
+from . import clientproto, texts
 from .config import ChatBoard
 
 if TYPE_CHECKING:
@@ -55,9 +61,35 @@ def cmd_chat(s: Session, arg: str) -> None:
     enter(s, board)
 
 
+def _epoch(iso: str) -> int:
+    return int(datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ")
+               .replace(tzinfo=timezone.utc).timestamp())
+
+
+def _enter_client(s: Session, board: ChatBoard) -> None:
+    from .session import State
+    hub = s.service.chat
+    if s.chat_board is not None:
+        hub.leave(s)
+    lines = [f"//IN {hub.number(board.name)} {board.name} {board.keep_label} "
+             f"{hub.last_seq(board.name)}"]
+    lines += [f"//H {_epoch(c.created)} {c.call}: {c.text}" for c in hub.history(board)]
+    others = []
+    for m in hub.members(board.name):
+        sym = m.client.symbol if m.client else ""
+        others.append(m.call + (f"={sym}" if sym else ""))
+    lines.append("//WHO " + " ".join(others) if others else "//WHO")
+    s.state = State.CHAT
+    s.out(*lines)
+    hub.join(s, board)            # the join event follows the //WHO line
+
+
 def enter(s: Session, board: ChatBoard) -> None:
     from .session import State  # local import avoids a cycle
     hub = s.service.chat
+    if s.client is not None:
+        _enter_client(s, board)
+        return
     lines = [texts.CHAT_HEADER.format(board=board.name, desc=board.description,
                                       keep=board.keep_label)]
     if board.live:
@@ -90,7 +122,7 @@ def _quit(s: Session) -> None:
     board = s.chat_board
     s.service.chat.leave(s)
     s.state = State.COMMAND
-    s.out(texts.CHAT_BACK.format(board=board))
+    s.out(f"//OUT {board}" if s.client else texts.CHAT_BACK.format(board=board))
 
 
 def handle(s: Session, line: str) -> None:
@@ -107,6 +139,9 @@ def handle(s: Session, line: str) -> None:
         return
     text = line.strip()
     if not text:
+        return
+    if text.startswith("//"):
+        clientproto.handle(s, text)
         return
     if text.startswith("/"):
         cmd, _, arg = text[1:].partition(" ")
@@ -125,6 +160,15 @@ def handle(s: Session, line: str) -> None:
                 s.out(texts.CHAT_ALREADY.format(board=board.name))
             else:
                 enter(s, board)
+        elif cmd in ("R", "REACT"):
+            ref, _, emoji = arg.strip().partition(" ")
+            ok = False
+            try:
+                ok = hub.react(s, int(ref, 16), emoji.strip())
+            except ValueError:
+                pass
+            if not ok:
+                s.out("//ERR react" if s.client else texts.CHAT_UNKNOWN)
         elif cmd in ("H", "HELP", "?"):
             s.out(*texts.CHAT_HELP)
         else:

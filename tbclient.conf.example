@@ -1,0 +1,25 @@
+# TinyBox client - copy to tbclient.conf and adapt.
+# Start with tbclient.bat, then open http://<this PC>:7744 in a browser (also on the phone).
+
+[station]
+mycall       = OE3GAS          # your call, with SSID if wanted (OE3GAS-9 = mobile)
+
+[tinybox]
+call         = OE3GAS-1        # the TinyBox to connect to
+link         = agw             # agw = radio via Direwolf, telnet = TinyBox test port (same PC)
+ui           = auto            # chat events as UI frames: auto = if the TinyBox is heard directly
+auto_connect = no              # connect when the client starts
+telnet_host  = 127.0.0.1
+telnet_port  = 6300
+
+[direwolf]
+agw_host     = 127.0.0.1
+agw_port     = 8000            # AGWPORT in direwolf.conf
+radio_port   = 0               # Direwolf channel
+
+[web]
+host         = 0.0.0.0         # 0.0.0.0 = reachable in the LAN (no login! see PLANUNG.md 11/5)
+port         = 7744
+
+[storage]
+data_dir     = data/tbclient   # settings (APRS symbol); relative to this file

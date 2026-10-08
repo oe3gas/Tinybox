@@ -1,0 +1,114 @@
+"""TinyBox client protocol (PLANUNG.md section 12).
+
+A TinyBox client announces itself right after login with one line:
+
+    //CLIENT TB1 caps=CHAT,UI sym=/-
+
+and the mailbox answers with the features both sides know:
+
+    //OK TB1 caps=CHAT,UI
+
+From then on the session is in client mode: no prompts, and in a chat board
+the client gets machine-readable lines instead of the human text:
+
+    //IN <n> <board> <keep> <last seq>     entered board number n
+    //H <unix time> <call>: <text>         history line (boards with history)
+    //WHO <call>[=<sym>] ...               who else is in the board
+    //OUT <board>                          left the board
+    #<seq> ...                             chat events, format see chat.py
+
+Other client commands:
+    //BOARDS              -> //B <n> <board> <keep> <users> <description> ... //BEND
+    //RESEND <a>-<b>      (inside a board) events a..b again, only to this client
+
+caps: CHAT = chat lines in the format above, UI = the client hears the
+mailbox directly and takes chat events from the UI frames to TBCHAT-<n>
+instead of I-frames. UI is only granted on radio sessions.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .session import Session
+
+PROTO = "TB1"
+KNOWN_CAPS = ("CHAT", "UI")
+# APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
+SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
+
+
+@dataclass
+class ClientInfo:
+    proto: str
+    caps: set[str] = field(default_factory=set)
+    symbol: str = ""
+
+    @property
+    def ui(self) -> bool:
+        return "UI" in self.caps
+
+
+def _parse_args(parts: list[str]) -> dict[str, str]:
+    args = {}
+    for p in parts:
+        key, sep, value = p.partition("=")
+        if sep:
+            args[key.lower()] = value
+    return args
+
+
+def handle(s: Session, line: str) -> None:
+    """One line starting with '//' (in the mailbox or inside a board)."""
+    parts = line.strip()[2:].split()
+    if not parts:
+        return
+    cmd = parts[0].upper()
+    if cmd == "CLIENT":
+        _client(s, parts[1:])
+    elif s.client is None:
+        s.out("//ERR not a client session")
+    elif cmd == "BOARDS":
+        _boards(s)
+    elif cmd == "RESEND":
+        _resend(s, parts[1:])
+    else:
+        s.out(f"//ERR unknown {cmd}")
+
+
+def _client(s: Session, parts: list[str]) -> None:
+    if not parts or parts[0].upper() != PROTO:
+        s.out("", f"//ERR protocol {PROTO} only")
+        return
+    args = _parse_args(parts[1:])
+    wanted = {c.strip().upper() for c in args.get("caps", "").split(",") if c.strip()}
+    caps = {c for c in wanted if c in KNOWN_CAPS}
+    if s.origin != "radio" or s.service.chat.ui_send is None:
+        caps.discard("UI")        # telnet, or no radio link: chat lines come as I-frames
+    symbol = args.get("sym", "")
+    s.client = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "")
+    # the human prompt is still on the line: start the answer on a fresh line
+    s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}")
+
+
+def _boards(s: Session) -> None:
+    hub = s.service.chat
+    rows = []
+    if hub.enabled and s.origin != "sysop":
+        for i, b in enumerate(hub.boards, 1):
+            rows.append(f"//B {i} {b.name} {b.keep_label} {len(hub.members(b.name))} "
+                        f"{b.description}".rstrip())
+    s.out(*rows, "//BEND")
+
+
+def _resend(s: Session, parts: list[str]) -> None:
+    m = re.match(r"^([0-9A-Fa-f]{1,2})-([0-9A-Fa-f]{1,2})$", parts[0] if parts else "")
+    if s.chat_board is None or not m:
+        s.out("//ERR resend")
+        return
+    lines = s.service.chat.replay(s.chat_board, int(m.group(1), 16), int(m.group(2), 16))
+    if lines:
+        s.out(*lines)

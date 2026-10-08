@@ -118,6 +118,7 @@ CHAT_LINE = "{call}: {text}"
 CHAT_JOINED = "*** {call} joined {board}"
 CHAT_LEFT = "*** {call} left {board}{reason}"
 CHAT_REASON_DISC = " (disconnected)"
+CHAT_REACT = "*** {call} {emoji} to: {target}"
 CHAT_BACK = "Left chat {board}, back in the mailbox."
 CHAT_CUT = "(Line cut to {max} characters.)"
 CHAT_UNKNOWN = "Unknown chat command. /H for help."
@@ -127,6 +128,7 @@ CHAT_HELP = [
     "  /W         Who is in this board",
     "  /L         List all boards",
     "  /J board   Change to another board",
+    "  /R n emoji React to line #n with an emoji code, e.g. /R 4F :+1",
     "  /H         This help",
 ]
 

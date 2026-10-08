@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d2b3a">
+<title>TinyBox chat</title>
+<link rel="icon" href="data:,">
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div id="me-avatar"></div>
+    <div class="top-text">
+      <div class="top-title"><span id="me-call">-</span> <span class="arrow">→</span> <span id="tb-call">-</span></div>
+      <div class="top-status"><span id="status-dot" class="dot"></span><button id="status-text" class="link-btn" aria-label="Who is here">offline</button></div>
+    </div>
+    <button id="btn-menu" class="icon-btn" aria-label="Settings">☰</button>
+  </header>
+
+  <div class="body">
+  <aside id="nav" class="nav" aria-label="Navigation">
+    <div class="nav-h">Chat boards</div>
+    <div id="nav-boards"></div>
+    <div class="nav-h">Mailbox</div>
+    <button class="nav-item off" disabled><span>✉ Mail</span><span class="soon">C3</span></button>
+    <button class="nav-item off" disabled><span>▤ Bulletins</span><span class="soon">C3</span></button>
+    <div class="nav-h">Station</div>
+    <button id="nav-monitor" class="nav-item"><span>▸ Monitor</span></button>
+    <button id="nav-settings" class="nav-item"><span>⚙ Settings</span></button>
+  </aside>
+
+  <div class="main-col">
+  <nav id="boards" class="boards" aria-label="Chat boards"></nav>
+  <div id="board-head" class="board-head hidden"><b id="bh-name"></b> <span id="bh-desc" class="muted"></span></div>
+
+  <main id="chat" class="chat">
+    <section id="offline" class="card center hidden">
+      <p class="big">Not connected to <span id="off-tb"></span></p>
+      <p id="off-reason" class="muted"></p>
+      <button id="btn-connect" class="primary">Connect</button>
+    </section>
+    <section id="pick" class="card center hidden">
+      <p class="big">Choose a board</p>
+      <p class="muted">Tap a board above to join.</p>
+    </section>
+    <ol id="messages" class="messages"></ol>
+  </main>
+
+  <div id="react-bar" class="react-bar hidden" role="menu"></div>
+
+  <section id="picker" class="picker hidden" aria-label="Emoji">
+    <div id="picker-grid" class="picker-grid"></div>
+  </section>
+
+  <footer class="composer">
+    <button id="btn-emoji" class="icon-btn" aria-label="Emoji">☺</button>
+    <input id="input" type="text" autocomplete="off" maxlength="200" placeholder="Message" enterkeyhint="send">
+    <button id="btn-send" class="send" aria-label="Send">➤</button>
+  </footer>
+  <div id="hint" class="hint hidden"></div>
+  </div>
+
+  <aside id="people" class="people" aria-label="Stations">
+    <div class="people-head"><span class="nav-h">In this board</span><button id="people-close" class="icon-btn" aria-label="Close">✕</button></div>
+    <ul id="members" class="plist"></ul>
+    <div class="nav-h">Heard on the channel</div>
+    <ul id="heard" class="plist"></ul>
+    <p id="heard-none" class="muted small pad">Nothing heard yet (radio link only).</p>
+  </aside>
+  </div>
+</div>
+
+<div id="sheet" class="sheet hidden" role="dialog" aria-label="Settings">
+  <div class="sheet-body">
+    <div class="sheet-head"><h2>Settings</h2><button id="btn-close" class="icon-btn" aria-label="Close">✕</button></div>
+
+    <h3>Connection</h3>
+    <p id="conn-info" class="muted"></p>
+    <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button><button id="btn-leave">Leave board</button></div>
+
+    <h3>My APRS symbol</h3>
+    <p class="muted">Shown as a badge on your avatar. Sent once when you join a board (2 bytes), others see a change the next time you join. “None”: others see the symbol of your APRS beacon, if they hear it.</p>
+    <div class="row"><input id="sym-search" type="search" placeholder="Search, e.g. car, house"><button id="sym-none">None</button></div>
+    <div id="sym-grid" class="sym-grid"></div>
+
+    <h3>Monitor</h3>
+    <pre id="console" class="console"></pre>
+
+    <h3>About</h3>
+    <p class="muted small">TinyBox client <span id="version"></span>. APRS symbols: aprs.fi symbol set by OH7LZB, <a href="https://github.com/hessu/aprs-symbols" rel="noopener" target="_blank">github.com/hessu/aprs-symbols</a>.</p>
+  </div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

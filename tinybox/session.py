@@ -54,6 +54,7 @@ class Session:
         self.started = utc_now()
         self.state = State.COMMAND
         self.chat_board: str | None = None  # set by ChatHub while in a board
+        self.client = None  # clientproto.ClientInfo after //CLIENT (TinyBox client)
         # message being composed
         self._to = ""
         self._type = "P"
@@ -73,6 +74,8 @@ class Session:
         self.transport.write(text)
 
     def prompt(self) -> None:
+        if self.client is not None:     # a client program needs no prompt
+            return
         self.transport.write(texts.PROMPT_SYSOP if self.sysop else texts.PROMPT)
 
     def error(self, exc: ServiceError, msg_id: int | str = "") -> None:

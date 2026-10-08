@@ -248,6 +248,10 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
 def dispatch(s: Session, line: str) -> None:
     if not line.strip():
         return
+    if line.lstrip().startswith("//"):      # TinyBox client protocol
+        from . import clientproto
+        clientproto.handle(s, line)
+        return
     m = CMD_RE.match(line)
     if not m:
         s.out(texts.UNKNOWN_CMD)

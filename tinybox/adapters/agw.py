@@ -14,6 +14,7 @@ AGW frame = 36 byte header (little endian) + data:
 Frames used:
     R  version        X  register call     C  connected
     D  connected data d  disconnect        Y  outstanding frames
+    M  UI frame (sent by us: chat events to TBCHAT-<n> for TinyBox clients)
 """
 
 from __future__ import annotations
@@ -215,10 +216,17 @@ class AgwAdapter:
         self._pending: dict[str, asyncio.Future] = {}   # outgoing connects (forward)
         self._writer: asyncio.StreamWriter | None = None
         self.connected = asyncio.Event()  # AGW link up (used by tests)
+        app.service.chat.ui_send = self.send_ui
 
     def send(self, frame: Frame) -> None:
         if self._writer is not None and not self._writer.is_closing():
             self._writer.write(frame.pack())
+
+    def send_ui(self, dest: str, text: str) -> None:
+        """One UI frame (unproto) from the mailbox call, e.g. to TBCHAT-1."""
+        self.send(Frame("M", self.radio_port, PID_NO_L3, self.mycall, dest,
+                        text.encode("utf-8")))
+        logging.getLogger("tinybox.monitor").info("UI %s > %s", dest, text)
 
     # --- main loop --------------------------------------------------------
 

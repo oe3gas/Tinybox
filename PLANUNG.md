@@ -12,7 +12,7 @@ Stand: 07.10.2026 (Rev. 4) · OE3GAS
 | Teil | Zweck | Stand | Details |
 |---|---|---|---|
 | Forwarding (F0–F7) | TinyBox tauscht Post und Bulletins mit anderen Mailboxen (LinBPQ, FBB, openBCM) | F1–F5 fertig: TinyBox empfängt und sendet (ASCII, FBB, B1 komprimiert), ruft Partner selbst an; mit LinBPQ getestet. Als Nächstes F6 (Anschluss ans Netz) | Abschnitt 13 und Konzept-Doc |
-| TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | Konzept, noch kein Code | Abschnitt 12 |
+| TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | C0 + C2 umgesetzt (08.10.2026): Grundgerüst, Handshake, Chat mit UI-Broadcast, Web-GUI im Messenger-Stil. Offen: C1, C3 | Abschnitt 12 |
 
 **Änderungen gegenüber Rev. 3**
 
@@ -328,7 +328,8 @@ C:\Tinybox\                PC2 (Entwicklung); PC1: E:\Tinybox, per git pull
     addressing.py           hierarchische Adressen, BID, R:-Zeilen
     session.py              Sitzungs-Zustandsautomat
     commands.py             Befehle
-    chat.py  chatcmd.py     Chat-Boards (ChatHub, Befehl C, /-Kommandos)
+    chat.py  chatcmd.py     Chat-Boards (ChatHub, Befehl C, /-Kommandos, TBCHAT-Ereignisse)
+    clientproto.py          Client-Protokoll TB1 (//CLIENT, //BOARDS, //RESEND)
     dictfile.py             Befehl DICT
     texts.py                englische Ausgabetexte
     adapters\
@@ -342,6 +343,10 @@ C:\Tinybox\                PC2 (Entwicklung); PC1: E:\Tinybox, per git pull
       mqtt.py               (später, M5)
     fwd\                    Forwarding: protocol, link (AGW/TCP), router, session
     web\                    HTML/CSS/JS der Sysop-Web-GUI
+  tbclient\                 TinyBox-Client (Abschnitt 12): Start tbclient.bat, Vorlage tbclient.conf.example
+    core.py  proto.py       Client-Logik, Ereignis-Parser
+    links.py  radio.py      AGW (Funk, mit Rohframes) bzw. Telnet; AX.25/APRS-Symbole
+    web.py  web\            Web-GUI (Messenger-Chat), emoji.json, aprs\ (Symbole OH7LZB)
   fwdsim\                   Forward-Testpartner, eigenständig (Abschnitt 13)
   brocast\                  brocast (eigenes Projekt, siehe brocast\README.md)
   geosphere_*.py            Wetter- und Warnungs-Skripte für den Eingangsordner
@@ -427,9 +432,9 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
 - Anbindung an Direwolf über **AGW**, nicht KISS. Direwolf erledigt die AX.25-Verbindung (`C`/`D`/`d`). Der Client sendet UI-Frames (`M`/`V`) und liest alle Frames roh mit (`k`).
 - Zu prüfen: Wie viele Anwendungen Direwolf gleichzeitig am AGW-Port zulässt (`MAX_NET_CLIENTS`), relevant für PC2 mit TinyBox + brocastd.
 
-### 12.2 Handshake (Vorschlag)
+### 12.2 Handshake (umgesetzt für CHAT und UI)
 
-- Der Client sendet nach dem Login `//CLIENT TB1 caps=NOTE,CHAT,SYNC`.
+- Der Client sendet nach dem Login `//CLIENT TB1 caps=CHAT,UI sym=/-` (später auch `NOTE`, `SYNC`).
 - Die TinyBox antwortet `//OK TB1 caps=…` mit dem gemeinsamen Funktionsumfang.
 - Die TinyBox merkt sich je Sitzung, ob ein Client angemeldet ist.
 - **UI-Modus nur bei direkter Verbindung:**
@@ -442,7 +447,7 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
 |---|---|---|
 | C0 | Grundgerüst + Handshake | AGW-Anbindung, Verbinden, UI mitlesen, `//CLIENT` |
 | C1 | Post-Benachrichtigung | Die TinyBox sendet ein UI-Frame „neue Post für <Call>“. Der Client zeigt einen Hinweis an, ohne verbunden zu sein. |
-| C2 | Chat mit UI-Broadcast | Beitrag als I-Frame an die TinyBox, die ihn einmal als UI an `TBCHAT-x` sendet (x = Board 0–15). Client-Sitzungen bekommen die Zeile nicht zusätzlich per I-Frame. Vorschlag: x = Nummer des Boards in `[chat_boards]`, damit höchstens 16 Boards. |
+| C2 | Chat mit UI-Broadcast | Beitrag als I-Frame an die TinyBox, die ihn einmal als UI an `TBCHAT-x` sendet (x = Nummer des Boards in `[chat_boards]`, 1–15 = SSID). Client-Sitzungen im UI-Modus bekommen die Zeile nicht zusätzlich per I-Frame. Ab Board 16 gehen die Ereignisse per I-Frame. **Umgesetzt.** |
 | C3 | Offline-Mailbox mit Delta-Sync | Neue Nachrichten/Bulletins komprimiert in einem Durchgang holen, offline lesen und schreiben, gesammelt senden, nach Abbruch fortsetzen |
 
 ### 12.4 Chat-Frame (entschieden 08.10.2026: lesbarer Text)
@@ -467,7 +472,25 @@ Info:   lesbarer Text, Folgenummer hexadezimal (1–2 Zeichen)
 - Der Client erkennt Lücken an der Folgenummer und fordert über seine Sitzung nach (`//RESEND <Board> <von>-<bis>`). Die Antwort kommt nur an ihn, per I-Frame.
 - Teilnehmer mit Terminalprogramm sowie Verbindungen über Digi oder Node bekommen die Zeilen wie bisher einzeln per I-Frame.
 - Voraussetzung erfüllt: Der Chat-Code ist seit Commit 33c2259 im Repo (Abschnitt 2a).
-- Zu klären: Live-Boards speichern nichts. Woher nimmt `//RESEND` dort die fehlenden Zeilen (kleiner Puffer im Speicher)?
+- Gelöst: Die TinyBox hält je Board die letzten 256 Ereignisse im Speicher, `//RESEND` (höchstens 64 auf einmal) bedient sich dort – auch bei Live-Boards.
+
+**Umgesetztes Client-Protokoll (TB1)** – Steuerzeilen per I-Frame, nur für Client-Sitzungen (ohne Prompt):
+
+| Richtung | Zeile | Bedeutung |
+|---|---|---|
+| C → T | `//CLIENT TB1 caps=CHAT,UI sym=/-` | Anmeldung; UI nur bei Funk-Sitzung, `sym` nur wenn im Client gewählt |
+| T → C | `//OK TB1 caps=…` | gemeinsamer Funktionsumfang |
+| C → T | `//BOARDS` | → `//B <n> <Board> <keep> <User> <Beschreibung>` … `//BEND` |
+| C → T | `C <n>` bzw. `/J <n>` | Board betreten bzw. wechseln |
+| T → C | `//IN <n> <Board> <keep> <letzte Nr.>` | Board betreten |
+| T → C | `//H <Unixzeit> <Call>: <Text>` | Verlaufszeile |
+| T → C | `//WHO <Call>[=<Symbol>] …` | wer schon da ist |
+| C → T | `/R <Nr.> <Emoji-Code>` | Reaktion (geht auch vom Terminal) |
+| C → T | `//RESEND <a>-<b>` | fehlende Ereignisse nachfordern |
+| C → T / T → C | `/Q` / `//OUT <Board>` | Board verlassen |
+
+- **Reihenfolge:** Ein UI-Frame geht sofort hinaus, I-Frames warten in der Sendewarteschlange. Das UI-Frame des eigenen Betretens kann deshalb vor `//IN` ankommen; der Client hält solche Ereignisse bis `//IN` zurück.
+- **APRS-Symbol eines Teilnehmers:** Symbol aus der Betreten-Meldung (seine eigene Wahl) vor gehörter APRS-Bake. Ohne gewähltes Symbol sendet der Client keins (0 Byte), dann zählt die Bake.
 
 ### 12.5 Bezug zum Forwarding
 
@@ -514,6 +537,16 @@ UI an TBCHAT-1:   #4F OE3GAS: Servus, Wetter passt :+1 ~1K
 - Grafiken: aprs.fi-Symbolsatz von OH7LZB (github.com/hessu/aprs-symbols, PNG-Sprites 24/48/64/128 px), lokal im Client; Quellenhinweis auf der „Über“-Seite. Namen für die Auswahlliste aus dessen Symbol-Index (JSON).
 
 **Entschieden (08.10.2026):** Escape-Zeichen für Stufe 2 ist `~`. Reaktionen kommen schon in v1.
+
+### 12.6a Oberfläche am PC und Mailbox-Ansicht (entschieden 08.10.2026)
+
+- **Eine Oberfläche, die nach Fensterbreite umschaltet:** ab ca. 1000 px drei Spalten, 700–1000 px zwei, darunter die Handy-Ansicht.
+- **Links Navigation:** Chat-Boards mit Teilnehmerzahl, Post (Eingang, Ausgang, Gesendet), Bulletins nach Rubrik mit Zähler, Monitor, Einstellungen.
+- **Chat am PC:** Mitte wie am Handy. Rechts die Teilnehmer im Board und die Stationen, deren APRS-Baken gehört wurden (mit „vor n min“).
+- **Mailbox am PC:** Liste in der Mitte, Lesebereich rechts (Kopf mit Avatar, Von/An/Datum/Nummer, BID bei Bulletins; Text in Festbreitenschrift). Am Handy nacheinander: Ordner → Liste → Nachricht.
+- **Offline (C3):** Knopf „Abgleichen“ mit Zeitpunkt des letzten Abgleichs; Gelesenes liegt lokal. Neue Nachrichten kommen in den **Ausgang** und gehen beim nächsten Abgleich hinaus, bis dahin bearbeitbar oder verwerfbar.
+- **Abgleich:** Post immer vollständig; Bulletins nur aus abonnierten Rubriken (sonst dauert der Abgleich bei 1200 Bd zu lange).
+- **Löschen:** eigene Post wird beim nächsten Abgleich auch in der TinyBox gelöscht; Bulletins nur lokal (sie gehören allen).
 
 ### 12.7 Später
 
