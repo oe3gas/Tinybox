@@ -5,7 +5,9 @@ Started by __main__ only when enabled; without it TinyBox is a standalone mailbo
 - listens to the event bus: new mail with fwd '$' goes into the queue of the
   partner(s) the router picks; deleted / expired mail leaves the queue
 - answers partner connects: over AGW (the AGW adapter hands them over) and on
-  the TCP forward port ([forward] listen_port, with callsign + password login)
+  the TCP forward port ([forward] listen_port, with callsign + password login;
+  per partner optionally only from allow_from addresses; after login_fail_max
+  failed logins an address is locked out for login_lockout_min minutes)
 - calls partners: FWD <call> on the sysop console, or by itself (scheduler):
   when mail waits for a partner with auto = yes, every interval_min minutes if
   set, only inside the partner's window; after a failure, and for mail the
@@ -18,6 +20,8 @@ Sessions receive (F3) and send (F4), see tinybox/fwd/.
 from __future__ import annotations
 
 import asyncio
+import hmac
+import ipaddress
 import logging
 import time
 from datetime import datetime
@@ -50,6 +54,8 @@ class ForwardModule:
         self.server: asyncio.AbstractServer | None = None
         self.listen_port = 0
         self.tasks: set[asyncio.Task] = set()
+        self.login_fails: dict[str, list[float]] = {}     # address -> monotonic times of failures
+        self.locked_until: dict[str, float] = {}          # address -> monotonic time
         for name in ("message.created", "message.deleted", "message.expired"):
             app.bus.subscribe(name, self.on_event)
 
@@ -165,9 +171,66 @@ class ForwardModule:
         conn.session = link
         self._spawn(self._run(partner, link, master=False, transport="agw"))
 
+    # --- TCP login protection -------------------------------------------------------
+
+    @staticmethod
+    def _peer_ip(peer) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+        try:
+            ip = ipaddress.ip_address(peer[0].split("%", 1)[0])
+        except (TypeError, ValueError, IndexError):
+            return None
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+            return ip.ipv4_mapped                     # ::ffff:10.8.0.2 -> 10.8.0.2
+        return ip
+
+    def is_locked(self, addr: str, now: float | None = None) -> bool:
+        now = time.monotonic() if now is None else now
+        until = self.locked_until.get(addr)
+        if until is None:
+            return False
+        if now >= until:
+            del self.locked_until[addr]
+            return False
+        return True
+
+    def _login_failed(self, addr: str, now: float | None = None) -> None:
+        now = time.monotonic() if now is None else now
+        window = self.cfg.login_lockout_min * 60
+        fails = [t for t in self.login_fails.get(addr, []) if now - t < window]
+        fails.append(now)
+        if len(fails) >= self.cfg.login_fail_max:
+            self.locked_until[addr] = now + window
+            self.login_fails.pop(addr, None)
+            log.warning("TCP forward: %s locked out for %d min after %d failed logins",
+                        addr, self.cfg.login_lockout_min, len(fails))
+        else:
+            self.login_fails[addr] = fails
+
+    def check_login(self, call: str, password: str, ip) -> tuple[PartnerCfg | None, str]:
+        """(partner, '') if the login is good, else (None, reason for the log)."""
+        partner = self.cfg.partner(call)
+        if partner is None or partner.transport != "tcp":
+            return None, "no TCP partner"
+        if partner.password:
+            if not hmac.compare_digest(password.encode("utf-8"), partner.password.encode("utf-8")):
+                return None, "wrong password"
+        elif self.cfg.listen_host not in LOOPBACK_HOSTS:
+            return None, "partner has no password"
+        if partner.allow_from and (ip is None or not any(ip in net for net in partner.allow_from)):
+            return None, "address not in allow_from"
+        if partner.call in self.busy:
+            return None, "already in a session"
+        return partner, ""
+
     async def _tcp_in(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info("peername")
+        ip = self._peer_ip(peer)
+        addr = str(ip) if ip is not None else str(peer)
         link = TcpLink(reader, writer, f"tcp:{peer}")
+        if self.is_locked(addr):
+            log.info("TCP forward: connect from locked-out %s dropped", addr)
+            await link.close()
+            return
         try:
             link.write_lines("Callsign:")
             call = normalize_call((await link.readline(LOGIN_TIMEOUT)) or "")
@@ -176,17 +239,16 @@ class ForwardModule:
         except asyncio.TimeoutError:
             await link.close()
             return
-        partner = self.cfg.partner(call)
-        open_port = self.cfg.listen_host in LOOPBACK_HOSTS
-        ok = (partner is not None and partner.transport == "tcp"
-              and (password == partner.password if partner.password else open_port)
-              and partner.call not in self.busy)
-        if not ok:
-            log.warning("TCP forward login refused: %r from %s", call, peer)
+        partner, reason = self.check_login(call, password, ip)
+        if partner is None:
+            log.warning("TCP forward login refused: %r from %s (%s)", call, addr, reason)
+            if reason != "already in a session":
+                self._login_failed(addr)
             link.write_lines("Login failed.")
             await link.close()
             return
-        log.info("TCP forward login %s from %s", partner.call, peer)
+        self.login_fails.pop(addr, None)
+        log.info("TCP forward login %s from %s", partner.call, addr)
         await self._run(partner, link, master=False, transport="tcp")
 
     # --- outgoing ------------------------------------------------------------------
@@ -299,6 +361,11 @@ class ForwardModule:
                     + (" window" if p.window else "")) if p.auto else "manual"
             out.append(f"  {p.call:<7} {p.transport:<3} {p.protocol:<5} {mode:<12} "
                        f"queued {n:>3}  {state}")
+        now = time.monotonic()
+        locked = [a for a in list(self.locked_until) if self.is_locked(a, now)]
+        if locked:
+            out.append("  locked out: " + ", ".join(
+                f"{a} ({int((self.locked_until[a] - now) // 60) + 1} min)" for a in locked))
         return out
 
 

@@ -94,6 +94,8 @@ publish_to_brocast = no        # yes: bulletins from partner mailboxes also go t
 listen_host = 127.0.0.1        # incoming TCP forwards (partners call us);
 listen_port = 0                # 0 = none. Not loopback: every TCP partner needs a password.
                                # Login: TinyBox asks "Callsign:" and "Password:".
+login_fail_max    = 5          # failed logins from one address, then ...
+login_lockout_min = 15         # ... it is locked out this long (minutes)
 
 # One section per neighbouring mailbox (call without SSID). Examples:
 #
@@ -119,6 +121,8 @@ listen_port = 0                # 0 = none. Not loopback: every TCP partner needs
 # port      = 8011
 # login     = OE3XTC | password  # lines sent after connecting, separated by |
 # password  =                    # what this partner sends when it calls us
+# allow_from =                   # it may only call us from here, e.g. 44.143.0.0/16, 10.8.0.2
+#                                (empty = any address; recommended when listen_host is not loopback)
 # routes    = WW
 # areas     = WW EU AUT
 

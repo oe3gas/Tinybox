@@ -66,6 +66,7 @@ class PartnerCfg:
     port: int = 0
     login: list[str] = field(default_factory=list)  # tcp: lines sent after connecting
     password: str = ""              # tcp: password this partner gives when calling us
+    allow_from: list = field(default_factory=list)  # tcp: ip_network list it may call from ([] = any)
     haddress: str = ""
     routes: list[str] = field(default_factory=list)  # personal mail: HR patterns
     areas: list[str] = field(default_factory=list)   # bulletins: flood areas, * = all
@@ -94,6 +95,8 @@ class ForwardCfg:
     aliases: dict[str, str] = field(default_factory=dict)   # e.g. ALLOE -> AUT
     listen_host: str = "127.0.0.1"   # incoming TCP forwards (partners call us)
     listen_port: int = 0             # 0 = no incoming TCP forwards
+    login_fail_max: int = 5          # failed TCP logins from one address ...
+    login_lockout_min: int = 15      # ... then it is locked out this long
     publish_to_brocast: bool = False # bulletins from partners also go to brocastd
     partners: dict[str, PartnerCfg] = field(default_factory=dict)
 
@@ -479,6 +482,10 @@ def load(path: str | Path) -> Config:
         _check_port("forward", "listen_port", forward.listen_port)
         if telnet.enabled and forward.listen_port == telnet.port:
             raise ConfigError("[forward] listen_port and [telnet] port must differ")
+    forward.login_fail_max = _get(cp, "forward", "login_fail_max", 5, int)
+    forward.login_lockout_min = _get(cp, "forward", "login_lockout_min", 15, int)
+    _check_range("forward", "login_fail_max", forward.login_fail_max, 1, 100)
+    _check_range("forward", "login_lockout_min", forward.login_lockout_min, 1, 10080)
     for sec in cp.sections():
         if sec.lower().startswith("partner."):
             p = _load_partner(cp, sec)
@@ -496,6 +503,18 @@ def load(path: str | Path) -> Config:
                   telnet=telnet, web=web, console=console, storage=storage, logging=logging_cfg,
                   mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp),
                   forward=forward)
+
+
+def _networks(sec: str, text: str) -> list:
+    """allow_from = 44.143.0.0/16, 10.8.0.2  ->  [ip_network, ...]"""
+    import ipaddress
+    out = []
+    for item in text.replace(",", " ").split():
+        try:
+            out.append(ipaddress.ip_network(item, strict=False))
+        except ValueError:
+            raise ConfigError(f"[{sec}] allow_from: '{item}' is not an IP address or network") from None
+    return out
 
 
 def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
@@ -516,6 +535,7 @@ def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
                    port=_get(cp, sec, "port", 0, int),
                    login=[x.strip() for x in _get(cp, sec, "login", "").split("|") if x.strip()],
                    password=_get(cp, sec, "password", "").strip(),
+                   allow_from=_networks(sec, _get(cp, sec, "allow_from", "")),
                    routes=words("routes"), areas=words("areas"),
                    protocol=_get(cp, sec, "protocol", "fbb").strip().lower(),
                    timeout=_get(cp, sec, "timeout", 120, int))
@@ -545,6 +565,8 @@ def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
         if not p.host:
             raise ConfigError(f"[{sec}] transport = tcp needs host")
         _check_port(sec, "port", p.port)
+    elif p.allow_from:
+        raise ConfigError(f"[{sec}] allow_from only applies to transport = tcp")
     _check_range(sec, "timeout", p.timeout, 10, 3600)
     try:
         p.haddress = normalize(_get(cp, sec, "haddress", "").strip()) or call

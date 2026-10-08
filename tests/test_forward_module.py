@@ -92,6 +92,64 @@ class ConfigTests(unittest.TestCase):
                 self._load(extra)
 
 
+class LoginProtectionTests(unittest.TestCase):
+    """allow_from, constant-time password, lockout after failed logins."""
+
+    def test_config(self):
+        cfg = ConfigTests()._load("login_fail_max = 3\nlogin_lockout_min = 30\n"
+                                  "[partner.OE3XAB]\ntransport = tcp\nhost = 44.1.2.3\nport = 8011\n"
+                                  "allow_from = 44.143.0.0/16, 10.8.0.2\n")
+        x = cfg.forward.partners["OE3XAB"]
+        self.assertEqual([str(n) for n in x.allow_from], ["44.143.0.0/16", "10.8.0.2/32"])
+        self.assertEqual((cfg.forward.login_fail_max, cfg.forward.login_lockout_min), (3, 30))
+        for extra in ("[partner.OE3XAB]\ntransport = tcp\nhost = x\nport = 1\nallow_from = 44.x\n",
+                      "[partner.OE3GAS]\ntransport = agw\nallow_from = 10.0.0.1\n",
+                      "login_fail_max = 0\n"):
+            with self.assertRaises(config.ConfigError, msg=extra):
+                ConfigTests()._load(extra)
+
+    def _module(self, **kw):
+        return ForwardModule(fwd_app(gas(**kw)))
+
+    def test_allow_from(self):
+        import ipaddress
+        m = self._module(allow_from=[ipaddress.ip_network("10.8.0.0/24")])
+        ip = ForwardModule._peer_ip
+        self.assertEqual(m.check_login("OE3GAS", "geheim", ip(("10.8.0.2", 1)))[1], "")
+        self.assertEqual(m.check_login("OE3GAS", "geheim", ip(("::ffff:10.8.0.2", 1, 0, 0)))[1], "")
+        self.assertEqual(m.check_login("OE3GAS", "geheim", ip(("192.0.2.7", 1)))[1],
+                         "address not in allow_from")
+        self.assertEqual(m.check_login("OE3GAS", "falsch", ip(("10.8.0.2", 1)))[1], "wrong password")
+        self.assertEqual(m.check_login("DL0XTC", "geheim", ip(("10.8.0.2", 1)))[1], "no TCP partner")
+        free = self._module()                                     # no allow_from: any address
+        self.assertEqual(free.check_login("OE3GAS", "geheim", ip(("192.0.2.7", 1)))[1], "")
+
+    def test_no_password_only_on_loopback(self):
+        m = self._module(password="")
+        self.assertEqual(m.check_login("OE3GAS", "", None)[1], "")
+        m.cfg.listen_host = "0.0.0.0"
+        self.assertEqual(m.check_login("OE3GAS", "", None)[1], "partner has no password")
+
+    def test_lockout(self):
+        m = self._module()
+        m.cfg.login_fail_max, m.cfg.login_lockout_min = 3, 15
+        for t in (0, 10):
+            m._login_failed("192.0.2.7", now=t)
+        self.assertFalse(m.is_locked("192.0.2.7", now=20))
+        m._login_failed("192.0.2.7", now=20)                    # third failure
+        self.assertTrue(m.is_locked("192.0.2.7", now=21))
+        self.assertFalse(m.is_locked("10.8.0.2", now=21))        # other addresses unaffected
+        self.assertFalse(m.is_locked("192.0.2.7", now=20 + 15 * 60))   # expired
+
+    def test_old_failures_forgotten(self):
+        m = self._module()
+        m.cfg.login_fail_max, m.cfg.login_lockout_min = 3, 15
+        m._login_failed("192.0.2.7", now=0)
+        m._login_failed("192.0.2.7", now=1)
+        m._login_failed("192.0.2.7", now=16 * 60)               # first two are older than 15 min
+        self.assertFalse(m.is_locked("192.0.2.7", now=16 * 60 + 1))
+
+
 class RouterTests(unittest.TestCase):
     def setUp(self):
         self.app = fwd_app(gas(), gas(call="DL0XTC", routes=["DEU.EU"], areas=["DEU", "EURO"]))
@@ -168,6 +226,46 @@ class TcpTests(unittest.IsolatedAsyncioTestCase):
         try:
             link = await tcp_connect("127.0.0.1", module.listen_port, "x")
             await tinybox_login(link, "OE3GAS", "falsch", 5)
+            lines = []
+            while (line := await link.readline(5)) is not None:
+                lines.append(line)
+            self.assertIn("Login failed.", lines)
+            self.assertNotIn("OE3GAS", module.last)
+        finally:
+            module.server.close()
+
+    async def test_lockout_over_tcp(self):
+        app = fwd_app(gas())
+        module = ForwardModule(app)
+        module.cfg.listen_port = free_port()
+        module.cfg.login_fail_max = 2
+        await module.start_server()
+        try:
+            for _ in range(2):
+                link = await tcp_connect("127.0.0.1", module.listen_port, "x")
+                await tinybox_login(link, "OE3GAS", "falsch", 5)
+                while await link.readline(5) is not None:
+                    pass
+            self.assertTrue(module.is_locked("127.0.0.1"))
+            # now even the right password gets nothing: dropped before the prompt
+            link = await tcp_connect("127.0.0.1", module.listen_port, "x")
+            lines = []
+            while (line := await link.readline(5)) is not None:
+                lines.append(line)
+            self.assertEqual(lines, [])
+            self.assertTrue(any("locked out" in l for l in module.status_lines()))
+        finally:
+            module.server.close()
+
+    async def test_allow_from_over_tcp(self):
+        import ipaddress
+        app = fwd_app(gas(allow_from=[ipaddress.ip_network("10.8.0.0/24")]))
+        module = ForwardModule(app)
+        module.cfg.listen_port = free_port()
+        await module.start_server()
+        try:
+            link = await tcp_connect("127.0.0.1", module.listen_port, "x")
+            await tinybox_login(link, "OE3GAS", "geheim", 5)       # right password, wrong address
             lines = []
             while (line := await link.readline(5)) is not None:
                 lines.append(line)
