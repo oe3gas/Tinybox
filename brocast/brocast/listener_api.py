@@ -45,8 +45,10 @@ class ListenerApi(JsonServer):
 
     def __init__(self, listener: Listener, host: str, port: int,
                  status: Callable[[], dict[str, Any]] = dict,
-                 dict_import: Callable[[Any, bool], dict[str, Any]] | None = None):
-        super().__init__(host, port, require_client_header=True, static=STATIC)
+                 dict_import: Callable[[Any, bool], dict[str, Any]] | None = None,
+                 lan: bool = False, lan_names: tuple[str, ...] = ()):
+        super().__init__(host, port, require_client_header=True, static=STATIC,
+                         lan=lan, lan_names=lan_names)
         self.listener = listener
         self.status = status
         self.dict_import = dict_import

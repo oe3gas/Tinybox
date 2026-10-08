@@ -164,6 +164,28 @@ Die Rohdaten liefert weiterhin die JSON-API:
 Schreibende Aufrufe (lesen/ungelesen, Favorit, löschen, Einstellungen, Abo)
 brauchen den Header `X-Brocast-Client: 1`; Details in `brocast/listener_api.py`.
 
+**Zugriff aus dem LAN/WLAN** (z. B. vom Handy): in `brocastd.conf`
+
+```
+[listener]
+web_host  = 0.0.0.0
+allow_lan = yes
+lan_names = pc2.fritz.box     ; nur nötig, wenn der Browser einen anderen Namen benutzt
+```
+
+Dann im Browser `http://<IP-Adresse des PCs>:7733/` oder `http://<Rechnername>:7733/`.
+Die Oberfläche hat **keine Anmeldung** – jedes Gerät im Netz kann Seiten löschen
+und Einstellungen ändern. Deshalb in der Windows-Firewall TCP 7733 eingehend nur
+für das Heimnetz freigeben (PowerShell als Administrator, Netz anpassen):
+
+```
+New-NetFirewallRule -DisplayName "brocastd Listener" -Direction Inbound -Protocol TCP -LocalPort 7733 -RemoteAddress 192.168.1.0/24 -Action Allow
+```
+
+Aufrufe mit fremden Domainnamen im Host-Header werden weiter abgewiesen
+(Schutz gegen DNS-Rebinding). Die Ingest-API (Port 8090) bleibt immer auf
+127.0.0.1 – über sie wird gesendet.
+
 ## Dauerbetrieb (PC2) und Sendeprotokoll
 
 - `..\start_alles.bat` startet Direwolf, brocastd und TinyBox in eigenen Fenstern

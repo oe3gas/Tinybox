@@ -92,6 +92,35 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             self._load("[direwolf]\ninterface = serial\n")
 
+    def test_listener_lan(self):
+        from brocast.config import ConfigError
+        cfg = self._load("")
+        self.assertEqual((cfg.listener.web_host, cfg.listener.allow_lan), ("127.0.0.1", False))
+        with self.assertRaises(ConfigError):          # LAN only when explicitly allowed
+            self._load("[listener]\nweb_host = 0.0.0.0\n")
+        cfg = self._load("[listener]\nweb_host = 0.0.0.0\nallow_lan = yes\n"
+                         "lan_names = pc2.fritz.box, PC2 ; Kommentar\n")
+        self.assertEqual((cfg.listener.web_host, cfg.listener.allow_lan, cfg.listener.lan_names),
+                         ("0.0.0.0", True, ("pc2.fritz.box", "PC2")))
+        with self.assertRaises(ConfigError):
+            self._load("[listener]\nweb_host = pc2\nallow_lan = yes\n")
+        with self.assertRaises(ConfigError):
+            self._load("[listener]\nallow_lan = vielleicht\n")
+        with self.assertRaises(ConfigError):          # ingest API stays on loopback
+            self._load("[station]\ningest_host = 0.0.0.0\n[listener]\nallow_lan = yes\n")
+
+    def test_host_allowed(self):
+        from brocast.webserver import host_allowed
+        names = frozenset({"pc2", "pc2.fritz.box"})
+        for host, lan, ok in [("127.0.0.1", False, True), ("localhost", False, True),
+                              ("192.168.1.20", False, False),
+                              ("192.168.1.20", True, True), ("[fe80::1]", True, True),
+                              ("PC2", True, True), ("pc2.fritz.box.", True, True),
+                              ("pc2", False, False),
+                              ("evil.example", True, False), ("", True, False)]:
+            with self.subTest(host=host, lan=lan):
+                self.assertEqual(host_allowed(host, lan, names), ok)
+
 
 class AgwTests(unittest.TestCase):
     def test_header(self):
