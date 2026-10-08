@@ -284,7 +284,7 @@ def setup_logging(cfg: config.Config) -> None:
     root = logging.getLogger()
     root.setLevel(cfg.log_level)
     console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S"))
+    console.setFormatter(logging.Formatter("[brocst] %(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S"))
     root.addHandler(console)
     if cfg.log_dir is not None:
         cfg.log_dir.mkdir(parents=True, exist_ok=True)
@@ -305,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = config.load(args.config)
     except config.ConfigError as exc:
-        print(f"Konfigurationsfehler: {exc}", file=sys.stderr)
+        print(f"[brocst] Konfigurationsfehler: {exc}", file=sys.stderr)
         return 2
     setup_logging(cfg)
 

@@ -30,11 +30,11 @@ if "%START_DIREWOLF%"=="1" (
 )
 
 echo Starte brocastd ...
-start "brocastd" /D "%~dp0brocast" cmd /c "%~dp0brocast\brocastd_dauerbetrieb.bat"
+start "[brocst] brocastd" /D "%~dp0brocast" cmd /c "%~dp0brocast\brocastd_dauerbetrieb.bat"
 timeout /t 3 /nobreak >nul
 
 echo Starte TinyBox ...
-start "TinyBox" /D "%~dp0" cmd /c "%~dp0tinybox_dauerbetrieb.bat"
+start "[tinyb] TinyBox" /D "%~dp0" cmd /c "%~dp0tinybox_dauerbetrieb.bat"
 
 echo Alle Programme gestartet. Dieses Fenster schliesst sich in 10 Sekunden.
 timeout /t 10 >nul

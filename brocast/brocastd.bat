@@ -1,4 +1,5 @@
 @echo off
+title [brocst] brocastd
 rem Start brocastd from the brocast folder
 cd /d "%~dp0"
 where py >nul 2>nul

@@ -26,7 +26,7 @@ def setup_logging(cfg: config.Config) -> sysop.MonitorFilter:
 
     console_filter = sysop.MonitorFilter(cfg.console.monitor)
     console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
+    console.setFormatter(logging.Formatter("[tinyb] %(asctime)s %(message)s", "%H:%M:%S"))
     console.addFilter(console_filter)
     root.addHandler(console)
 
@@ -75,7 +75,7 @@ async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter) -> None:
     if cfg.web.enabled:
         web_server = await web.start(app)
         # the login link contains the secret token: console only, never the log file
-        print(f"\n  Web GUI login:  {app.web_login_url}\n", flush=True)
+        print(f"\n[tinyb]   Web GUI login:  {app.web_login_url}\n", flush=True)
     app.agw = agw.AgwAdapter(app)
     tasks = [asyncio.create_task(app.agw.run()),
              asyncio.create_task(housekeeping(app))]
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = config.load(args.config)
     except config.ConfigError as exc:
-        print(f"Config error: {exc}", file=sys.stderr)
+        print(f"[tinyb] Config error: {exc}", file=sys.stderr)
         return 2
     monitor_filter = setup_logging(cfg)
     try:

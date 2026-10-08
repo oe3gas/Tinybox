@@ -1,4 +1,5 @@
 @echo off
+title [tinyb] TinyBox
 rem Start TinyBox from its own folder
 cd /d "%~dp0"
 where py >nul 2>nul
