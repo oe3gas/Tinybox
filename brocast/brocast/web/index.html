@@ -13,12 +13,14 @@
   <div class="logo">brocast</div>
   <span class="badge-call" id="hdr-call">…</span>
   <span class="stat"><span class="dot" id="hdr-dot"></span><span id="hdr-kiss">Direwolf …</span></span>
-  <span class="stat"><b id="hdr-unread">0</b>&nbsp;ungelesen</span>
-  <span class="stat"><b id="hdr-stations">0</b>&nbsp;Stationen gehört</span>
+  <span class="stat m-hide"><b id="hdr-unread">0</b>&nbsp;ungelesen</span>
+  <span class="stat m-hide"><b id="hdr-stations">0</b>&nbsp;Stationen gehört</span>
   <span class="grow"></span>
-  <input class="search" id="search" type="search" placeholder="Suchen in allen Seiten …" autocomplete="off">
-  <label class="goto">Seite <input id="goto" class="mono" maxlength="5" inputmode="numeric" autocomplete="off"></label>
-  <button class="btn" id="btn-settings" type="button">Einstellungen</button>
+  <div class="hsearch">
+    <input class="search" id="search" type="search" placeholder="Suchen in allen Seiten …" autocomplete="off">
+    <label class="goto">Seite <input id="goto" class="mono" maxlength="5" inputmode="numeric" autocomplete="off"></label>
+  </div>
+  <button class="btn" id="btn-settings" type="button" aria-label="Einstellungen"><span class="m-only" aria-hidden="true">⚙</span><span class="m-hide">Einstellungen</span></button>
 </header>
 
 <div class="alert" id="alert" hidden>
@@ -52,6 +54,7 @@
 
   <section class="list">
     <div class="listhead">
+      <button class="mback" id="back-list" type="button">‹ Rubriken</button>
       <h2><span id="list-title">Alle Seiten</span> <small id="list-sub"></small></h2>
       <div class="filters">
         <button class="btn sm on" data-f="all" type="button">Alle</button>
@@ -63,7 +66,10 @@
     <div class="rows" id="rows"></div>
   </section>
 
-  <main class="view" id="view"></main>
+  <div class="pane-view">
+    <button class="mback" id="back-view" type="button">‹ Zurück</button>
+    <main class="view" id="view"></main>
+  </div>
 </div>
 
 <div class="toast" id="toast" hidden></div>

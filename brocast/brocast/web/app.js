@@ -144,9 +144,12 @@ async function refreshStatus() {
     return;
   }
   const s = state.status;
-  $("hdr-call").textContent = s.mode === "station" ? `${s.callsign} · Station` : "Listener";
+  if (s.mode === "station") $("hdr-call").replaceChildren(s.callsign, el("span", "m-hide", " · Station"));
+  else $("hdr-call").textContent = "Listener";
   $("hdr-dot").className = "dot " + (s.kiss_connected ? "ok" : "bad");
-  $("hdr-kiss").textContent = s.kiss_connected ? "Direwolf verbunden" : "Direwolf getrennt";
+  // phone: "Direwolf" + green dot when connected; "getrennt" always spelled out
+  $("hdr-kiss").replaceChildren("Direwolf",
+    s.kiss_connected ? el("span", "m-hide", " verbunden") : " getrennt");
   $("hdr-unread").textContent = s.unread;
   $("hdr-stations").textContent = s.stations;
 
@@ -205,12 +208,50 @@ function beep() {
   } catch (e) { /* no audio – ignore */ }
 }
 
+/* ---------- phone: one pane at a time ----------
+ * body[data-pane] = nav | list | view; app.css shows only that pane below 700 px.
+ * Every step goes into the browser history, so the iPhone back gesture works too.
+ * On the desktop all panes are visible and data-pane is ignored. */
+
+const PHONE = window.matchMedia("(max-width: 700px)");
+
+function setPane(pane, push = true) {
+  const cur = document.body.dataset.pane;
+  document.body.dataset.pane = pane;
+  if (push && PHONE.matches && cur !== pane) history.pushState({ pane, prev: cur }, "");
+  updateBack();
+}
+
+function goBack(fallback) {
+  const h = history.state;
+  if (PHONE.matches && h && h.prev) history.back();
+  else setPane(fallback, false);
+}
+
+function paneLabel(pane) {
+  if (pane === "list") return $("list-title").textContent;
+  if (pane === "view") return "Zurück";
+  return state.mode === "cat" ? "Rubriken" : "Stationen";
+}
+
+function updateBack() {
+  const h = history.state || {};
+  const pane = document.body.dataset.pane;
+  $("back-list").textContent = "‹ " + paneLabel(pane === "list" && h.prev ? h.prev : "nav");
+  $("back-view").textContent = "‹ " + paneLabel(pane === "view" && h.prev ? h.prev : (state.screen === "pages" ? "list" : "nav"));
+  // bottom bar: highlight what is open
+  $("nav-fav").classList.toggle("mon", pane === "list" && state.filter === "fav" && !state.cat && !state.station);
+  $("nav-rxlog").classList.toggle("mon", pane === "view" && state.screen === "rxlog");
+  $("nav-status").classList.toggle("mon", pane === "view" && state.screen === "status");
+}
+
 /* ---------- left pane ---------- */
 
 function countNode(unread, total) {
   const c = el("span", "count");
-  if (unread) c.append(el("span", "u", unread + "/"));
+  if (unread) c.append(el("span", "u", unread + " neu"));
   c.append(String(total));
+  c.title = `${total} ${total === 1 ? "Seite" : "Seiten"}, davon ${unread} ungelesen`;
   return c;
 }
 
@@ -259,6 +300,7 @@ function select(sel) {
   $("search").value = "";
   state.screen = "pages";
   if (state.filter === "fav" && (state.cat || state.station)) setFilter("all", false);
+  setPane("list");
   refreshLists();
   if (!state.selected) renderEmpty();
 }
@@ -296,9 +338,17 @@ async function renderList() {
   else if (state.cat) title = (await catName(state.cat));
   else if (state.station) title = state.station;
   else if (state.filter === "fav") title = "Gemerkt";
+  if (state.filter === "unread" && title === "Alle Seiten") title = "Ungelesene Seiten";
   $("list-title").textContent = title;
-  const unread = pages.filter(p => p.status === "unread").length;
-  $("list-sub").textContent = `${pages.length} ${pages.length === 1 ? "Seite" : "Seiten"} · ${unread} ungelesen`;
+  // Seitenzahl ohne den Filter Alle/Ungelesen/Gemerkt, damit klar ist, was der Filter ausblendet
+  const all = state.filter === "all" ? pages
+    : await api("GET", "/pages" + qs({ ...listParams(), unread: false, favorite: false }));
+  const unread = all.filter(p => p.status === "unread").length;
+  const n = (k) => `${k} ${k === 1 ? "Seite" : "Seiten"}`;
+  $("list-sub").textContent =
+    state.filter === "unread" ? `${unread} von ${n(all.length)} ungelesen`
+    : state.filter === "fav" ? `${pages.length} von ${n(all.length)} gemerkt`
+    : `${n(pages.length)} · ${unread} ungelesen`;
 
   const rows = pages.map(p => {
     const sel = state.selected && state.selected.org === p.org && state.selected.id === p.id;
@@ -321,7 +371,20 @@ async function renderList() {
     r.onkeydown = (e) => { if (e.key === "Enter") open(); };
     return r;
   });
-  $("rows").replaceChildren(...(rows.length ? rows : [el("div", "empty", state.q ? "Nichts gefunden." : "Keine Seiten.")]));
+  $("rows").replaceChildren(...(rows.length ? rows : [emptyList(all.length)]));
+  updateBack();
+}
+
+function emptyList(total) {
+  if (state.filter === "all" || !total) return el("div", "empty", state.q ? "Nichts gefunden." : "Keine Seiten.");
+  const e = el("div", "empty", state.filter === "unread"
+    ? `Keine ungelesenen Seiten – ${total} ${total === 1 ? "Seite ist" : "Seiten sind"} schon gelesen.`
+    : "Hier ist keine Seite gemerkt.");
+  const b = el("button", "btn", "Alle anzeigen");
+  b.type = "button";
+  b.onclick = () => setFilter("all");
+  e.append(el("br"), b);
+  return e;
 }
 
 let rubricCache = null;
@@ -368,6 +431,7 @@ async function openPage(org, id) {
   state.selected = { org, id };
   state.screen = "pages";
   renderPage(page);
+  setPane("view");
   refreshLists();
   refreshStatus();
   refreshAlerts().catch(() => {});
@@ -1230,7 +1294,7 @@ function onSearch() {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     state.q = $("search").value.trim();
-    if (state.q) { state.cat = null; state.station = null; state.sub = "*"; }
+    if (state.q) { state.cat = null; state.station = null; state.sub = "*"; setPane("list"); }
     state.screen = "pages";
     refreshLists();
   }, 300);
@@ -1271,11 +1335,19 @@ async function init() {
   $("tab-st").onclick = () => setMode("st");
   $("sub-filter").onchange = () => { state.sub = $("sub-filter").value; renderList().catch(e => toast(e.message, true)); };
   document.querySelectorAll("[data-f]").forEach(b => { b.onclick = () => setFilter(b.dataset.f); });
-  $("btn-settings").onclick = () => renderSettings().catch(e => toast(e.message, true));
-  $("nav-status").onclick = () => renderStatus().catch(e => toast(e.message, true));
-  $("nav-rxlog").onclick = () => renderRxlog(null).catch(e => toast(e.message, true));
-  $("dictbar-details").onclick = () => renderStatus().catch(e => toast(e.message, true));
-  $("dictbar-import").onclick = () => renderImport();
+  const show = (render) => async () => {
+    try { await render(); setPane("view"); } catch (e) { toast(e.message, true); }
+  };
+  $("btn-settings").onclick = show(renderSettings);
+  $("nav-status").onclick = show(renderStatus);
+  $("nav-rxlog").onclick = show(() => renderRxlog(null));
+  $("dictbar-details").onclick = show(renderStatus);
+  $("dictbar-import").onclick = show(renderImport);
+  $("back-list").onclick = () => goBack("nav");
+  $("back-view").onclick = () => goBack(state.screen === "pages" && state.selected ? "list" : "nav");
+  window.addEventListener("popstate", (e) => setPane((e.state && e.state.pane) || "nav", false));
+  document.body.dataset.pane = "nav";
+  history.replaceState({ pane: "nav" }, "");
   $("dictbar-install").onclick = async () => {
     const r = state.status.dictionary && state.status.dictionary.ready;
     if (!r || !confirm(`Dictionary v${r.version} von ${r.station} installieren?\n` +
@@ -1291,7 +1363,7 @@ async function init() {
     state.dictHidden = state.status.dictionary && state.status.dictionary.newest_heard;
     $("dictbar").hidden = true;
   };
-  $("nav-fav").onclick = () => { state.cat = null; state.station = null; state.q = ""; setFilter("fav"); };
+  $("nav-fav").onclick = () => { state.cat = null; state.station = null; state.q = ""; setFilter("fav"); setPane("list"); };
   $("alert-open").onclick = () => { if (state.alertPage) openPage(state.alertPage.org, state.alertPage.id); };
   $("search").oninput = onSearch;
   $("goto").onkeydown = (e) => onGoto(e).catch(err => toast(err.message, true));
