@@ -54,7 +54,8 @@ class Daemon:
         self.listener = Listener(self.store, self.codec, clock,
                                  baud=cfg.station.baud, txdelay_ms=cfg.station.txdelay_ms)
         self.web = ListenerApi(self.listener, cfg.listener.web_host, cfg.listener.web_port,
-                               self.status, dict_import=self.import_dictionary)
+                               self.status, dict_import=self.import_dictionary,
+                               lan=cfg.listener.allow_lan, lan_names=cfg.listener.lan_names)
         self.listener.install_dictionary = self.install_received
         self.web.dict_broadcast = self.broadcast_dictionary_now
         self.carousel: Carousel | None = None

@@ -379,6 +379,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M3f ✅ | Kopfzeile `Brocast:` im Eingang, Seite statt Text an brocastd (Abschnitt 6d) | Fertig 03.10.2026 |
 | M3g ✅ | Chat-Boards mit Aufbewahrung, Befehl `C`, /-Kommandos, Anzeige in Konsole und Web (Abschnitt 2a) | Fertig 04.10.2026 |
 | M4 | Limits, Timeouts, Logging, Tests | Dauerbetrieb |
+| P1 ❗ | **Major Fix** brocastd: kein Datenbank-Schreiben pro Funk-Frame, Sendeprotokoll abschaltbar (offener Punkt 9) | Voraussetzung für Dauerbetrieb auf dem NanoPi (eMMC) |
 | M5 | MQTT-Adapter (Ein-/Ausgang) | Anbindung an Broker |
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
 | F0–F7 | Forwarding-Modul (Abschnitt 13) | F1 und F2 fertig 06.10.2026, F3 und F4 fertig 07.10.2026, F0 teilweise. Als Nächstes F5 oder F0-Reste |
@@ -396,6 +397,20 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 6. Direwolf: Wie viele Programme gleichzeitig am AGW-Port (`MAX_NET_CLIENTS`)? Relevant für PC2 mit TinyBox, brocastd und ggf. Client.
 7. Forwarding über Funk ohne Aufsicht ist vermutlich eine Relaisfunkstelle mit Clubrufzeichen: mit Fernmeldebüro oder ÖVSV klären (F0). Bis dahin Forwarding nur über TCP/HAMNET.
 8. Forwarding: OE-Hub-Partner finden, eigene Region für `haddress` mit dem Hub-Sysop abstimmen (F0/F6).
+9. **MAJOR FIX (vor Dauerbetrieb auf dem NanoPi, eMMC 8 GB):** brocastd schreibt bei **jedem Funk-Frame** mehrfach in die SQLite-Datenbank, jeweils als eigener Commit ohne PRAGMAs (Rollback-Journal, `synchronous=FULL`, also mehrere fsync pro Commit). Das ist verschwenderisch und verschleißt den eMMC. Gefunden am 07.10.2026 bei der Produktionsversion (`PRODUCTION.md`).
+   - Jeder gesendete Frame wird über `_send` → `_receive(own=True)` (`brocast/brocast/daemon.py:79-84`) als eigener Empfang verbucht. Das sind die Commits `heard()` (`store.py:326`), `save_received`, `update_lpage` (`listener.py:191-258`) und `add_rxlog` (`store.py:347`). Pro Seite kommt noch `mark_sent` dazu (`carousel.py:225`).
+   - Jeder empfangene Frame, auch fremde wie APRS, schreibt `add_rxlog` (`daemon.py:95-100`). Brocast-Frames schreiben zusätzlich `heard()` und die lpage-Commits.
+   - Das Sendeprotokoll schreibt eine Zeile pro Frame (`txlog.py:46-59`). Es lässt sich nicht abschalten: Ein leeres `txlog_dir` wird zu `logs` (`config.py:138`), deshalb ist die Prüfung `is not None` in `daemon.py:65` toter Code.
+
+   Vorschlag:
+   - Pro Verbindung `PRAGMA journal_mode=WAL` und `synchronous=NORMAL`.
+   - Flüchtige Daten nur im RAM halten: rxlog, „stations heard“, das Echo eigener Frames und `last_seen`, wenn eine Seite nur wiederholt wird. Höchstens gebündelt speichern, z. B. alle 10 min und beim Beenden.
+   - Den Sendezeitplan (`mark_sent`) im RAM führen und nur gebündelt oder beim Beenden speichern.
+   - Leeres `txlog_dir` = Sendeprotokoll aus.
+   - Ziel: Die Datenbank wird nur bei echten Änderungen geschrieben, also bei neuen oder geänderten Seiten, Einstellungen und Bedienung.
+   - Danach dieselben PRAGMAs für die TinyBox-Datenbank prüfen, die nur bei Login, Nachrichten und Chat schreibt (niedrige Priorität).
+
+   Bis zum Fix bleibt die brocastd-Datenbank auf dem eMMC. Das Sendeprotokoll legt die Produktionsversion in den RAM (`/run/tinybox`).
 
 ---
 

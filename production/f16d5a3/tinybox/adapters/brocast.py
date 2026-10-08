@@ -1,0 +1,287 @@
+"""brocast adapter: report bulletins to brocastd, which sends them as pages.
+
+TinyBox stays a small text BBS. This adapter only listens on the event bus
+and calls brocastd's ingest API on the same PC (standard library only):
+
+    bulletin created / edited   -> PUT    /pages/tinybox/<msg number>
+    bulletin deleted / expired  -> DELETE /pages/tinybox/<msg number>
+    at start and every sync_min -> PUT    /pages/tinybox   (full list)
+
+Private messages (type P) are never reported. If brocastd is not running,
+TinyBox logs one warning and goes on; the next full sync catches up.
+
+Mapping bulletin -> page (agreed 02.10.2026):
+    ti   subject (max 40 chars; longer: full subject as heading)
+    cat  from the destination via [brocast] rubrics (unknown: own rubric)
+    to   destination, src ["TinyBox", author], exp = bulletin lifetime
+    blk  body, paragraphs split at blank lines; cut at max_bytes with a
+         hint "Vollständig in der Mailbox <call>: R <n>"
+
+Bulletins from the inbox may carry a ready page ("Brocast:" header, PLANUNG
+6d, e.g. a weather page typ wx). Then that page is sent instead; TinyBox only
+fills in ti, cat and exp if missing. If brocastd rejects it, the text page is
+sent as a fallback.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
+from ..store import Message
+
+if TYPE_CHECKING:
+    from ..app import App
+
+log = logging.getLogger(__name__)
+
+PROVIDER = "tinybox"
+TITLE_MAX = 40
+TIMEOUT_SEC = 5
+RETRY_SEC = 60                    # full sync interval while brocastd is not reachable
+FOREVER_MIN = 365 * 1440          # bulletins never expire (bulletin_expire_days = 0)
+
+
+# --- mapping ----------------------------------------------------------------
+
+def _paragraphs(text: str) -> list[str]:
+    paras, cur = [], []
+    for line in text.replace("\r\n", "\n").split("\n"):
+        if line.strip():
+            cur.append(line.rstrip())
+        elif cur:
+            paras.append("\n".join(cur))
+            cur = []
+    if cur:
+        paras.append("\n".join(cur))
+    return paras
+
+
+def _cut(text: str, max_bytes: int) -> tuple[str, bool]:
+    raw = text.encode("utf-8")
+    if len(raw) <= max_bytes:
+        return text, False
+    head = raw[:max_bytes].decode("utf-8", errors="ignore")
+    for sep in ("\n\n", "\n", ". ", " "):            # nicest boundary in the back half
+        pos = head.rfind(sep)
+        if pos > len(head) // 2:
+            return head[:pos + (1 if sep == ". " else 0)].rstrip(), True
+    return head.rstrip(), True
+
+
+def lifetime_min(days: int) -> int:
+    """Validity sent to brocastd. Kept constant (not "time left") so that the
+    hourly sync does not create a new page revision every time; when the
+    bulletin really expires, TinyBox withdraws the page (message.expired)."""
+    return FOREVER_MIN if days <= 0 else days * 1440
+
+
+def _valid_min(msg: Message) -> int | None:
+    """Bulletins from the inbox with "Valid:": the same validity for the page.
+    expires - created is constant per content, so syncs stay idempotent."""
+    if not msg.expires:
+        return None
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    try:
+        span = datetime.strptime(msg.expires, fmt) - datetime.strptime(msg.created, fmt)
+    except ValueError:
+        return None
+    return max(int(span.total_seconds() // 60), 1)
+
+
+def text_page(msg: Message, app: App) -> dict[str, Any]:
+    """The bulletin text as a text page (typ text, or alert for WARN)."""
+    cfg = app.cfg.brocast
+    subject = msg.subject.strip() or "(no subject)"
+    blocks: list[dict[str, Any]] = []
+    title = subject
+    if len(subject) > TITLE_MAX:
+        title = subject[:TITLE_MAX - 1].rstrip() + "…"
+        blocks.append({"k": "heading", "x": subject})
+    body, cut = _cut(msg.body, cfg.max_bytes)
+    blocks += [{"k": "para", "x": p} for p in _paragraphs(body)]
+    if cut:
+        blocks.append({"k": "note", "st": "info",
+                       "x": f"Gekürzt. Vollständig in der Mailbox "
+                            f"{app.cfg.station.mailbox_call}: R {msg.id}"})
+    if not blocks:
+        blocks.append({"k": "para", "x": "(leer)"})
+    return {
+        # bulletins to an alert destination (WARN) become warning pages: the
+        # listener always shows them, highlighted, even if the rubric is deselected
+        "typ": "alert" if msg.to_call in cfg.alert_destinations else "text",
+        "ti": title,
+        "cat": [cfg.rubrics.get(msg.to_call, msg.to_call)],
+        "to": msg.to_call,
+        "src": ["TinyBox", msg.from_call],
+        "exp": _exp(msg, app),
+        "blk": blocks,
+    }
+
+
+def _exp(msg: Message, app: App) -> int:
+    return _valid_min(msg) or lifetime_min(app.cfg.mailbox.bulletin_expire_days)
+
+
+def delivered_page(msg: Message, app: App) -> dict[str, Any] | None:
+    """The page that came with the bulletin ("Brocast:"), completed, or None."""
+    if not msg.brocast:
+        return None
+    try:
+        page = json.loads(msg.brocast)
+    except ValueError:
+        return None
+    if not isinstance(page, dict):
+        return None
+    cfg = app.cfg.brocast
+    subject = msg.subject.strip() or "(no subject)"
+    page.setdefault("ti", subject if len(subject) <= TITLE_MAX
+                    else subject[:TITLE_MAX - 1].rstrip() + "…")
+    page.setdefault("cat", [cfg.rubrics.get(msg.to_call, msg.to_call)])
+    page.setdefault("exp", _exp(msg, app))
+    return page
+
+
+def to_page(msg: Message, app: App) -> dict[str, Any]:
+    """What goes to brocastd: the delivered page if there is one, else the text."""
+    return delivered_page(msg, app) or text_page(msg, app)
+
+
+def wanted(msg: Message, app: App) -> bool:
+    dests = app.cfg.brocast.destinations
+    if msg.origin == "forward" and not app.cfg.forward.publish_to_brocast:
+        return False                    # bulletins from other mailboxes stay off the air
+    return msg.type == "B" and (not dests or msg.to_call in dests)
+
+
+# --- adapter ----------------------------------------------------------------
+
+class BrocastPublisher:
+    def __init__(self, app: App) -> None:
+        self.app = app
+        self.cfg = app.cfg.brocast
+        # (method, key, body, fallback): fallback = text page if body is a delivered page
+        self.queue: asyncio.Queue[tuple[str, str, Any, Any]] = asyncio.Queue()
+        self.loop = asyncio.get_running_loop()
+        self.online = True              # for "warn once" logging
+        self.sent = 0
+        for name in ("message.created", "message.edited", "message.deleted",
+                     "message.expired"):
+            app.bus.subscribe(name, self.on_event)
+
+    # events arrive synchronously from the MessageService
+    def on_event(self, name: str, data: dict) -> None:
+        if name == "message.expired":
+            for msg_id in data.get("ids", []):
+                self._enqueue("DELETE", str(msg_id), None)
+            return
+        msg: Message = data["message"]
+        if name == "message.deleted":
+            if msg.type == "B":
+                self._enqueue("DELETE", str(msg.id), None)
+        elif wanted(msg, self.app):                     # created or edited bulletin
+            page = delivered_page(msg, self.app)
+            if page is None:
+                self._enqueue("PUT", str(msg.id), text_page(msg, self.app))
+            else:
+                self._enqueue("PUT", str(msg.id), page, text_page(msg, self.app))
+        elif name == "message.edited":                  # now private or other destination
+            self._enqueue("DELETE", str(msg.id), None)
+
+    def _enqueue(self, method: str, key: str, body: Any, fallback: Any = None) -> None:
+        self.loop.call_soon_threadsafe(self.queue.put_nowait, (method, key, body, fallback))
+
+    def bulletins(self) -> list[Message]:
+        return [m for m in self.app.store.list_messages() if wanted(m, self.app)]
+
+    def full_list(self) -> dict[str, Any]:
+        return {str(m.id): to_page(m, self.app) for m in self.bulletins()}
+
+    async def run(self) -> None:
+        worker = asyncio.create_task(self._worker())
+        try:
+            while True:
+                await self.sync()
+                # brocastd missing: try again every minute, so nothing waits up to an hour
+                await asyncio.sleep(self.cfg.sync_min * 60 if self.online else RETRY_SEC)
+        finally:
+            worker.cancel()
+
+    async def sync(self) -> None:
+        msgs = {str(m.id): m for m in self.bulletins()}
+        pages = {key: to_page(m, self.app) for key, m in msgs.items()}
+        status, res = await self.request("PUT", f"/pages/{PROVIDER}", {"pages": pages})
+        if status == 200:
+            log.info("brocast: %s bulletins in sync, %s withdrawn", len(pages),
+                     len(res.get("withdrawn", [])))
+            for key, err in (res.get("errors") or {}).items():
+                msg = msgs.get(key)
+                if msg is not None and delivered_page(msg, self.app) is not None:
+                    log.warning("brocast: page of bulletin %s not accepted (%s) - "
+                                "sending the text instead", key, err)
+                    self._enqueue("PUT", key, text_page(msg, self.app))
+                else:
+                    log.warning("brocast: bulletin %s not accepted: %s", key, err)
+
+    async def _worker(self) -> None:
+        while True:
+            method, key, body, fallback = await self.queue.get()
+            status, res = await self.request(method, f"/pages/{PROVIDER}/{key}", body)
+            if status == 400 and fallback is not None:
+                log.warning("brocast: page of bulletin %s not accepted (%s) - "
+                            "sending the text instead", key, res.get("error", ""))
+                status, res = await self.request(method, f"/pages/{PROVIDER}/{key}", fallback)
+            if status == 200:
+                log.info("brocast: bulletin %s %s (page %s, %s subpages)", key,
+                         "withdrawn" if method == "DELETE" else "published",
+                         res.get("id"), res.get("subpages"))
+            elif status == 404 and method == "DELETE":
+                pass                                # was never published: fine
+            elif status:
+                log.warning("brocast: bulletin %s: HTTP %s %s", key, status, res.get("error", ""))
+
+    async def request(self, method: str, path: str, body: Any = None) -> tuple[int, dict]:
+        """One HTTP/1.1 request to brocastd. Returns (0, {}) if not reachable."""
+        data = b"" if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
+        head = [f"{method} {self.cfg.ingest_path}{path} HTTP/1.1",
+                f"Host: {self.cfg.ingest_host}:{self.cfg.ingest_port}",
+                f"Content-Length: {len(data)}", "Connection: close"]
+        if body is not None:
+            head.append("Content-Type: application/json")
+        if self.cfg.token:
+            head.append(f"X-Brocast-Token: {self.cfg.token}")
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self.cfg.ingest_host, self.cfg.ingest_port), TIMEOUT_SEC)
+            writer.write(("\r\n".join(head) + "\r\n\r\n").encode("ascii") + data)
+            await writer.drain()
+            raw = await asyncio.wait_for(reader.read(), TIMEOUT_SEC)
+            writer.close()
+        except (OSError, asyncio.TimeoutError) as exc:
+            if self.online:
+                log.warning("brocast: brocastd not reachable (%s) - bulletins will be "
+                            "synced later", exc)
+            self.online = False
+            return 0, {}
+        if not self.online:
+            log.info("brocast: brocastd reachable again")
+        self.online = True
+        self.sent += 1
+        try:
+            status = int(raw.split(b" ", 2)[1])
+            payload = json.loads(raw.split(b"\r\n\r\n", 1)[1] or b"{}")
+        except (IndexError, ValueError):
+            return 0, {}
+        return status, payload if isinstance(payload, dict) else {"result": payload}
+
+
+async def start(app: App) -> asyncio.Task:
+    publisher = BrocastPublisher(app)
+    app.brocast = publisher
+    log.info("brocast: bulletins are reported to brocastd at http://%s:%s%s",
+             app.cfg.brocast.ingest_host, app.cfg.brocast.ingest_port,
+             app.cfg.brocast.ingest_path)
+    return asyncio.create_task(publisher.run(), name="brocast")

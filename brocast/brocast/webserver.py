@@ -3,8 +3,11 @@
 Shared by the ingest API (port 8090) and the listener API (port 7733).
 
 Security:
-  * listens on loopback only (checked in config)
-  * Host header must be a loopback name -> blocks DNS rebinding
+  * listens on loopback only (checked in config); the listener GUI may
+    listen in the LAN when [listener] allow_lan = yes
+  * Host header must be a loopback name -> blocks DNS rebinding. In LAN
+    mode an IP address, this PC's name or a name from lan_names is also
+    accepted - never a foreign domain name, so DNS rebinding stays blocked
   * request bodies must be application/json; browsers can only send that
     cross-site after a CORS preflight, which we never answer
   * optional: token in X-Brocast-Token, and/or X-Brocast-Client header on
@@ -15,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import ipaddress
+import socket
 import json
 import logging
 from dataclasses import dataclass, field
@@ -31,6 +36,27 @@ WRITE_METHODS = ("PUT", "POST", "DELETE", "PATCH")
 REASONS = {200: "OK", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
            404: "Not Found", 405: "Method Not Allowed", 411: "Length Required",
            413: "Payload Too Large", 415: "Unsupported Media Type", 500: "Internal Server Error"}
+
+
+def host_allowed(host: str, lan: bool, lan_names: frozenset[str] = frozenset()) -> bool:
+    """host: Host header without port, IPv6 in brackets."""
+    host = host.lower().rstrip(".")
+    if host in LOOPBACK_NAMES:
+        return True
+    if not lan:
+        return False
+    try:
+        ipaddress.ip_address(host[1:-1] if host.startswith("[") else host)
+        return True
+    except ValueError:
+        pass
+    return host in lan_names
+
+
+def own_names() -> frozenset[str]:
+    """This PC's name, short and with domain (e.g. pc2, pc2.fritz.box)."""
+    names = {socket.gethostname(), socket.getfqdn()}
+    return frozenset(n.lower().rstrip(".") for n in names if n)
 
 
 class HttpError(Exception):
@@ -80,8 +106,12 @@ class JsonServer:
     name = "API"
 
     def __init__(self, host: str, port: int, token: str = "",
-                 require_client_header: bool = False, static: dict[str, Any] | None = None):
+                 require_client_header: bool = False, static: dict[str, Any] | None = None,
+                 lan: bool = False, lan_names: tuple[str, ...] = ()):
         self.host, self.port, self.token = host, port, token
+        self.lan = lan
+        self.lan_names = (own_names() | {n.lower().rstrip(".") for n in lan_names}) \
+            if lan else frozenset()
         self.require_client_header = require_client_header
         self.static = static or {}               # URL path -> file Path
         self.server: Any = None
@@ -91,6 +121,9 @@ class JsonServer:
                                                  limit=MAX_HEADER)
         self.port = self.server.sockets[0].getsockname()[1]
         log.info("%s auf http://%s:%s%s", self.name, self.host, self.port, PREFIX)
+        if self.lan:
+            log.warning("%s im LAN erreichbar (allow_lan = yes), ohne Anmeldung – "
+                        "Zugriff per Firewall auf das Heimnetz beschränken", self.name)
 
     async def close(self) -> None:
         if self.server:
@@ -158,7 +191,7 @@ class JsonServer:
         host_header = headers.get("host", "")
         host = host_header.split("]")[0] + "]" if host_header.startswith("[") \
             else host_header.split(":")[0]
-        if host not in LOOPBACK_NAMES:
+        if not host_allowed(host, self.lan, self.lan_names):
             raise HttpError(403, "Host nicht erlaubt")
         if self.token and not hmac.compare_digest(
                 headers.get("x-brocast-token", "").encode(), self.token.encode()):

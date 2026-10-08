@@ -1,0 +1,22 @@
+[Unit]
+Description=brocastd broadcast daemon (station)
+After=network.target direwolf.service
+
+[Service]
+Type=simple
+User=tinybox
+Group=tinybox
+WorkingDirectory=/opt/tinybox/brocast
+ExecStart=/usr/bin/python3 -m brocast.daemon -c /opt/tinybox/brocast/brocastd.conf
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+KillSignal=SIGINT
+TimeoutStopSec=30
+# like brocastd_dauerbetrieb.bat: restart after a crash
+Restart=always
+RestartSec=15
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

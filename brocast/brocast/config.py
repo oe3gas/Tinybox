@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import configparser
+import ipaddress
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,6 +69,8 @@ class StationCfg:
 class ListenerCfg:
     web_host: str = "127.0.0.1"
     web_port: int = 7733
+    allow_lan: bool = False            # GUI reachable from the LAN (no login!)
+    lan_names: tuple[str, ...] = ()    # extra host names for the browser, e.g. pc2.fritz.box
 
 
 @dataclass
@@ -204,10 +207,23 @@ def load(path: str | Path) -> Config:
         raise ConfigError("[station] dict_broadcast_hours muss 0..720 sein")
     cfg.station = st
 
+    try:
+        allow_lan = cp.getboolean("listener", "allow_lan", fallback=False)
+    except ValueError:
+        raise ConfigError("[listener] allow_lan: yes oder no erwartet") from None
     cfg.listener = ListenerCfg(
         web_host=get("listener", "web_host", "127.0.0.1"),
         web_port=getint("listener", "web_port", 7733),
+        allow_lan=allow_lan,
+        lan_names=tuple(n.strip() for n in get("listener", "lan_names").split(",") if n.strip()),
     )
     if cfg.listener.web_host not in LOOPBACK_HOSTS:
-        raise ConfigError("[listener] web_host muss 127.0.0.1 oder localhost sein")
+        if not allow_lan:
+            raise ConfigError("[listener] web_host muss 127.0.0.1 oder localhost sein "
+                              "(für Zugriff aus dem LAN: allow_lan = yes)")
+        try:
+            ipaddress.ip_address(cfg.listener.web_host)
+        except ValueError:
+            raise ConfigError("[listener] web_host: IP-Adresse erwartet, "
+                              "z. B. 0.0.0.0 (alle Netzwerkkarten)") from None
     return cfg

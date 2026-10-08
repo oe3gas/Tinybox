@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyBox Sysop</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo">TinyBox</span>
+    <span class="callbadge" id="hdr-mailbox">-</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="dot" id="hdr-dot"></span><span>Direwolf <strong id="hdr-agw">-</strong></span></div>
+    <div class="stat">Users <strong id="hdr-users">-</strong></div>
+    <div class="stat">Messages <strong id="hdr-msgs">-</strong> · <strong id="hdr-unread">-</strong></div>
+    <div class="stat">Up since <strong id="hdr-since">-</strong></div>
+    <div class="stat" id="hdr-fwd-box" hidden>Forward <strong id="hdr-fwd">-</strong></div>
+  </div>
+  <div class="who">
+    <span>Sysop <strong class="mono" id="hdr-sysop">-</strong></span>
+    <button class="btn danger" id="btn-shutdown" type="button">Shutdown</button>
+  </div>
+</header>
+<div class="shell">
+  <nav class="side" aria-label="Main">
+    <a href="#/dashboard" data-nav="dashboard">Dashboard</a>
+    <a href="#/messages" data-nav="messages">Messages<span class="count" id="nav-msgs"></span></a>
+    <a href="#/users" data-nav="users">Users<span class="count" id="nav-users"></span></a>
+    <a href="#/monitor" data-nav="monitor">Monitor</a>
+    <a href="#/jlog" data-nav="jlog">Stations (JLOG)</a>
+    <a href="#/settings" data-nav="settings">Settings</a>
+    <div class="grow"></div>
+    <div class="ver" id="nav-ver"></div>
+  </nav>
+  <main id="main"></main>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="stopped" hidden>
+  <div class="stopped-box">
+    <h1>TinyBox has been stopped.</h1>
+    <p>Start it again with tinybox.bat, then reload this page.</p>
+  </div>
+</div>
+</body>
+</html>

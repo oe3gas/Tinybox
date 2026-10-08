@@ -45,5 +45,8 @@ txlog_dir = logs              ; Sendeprotokoll (Station): Sendeprotokoll_<JJJJ-M
                               ; jeder gesendete Frame mit Zeit (UTC); wird nie automatisch gelöscht
 
 [listener]
-web_host = 127.0.0.1
-web_port = 7733               ; Listener-Oberfläche: http://127.0.0.1:7733/
+web_host  = 127.0.0.1         ; 0.0.0.0 = aus dem LAN/WLAN erreichbar (nur mit allow_lan = yes)
+web_port  = 7733              ; Listener-Oberfläche: http://127.0.0.1:7733/
+allow_lan = no                ; yes = Oberfläche im LAN, OHNE Anmeldung – Firewall auf Heimnetz beschränken!
+lan_names =                   ; zusätzliche Rechnernamen für den Browser, z. B. pc2.fritz.box
+                              ; (IP-Adresse und Rechnername gehen bei allow_lan = yes immer)
