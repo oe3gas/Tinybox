@@ -11,7 +11,7 @@ Stand: 07.10.2026 (Rev. 4) · OE3GAS
 
 | Teil | Zweck | Stand | Details |
 |---|---|---|---|
-| Forwarding (F0–F7) | TinyBox tauscht Post und Bulletins mit anderen Mailboxen (LinBPQ, FBB, openBCM) | F1–F4 fertig (07.10.2026): TinyBox empfängt und sendet, ruft Partner selbst an. Als Nächstes F5 (B1 komprimiert) oder F0-Reste (LinBPQ-Test) | Abschnitt 13 und Konzept-Doc |
+| Forwarding (F0–F7) | TinyBox tauscht Post und Bulletins mit anderen Mailboxen (LinBPQ, FBB, openBCM) | F1–F5 fertig: TinyBox empfängt und sendet (ASCII, FBB, B1 komprimiert), ruft Partner selbst an; mit LinBPQ getestet. Als Nächstes F6 (Anschluss ans Netz) | Abschnitt 13 und Konzept-Doc |
 | TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | Konzept, noch kein Code | Abschnitt 12 |
 
 **Änderungen gegenüber Rev. 3**
@@ -382,7 +382,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | P1 ❗ | **Major Fix** brocastd: kein Datenbank-Schreiben pro Funk-Frame, Sendeprotokoll abschaltbar (offener Punkt 9) | Voraussetzung für Dauerbetrieb auf dem NanoPi (eMMC) |
 | M5 | MQTT-Adapter (Ein-/Ausgang) | Anbindung an Broker |
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
-| F0–F7 | Forwarding-Modul (Abschnitt 13) | F1 und F2 fertig 06.10.2026, F3 und F4 fertig 07.10.2026, F0 teilweise. Als Nächstes F5 oder F0-Reste |
+| F0–F7 | Forwarding-Modul (Abschnitt 13) | F1–F5 fertig (06.–08.10.2026), mit LinBPQ getestet; F0 teilweise. Als Nächstes F6 |
 | C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast, Offline-Mailbox. Konzept fertig, noch kein Code |
 
 ---
@@ -494,8 +494,8 @@ Ausführliches Konzept mit Protokollen, Routing, Testfällen und Quellen: Claude
 | F2 ✅ | Modul-Gerüst: `tinybox/fwd/`, `adapters/forward.py`, `[partner.CALL]`, AGW- und TCP-Verbindungen in beide Richtungen, SID-Aushandlung, Warteschlange, `FWD`/`FWQ` | Fertig 06.10.2026, 144 Tests grün. Angebotenes wird noch zurückgestellt (`=` bzw. Trennen), damit nichts verloren geht |
 | F3 ✅ | Empfänger: ASCII- und FBB-Empfang, R:-Zeilen, Loop-Erkennung, BID/MID-Regel, Partner-Whitelist, Grenzen, `publish_to_brocast` | Fertig 07.10.2026, 168 Tests grün |
 | F4 ✅ | Forwarder: Senden, Reverse Forward, Routing-Feinschliff, Scheduler, Prompt-Skip je Partner, `HOLD`/`REL`, Web-Anzeige | Fertig 07.10.2026, 191 Tests grün |
-| F5 | B1 komprimiert (LZHUF, Resume) | Code fertig 08.10.2026 (204 Tests), Gegentest mit LinBPQ läuft |
-| F6 | Anschluss ans Netz: Leaf an einem OE-Hub über TCP/HAMNET, Probebetrieb | offen |
+| F5 ✅ | B1 komprimiert (LZHUF, Resume) | Fertig 08.10.2026, 204 Tests; B1 mit LinBPQ in beide Richtungen bestätigt |
+| F6 | Anschluss ans Netz: Leaf an einem OE-Hub über TCP/HAMNET, Probebetrieb | **als Nächstes** (Hub-Partner nötig) |
 | F7 (opt.) | Mehrere Partner, White Pages, MQTT und Forwarding gemeinsam, Doku für Partner-Sysops | offen |
 
 **F3 im Detail (07.10.2026)**
@@ -523,6 +523,7 @@ Ausführliches Konzept mit Protokollen, Routing, Testfällen und Quellen: Claude
 - ASCII nach W0RLI funktioniert in beide Richtungen (TinyBox sendet, TinyBox holt mit `F>` ab).
 - LinBPQ sendet `F` in der SID nur mit „Allow Binary“ und überträgt dann **immer komprimiert**, auch wenn die Gegenseite kein `B` ankündigt. Unkomprimiertes FBB gibt es mit LinBPQ also nicht: Partner-Einstellung `protocol = b1` oder `ascii`.
 - Eine Nachricht mit kaputter @-Adresse wird jetzt angenommen und gehalten statt abgelehnt (ein `-` hieße für den Absender „schon da“).
+- **B1 (nach F5):** TinyBox ↔ LinBPQ komprimiert in beide Richtungen, sowohl wenn TinyBox anruft (FBBPORT 8011) als auch wenn LinBPQ anruft (Login am Forward-Port 6411). Titel und Text mit Umlauten kommen unverändert an. Damit sind die Tore von F3 und F4 über TCP erreicht; Funk (AGW zwischen PC1 und PC2) steht noch aus.
 
 **F5 im Detail (08.10.2026)**
 

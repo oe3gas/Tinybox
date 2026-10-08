@@ -116,7 +116,7 @@ Doppelklick auf `runtests.bat`.
 - M3b (Sysop-Weboberfläche): fertig
 - M3c–M3f (DICT, brocast-Anbindung, Eingangsordner, Kopfzeile Brocast:): fertig
 - Chat-Boards (Befehl C): fertig
-- Forwarding (optionales Modul): F1–F4 fertig (Empfangen, Senden, Zeitplan, HOLD/REL), als Nächstes F5 (B1 komprimiert)
+- Forwarding (optionales Modul): F1–F5 fertig (Empfangen, Senden, B1 komprimiert, Zeitplan, HOLD/REL), mit LinBPQ getestet; als Nächstes F6 (Anschluss ans Netz)
 - M4 (Limits, Rate-Limit, Dauerbetrieb): offen
 - TinyBox-Client (C0–C3): Konzept
 

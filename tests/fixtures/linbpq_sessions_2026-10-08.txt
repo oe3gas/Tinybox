@@ -106,3 +106,45 @@
 15:08:01 # OE3GAS: offer P 6_OE3GAS -> OE3ABC @ OE3XTC.@NOE.AUT.EU rejected: invalid_address OE3XTC.@NOE.AUT.EU
 15:08:01 tcp:OE3GAS > FS +-
 15:08:02 # WARN OE3GAS: called OE3GAS via tcp, mode fbb, SID [BPQ-6.0.25.41-B1FWIHJM$], received 0, rejected 0, sent 0, ERROR connection closed by partner (in a message)
+
+## Tinybox_log_2026-10-08_20-22-45.log  (B1 komprimiert, beide Richtungen, TinyBox ruft an und LinBPQ ruft an)
+20:22:45 # forward port listening on 127.0.0.1:6411
+20:22:45 # forward module on: OE3XTC.#NOE.AUT.EU, partners OE3GAS
+20:27:56 # msg 6 (6_OE3XTC) queued for OE3GAS
+20:28:42 tcp:OE3GAS > OE3XTC
+20:28:42 tcp:OE3GAS > ******
+20:28:42 # OE3GAS: forward session to tcp
+20:28:42 tcp:OE3GAS < GASBPQ:OE3GAS-7} Connected to BBS
+20:28:42 tcp:OE3GAS < [BPQ-6.0.25.41-B1FWIHJM$]
+20:28:42 tcp:OE3GAS < Please enter your Name
+20:28:42 tcp:OE3GAS < >
+20:28:42 tcp:OE3GAS > [TINYBOX-0.1.0-B1FH$]
+20:28:42 tcp:OE3GAS > FA P OE3GAS OE3GAS.#OOE.AUT.EU OE3GAS 6_OE3XTC 140
+20:28:42 tcp:OE3GAS > F> 82
+20:28:42 tcp:OE3GAS < FS +
+20:28:42 tcp:OE3GAS > [157 bytes binary]
+20:28:42 # OE3GAS: message 6 (6_OE3XTC) done
+20:28:42 tcp:OE3GAS < FA P OE3GAS OE3XTC.#NOE.AUT.EU OE1ABC 7_OE3GAS 162
+20:28:42 tcp:OE3GAS < F> 95
+20:28:42 tcp:OE3GAS > FS +
+20:28:43 # OE3GAS: message 7_OE3GAS stored as 7
+20:28:43 tcp:OE3GAS > FF
+20:28:43 tcp:OE3GAS < FQ
+20:28:43 # OE3GAS: called OE3GAS via tcp, mode b1, SID [BPQ-6.0.25.41-B1FWIHJM$], received 1, rejected 0, sent 1 (rejected 0, later 0)
+20:32:35 tcp:('127.0.0.1', 59772) > Callsign:
+20:32:35 tcp:('127.0.0.1', 59772) < OE3GAS
+20:32:35 tcp:('127.0.0.1', 59772) > Password:
+20:32:35 tcp:('127.0.0.1', 59772) < ******
+20:32:35 # TCP forward login OE3GAS from ('127.0.0.1', 59772)
+20:32:35 # OE3GAS: forward session from tcp
+20:32:35 tcp:('127.0.0.1', 59772) > [TINYBOX-0.1.0-B1FH$]
+20:32:35 tcp:('127.0.0.1', 59772) > TinyBox OE3XTC forward port
+20:32:35 tcp:('127.0.0.1', 59772) > OE3XTC>
+20:32:35 tcp:('127.0.0.1', 59772) < [BPQ-6.0.25.41-B1FIHJM$]
+20:32:35 tcp:('127.0.0.1', 59772) < FA P OE3GAS OE3XTC.#NOE.AUT.EU OE3ABC 10_OE3GAS 94
+20:32:35 tcp:('127.0.0.1', 59772) < F> 95
+20:32:35 tcp:('127.0.0.1', 59772) > FS +
+20:32:35 # OE3GAS: message 10_OE3GAS stored as 8
+20:32:35 tcp:('127.0.0.1', 59772) > FF
+20:32:35 tcp:('127.0.0.1', 59772) < FQ
+20:32:35 # OE3GAS: was called by OE3GAS via tcp, mode b1, SID [BPQ-6.0.25.41-B1FIHJM$], received 1, rejected 0, sent 0
