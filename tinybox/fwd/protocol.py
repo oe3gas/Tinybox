@@ -43,8 +43,10 @@ def parse_sid(line: str) -> Sid | None:
 
 
 def own_sid(protocol: str) -> str:
-    """No M: W0RLI discourages MIDs in the SID. F only if FBB batch is allowed."""
-    return f"[TINYBOX-{VERSION}-{'FH$' if protocol == 'fbb' else 'H$'}]"
+    """No M: W0RLI discourages MIDs in the SID. F only if FBB batch is allowed,
+    B1 only if compressed forwarding is allowed (protocol = b1)."""
+    flags = {"b1": "B1FH$", "fbb": "FH$"}.get(protocol, "H$")
+    return f"[TINYBOX-{VERSION}-{flags}]"
 
 
 @dataclass
@@ -93,14 +95,25 @@ FS_SYMBOLS = {"+": "+", "Y": "+", "H": "+",          # H: accepted, will be held
               "=": "=", "L": "="}                      # later
 
 
+FS_RE = re.compile(r"[!A]\d+|[^!A]", re.I)
+
+
 def parse_fs(line: str, n: int) -> list[str]:
-    """'FS +-=' -> ['+', '-', '=']; exactly n answers, else a protocol error."""
+    """'FS +-=!1234' -> ['+', '-', '=', '!1234']; exactly n answers, else a
+    protocol error. '!n' / 'An' = accepted, restart a B1 transfer at offset n."""
     if not line.upper().startswith("FS"):
         raise ProtocolError(f"expected FS, got {line!r}")
-    syms = line[2:].strip()
-    if len(syms) != n or any(c.upper() not in FS_SYMBOLS for c in syms):
+    out = []
+    for tok in FS_RE.findall(line[2:].strip()):
+        if tok[0] in "!Aa" and len(tok) > 1:
+            out.append("!" + tok[1:])
+        elif tok.upper() in FS_SYMBOLS:
+            out.append(FS_SYMBOLS[tok.upper()])
+        else:
+            raise ProtocolError(f"bad FS answer {line!r}")
+    if len(out) != n:
         raise ProtocolError(f"bad FS answer {line!r} for {n} proposal(s)")
-    return [FS_SYMBOLS[c.upper()] for c in syms]
+    return out
 
 
 def parse_rli_reply(line: str) -> str | None:

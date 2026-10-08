@@ -101,9 +101,12 @@ class AgwConnection:
     # --- Transport interface -------------------------------------------
 
     def write(self, text: str) -> None:
+        self.write_bytes(text.encode("utf-8"))
+
+    def write_bytes(self, data: bytes) -> None:
+        """Raw bytes (text already encoded, or compressed forwarding data)."""
         if self.gone:
             return
-        data = text.encode("utf-8")
         n = self.adapter.cfg.direwolf.paclen
         self.queue.extend(data[i:i + n] for i in range(0, len(data), n))
         self._wakeup.set()
@@ -121,6 +124,10 @@ class AgwConnection:
 
     def feed(self, data: bytes) -> None:
         self.last_activity = time.monotonic()
+        if self.session is not None and hasattr(self.session, "feed_bytes"):
+            if not self.session.closed:         # forward link: bytes, it splits lines itself
+                self.session.feed_bytes(data)
+            return
         for b in data:
             if self.session is None or self.session.closed:
                 return

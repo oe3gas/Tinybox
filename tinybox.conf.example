@@ -104,7 +104,8 @@ listen_port = 0                # 0 = none. Not loopback: every TCP partner needs
 # haddress  = OE3GAS.#OOE.AUT.EU
 # routes    = WW               # personal mail: address patterns, WW = default route
 # areas     = WW EU AUT        # bulletins: flood areas, * = all
-# protocol  = fbb              # fbb or ascii (W0RLI)
+# protocol  = fbb              # b1 (compressed, with restart), fbb or ascii (W0RLI);
+#                              # LinBPQ compresses whenever both sides have F: use b1 or ascii
 # timeout   = 300              # seconds without data
 # auto      = no               # call by itself when mail waits (default: tcp yes, agw no -
 #                              # unattended forwarding over the air: check the licence first)

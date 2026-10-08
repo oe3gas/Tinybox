@@ -256,6 +256,7 @@ class MessageService:
         return n
 
     def purge_bids(self) -> int:
+        self.store.purge_partials()             # B1 restart data older than 2 days (as LinBPQ)
         n = self.store.purge_bids(self.cfg.forward.bid_days)
         if n:
             log.info("%d BID(s) older than %d days forgotten", n, self.cfg.forward.bid_days)

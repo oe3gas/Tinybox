@@ -15,6 +15,7 @@ import logging
 
 from ..service import MessageService
 from ..store import Message
+from . import b1, lzhuf
 from .protocol import CTRL_Z, Proposal
 
 log = logging.getLogger("tinybox.forward")
@@ -71,6 +72,13 @@ class Sender:
         """W0RLI S command; $BID only for real BIDs (not for generated MIDs)."""
         bid = f" ${m.bid}" if m.bid and m.bid_kind == "B" else ""
         return f"S{m.type} {m.to_call} @ {m.at_addr} < {m.from_call}{bid}"
+
+    @staticmethod
+    def payload(m: Message, crc: bool) -> bytes:
+        """Compressed message (B1 with CRC, else B0). Deterministic, so a restart
+        continues exactly where the first try stopped."""
+        data = b1.text_to_bytes(m.rline_list, m.body)
+        return lzhuf.compress_b1(data) if crc else lzhuf.compress(data)
 
     @staticmethod
     def message_lines(m: Message) -> list[str]:

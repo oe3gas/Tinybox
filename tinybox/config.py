@@ -69,7 +69,7 @@ class PartnerCfg:
     haddress: str = ""
     routes: list[str] = field(default_factory=list)  # personal mail: HR patterns
     areas: list[str] = field(default_factory=list)   # bulletins: flood areas, * = all
-    protocol: str = "fbb"           # fbb | ascii - the most we offer this partner
+    protocol: str = "fbb"           # b1 | fbb | ascii - the most we offer this partner
     timeout: int = 120              # seconds without data
     auto: bool = True               # call by itself when mail waits (default: tcp yes, agw no)
     interval_min: int = 0           # also call every n minutes to fetch mail (0 = only to send)
@@ -534,8 +534,8 @@ def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
         p.window = (int(m.group(1)) * 60 + int(m.group(2)), int(m.group(3)) * 60 + int(m.group(4)))
     if p.transport not in ("agw", "tcp"):
         raise ConfigError(f"[{sec}] transport must be agw or tcp")
-    if p.protocol not in ("fbb", "ascii"):
-        raise ConfigError(f"[{sec}] protocol must be fbb or ascii")
+    if p.protocol not in ("b1", "fbb", "ascii"):
+        raise ConfigError(f"[{sec}] protocol must be b1, fbb or ascii")
     if p.ax25_call and not is_valid_call(p.ax25_call):
         raise ConfigError(f"[{sec}] ax25_call: '{p.ax25_call}' is not a valid callsign")
     for v in p.via:

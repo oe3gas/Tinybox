@@ -494,7 +494,7 @@ Ausführliches Konzept mit Protokollen, Routing, Testfällen und Quellen: Claude
 | F2 ✅ | Modul-Gerüst: `tinybox/fwd/`, `adapters/forward.py`, `[partner.CALL]`, AGW- und TCP-Verbindungen in beide Richtungen, SID-Aushandlung, Warteschlange, `FWD`/`FWQ` | Fertig 06.10.2026, 144 Tests grün. Angebotenes wird noch zurückgestellt (`=` bzw. Trennen), damit nichts verloren geht |
 | F3 ✅ | Empfänger: ASCII- und FBB-Empfang, R:-Zeilen, Loop-Erkennung, BID/MID-Regel, Partner-Whitelist, Grenzen, `publish_to_brocast` | Fertig 07.10.2026, 168 Tests grün |
 | F4 ✅ | Forwarder: Senden, Reverse Forward, Routing-Feinschliff, Scheduler, Prompt-Skip je Partner, `HOLD`/`REL`, Web-Anzeige | Fertig 07.10.2026, 191 Tests grün |
-| F5 | B1 komprimiert (LZHUF, Resume) | **als Nächstes** (oder vorher F0-Reste: LinBPQ) |
+| F5 | B1 komprimiert (LZHUF, Resume) | Code fertig 08.10.2026 (204 Tests), Gegentest mit LinBPQ läuft |
 | F6 | Anschluss ans Netz: Leaf an einem OE-Hub über TCP/HAMNET, Probebetrieb | offen |
 | F7 (opt.) | Mehrere Partner, White Pages, MQTT und Forwarding gemeinsam, Doku für Partner-Sysops | offen |
 
@@ -517,6 +517,21 @@ Ausführliches Konzept mit Protokollen, Routing, Testfällen und Quellen: Claude
 - Zeitplan je Partner: `auto` (ruft an, wenn Post wartet; Standard bei TCP `yes`, bei Funk `no` wegen offener Punkt 7), `interval_min` (zusätzlich regelmäßig abholen), `window` (z. B. `22:00-06:00`), `retry_min` (Pause nach Fehler und für „later“). Der Planer schaut alle 30 s und 2 s nach neuer Post.
 - Prompt-Falle (T20): TinyBox wartet nach dem Connect zuerst auf die SID, Knoten-Texte davor mit `>` stören nicht. Eine eigene Skip-Option je Partner war deshalb nicht nötig.
 - Korrektur in fwdsim: auch dort erzeugte das CR nach Ctrl-Z eine leere Zeile (Betreff der zweiten Nachricht ging verloren).
+
+**Gegentest mit LinBPQ 6.0.25.41 (08.10.2026)** – LinBPQ in WSL auf PC2, Test-TinyBox `test\bpq\`, Mitschnitte in `tests/fixtures/`
+
+- ASCII nach W0RLI funktioniert in beide Richtungen (TinyBox sendet, TinyBox holt mit `F>` ab).
+- LinBPQ sendet `F` in der SID nur mit „Allow Binary“ und überträgt dann **immer komprimiert**, auch wenn die Gegenseite kein `B` ankündigt. Unkomprimiertes FBB gibt es mit LinBPQ also nicht: Partner-Einstellung `protocol = b1` oder `ascii`.
+- Eine Nachricht mit kaputter @-Adresse wird jetzt angenommen und gehalten statt abgelehnt (ein `-` hieße für den Absender „schon da“).
+
+**F5 im Detail (08.10.2026)**
+
+- `tinybox/fwd/lzhuf.py`: LZHUF in Python (FBB-Variante: 2-kB-Fenster, 60 Byte Vorschau), byte-identisch mit LinBPQs `lzhuf32.c` – geprüft gegen Testvektoren aus dem kompilierten C-Original (`tests/fixtures/lzhuf_vectors.json`). B1 = CRC-16 + Länge + Daten.
+- `tinybox/fwd/b1.py`: Rahmen wie LinBPQ (SOH-Kopf mit Titel und Offset, STX-Blöcke à 250 Byte, EOT mit Prüfsumme); Text innen mit CR LF, R:-Zeilen vor dem Text.
+- Link: ein Bytestrom, aus dem zeilenweise oder roh gelesen wird – kein Datenverlust beim Umschalten. AGW reicht Forward-Verbindungen die Rohbytes durch.
+- Restart (B1): bricht eine Übertragung ab, hebt TinyBox das Empfangene auf (Tabelle `fwd_partial`, Schema 6, 2 Tage) und antwortet beim nächsten Angebot `!offset`; als Sender setzt TinyBox an diesem Offset fort. Nach 10 Versuchen wieder von vorn.
+- SID mit `protocol = b1`: `[TINYBOX-…-B1FH$]`. B0 (Gegenseite nur `B`) ist eingebaut, aber ungetestet.
+- Getestet: LZHUF gegen LinBPQ-C-Code, Rahmen, und Sitzungen TinyBox ↔ TinyBox in beide Richtungen inklusive Abbruch und Restart. fwdsim kann kein B1.
 
 **Test-Tool fwdsim** (`fwdsim\`, Start mit `fwdsim.bat`, Bedienung in `fwdsim/README.md`): spielt die Partner OE3GAS (`#OOE`, Endstation und Hop) und DL0XTC (`#BAY`, nur über OE3GAS erreichbar, sendet nie auf Funk). TinyBox läuft im Test als OE3XTC (`#NOE`). Testfälle T01–T28 über TCP oder Direwolf, mit Fehlerinjektion. Gegen einen fwdsim-Stellvertreter laufen alle automatischen Fälle grün. Gegen die echte TinyBox (TCP) laufen seit F4 alle 24 automatischen Fälle grün (T01–T16, T18–T20, T24–T28); T21 (Neustart) ist als Unit-Test abgedeckt. Manuell offen: T17, T22, T23. Noch offen: fwdsim nimmt TCP-Anrufe ohne Login an.
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 5   # 4: chat_lines; 5: forwarding fields, bids, fwd_queue
+SCHEMA_VERSION = 6   # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS fwd_queue (                -- filled by the forward m
     state   TEXT NOT NULL,                            -- open, later, done, rejected
     changed TEXT NOT NULL,
     PRIMARY KEY (msg_id, partner)
+);
+CREATE TABLE IF NOT EXISTS fwd_partial (              -- B1 restart: half received messages
+    partner TEXT NOT NULL,
+    bid     TEXT NOT NULL,
+    data    BLOB NOT NULL,                            -- compressed payload received so far
+    tries   INTEGER NOT NULL DEFAULT 0,               -- restarts asked for
+    created TEXT NOT NULL,
+    PRIMARY KEY (partner, bid)
 );
 CREATE TABLE IF NOT EXISTS jlog (
     call       TEXT PRIMARY KEY,
@@ -208,6 +216,34 @@ class Store:
         """(partner, msg_id, state, changed) of everything not yet done."""
         return [(r["partner"], r["msg_id"], r["state"], r["changed"]) for r in self._db.execute(
             "SELECT * FROM fwd_queue WHERE state IN ('open', 'later') ORDER BY partner, msg_id")]
+
+    # --- B1 restart data (forward module only) -----------------------------
+
+    def partial_get(self, partner: str, bid: str) -> tuple[bytes, int] | None:
+        row = self._db.execute("SELECT data, tries FROM fwd_partial WHERE partner = ? AND bid = ?",
+                               (partner, bid)).fetchone()
+        return (bytes(row["data"]), row["tries"]) if row else None
+
+    def partial_put(self, partner: str, bid: str, data: bytes) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO fwd_partial (partner, bid, data, tries, created) VALUES (?, ?, ?, 0, ?)"
+                " ON CONFLICT (partner, bid) DO UPDATE SET data = excluded.data",
+                (partner, bid, data, utc_now()))
+
+    def partial_tried(self, partner: str, bid: str) -> None:
+        with self._db:
+            self._db.execute("UPDATE fwd_partial SET tries = tries + 1 WHERE partner = ? AND bid = ?",
+                             (partner, bid))
+
+    def partial_drop(self, partner: str, bid: str) -> None:
+        with self._db:
+            self._db.execute("DELETE FROM fwd_partial WHERE partner = ? AND bid = ?", (partner, bid))
+
+    def purge_partials(self, days: int = 2) -> int:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self._db:
+            return self._db.execute("DELETE FROM fwd_partial WHERE created < ?", (cutoff,)).rowcount
 
     def fill_bid_kind(self) -> None:
         with self._db:
