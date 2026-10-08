@@ -2,7 +2,10 @@
 
 Decision per offer (FBB proposal or W0RLI S command):
     type T (NTS), unknown type          -> reject
-    bad call, address, or too large     -> reject
+    bad call, or too large              -> reject
+    bad @ address                       -> accept, keep it held (H) for the sysop
+                                           (rejecting would lose it: '-' means
+                                           "have it already" to the sender)
     same BID twice in one block         -> reject the second
     BID already known here:
         FBB batch                       -> reject ('-')
@@ -39,6 +42,7 @@ class Receiver:
         self.mode = ""                         # fbb | ascii
         self.peer_sid: Sid | None = None
         self.hold_dup: set[str] = set()        # known MIDs we take anyway (held)
+        self.bad_addr: dict[str, str] = {}     # offer key -> unusable @ address (held)
 
     @property
     def max_bytes(self) -> int:
@@ -64,9 +68,14 @@ class Receiver:
             return f"bad sender {p.from_call!r}"
         try:
             self.service.check_send(frm, p.to_call, p.type, sysop=True)
-            self.service.check_address(p.type, p.at_addr, None, origin="forward")
         except ServiceError as exc:
             return f"{exc.code} {exc}"
+        try:
+            self.service.check_address(p.type, p.at_addr, None, origin="forward")
+        except ServiceError:
+            log.warning("%s: offer %s has an unusable address %r - taken and held",
+                        self.partner, p.bid or "-", p.at_addr)
+            self.bad_addr[self._key(p)] = p.at_addr
         if not p.bid:
             return ""
         if p.bid in seen:
@@ -83,26 +92,37 @@ class Receiver:
             return ""
         return "BID known"
 
+    @staticmethod
+    def _key(p: Proposal) -> str:
+        return p.bid or f"{p.to_call}@{p.at_addr}"
+
     # --- storing ------------------------------------------------------------------
 
     def store(self, p: Proposal, subject: str, text: str) -> int | None:
         rlines, body = addressing.split_rlines(text)
         # W0RLI: a text line "/EX" travels as '/EX'
-        body = "\n".join("/EX" if x.strip().upper() == "'/EX'" else x
-                         for x in body.split("\n"))
+        lines = ["/EX" if x.strip().upper() == "'/EX'" else x for x in body.split("\n")]
+        while lines and not lines[-1].strip():       # some mailboxes add blank lines
+            lines.pop()
+        body = "\n".join(lines)
         if self.mode == "fbb":
             kind = "B" if p.type == "B" else "M"
         else:                                   # ASCII: $BID only for real BIDs
             kind = "B" if p.bid else "M"
         hold = ""
         bid = p.bid or None
+        at_addr = p.at_addr
         if bid and bid in self.hold_dup:
             hold = f"known MID {bid} offered again (ASCII without M)"
             bid = None
+        bad = self.bad_addr.pop(self._key(p), None)
+        if bad is not None:
+            hold = f"unusable address @ {bad}"
+            at_addr = ""
         try:
             msg_id = self.service.create(
                 from_call=p.from_call or self.partner, to_call=p.to_call, type=p.type,
-                subject=subject, body=body, origin="forward", at_addr=p.at_addr, bid=bid,
+                subject=subject, body=body, origin="forward", at_addr=at_addr, bid=bid,
                 rlines=rlines, bid_kind=kind, hold=hold)
         except ServiceError as exc:
             log.warning("%s: message %s not stored: %s %s", self.partner, p.bid or "-",

@@ -1,0 +1,108 @@
+# Mitschnitte TinyBox <-> LinBPQ 6.0.25.41 (WSL, TCP FBBPORT 8011), 07./08.10.2026
+# Zeilen: '>' von TinyBox gesendet, '<' empfangen. Passwort unkenntlich gemacht.
+
+## Tinybox_log_2026-10-07_21-17-34.log
+21:17:34 # forward port listening on 127.0.0.1:6411
+21:17:34 # forward module on: OE3XTC.#NOE.AUT.EU, partners OE3GAS
+21:20:09 # msg 1 (1_OE3XTC) queued for OE3GAS
+21:21:00 tcp:OE3GAS > OE3XTC
+21:21:00 tcp:OE3GAS > ******
+21:21:00 # OE3GAS: forward session to tcp
+21:21:00 tcp:OE3GAS < GASBPQ:OE3GAS-7} Connected to BBS
+21:21:00 tcp:OE3GAS < [BPQ-6.0.25.41-IHJM$]
+21:21:00 tcp:OE3GAS < Please enter your Name
+21:21:00 tcp:OE3GAS < >
+21:21:00 tcp:OE3GAS > [TINYBOX-0.1.0-FH$]
+21:21:00 tcp:OE3GAS < >
+21:21:00 tcp:OE3GAS > SP OE3GAS @ OE3GAS.OOE.AUT.EU < OE1ABC
+21:21:00 tcp:OE3GAS < OK
+21:21:00 tcp:OE3GAS > Test A1
+21:21:00 tcp:OE3GAS > R:261007/1920Z @:OE3XTC.#NOE.AUT.EU [Hollabrunn] #:1 $:1_OE3XTC
+21:21:00 tcp:OE3GAS > 
+21:21:00 tcp:OE3GAS > ein paar zeilen text
+21:21:00 tcp:OE3GAS > so halt
+21:21:00 tcp:OE3GAS > 73!
+21:21:00 tcp:OE3GAS > 
+21:21:00 # OE3GAS: message 1 (1_OE3XTC) done
+21:21:00 tcp:OE3GAS < >
+21:21:00 tcp:OE3GAS > F>
+21:21:01 tcp:OE3GAS < *** DONE
+21:21:01 # OE3GAS: called OE3GAS via tcp, mode ascii, SID [BPQ-6.0.25.41-IHJM$], received 0, rejected 0, sent 1 (rejected 0, later 0)
+21:22:03 # msg 2 (2_OE3XTC) queued for OE3GAS
+21:22:17 tcp:OE3GAS > OE3XTC
+21:22:17 tcp:OE3GAS > ******
+21:22:17 # OE3GAS: forward session to tcp
+21:22:17 tcp:OE3GAS < GASBPQ:OE3GAS-7} Connected to BBS
+21:22:18 tcp:OE3GAS < [BPQ-6.0.25.41-IHJM$]
+21:22:18 tcp:OE3GAS < Please enter your Name
+21:22:18 tcp:OE3GAS < >
+21:22:18 tcp:OE3GAS > [TINYBOX-0.1.0-FH$]
+21:22:18 tcp:OE3GAS < >
+21:22:18 tcp:OE3GAS > SB ALL @ WW < OE1ABC $2_OE3XTC
+21:22:18 tcp:OE3GAS < OK
+21:22:18 tcp:OE3GAS > Test A2
+21:22:18 tcp:OE3GAS > R:261007/1922Z @:OE3XTC.#NOE.AUT.EU [Hollabrunn] #:2 $:2_OE3XTC
+21:22:18 tcp:OE3GAS > 
+21:22:18 tcp:OE3GAS > asldasldf
+21:22:18 tcp:OE3GAS > asdfkjasldkfjö
+21:22:18 tcp:OE3GAS > 
+21:22:18 # OE3GAS: message 2 (2_OE3XTC) done
+21:22:18 tcp:OE3GAS < >
+21:22:18 tcp:OE3GAS > F>
+21:22:18 tcp:OE3GAS < *** DONE
+21:22:18 # OE3GAS: called OE3GAS via tcp, mode ascii, SID [BPQ-6.0.25.41-IHJM$], received 0, rejected 0, sent 1 (rejected 0, later 0)
+
+## Tinybox_log_2026-10-08_14-54-33.log
+14:54:33 # forward port listening on 127.0.0.1:6411
+14:54:33 # forward module on: OE3XTC.#NOE.AUT.EU, partners OE3GAS
+14:56:23 tcp:OE3GAS > OE3XTC
+14:56:23 tcp:OE3GAS > ******
+14:56:23 # OE3GAS: forward session to tcp
+14:56:23 tcp:OE3GAS < GASBPQ:OE3GAS-7} Connected to BBS
+14:56:23 tcp:OE3GAS < [BPQ-6.0.25.41-IHJM$]
+14:56:23 tcp:OE3GAS < Please enter your Name
+14:56:23 tcp:OE3GAS < >
+14:56:23 tcp:OE3GAS > [TINYBOX-0.1.0-FH$]
+14:56:23 tcp:OE3GAS < >
+14:56:23 tcp:OE3GAS > F>
+14:56:23 tcp:OE3GAS < SP OE1ABC @ OE3XTC.#NOE.AUT.EU < OE3GAS $3_OE3GAS
+14:56:23 tcp:OE3GAS > OK
+14:56:24 tcp:OE3GAS < Test B1
+14:56:24 tcp:OE3GAS < R:261008/1256Z 3@OE3GAS. LinBPQ6.0.25
+14:56:24 tcp:OE3GAS < 
+14:56:24 tcp:OE3GAS < aslkfjalsdkjflasjkf
+14:56:24 tcp:OE3GAS < kalsdjfaskldjflskadj
+14:56:24 tcp:OE3GAS < 
+14:56:24 tcp:OE3GAS < 
+14:56:24 # OE3GAS: message 3_OE3GAS stored as 3
+14:56:24 tcp:OE3GAS > F>
+14:56:24 tcp:OE3GAS < *** DONE
+14:56:24 # OE3GAS: called OE3GAS via tcp, mode ascii, SID [BPQ-6.0.25.41-IHJM$], received 1, rejected 0, sent 0
+15:06:37 tcp:OE3GAS > OE3XTC
+15:06:37 tcp:OE3GAS > ******
+15:06:37 # OE3GAS: forward session to tcp
+15:06:37 tcp:OE3GAS < GASBPQ:OE3GAS-7} Connected to BBS
+15:06:37 tcp:OE3GAS < [BPQ-6.0.25.41-B1FWIHJM$]
+15:06:37 tcp:OE3GAS < Please enter your Name
+15:06:37 tcp:OE3GAS < >
+15:06:37 tcp:OE3GAS > [TINYBOX-0.1.0-FH$]
+15:06:37 tcp:OE3GAS > FF
+15:06:37 tcp:OE3GAS < FB P OE3GAS OE3XTC OE3ABC 5_OE3GAS 60
+15:06:37 tcp:OE3GAS < F> DA
+15:06:37 tcp:OE3GAS > FS +
+15:06:38 # WARN OE3GAS: called OE3GAS via tcp, mode fbb, SID [BPQ-6.0.25.41-B1FWIHJM$], received 0, rejected 0, sent 0, ERROR connection closed by partner (in a message)
+15:08:01 tcp:OE3GAS > OE3XTC
+15:08:01 tcp:OE3GAS > ******
+15:08:01 # OE3GAS: forward session to tcp
+15:08:01 tcp:OE3GAS < GASBPQ:OE3GAS-7} Connected to BBS
+15:08:01 tcp:OE3GAS < [BPQ-6.0.25.41-B1FWIHJM$]
+15:08:01 tcp:OE3GAS < Please enter your Name
+15:08:01 tcp:OE3GAS < >
+15:08:01 tcp:OE3GAS > [TINYBOX-0.1.0-FH$]
+15:08:01 tcp:OE3GAS > FF
+15:08:01 tcp:OE3GAS < FB P OE3GAS OE3XTC OE3ABC 5_OE3GAS 60
+15:08:01 tcp:OE3GAS < FB P OE3GAS OE3XTC.@NOE.AUT.EU OE3ABC 6_OE3GAS 74
+15:08:01 tcp:OE3GAS < F> 7E
+15:08:01 # OE3GAS: offer P 6_OE3GAS -> OE3ABC @ OE3XTC.@NOE.AUT.EU rejected: invalid_address OE3XTC.@NOE.AUT.EU
+15:08:01 tcp:OE3GAS > FS +-
+15:08:02 # WARN OE3GAS: called OE3GAS via tcp, mode fbb, SID [BPQ-6.0.25.41-B1FWIHJM$], received 0, rejected 0, sent 0, ERROR connection closed by partner (in a message)

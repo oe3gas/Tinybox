@@ -231,7 +231,7 @@ class SchedulerTests(SendBase):
         now = time.monotonic()
         self.module.last_call["OE3GAS"] = now
         self.assertFalse(self.module.due(p, now + 60, 600))
-        self.assertTrue(self.module.due(p, now + p.retry_min * 60, 600))
+        self.assertTrue(self.module.due(p, now + p.retry_min * 60 + 1, 600))   # +1: float rounding
 
     async def test_unreachable_partner_waits(self):
         self.server.close()

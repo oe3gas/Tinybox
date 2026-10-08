@@ -278,7 +278,7 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(self.rx.answer(self.prop()), "+")
         self.assertEqual(self.rx.answer(self.prop(type="T")), "-")
         self.assertEqual(self.rx.answer(self.prop(to_call="NO CALL")), "-")
-        self.assertEqual(self.rx.answer(self.prop(at_addr="BAD..ADDR")), "-")
+        self.assertEqual(self.rx.answer(self.prop(at_addr="BAD..ADDR")), "+")   # taken, held
         self.assertEqual(self.rx.answer(self.prop(size=10**6)), "-")
         self.assertEqual(self.rx.answer(self.prop(), {"1_OE3GAS"}), "-")
 
@@ -294,6 +294,13 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(self.rx.answer(p), "+")                  # known MID, no M: held
         self.rx.peer_sid = parse_sid("[X-1-HM$]")
         self.assertEqual(self.rx.answer(p), "-")
+
+    def test_bad_address_is_held_not_lost(self):
+        p = self.prop(at_addr="OE3XTC.@NOE.AUT.EU", bid="6_OE3GAS")   # seen from LinBPQ
+        self.assertEqual(self.rx.answer(p), "+")
+        msg = self.app.store.get(self.rx.store(p, "B2 Test", "Text\n\n"))
+        self.assertEqual((msg.fwd, msg.at_addr, msg.body), ("H", "", "Text"))
+        self.assertIn("OE3XTC.@NOE.AUT.EU", msg.note)
 
     def test_forwarded_bulletins_and_brocast(self):
         self.rx.store(self.prop(type="B", to_call="ALL", at_addr="WW", bid="7_OE3GAS"),
