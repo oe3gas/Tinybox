@@ -34,7 +34,10 @@
 
   <div class="main-col">
   <nav id="boards" class="boards" aria-label="Chat boards"></nav>
-  <div id="board-head" class="board-head hidden"><b id="bh-name"></b> <span id="bh-desc" class="muted"></span></div>
+  <div id="board-head" class="board-head hidden">
+    <div class="bh-text"><b id="bh-name"></b> <span id="bh-desc" class="muted"></span></div>
+    <button id="bh-leave" class="leave-btn" title="Leave this board">Leave</button>
+  </div>
 
   <div id="mail-banner" class="mail-banner hidden" role="status">
     <span>✉ <b id="mb-count"></b> <span id="mb-text"></span></span>
@@ -84,7 +87,7 @@
 
     <h3>Connection</h3>
     <p id="conn-info" class="muted"></p>
-    <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button><button id="btn-leave">Leave board</button></div>
+    <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button></div>
 
     <h3>My APRS symbol</h3>
     <p class="muted">Shown as a badge on your avatar. Sent once when you join a board (2 bytes), others see a change the next time you join. “None”: others see the symbol of your APRS beacon, if they hear it.</p>

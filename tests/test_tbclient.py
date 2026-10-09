@@ -159,6 +159,36 @@ class FakeDirewolf:
             pass
 
 
+class OwnReactionTests(unittest.TestCase):
+    """CR8: an own reaction shows at once, the echo confirms it."""
+
+    def test_react_shows_at_once(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, link="telnet"))
+                sent: list[str] = []
+                core.link.send_line = sent.append
+                core.board = {"n": 1, "name": "Chat", "keep": "live"}
+                core._event(proto.Event(5, "line", "OE3TEC", text="hallo"))
+                self.assertTrue(core.react(5, ":+1"))
+                self.assertEqual(sent, ["/R 5 :+1"])
+                snap = core.snapshot()
+                self.assertEqual(snap["messages"][0]["reactions"], {":+1": ["OE3GAS"]})
+                self.assertEqual(snap["pending_reacts"], ["5::+1"])
+                # the echo from the TinyBox: no double entry, no longer pending
+                core._event(proto.Event(6, "react", "OE3GAS", text=":+1", ref=5))
+                snap = core.snapshot()
+                self.assertEqual(snap["messages"][0]["reactions"], {":+1": ["OE3GAS"]})
+                self.assertEqual(snap["pending_reacts"], [])
+                # no echo within 2 minutes: taken back
+                core.react(5, "~01")
+                core.pending_reacts[(5, "~01")] -= 200
+                snap = core.snapshot()
+                self.assertEqual(snap["messages"][0]["reactions"], {":+1": ["OE3GAS"]})
+                self.assertEqual(snap["pending_reacts"], [])
+        asyncio.run(scenario())
+
+
 class EndToEndTests(unittest.TestCase):
     def test_radio_with_ui(self):
         async def scenario():

@@ -3,11 +3,12 @@
   --bg: #eef1f4; --surface: #ffffff; --text: #1b1f24; --muted: #66707a; --line: #d9dee3;
   --top: #1d2b3a; --top-text: #ffffff; --own: #d6ecff; --own-text: #0b3a63;
   --accent: #1f6fd1; --ok: #2e9b4f; --warn: #d08a12; --bad: #c43c3c;
-  --sys: #7b8590;
+  --sys: #7b8590; --mention: #fff3c4; --mention-line: #e8b84a;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #12161b; --surface: #1d232a; --text: #e6e9ec; --muted: #9aa4ad; --line: #2c343d;
-          --top: #0c1218; --own: #1c3b5c; --own-text: #dcebff; --accent: #5aa2ff; --sys: #8b959e; }
+          --top: #0c1218; --own: #1c3b5c; --own-text: #dcebff; --accent: #5aa2ff; --sys: #8b959e;
+          --mention: #4a3b12; --mention-line: #b8902e; }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -43,7 +44,11 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
   padding: 6px 8px 6px 14px; background: var(--own); color: var(--own-text); font-size: 13px;
   border-bottom: 1px solid var(--line); }
 .mail-banner .icon-btn { font-size: 14px; color: inherit; }
-.board-head { padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.board-head { padding: 6px 10px 6px 14px; border-bottom: 1px solid var(--line); background: var(--surface);
+  display: flex; align-items: center; gap: 8px; }
+.bh-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leave-btn { flex: none; font-size: 12px; padding: 3px 10px; border-radius: 12px; color: var(--muted); }
+.leave-btn:hover { color: var(--bad); border-color: var(--bad); }
 .plist { list-style: none; margin: 0; padding: 0; }
 .plist li { display: flex; align-items: center; gap: 10px; padding: 5px 6px; }
 .plist .c { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
@@ -74,6 +79,8 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .chip .n { color: var(--muted); font-size: 11px; margin-left: 4px; }
 .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .chip.active .n { color: #dbe8ff; }
+.chip.leave { color: var(--muted); margin-left: auto; position: sticky; right: 0;
+  box-shadow: -10px 0 8px -2px var(--surface); }
 
 /* --- chat ------------------------------------------------------------- */
 .chat { flex: 1; overflow-y: auto; padding: 10px 12px 4px; -webkit-overflow-scrolling: touch; }
@@ -93,10 +100,19 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .bubble.pending { opacity: .55; }
 .bubble.history { border-style: dashed; }
 .bubble.selected { outline: 2px solid var(--accent); }
+/* one emoji alone: big, without bubble (CR1) */
+.bubble.jumbo { font-size: 44px; line-height: 1.1; padding: 0 2px; background: transparent !important;
+  border-color: transparent !important; }
+/* a line that mentions me with @CALL (CR15) */
+.bubble.mention { background: var(--mention); border-color: var(--mention-line); }
+.bubble .mono { font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 13px;
+  white-space: pre; overflow-x: auto; display: inline-block; max-width: 100%; vertical-align: top; }
+.bubble a { overflow-wrap: anywhere; }
 .meta { font-size: 10px; color: var(--muted); margin: 2px 6px 0; }
 .reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .react { font-size: 13px; padding: 0 7px; border-radius: 10px; line-height: 20px; }
 .react.mine { border-color: var(--accent); }
+.react.pending { opacity: .55; border-style: dashed; }
 .sys { text-align: center; color: var(--sys); font-size: 12px; margin: 8px 0; }
 .divider { text-align: center; color: var(--muted); font-size: 11px; margin: 10px 0;
   display: flex; align-items: center; gap: 8px; }
@@ -161,7 +177,7 @@ a { color: var(--accent); }
   #app { max-width: 1400px; }
   .nav { display: block; }
   .boards { display: none; }
-  .board-head:not(.hidden) { display: block; }
+  .board-head:not(.hidden) { display: flex; }
 }
 @media (min-width: 1000px) {
   .people { display: block; }

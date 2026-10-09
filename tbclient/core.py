@@ -43,6 +43,7 @@ class ClientCore:
         self.members: dict[str, str] = {}         # call -> symbol sent with the join
         self.messages: list[dict] = []
         self.pending: list[dict] = []
+        self.pending_reacts: dict[tuple[int, str], float] = {}   # own reactions not echoed yet
         self.console: deque[str] = deque(maxlen=200)
         self.heard: dict[str, str] = {}           # call -> APRS symbol from a beacon
         self.heard_at: dict[str, float] = {}      # call -> last frame heard (any kind)
@@ -136,6 +137,15 @@ class ClientCore:
         if not self.board or not re.match(r"^[!-~]{1,8}$", emoji) or not 0 <= seq < 256:
             return False
         self._send(f"/R {seq:X} {emoji}")
+        # show it at once (CR8); the echo from the TinyBox confirms it
+        for m in reversed(self.messages):
+            if m.get("seq") == seq and m["kind"] == "line":
+                calls = m["reactions"].setdefault(emoji, [])
+                if self.cfg.mycall not in calls:
+                    calls.append(self.cfg.mycall)
+                    self.pending_reacts[(seq, emoji)] = time.time()
+                break
+        self._touch()
         return True
 
     def _send(self, line: str) -> None:
@@ -305,6 +315,7 @@ class ClientCore:
         self.messages = []
         self.seen = set()
         self.unwrap = proto.Unwrapper()
+        self.pending_reacts = {}
 
     def _event(self, ev: proto.Event) -> None:
         if not self.board:
@@ -339,6 +350,8 @@ class ClientCore:
                     if ev.call not in calls:
                         calls.append(ev.call)
                     break
+            if ev.call == self.cfg.mycall:
+                self.pending_reacts.pop((ev.ref, ev.text), None)
         elif ev.kind == "system":
             self._add({"id": pos, "seq": ev.seq, "kind": "system", "text": ev.text,
                        "time": now})
@@ -350,6 +363,21 @@ class ClientCore:
 
     # --- for the GUI -------------------------------------------------------------------
 
+    def _expire_reacts(self, now: float) -> None:
+        """Own reactions that never came back within 2 min are taken back."""
+        for (seq, emoji), at in list(self.pending_reacts.items()):
+            if now - at < 120:
+                continue
+            del self.pending_reacts[(seq, emoji)]
+            for m in reversed(self.messages):
+                if m.get("seq") == seq and m["kind"] == "line":
+                    calls = m["reactions"].get(emoji, [])
+                    if self.cfg.mycall in calls:
+                        calls.remove(self.cfg.mycall)
+                    if not calls:
+                        m["reactions"].pop(emoji, None)
+                    break
+
     def symbol_of(self, call: str) -> str:
         if call == self.cfg.mycall and self.my_symbol:
             return self.my_symbol
@@ -360,6 +388,7 @@ class ClientCore:
         calls.update(m["call"] for m in self.messages if m.get("call"))
         now = time.time()
         self.pending = [p for p in self.pending if now - p["at"] < 120]
+        self._expire_reacts(now)
         return {
             "version": self.version, "client_version": VERSION,
             "mycall": self.cfg.mycall, "tinybox": self.cfg.tinybox_call,
@@ -375,6 +404,7 @@ class ClientCore:
             "symbols": {c: self.symbol_of(c) for c in calls if self.symbol_of(c)},
             "my_symbol": self.my_symbol,
             "messages": self.messages, "pending": [p["text"] for p in self.pending],
+            "pending_reacts": [f"{seq}:{e}" for seq, e in self.pending_reacts],
             "console": list(self.console)[-80:],
         }
 

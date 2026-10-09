@@ -81,6 +81,69 @@ function allEmojis() {
   return [...EMO.emoticons.map(([, e]) => e), ...codes];
 }
 
+// ---------------------------------------------------------------- rich text
+/* Shown text -> DOM nodes, without innerHTML (text from the air is untrusted).
+ *   `mono`   monospace, e.g. ASCII art (nothing else is formatted inside)
+ *   _bold_   bold, only as a whole word: OE3GAS_1 or file_name stay text
+ *   http(s)://... and www.... become links
+ * The text goes over the air unchanged, the formatting happens only here. */
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"]+/gi;
+const BOLD_RE = /(^|[\s(\["'])_([^\s_](?:[^_]*[^\s_])?)_(?=$|[\s.,!?;:)\]"'])/g;
+
+function addBold(parent, text) {
+  let last = 0;
+  for (const m of text.matchAll(BOLD_RE)) {
+    const start = m.index + m[1].length;
+    parent.append(text.slice(last, start), el("b", "", m[2]));
+    last = m.index + m[0].length;
+  }
+  parent.append(text.slice(last));
+}
+
+function addLinks(parent, text) {
+  let last = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    let url = m[0];
+    const trail = url.match(/[.,!?;:)\]'"]+$/);       // "see www.oevsv.at." -> without the dot
+    if (trail) url = url.slice(0, -trail[0].length);
+    if (!url) continue;
+    addBold(parent, text.slice(last, m.index));
+    const a = el("a", "", url);
+    a.href = /^https?:\/\//i.test(url) ? url : "http://" + url;
+    a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.onclick = (ev) => ev.stopPropagation();       // no reaction bar when opening a link
+    parent.append(a);
+    last = m.index + url.length;
+  }
+  addBold(parent, text.slice(last));
+}
+
+function richText(parent, text) {
+  const parts = text.split("`");
+  // an odd number of backticks: the last one has no partner and stays a character
+  const closed = parts.length % 2 === 1 ? parts.length : parts.length - 1;
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1 && i < closed) parent.append(el("code", "mono", parts[i]));
+    else addLinks(parent, (i === closed && i > 0 ? "`" : "") + parts[i]);
+  }
+}
+
+/* A message that is just one emoji is shown big (CR1). */
+const segmenter = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter() : null;
+function isSingleEmoji(text) {
+  const t = text.trim();
+  if (!t || !/\p{Extended_Pictographic}/u.test(t)) return false;
+  if (segmenter) return [...segmenter.segment(t)].length === 1;
+  return [...noVS(t)].length === 1;
+}
+
+/* "@OE3GAS" or "@oe3gas-9" in a line from someone else -> highlight (CR15). */
+function mentionsMe(text) {
+  if (!S) return false;
+  const base = baseCall(S.mycall).replace(/[^A-Z0-9]/g, "");
+  return new RegExp(`(^|[^A-Za-z0-9])@${base}(-\\d{1,2})?(?![A-Za-z0-9])`, "i").test(text);
+}
+
 // ---------------------------------------------------------------- avatars
 const PAL = [["#CECBF6", "#3C3489"], ["#9FE1CB", "#085041"], ["#F5C4B3", "#712B13"],
              ["#F4C0D1", "#72243E"], ["#B5D4F4", "#0C447C"], ["#C0DD97", "#27500A"],
@@ -173,6 +236,12 @@ function renderBoards() {
     c.append(el("span", "n", b.keep === "live" ? "live" : b.keep));
     c.onclick = () => { if (!active) api("join", { board: b.n }); };
     nav.append(c);
+  }
+  if (S.board) {                       // phone: leave the board right here (CR6)
+    const lv = el("button", "chip leave", "Leave ✕");
+    lv.title = `Leave ${S.board.name}`;
+    lv.onclick = () => api("leave");
+    nav.append(lv);
   }
 }
 
@@ -275,8 +344,11 @@ function bubble(m, cont) {
   const li = el("li", "msg" + (own ? " own" : "") + (cont ? " cont" : ""));
   const col = el("div", "col");
   if (!own && !cont) col.append(el("div", "who", m.call));
+  const text = wireToText(m.text);
   const b = el("div", "bubble" + (m.pending ? " pending" : "") + (m.history ? " history" : "")
-               + (selected === m.id ? " selected" : ""), wireToText(m.text));
+               + (selected === m.id ? " selected" : "") + (isSingleEmoji(text) ? " jumbo" : "")
+               + (!own && mentionsMe(text) ? " mention" : ""));
+  richText(b, text);
   if (!m.pending && !m.history && m.seq >= 0) {
     b.onclick = (ev) => { ev.stopPropagation(); openReactBar(m, b); };
   }
@@ -286,8 +358,11 @@ function bubble(m, cont) {
     const rs = el("div", "reacts");
     for (const [code, calls] of r) {
       const mine = calls.includes(S.mycall);
-      const pill = el("button", "react" + (mine ? " mine" : ""), `${wireToText(code)} ${calls.length}`);
-      pill.title = calls.join(", ");
+      const wait = mine && (S.pending_reacts || []).includes(`${m.seq}:${code}`);
+      const pill = el("button", "react" + (mine ? " mine" : "") + (wait ? " pending" : ""),
+                      `${wireToText(code)} ${calls.length}`);
+      if (wait) pill.title = "sending…";
+      if (!wait) pill.title = calls.join(", ");
       if (!mine) pill.onclick = () => api("react", { seq: m.seq, emoji: code });
       rs.append(pill);
     }
@@ -425,7 +500,7 @@ async function start() {
   initEmoji();
   $("btn-connect").onclick = $("btn-connect2").onclick = () => api("connect");
   $("btn-disconnect").onclick = () => api("disconnect");
-  $("btn-leave").onclick = () => api("leave");
+  $("bh-leave").onclick = () => api("leave");
   const openSheet = (focus) => {
     $("sheet").classList.remove("hidden"); renderSymbols();
     if (focus) $(focus).scrollIntoView({ block: "start" });
