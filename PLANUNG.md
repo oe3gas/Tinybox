@@ -550,7 +550,7 @@ UI an TBCHAT-1:   #4F OE3GAS: Servus, Wetter passt :+1 ~1K
 
 ### 12.7 Später
 
-Strukturierter Modus (CBOR statt Menütext), Formulare, kleine Dateien, Sysop-Fernverwaltung mit Challenge-Response (keine Verschlüsselung), Anzeige der Verbindungsqualität, zeitgesteuertes Abholen.
+Strukturierter Modus (CBOR statt Menütext), Formulare, kleine Dateien, Sysop-Fernverwaltung mit Challenge-Response (keine Verschlüsselung), zeitgesteuertes Abholen. Anzeige der Verbindungsqualität: jetzt eigener Abschnitt 14.
 
 ### 12.8 Offline-Mailbox: Abgleich (umgesetzt 10.10.2026)
 
@@ -663,6 +663,101 @@ Ausführliches Konzept mit Protokollen, Routing, Testfällen und Quellen: Claude
 - Getestet: LZHUF gegen LinBPQ-C-Code, Rahmen, und Sitzungen TinyBox ↔ TinyBox in beide Richtungen inklusive Abbruch und Restart. fwdsim kann kein B1.
 
 **Test-Tool fwdsim** (`fwdsim\`, Start mit `fwdsim.bat`, Bedienung in `fwdsim/README.md`): spielt die Partner OE3GAS (`#OOE`, Endstation und Hop) und DL0XTC (`#BAY`, nur über OE3GAS erreichbar, sendet nie auf Funk). TinyBox läuft im Test als OE3XTC (`#NOE`). Testfälle T01–T28 über TCP oder Direwolf, mit Fehlerinjektion. Gegen einen fwdsim-Stellvertreter laufen alle automatischen Fälle grün. Gegen die echte TinyBox (TCP) laufen seit F4 alle 24 automatischen Fälle grün (T01–T16, T18–T20, T24–T28); T21 (Neustart) ist als Unit-Test abgedeckt. Manuell offen: T17, T22, T23. Noch offen: fwdsim nimmt TCP-Anrufe ohne Login an.
+
+---
+
+## 14. Verbindungsqualität (Konzept, entschieden 10.10.2026)
+
+Ziel: Qualität jeder Verbindung live messen und den Usern zeigen. Keine Langzeitstatistik, die Werte werden nach der Abfrage nicht mehr gebraucht.
+
+### 14.1 Direwolf-Fork
+
+Direwolf führt die AX.25-Protokollschicht selbst; über AGW sieht TinyBox keine Retries. Darum ein eigener Fork von `wb2osz/direwolf` (GPL v2), nur für die TinyBox, keine Weitergabe. Läuft auf Windows 11 (Bau mit MSYS2/MinGW + CMake).
+
+**Grundsatz: der Fork zählt nur, er ändert kein Protokollverhalten.** Kleiner Patch, wenige Dateien, damit neue Direwolf-Versionen leicht nachzuziehen sind.
+
+Geprüft am Quelltext (Stand `eda1383`, Mai 2026), alles in `src/ax25_link.c`, Zustandsblock `ax25_dlsm_t` pro Verbindung:
+
+| Zähler | Wo einhängen | Bemerkung |
+|---|---|---|
+| `i_new` | `i_frame_pop_off_queue()` | neues I-Frame gesendet |
+| `i_retry` | `invoke_retransmission()` und SREJ-Antwort (`ax25_i_frame` bei Zeile ~4230/4265) | I-Frame wiederholt |
+| `bytes_new`, `bytes_retry` | dieselben Stellen | Nutzbytes netto / wiederholt |
+| `rej_rx` | gibt es schon: `count_recv_frame_type[frame_type_S_REJ]` | Gegenstation hat einen unserer Frames verpasst |
+| `rej_tx` | beim Senden von REJ/SREJ (`i_frame_continued()`, Zeile ~2996, bzw. `send_srej_frames()`) | wir haben einen Frame verpasst |
+| `retry_rx` | `i_frame_continued()`, Zweig `ns != S->vr`, wenn N(S) schon empfangen war (liegt hinter V(R)) | Gegenstation wiederholt |
+| `i_rx` | gibt es schon: `count_recv_frame_type[frame_type_I]` | empfangene I-Frames |
+| `t1_exp` | `t1_expiry()` | T1 abgelaufen |
+| `srt` | gibt es schon: `S->srt` | geglättete Round-Trip-Zeit (nur Anzeige) |
+
+Abfrage über eine **AGW-Erweiterung**: neuer Frame-Typ `Q` (in Direwolf bisher unbenutzt), Ablauf wie das vorhandene `Y` (Anfrage → dlq → `ax25_link.c` → Antwort an den Client). Antwort: eine Textzeile mit allen Zählern seit Verbindungsaufbau. Normale AGW-Clients schicken nie `Q`, es bricht also nichts.
+
+Der **Abbruchgrund** braucht keinen Fork: Direwolf meldet ihn schon im AGW-Frame `d` als Text (`*** DISCONNECTED RETRYOUT With …` statt `*** DISCONNECTED From Station …`). TinyBox wertet das heute noch nicht aus.
+
+### 14.2 Messung in der TinyBox
+
+TinyBox fragt die Zähler per `Q` ab und rechnet selbst; Bewertung, Fenster und Formatierung liegen in der TinyBox, nicht im Fork.
+
+Pro Richtung eine Verlustquote:
+
+| Richtung | Terminal-User (I-Frames) | Client im UI-Modus |
+|---|---|---|
+| TinyBox → Station | (`i_retry` + `t1_exp`) / gesendete I-Frames, `rej_rx` | Empfangsquote der TBCHAT-Frames (14.3) |
+| Station → TinyBox | (`rej_tx` + `retry_rx`) / empfangene I-Frames | wie links |
+
+- **Fenster:** die letzten **50 Frames pro Richtung** (TinyBox bildet Differenzen zwischen den Abfragen). Zeigt den aktuellen Zustand, nicht den Durchschnitt seit Verbindungsaufbau.
+- **Mindestmenge:** eine Richtung zählt erst ab **20 Frames**. Hat keine Richtung 20 Frames → noch kein Ergebnis.
+- **Die schlechtere Richtung bestimmt die Balken.**
+- **Schwellen** (Startwerte, in `tinybox.conf` einstellbar):
+
+| Verlust | Balken |
+|---|---|
+| < 2 % | 5 |
+| < 5 % | 4 |
+| < 10 % | 3 |
+| < 20 % | 2 |
+| darüber | 1 |
+| zu wenig Daten | 5 ausgegraute Balken |
+
+- Jeder T1-Ablauf im Fenster kostet zusätzlich einen Balken (minimal 1).
+- `bytes_new`/`bytes_retry` fließen nicht in die Balken ein, nur in `stat`.
+
+### 14.3 Empfangsquote der Clients (ohne zusätzliche Frames)
+
+Die Folgenummern gibt es schon (`chat.py`, hex 0–FF pro Board). Der Client fordert Lücken mit `//RESEND von-bis` nach (`tbclient/core.py`, bis Lücke 32). TinyBox kennt also gesendete und nachgeforderte Ereignisse und berechnet die Quote selbst – der Client meldet nichts zusätzlich (sonst wieder 1 Frame pro Teilnehmer).
+
+- Neu: `//LOST <n>` vom Client, wenn eine Lücke größer als 32 ist (heute fordert er dann nichts an, TinyBox erführe davon nichts).
+- Fehlende letzte Frames merkt der Client erst beim nächsten Ereignis; die Quote hinkt in ruhigen Boards etwas nach. Akzeptiert.
+- Maßnahmen bei schlechter Quote (z. B. priorisieren) später.
+
+### 14.4 Ausgabe
+
+**Live-Ansicht im Client:** Balken neben dem Avatar in der Teilnehmerliste. Alle sehen die Qualität aller. Neuer Ereignistyp im TBCHAT-Schema (12.4), z. B.
+
+```
+#53 %OE3TEC 4 OE1ABC 2 OE3XYZ ?
+```
+
+- `?` = noch kein Ergebnis (graue Balken).
+- Bekommt eine Folgenummer wie alle Ereignisse (Lückenerkennung, RESEND).
+- Nur bei Änderung der Balken, alle Stationen gebündelt, höchstens 1× pro Minute und Board.
+- Nicht in der Chat-History (`chat_lines`) speichern; Terminal-User bekommen ihn nicht.
+
+**Abbruch:** nur als Chat-Ereignis „Verbindung zu OE3XYZ verloren“ statt „hat das Board verlassen“ (aus dem AGW-`d`-Text, 14.1). Fließt nicht in die Balken ein.
+
+**Befehl `stat`** (Mailbox und Chat): `stat` = eigene Verbindung, `stat alle` = alle Verbindungen. Reiner Text, z. B.
+
+```
+Call     Bal  Hin   Rück  Retry  REJrx REJtx T1  Netto/Wdh   RX-Quote
+OE3TEC   4    3%    1%    3%     1     0     0   2.1k/64     -
+OE1ABC   2    14%   4%    -      -     2     1   -           86%
+```
+
+### 14.5 Offen
+
+- Fork-Repo anlegen (z. B. `oe3gas/direwolf`), Bau unter Windows 11 einrichten.
+- Antwortformat der `Q`-Abfrage festlegen.
+- Wie oft TinyBox `Q` abfragt (Vorschlag: nach jeder gesendeten Chat-Zeile und alle 30 s).
 
 ---
 
