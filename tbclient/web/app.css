@@ -172,6 +172,13 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
   font-size: 11px; max-height: 200px; overflow: auto; white-space: pre-wrap; }
 a { color: var(--accent); }
 
+/* --- system message from the TinyBox (shutdown) ------------------------------ */
+.sys-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 8px 8px 14px; background: var(--bad); color: #fff; font-size: 13px; font-weight: 600; }
+.sys-banner.info { background: var(--ok); }
+.sys-banner .icon-btn { font-size: 14px; color: inherit; }
+.sys-banner button.sm { background: #fff; color: var(--bad); border-color: #fff; }
+
 /* --- mailbox (C3) ----------------------------------------------------------- */
 button.sm { font-size: 12px; padding: 3px 10px; border-radius: 12px; }
 button.primary.sm { padding: 4px 12px; }

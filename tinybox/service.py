@@ -41,6 +41,7 @@ class MessageService:
         self.bus = bus
         self.cfg = cfg
         self.chat = ChatHub(store, bus, cfg)
+        self.shutdown_left = None   # callable -> seconds, while a shutdown is pending
 
     # --- helpers --------------------------------------------------------
 

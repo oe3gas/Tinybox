@@ -15,7 +15,7 @@ cd /d E:\Tinybox
 py -3 -m tinybox -c tinybox.conf
 ```
 
-Beenden mit `SHUTDOWN` (oder Ctrl+C). Die Daten liegen unter `data\`.
+Beenden mit `SHUTDOWN` (verbundene Stationen werden 60 s vorher gewarnt) oder sofort mit `SHUTDOWN NOW` bzw. Ctrl+C. Die Daten liegen unter `data\`.
 
 Log-Datei: in `tinybox.conf` unter `[logging]` einen vorhandenen Ordner bei
 `log_dir` eintragen (z. B. `logs`). Jeder Start legt dort
@@ -75,7 +75,9 @@ Im TinyBox-Fenster tippen. Es gelten alle Mailbox-Befehle mit Sysop-Rechten
 | `DISC call` | Benutzer trennen (ohne SSID: alle SSIDs dieses Calls) |
 | `STATUS` | Direwolf-Verbindung, Benutzer, Nachrichten |
 | `WEB` | Login-Link der Weboberfläche anzeigen |
-| `SHUTDOWN` | TinyBox sauber beenden (Benutzer werden verabschiedet) |
+| `SHUTDOWN [s]` | TinyBox in s Sekunden beenden (Standard 60). Alle verbundenen Stationen bekommen sofort eine Systemnachricht, Erinnerung bei 30 und 10 s; wer sich in der Zeit anmeldet, wird beim Login gewarnt. Ist niemand verbunden, sofort |
+| `SHUTDOWN NOW` | Sofort beenden (Benutzer werden verabschiedet) |
+| `SHUTDOWN CANCEL` | Angekündigten Shutdown absagen, die Stationen werden informiert |
 
 Nachricht beenden mit `/EX`. Log-Meldungen und Monitor erscheinen
 zwischen den Eingaben – das ist normal.

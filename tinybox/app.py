@@ -26,6 +26,7 @@ class App:
     web_login_url: str | None = None     # set when the web GUI runs
     brocast: Any = None                  # BrocastPublisher, set when publishing
     forward: Any = None                  # ForwardModule, only with [forward] enabled = yes
+    shutdown: Any = None                 # ShutdownTimer (SHUTDOWN with warning)
 
     @classmethod
     def create(cls, cfg: Config, db_path: str | None = None) -> "App":
@@ -33,4 +34,7 @@ class App:
         bus = EventBus()
         service = MessageService(store, bus, cfg)
         service.assign_missing_bids()          # schema 4 -> 5, no-op afterwards
-        return cls(cfg, store, bus, service, SessionRegistry(cfg.mailbox.max_users))
+        app = cls(cfg, store, bus, service, SessionRegistry(cfg.mailbox.max_users))
+        from .shutdown import ShutdownTimer
+        app.shutdown = ShutdownTimer(app)
+        return app

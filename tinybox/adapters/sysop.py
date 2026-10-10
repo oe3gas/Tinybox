@@ -166,6 +166,9 @@ class SysopConsole:
             data_dir=cfg.storage.data_dir,
         )
         self.out(*[line.format(**values) for line in texts.STATUS_LINES])
+        left = self.app.shutdown.seconds_left() if self.app.shutdown else None
+        if left is not None:
+            self.out(texts.SHUTDOWN_PENDING.format(sec=left))
 
     def cmd_web(self, arg: str) -> None:
         # shown on the console only - it contains the secret token
@@ -238,9 +241,24 @@ class SysopConsole:
         self._hold_rel(arg, release=True)
 
     def cmd_shutdown(self, arg: str) -> None:
-        self.out(texts.SHUTTING_DOWN)
-        if self.app.stop_event is not None:
-            self.app.stop_event.set()
+        """SHUTDOWN [seconds] warns all stations first; NOW at once; CANCEL."""
+        arg = arg.strip().upper()
+        timer = self.app.shutdown
+        if arg == "CANCEL":
+            self.out(texts.SHUTDOWN_CANCEL_DONE if timer.cancel() else texts.SHUTDOWN_NONE)
+            return
+        if arg and arg != "NOW" and not arg.isdigit():
+            self.out(texts.USAGE_SHUTDOWN)
+            return
+        users = len(self.app.registry)
+        # nobody connected and no time given: no reason to wait
+        if arg == "NOW" or arg == "0" or (not arg and users == 0):
+            self.out(texts.SHUTTING_DOWN)
+            if self.app.stop_event is not None:
+                self.app.stop_event.set()
+            return
+        sec = timer.schedule(int(arg) if arg else 60, self.app.cfg.station.sysop_call)
+        self.out(texts.SHUTDOWN_SCHEDULED.format(sec=sec, n=users))
 
     COMMANDS: dict[str, Callable[["SysopConsole", str], None]] = {
         "H": cmd_help, "?": cmd_help, "HELP": cmd_help,

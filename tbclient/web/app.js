@@ -208,6 +208,7 @@ function render() {
   $("input").disabled = !inBoard; $("btn-send").disabled = !inBoard;
   $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
   renderMail();
+  renderSys();
   renderMailbox();
   renderBoards();
   renderNav();
@@ -261,6 +262,24 @@ function renderMail() {
   const unread = S.mailbox ? S.mailbox.unread : 0;
   document.title = (unread ? `(${unread}) ` : "") + "TinyBox";
 }
+
+// System message of the TinyBox (sysop shuts down): red banner with countdown.
+let sysDismissed = 0;
+function renderSys() {
+  const m = S.sysmsg;
+  const show = !!m && m.at !== sysDismissed &&
+    !(m.left < 0 && Date.now() / 1000 - m.at > 60);        // "called off" for one minute
+  $("sys-banner").classList.toggle("hidden", !show);
+  if (!show) return;
+  const cancelled = m.left < 0;
+  const left = Math.max(0, m.left - Math.floor(Date.now() / 1000 - m.at));
+  $("sys-banner").classList.toggle("info", cancelled);
+  $("sys-text").textContent = cancelled ? "Shutdown called off - the TinyBox stays on."
+    : `${S.tinybox} shuts down in ${left} s - please disconnect.`;
+  $("sys-text").title = m.text;
+  $("sys-disc").classList.toggle("hidden", cancelled || S.state === "offline");
+}
+setInterval(() => { if (S) renderSys(); }, 1000);
 
 function renderNav() {
   const box = $("nav-boards");
@@ -871,6 +890,8 @@ async function start() {
   try { SYMNAMES = await (await fetch("/aprs/names.json")).json(); } catch (e) { /* no names */ }
   initEmoji();
   initMail();
+  $("sys-disc").onclick = () => api("disconnect");
+  $("sys-close").onclick = () => { sysDismissed = S && S.sysmsg ? S.sysmsg.at : 0; renderSys(); };
   $("btn-connect").onclick = $("btn-connect2").onclick = () => api("connect");
   $("btn-disconnect").onclick = () => api("disconnect");
   $("bh-leave").onclick = () => api("leave");

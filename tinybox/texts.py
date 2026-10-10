@@ -141,6 +141,9 @@ IDLE_TIMEOUT = "Idle timeout, disconnecting. 73."
 
 DISC_BY_SYSOP = "Disconnected by sysop. 73."
 SHUTDOWN = "TinyBox is shutting down. 73."
+SHUTDOWN_WARNING = ("*** System message from {sysop}: {mailbox} goes down in {left}. "
+                    "Please finish and disconnect (B). ***")
+SHUTDOWN_CANCELLED = "*** System message: shutdown of {mailbox} cancelled. ***"
 
 # sysop console only
 CONSOLE_BANNER = "*** TinyBox sysop console - type H for help ***"
@@ -156,7 +159,9 @@ HELP_CONSOLE = [
     "  FWQ        Messages waiting for forwarding",
     "  HOLD n     Keep message n from forwarding (held, only the sysop sees it)",
     "  REL n      Release message n: forward it, or make it a normal local message",
-    "  SHUTDOWN   Stop TinyBox",
+    "  SHUTDOWN [s]   Stop TinyBox in s seconds (default 60), users are warned",
+    "  SHUTDOWN NOW   Stop at once",
+    "  SHUTDOWN CANCEL  Call off a pending shutdown",
 ]
 CONSOLE_NO_BYE = "This is the local console. Use SHUTDOWN to stop TinyBox."
 WHO_HEADER = "Call       Via     Since (UTC)       State"
@@ -175,6 +180,12 @@ STATUS_LINES = [
     "Data:      {data_dir}",
 ]
 SHUTTING_DOWN = "Shutting down ..."
+SHUTDOWN_SCHEDULED = ("Shutdown in {sec} s, {n} station(s) warned. "
+                      "SHUTDOWN CANCEL calls it off.")
+SHUTDOWN_PENDING = "Shutdown pending: {sec} s left."
+SHUTDOWN_CANCEL_DONE = "Shutdown cancelled, stations informed."
+SHUTDOWN_NONE = "No shutdown pending."
+USAGE_SHUTDOWN = "Usage: SHUTDOWN [seconds | NOW | CANCEL]"
 FWD_OFF = "Forwarding is off ([forward] enabled = no)."
 FWD_START = "Connecting to {call} ..."
 FWD_DONE = "Forward {call}: {result}"

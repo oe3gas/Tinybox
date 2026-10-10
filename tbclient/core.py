@@ -50,6 +50,7 @@ class ClientCore:
         self.heard: dict[str, str] = {}           # call -> APRS symbol from a beacon
         self.heard_at: dict[str, float] = {}      # call -> last frame heard (any kind)
         self.mail: dict | None = None             # {"count": n, "at": unix} - C1 notice
+        self.sysmsg: dict | None = None           # system message (shutdown) from the TinyBox
         self.tinybox_direct_at = 0.0
         self.unwrap = proto.Unwrapper()
         self.seen: set[int] = set()
@@ -170,6 +171,7 @@ class ClientCore:
             self._clear_board()
             self.pending.clear()
             self.sync.link_lost()
+            self.sysmsg = None                   # a shutdown warning is over now
             if self._hs_task:
                 self._hs_task.cancel()
         self.console.append(f"*** {state}" + (f" ({reason})" if reason else ""))
@@ -296,6 +298,12 @@ class ClientCore:
             self._clear_board()
             self.settings.pop("board", None)
             self._save_settings()
+        elif cmd == "SYS":
+            # //SYS <seconds left> <text>  (-1 = shutdown called off)
+            left, _, text = rest.partition(" ")
+            if re.match(r"^-?\d+$", left):
+                self.sysmsg = {"text": text, "left": int(left), "at": int(time.time())}
+                self.console.append("*** " + text)
         elif cmd == "ERR":
             self.console.append(line)
         # //CLIENT etc. echoed by a terminal: ignore
@@ -413,6 +421,7 @@ class ClientCore:
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),
             "mail": self.mail,
+            "sysmsg": self.sysmsg,
             "heard": [{"call": c, "symbol": self.heard.get(c, ""), "ago": int(now - t)}
                       for c, t in sorted(self.heard_at.items(), key=lambda kv: -kv[1])[:30]
                       if c not in self.members and c != self.cfg.tinybox_call],

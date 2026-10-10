@@ -355,10 +355,18 @@ class WebServer:
             if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "disconnect":
                 return {"disconnected": self._disconnect(parts[1])}
             if parts == ["shutdown"]:
+                delay = data.get("delay", 0)
+                if not isinstance(delay, int) or delay < 0:
+                    raise HttpError(400, "delay: seconds")
+                if delay and len(app.registry):        # warn the stations first
+                    log.info("shutdown in %d s requested from web GUI", delay)
+                    return {"ok": True, "delay": app.shutdown.schedule(delay, sysop)}
                 log.info("shutdown requested from web GUI")
                 if app.stop_event is not None:
                     asyncio.get_running_loop().call_later(0.3, app.stop_event.set)
-                return {"ok": True}
+                return {"ok": True, "delay": 0}
+            if parts == ["shutdown", "cancel"]:
+                return {"ok": app.shutdown.cancel()}
         raise HttpError(404)
 
     @staticmethod
@@ -393,6 +401,7 @@ class WebServer:
             "unread": sum(m.status == "N" for m in msgs),
             "max_msg_bytes": cfg.mailbox.max_msg_bytes,
             "web": f"127.0.0.1:{self.port}",
+            "shutdown_in": self.app.shutdown.seconds_left() if self.app.shutdown else None,
             "forward": (None if self.app.forward is None else
                         {"queued": len(self.app.store.fwd_queue_list()),
                          "held": sum(m.fwd == "H" for m in msgs),

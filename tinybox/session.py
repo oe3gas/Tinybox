@@ -84,6 +84,12 @@ class Session:
             return
         self.transport.write(texts.PROMPT_SYSOP if self.sysop else texts.PROMPT)
 
+    def prompt_again(self) -> None:
+        """After a message in between (system message): the prompt once more,
+        but not while the user types a message or chats."""
+        if self.state == State.COMMAND:
+            self.prompt()
+
     def error(self, exc: ServiceError, msg_id: int | str = "") -> None:
         if exc.code == "not_found":
             self.out(texts.NO_SUCH_MSG.format(id=msg_id))
@@ -126,6 +132,11 @@ class Session:
         chat = self.service.chat
         if chat.enabled and chat.total_members():
             lines.append(texts.CHAT_ACTIVE.format(n=chat.total_members()))
+        left = self.service.shutdown_left() if self.service.shutdown_left else None
+        if left is not None:             # shutdown pending: warn new stations too
+            lines.append(texts.SHUTDOWN_WARNING.format(
+                mailbox=mailbox, sysop=self.cfg.station.sysop_call,
+                left="1 second" if left == 1 else f"{left} seconds"))
         self.out(*lines)
         self.prompt()
 

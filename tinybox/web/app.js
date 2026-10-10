@@ -116,6 +116,7 @@ async function refreshStatus() {
   $("nav-users").textContent = st.users || "";
   $("nav-ver").replaceChildren("TinyBox " + st.version, h("br"), st.web + " · local only");
   document.title = "TinyBox " + st.mailbox;
+  setShutdown(st.shutdown_in);
 }
 
 async function refreshMessages() {
@@ -547,11 +548,46 @@ function route() {
   main().scrollTop = 0;
 }
 
-async function shutdown() {
-  if (!confirm("Stop TinyBox? Connected users will be disconnected.")) return;
-  try {
-    await api("shutdown", {});
+// Shutdown with warning: the stations get 60 s (button turns into "Cancel").
+let shutdownAt = null, shutdownTimer = null;
+
+function setShutdown(left) {
+  shutdownAt = left === null || left === undefined ? null : Date.now() + left * 1000;
+  tickShutdown();
+  if (shutdownAt && !shutdownTimer) shutdownTimer = setInterval(tickShutdown, 1000);
+}
+
+function tickShutdown() {
+  const b = $("btn-shutdown");
+  if (shutdownAt === null) {
+    clearInterval(shutdownTimer); shutdownTimer = null;
+    b.textContent = "Shutdown";
+    return;
+  }
+  const left = Math.max(0, Math.round((shutdownAt - Date.now()) / 1000));
+  b.textContent = `Cancel shutdown (${left} s)`;
+  if (left === 0 && Date.now() - shutdownAt > 2000) {
+    clearInterval(shutdownTimer); shutdownTimer = null;
     $("stopped").hidden = false;
+  }
+}
+
+async function shutdown() {
+  try {
+    if (shutdownAt !== null) {
+      if (!confirm("Call off the shutdown? The stations are told.")) return;
+      await api("shutdown/cancel", {});
+      setShutdown(null);
+      toast("Shutdown cancelled");
+      return;
+    }
+    const users = S.status ? S.status.users : 0;
+    if (!confirm(users ? `Stop TinyBox in 60 seconds?\n${users} connected station(s) get a ` +
+                         "system message now and are disconnected then."
+                       : "Stop TinyBox now? No station is connected.")) return;
+    const r = await api("shutdown", { delay: 60 });
+    if (r.delay) { setShutdown(r.delay); toast(`Shutdown in ${r.delay} s - stations warned`); }
+    else $("stopped").hidden = false;
   } catch (e) { toast(e.message, true); }
 }
 
