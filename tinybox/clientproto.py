@@ -20,10 +20,13 @@ the client gets machine-readable lines instead of the human text:
 Other client commands:
     //BOARDS              -> //B <n> <board> <keep> <users> <description> ... //BEND
     //RESEND <a>-<b>      (inside a board) events a..b again, only to this client
+    //MLIST, //GET, //SEND ...   offline mailbox, see clientsync.py
 
 caps: CHAT = chat lines in the format above, UI = the client hears the
 mailbox directly and takes chat events from the UI frames to TBCHAT-<n>
 instead of I-frames. UI is only granted on radio sessions.
+SYNC = offline mailbox commands, Z = message texts may come LZHUF-compressed
+(binary, radio sessions only).
 """
 
 from __future__ import annotations
@@ -32,11 +35,13 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from . import clientsync
+
 if TYPE_CHECKING:
     from .session import Session
 
 PROTO = "TB1"
-KNOWN_CAPS = ("CHAT", "UI")
+KNOWN_CAPS = ("CHAT", "UI", "SYNC", "Z")
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 
@@ -75,6 +80,8 @@ def handle(s: Session, line: str) -> None:
         _boards(s)
     elif cmd == "RESEND":
         _resend(s, parts[1:])
+    elif cmd in clientsync.COMMANDS:
+        clientsync.handle(s, cmd, parts[1:])
     else:
         s.out(f"//ERR unknown {cmd}")
 
@@ -88,6 +95,8 @@ def _client(s: Session, parts: list[str]) -> None:
     caps = {c for c in wanted if c in KNOWN_CAPS}
     if s.origin != "radio" or s.service.chat.ui_send is None:
         caps.discard("UI")        # telnet, or no radio link: chat lines come as I-frames
+    if s.origin != "radio" or not hasattr(s.transport, "write_bytes"):
+        caps.discard("Z")         # compressed texts are binary: radio (AGW) only
     symbol = args.get("sym", "")
     s.client = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "")
     # the human prompt is still on the line: start the answer on a fresh line

@@ -38,6 +38,7 @@ class State(Enum):
     SEND_BODY = 3
     CLOSED = 4
     CHAT = 5
+    COLLECT = 6     # client protocol: n raw lines for a callback (//SEND)
 
 
 class Session:
@@ -63,6 +64,11 @@ class Session:
         self._subject = ""
         self._body: list[str] = []
         self._body_bytes = 0
+        # client protocol: lines to collect (see collect())
+        self._collect_n = 0
+        self._collect_lines: list[str] = []
+        self._collect_done = None
+        self._collect_back = State.COMMAND
 
     # --- output ---------------------------------------------------------
 
@@ -146,7 +152,9 @@ class Session:
         if self.monitor:
             log.info("%s < %s", self.call, line)
         try:
-            if self.state == State.COMMAND:
+            if self.state == State.COLLECT:
+                self._on_collect(line)
+            elif self.state == State.COMMAND:
                 from . import commands  # local import avoids a cycle
                 commands.dispatch(self, line)
             elif self.state == State.SEND_SUBJECT:
@@ -167,6 +175,24 @@ class Session:
                 self.out(texts.INTERNAL_ERROR)
         if self.state == State.COMMAND:
             self.prompt()
+
+    # --- client protocol: take the next n lines as they are --------------
+
+    def collect(self, n: int, done) -> None:
+        """The next n input lines go unchanged to done(lines) - also inside a
+        chat board, where the session returns to afterwards."""
+        self._collect_back = self.state
+        self._collect_n, self._collect_lines, self._collect_done = n, [], done
+        self.state = State.COLLECT
+
+    def _on_collect(self, line: str) -> None:
+        self._collect_lines.append(line)
+        if len(self._collect_lines) < self._collect_n:
+            return
+        self.state = self._collect_back
+        done, lines = self._collect_done, self._collect_lines
+        self._collect_done, self._collect_lines = None, []
+        done(lines)
 
     # --- composing a message -------------------------------------------
 

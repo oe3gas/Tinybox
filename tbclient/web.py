@@ -15,6 +15,16 @@ API:
   POST /api/say    {"text": "..."}
   POST /api/react  {"seq": n, "emoji": ":+1"}
   POST /api/symbol {"symbol": "/-"}  ("" = none)
+
+Mailbox (C3), all local - only "sync" goes on air:
+  GET  /api/mail?folder=inbox|sent|outbox|b:<RUBRIC>   message list (no texts)
+  POST /api/mail/open     {"id": n}          -> the message with text (marks it read)
+  POST /api/mail/delete   {"id": n}
+  POST /api/mail/save     {"oid": n|null, "type": "P"|"B", "to": "...", "subject": "...",
+                           "body": "..."}   -> {"oid": n}  (into the outbox)
+  POST /api/mail/discard  {"oid": n}
+  POST /api/mail/subscribe {"rubric": "ALL", "on": true}
+  POST /api/mail/sync | /api/mail/cancel
 """
 
 from __future__ import annotations
@@ -22,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -47,7 +58,9 @@ HEADERS = {
 }
 REASONS = {200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found",
            405: "Method Not Allowed", 413: "Payload Too Large", 415: "Unsupported Media Type"}
-MAX_BODY = 8192
+CALL_AT_RE = re.compile(r"^[A-Z0-9]{1,6}(-\d{1,2})?(@[A-Z0-9#.-]{1,40})?$")
+RUBRIC_RE = re.compile(r"^[A-Z0-9]{1,6}$")
+MAX_BODY = 131072        # a message for the outbox can be long
 POLL_SEC = 25
 
 
@@ -105,6 +118,11 @@ class WebServer:
                 since = int((query.get("since") or ["-1"])[0] or -1)
                 await core.wait_change(since, POLL_SEC)
                 return 200, core.snapshot(), None
+            if method == "GET" and path == "/api/mail":
+                folder = (query.get("folder") or ["inbox"])[0]
+                if folder not in ("inbox", "sent", "outbox") and not folder.startswith("b:"):
+                    return 400, {"error": "folder"}, None
+                return 200, {"folder": folder, "items": core.mailbox.folder(folder)}, None
             if method != "POST":
                 return 405, {"error": "method"}, None
             if headers.get("x-tbclient") != "1":
@@ -132,6 +150,8 @@ class WebServer:
                 ok = core.react(int(data.get("seq", -1)), str(data.get("emoji", "")))
             elif path == "/api/symbol":
                 ok = core.set_symbol(str(data.get("symbol", "")))
+            elif path.startswith("/api/mail/"):
+                return self._mail(path[10:], data)
             else:
                 return 404, {"error": "unknown"}, None
             return (200 if ok else 400), {"ok": ok}, None
@@ -142,6 +162,45 @@ class WebServer:
             return 404, {"error": "not found"}, None
         return 200, (STATIC / name).read_bytes(), TYPES.get(Path(name).suffix,
                                                            "application/octet-stream")
+
+    def _mail(self, action: str, data: dict):
+        core, box = self.core, self.core.mailbox
+        try:
+            if action == "open":
+                m = box.open(int(data.get("id", 0)))
+                core._touch()
+                return (200, m, None) if m else (404, {"error": "not found"}, None)
+            if action == "delete":
+                ok = box.delete(int(data.get("id", 0)))
+            elif action == "save":
+                kind = str(data.get("type", "P")).upper()
+                to = str(data.get("to", "")).strip().upper().replace(" ", "")
+                subject = " ".join(str(data.get("subject", "")).split())[:60]
+                body = str(data.get("body", "")).replace("\r\n", "\n")
+                if kind not in ("P", "B") or not CALL_AT_RE.match(to):
+                    return 400, {"error": "address"}, None
+                oid = box.save_out(int(data.get("oid") or 0) or None, kind, to, subject, body)
+                core._touch()
+                return 200, {"ok": True, "oid": oid}, None
+            elif action == "discard":
+                ok = box.discard_out(int(data.get("oid", 0)))
+            elif action == "subscribe":
+                rubric = str(data.get("rubric", "")).upper()
+                if not RUBRIC_RE.match(rubric):
+                    return 400, {"error": "rubric"}, None
+                box.subscribe(rubric, bool(data.get("on")))
+                ok = True
+            elif action == "sync":
+                ok = core.sync.start()
+            elif action == "cancel":
+                core.sync.cancel()
+                ok = True
+            else:
+                return 404, {"error": "unknown"}, None
+        except (TypeError, ValueError):
+            return 400, {"error": "bad value"}, None
+        core._touch()
+        return (200 if ok else 400), {"ok": ok}, None
 
     async def _send(self, writer, status, payload, ctype=None) -> None:
         if isinstance(payload, (bytes, bytearray)):

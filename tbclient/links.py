@@ -38,9 +38,28 @@ class LineSplitter:
         self.on_line = on_line
         self.buf = bytearray()
         self.last_cr = False
+        self.need = 0                     # binary mode: bytes still expected
+        self.bin = bytearray()
+        self.on_bin: Callable[[bytes], None] | None = None
+
+    def expect(self, n: int, on_bin: Callable[[bytes], None]) -> None:
+        """The next n bytes are binary (compressed message text), not lines.
+        Called from on_line, so it applies right after the announcing line."""
+        if n <= 0:
+            on_bin(b"")
+            return
+        self.need, self.bin, self.on_bin = n, bytearray(), on_bin
 
     def feed(self, data: bytes) -> None:
         for b in data:
+            if self.need:
+                self.bin.append(b)
+                self.need -= 1
+                if not self.need:
+                    self.last_cr = False
+                    cb, self.on_bin = self.on_bin, None
+                    cb(bytes(self.bin))
+                continue
             if b in (10, 13):
                 if b == 10 and self.last_cr:
                     self.last_cr = False

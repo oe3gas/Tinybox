@@ -12,7 +12,7 @@ Stand: 07.10.2026 (Rev. 4) · OE3GAS
 | Teil | Zweck | Stand | Details |
 |---|---|---|---|
 | Forwarding (F0–F7) | TinyBox tauscht Post und Bulletins mit anderen Mailboxen (LinBPQ, FBB, openBCM) | F1–F5 fertig: TinyBox empfängt und sendet (ASCII, FBB, B1 komprimiert), ruft Partner selbst an; mit LinBPQ getestet. Als Nächstes F6 (Anschluss ans Netz) | Abschnitt 13 und Konzept-Doc |
-| TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | C0, C1, C2 umgesetzt (08.10.2026): Grundgerüst, Handshake, Post-Hinweis, Chat mit UI-Broadcast, Web-GUI im Messenger-Stil (Handy und PC). Offen: C3 | Abschnitt 12 |
+| TinyBox-Client (C0–C3) | Eigener Client mit Funktionen, die es nur mit der TinyBox gibt: Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox | C0–C3 umgesetzt: Grundgerüst, Handshake, Post-Hinweis, Chat mit UI-Broadcast, Web-GUI im Messenger-Stil (Handy und PC, 08.10.2026); Offline-Mailbox mit Abgleich (10.10.2026). Funktest von C3 offen | Abschnitt 12 |
 
 **Änderungen gegenüber Rev. 3**
 
@@ -388,7 +388,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M5 | MQTT-Adapter (Ein-/Ausgang) | Anbindung an Broker |
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
 | F0–F7 | Forwarding-Modul (Abschnitt 13) | F1–F5 fertig (06.–08.10.2026), mit LinBPQ getestet; F0 teilweise. Als Nächstes F6 |
-| C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast, Offline-Mailbox. Konzept fertig, noch kein Code |
+| C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast (08.10.2026), Offline-Mailbox (10.10.2026). Funktest C3 offen |
 
 ---
 
@@ -434,7 +434,7 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
 
 ### 12.2 Handshake (umgesetzt für CHAT und UI)
 
-- Der Client sendet nach dem Login `//CLIENT TB1 caps=CHAT,UI sym=/-` (später auch `NOTE`, `SYNC`).
+- Der Client sendet nach dem Login `//CLIENT TB1 caps=CHAT,UI,SYNC,Z sym=/-` (`SYNC` und `Z` für die Offline-Mailbox, 12.8).
 - Die TinyBox antwortet `//OK TB1 caps=…` mit dem gemeinsamen Funktionsumfang.
 - Die TinyBox merkt sich je Sitzung, ob ein Client angemeldet ist.
 - **UI-Modus nur bei direkter Verbindung:**
@@ -448,7 +448,7 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
 | C0 | Grundgerüst + Handshake | AGW-Anbindung, Verbinden, UI mitlesen, `//CLIENT` |
 | C1 | Post-Benachrichtigung | Die TinyBox sendet ein UI-Frame „neue Post für <Call>“. Der Client zeigt einen Hinweis an, ohne verbunden zu sein. **Umgesetzt:** UI an `TBMAIL`, Text `OE3ABC 2 new` (Rufzeichen ohne SSID, Zahl ungelesener Privatnachrichten). Nur lokale Post (nicht zum Weiterleiten oder angehalten), höchstens ein Frame pro Rufzeichen und Minute; mehr Post in dieser Minute wird am Ende einmal mit neuer Zahl gemeldet. Abschaltbar: `[client] mail_notify = no`. Der Client wertet zusätzlich die Login-Zeile „You have n new message(s)“ aus. |
 | C2 | Chat mit UI-Broadcast | Beitrag als I-Frame an die TinyBox, die ihn einmal als UI an `TBCHAT-x` sendet (x = Nummer des Boards in `[chat_boards]`, 1–15 = SSID). Client-Sitzungen im UI-Modus bekommen die Zeile nicht zusätzlich per I-Frame. Ab Board 16 gehen die Ereignisse per I-Frame. **Umgesetzt.** |
-| C3 | Offline-Mailbox mit Delta-Sync | Neue Nachrichten/Bulletins komprimiert in einem Durchgang holen, offline lesen und schreiben, gesammelt senden, nach Abbruch fortsetzen |
+| C3 | Offline-Mailbox mit Delta-Sync | Neue Nachrichten/Bulletins komprimiert in einem Durchgang holen, offline lesen und schreiben, gesammelt senden, nach Abbruch fortsetzen. **Umgesetzt (10.10.2026)**, Protokoll in 12.8 |
 
 ### 12.4 Chat-Frame (entschieden 08.10.2026: lesbarer Text)
 
@@ -551,6 +551,43 @@ UI an TBCHAT-1:   #4F OE3GAS: Servus, Wetter passt :+1 ~1K
 ### 12.7 Später
 
 Strukturierter Modus (CBOR statt Menütext), Formulare, kleine Dateien, Sysop-Fernverwaltung mit Challenge-Response (keine Verschlüsselung), Anzeige der Verbindungsqualität, zeitgesteuertes Abholen.
+
+### 12.8 Offline-Mailbox: Abgleich (umgesetzt 10.10.2026)
+
+**Ablauf eines Abgleichs** (Knopf „Sync“ im Client; ist der Client nicht verbunden, verbindet er sich selbst, tritt keinem Board bei und trennt danach wieder):
+
+1. Ausgang senden (`//SEND`)
+2. hier gelöschte eigene Post in der TinyBox löschen (`//KILL`)
+3. hier gelesene Post melden, damit sie in der TinyBox den Status Y bekommt (`//READ`)
+4. Köpfe der eigenen Post holen – immer alle (`//MLIST`)
+5. Rubrikenliste holen (`//RUBRICS`)
+6. Köpfe neuer Bulletins aus den abonnierten Rubriken holen (`//BLIST`, je Rubrik ab der höchsten schon bekannten Nummer)
+7. fehlende Texte in Fünferpaketen holen (`//GET`)
+
+Alles wird sofort lokal gespeichert (`data/tbclient/mailbox.db`, SQLite). Bricht die Verbindung ab, setzt der nächste Abgleich dort fort: Vorhandene Texte werden nicht noch einmal geholt. Ein zweiter Abgleich ohne Neues überträgt nur die Köpfe der eigenen Post.
+
+**Kompression:** Über Funk (Cap `Z`) kommen Texte über 64 Byte LZHUF-komprimiert, im selben Format wie FBB-B1 (CRC-16 + Länge + Daten, `tinybox/fwd/lzhuf.py`). Die TinyBox schickt einen Text nur komprimiert, wenn er dadurch kleiner wird. Über Telnet gibt es kein `Z`.
+
+**Protokoll** (Cap `SYNC`, jede Antwort endet mit einer End-Zeile):
+
+| Richtung | Zeile | Bedeutung |
+|---|---|---|
+| C → T | `//MLIST` | eigene Post (an mich oder von mir) → `//M <Kopf>` … `//MEND <n>` |
+| C → T | `//RUBRICS` | → `//RU <Rubrik> <Anzahl> <höchste Nr.>` … `//RUEND` |
+| C → T | `//BLIST <Rubrik>=<ab Nr.> …` | Bulletins dieser Rubriken mit höherer Nummer → `//M …` … `//MEND <n>` |
+| C → T | `//GET <Nr.> …` (max. 20) | `//MSG <Nr.> <Zeilen>` + Zeilen, oder `//ZMSG <Nr.> <Bytes>` + Binärdaten, oder `//NOMSG <Nr.>`; Ende `//GEND`. Liest nicht (Status bleibt N) |
+| C → T | `//SEND <P\|B> <An>[@<Adresse>] <Zeilen> mid=<Kennung>` + Betreff + Zeilen | → `//SENT <Nr.>` oder `//ERR send <Grund>` |
+| C → T | `//KILL <Nr.> …` | → `//K <Nr.> ok\|<Grund>` … `//KEND`; nur Privatpost |
+| C → T | `//READ <Nr.> …` | Status Y wie beim Lesen am Terminal → `//REND` |
+
+Kopf: `<Nr.> <P|B> <N|Y> <Fwd|-> <Größe> <Von> <An> <@Adresse|-> <BID|-> <Unixzeit> <Betreff>`
+
+- **Doppelt senden verhindert:** Jede Nachricht im Ausgang hat eine eindeutige Kennung (`mid=`). Geht `//SENT` verloren und der Client sendet sie noch einmal, antwortet die TinyBox mit der alten Nummer (`msgid = tbc-<Kennung>`).
+- `//SEND` geht auch in einem Chat-Board; die Sitzung bleibt danach im Board.
+- Was in der TinyBox gelöscht wurde (z. B. am Terminal mit `K`), bleibt im Client als Archiv erhalten. Ein Text, den die TinyBox nicht mehr hat (`//NOMSG`), wird im Client entfernt.
+- Gesendete Nachrichten legt der Client sofort im Ordner „Sent“ ab, ohne sie noch einmal zu holen.
+
+**Oberfläche:** Ordner Inbox, Outbox, Sent; Bulletins je abonnierter Rubrik; „Rubrics…“ zum Abonnieren (Zahlen: in der TinyBox / im Client). Am Handy über ✉ oben: Ordner → Liste → Nachricht. Antworten zitiert die ersten 20 Zeilen. Beim Schreiben zeigt der Client Bytes und ungefähre Sendezeit bei 1200 Bd.
 
 ---
 

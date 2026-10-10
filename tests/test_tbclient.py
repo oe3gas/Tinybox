@@ -212,7 +212,7 @@ class EndToEndTests(unittest.TestCase):
                 await asyncio.wait_for(core.link.agw_up.wait(), 5)
                 await core.connect()
                 await until(lambda: core.boards, 10)
-                self.assertEqual(core.caps, {"CHAT", "UI"})
+                self.assertEqual(core.caps, {"CHAT", "UI", "SYNC", "Z"})
                 self.assertTrue(core.join(1))
                 await until(lambda: core.board and "OE3GAS" in core.members)
                 self.assertEqual(core.members, {"OE3XYZ": "", "OE3GAS": "/-"})
@@ -277,7 +277,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertEqual((await http("POST", "/api/connect", headers=False))[0], 403)
                 self.assertEqual((await http("POST", "/api/connect"))[0], 200)
                 await until(lambda: core.boards, 10)
-                self.assertEqual(core.caps, {"CHAT"})           # telnet: no UI
+                self.assertEqual(core.caps, {"CHAT", "SYNC"})   # telnet: no UI, no Z
                 await http("POST", "/api/join", {"board": 2})
                 await until(lambda: core.board is not None)
                 await http("POST", "/api/say", {"text": "per telnet ~01"})
@@ -288,7 +288,7 @@ class EndToEndTests(unittest.TestCase):
                 state = json.loads(body)
                 self.assertEqual((status, state["board"]["name"]), (200, "RUNDE"))
                 status, body = await http("GET", "/")
-                self.assertIn(b"TinyBox chat", body)
+                self.assertIn(b"<title>TinyBox</title>", body)
                 self.assertEqual((await http("GET", "/aprs/symbols-0.png"))[0], 200)
                 self.assertEqual((await http("GET", "/../tbclient.conf"))[0], 404)
                 core.disconnect()

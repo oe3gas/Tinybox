@@ -14,7 +14,9 @@ from pathlib import Path
 from . import VERSION, proto
 from .config import Config
 from .links import AgwLink, TelnetLink
+from .mailstore import MailStore
 from .radio import RawFrame, aprs_symbol
+from .sync import Syncer
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +61,9 @@ class ClientCore:
         # our own join can overtake the //IN line. Keep such events until //IN.
         self._joining: int | None = None
         self._early: list[proto.Event] = []
+        # offline mailbox (C3)
+        self.mailbox = MailStore(cfg.data_dir / "mailbox.db", cfg.mycall)
+        self.sync = Syncer(self, self.mailbox)
 
     # --- settings --------------------------------------------------------
 
@@ -164,6 +169,7 @@ class ClientCore:
             self.caps = set()
             self._clear_board()
             self.pending.clear()
+            self.sync.link_lost()
             if self._hs_task:
                 self._hs_task.cancel()
         self.console.append(f"*** {state}" + (f" ({reason})" if reason else ""))
@@ -186,10 +192,13 @@ class ClientCore:
             return
         self.handshake_done = True          # sent; //OK confirms the caps
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
+        caps += ",SYNC" + (",Z" if self.link.kind == "agw" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} caps={caps}{sym}")
 
     def _on_line(self, line: str) -> None:
+        if self.sync.take(line):                 # mailbox sync answers and texts
+            return
         line = line.rstrip()
         if not line:
             return
@@ -254,7 +263,8 @@ class ClientCore:
             self.boards = self._boards_tmp or []
             self._boards_tmp = None
             last = self.settings.get("board")
-            if self.board is None and any(b["n"] == last for b in self.boards):
+            if self.board is None and any(b["n"] == last for b in self.boards) \
+                    and not self.sync.own_connect:   # a sync-only connection stays out
                 self.join(last)                  # back into the last board
         elif cmd == "IN":
             parts = rest.split()
@@ -296,6 +306,11 @@ class ClientCore:
         if m and m.group(1) == self.cfg.mycall.split("-")[0]:
             self._set_mail(int(m.group(2)))
             self.console.append(f"*** mail notice: {m.group(2)} new")
+
+    def after_sync(self) -> None:
+        """Everything is fetched now: the notice of new mail is done."""
+        if self.mail and self.mail["count"] and not self.sync.status["error"]:
+            self.mail = {"count": 0, "at": self.mail["at"]}
 
     def _set_mail(self, count: int) -> None:
         old = self.mail["count"] if self.mail else 0
@@ -406,6 +421,8 @@ class ClientCore:
             "messages": self.messages, "pending": [p["text"] for p in self.pending],
             "pending_reacts": [f"{seq}:{e}" for seq, e in self.pending_reacts],
             "console": list(self.console)[-80:],
+            "mailbox": self.mailbox.summary(),
+            "sync": self.sync.status,
         }
 
     async def run(self) -> None:

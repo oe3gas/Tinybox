@@ -118,6 +118,6 @@ Doppelklick auf `runtests.bat`.
 - Chat-Boards (Befehl C): fertig
 - Forwarding (optionales Modul): F1–F5 fertig (Empfangen, Senden, B1 komprimiert, Zeitplan, HOLD/REL), mit LinBPQ getestet; als Nächstes F6 (Anschluss ans Netz)
 - M4 (Limits, Rate-Limit, Dauerbetrieb): offen
-- TinyBox-Client (C0–C3): Konzept
+- TinyBox-Client (C0–C3): umgesetzt – Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox mit Abgleich (`tbclient.bat`)
 
 Details und Meilensteine: `PLANUNG.md` (Rev. 4).

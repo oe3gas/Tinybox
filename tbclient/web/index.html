@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1d2b3a">
-<title>TinyBox chat</title>
+<title>TinyBox</title>
 <link rel="icon" href="data:,">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/app.css">
@@ -17,6 +17,7 @@
       <div class="top-title"><span id="me-call">-</span> <span class="arrow">→</span> <span id="tb-call">-</span></div>
       <div class="top-status"><span id="status-dot" class="dot"></span><button id="status-text" class="link-btn" aria-label="Who is here">offline</button></div>
     </div>
+    <button id="btn-view" class="icon-btn view-btn" aria-label="Mailbox" title="Mailbox"><span id="view-icon">✉</span><span id="view-cnt" class="cnt hidden"></span></button>
     <button id="btn-menu" class="icon-btn" aria-label="Settings">☰</button>
   </header>
 
@@ -24,9 +25,10 @@
   <aside id="nav" class="nav" aria-label="Navigation">
     <div class="nav-h">Chat boards</div>
     <div id="nav-boards"></div>
-    <div class="nav-h">Mailbox</div>
-    <button class="nav-item off" disabled><span>✉ Mail</span><span><span id="nav-mail" class="cnt hidden"></span> <span class="soon">C3</span></span></button>
-    <button class="nav-item off" disabled><span>▤ Bulletins</span><span class="soon">C3</span></button>
+    <div class="nav-h">Mail</div>
+    <div id="nav-folders"></div>
+    <div class="nav-h">Bulletins</div>
+    <div id="nav-rubrics"></div>
     <div class="nav-h">Station</div>
     <button id="nav-monitor" class="nav-item"><span>▸ Monitor</span></button>
     <button id="nav-settings" class="nav-item"><span>⚙ Settings</span></button>
@@ -41,7 +43,7 @@
 
   <div id="mail-banner" class="mail-banner hidden" role="status">
     <span>✉ <b id="mb-count"></b> <span id="mb-text"></span></span>
-    <button id="mb-close" class="icon-btn" aria-label="Dismiss">✕</button>
+    <span class="row nowrap"><button id="mb-sync" class="sm">Sync now</button><button id="mb-close" class="icon-btn" aria-label="Dismiss">✕</button></span>
   </div>
 
   <main id="chat" class="chat">
@@ -71,6 +73,43 @@
   <div id="hint" class="hint hidden"></div>
   </div>
 
+  <section id="mailview" class="mailview hidden lvl-list" aria-label="Mailbox">
+    <div id="mv-folders" class="mv-pane mv-folders">
+      <div class="mv-bar"><button class="icon-btn back mv-tochat" aria-label="Back to chat">‹</button><b>Mailbox</b></div>
+      <div id="mvf-list"></div>
+    </div>
+    <div id="mv-list" class="mv-pane mv-list">
+      <div class="mv-bar"><button id="mv-back-folders" class="icon-btn back" aria-label="Folders">‹</button><b id="mv-title">Inbox</b><span class="sp"></span><button id="mv-new" class="sm">✎ New</button></div>
+      <div class="mv-sync"><button id="btn-sync" class="primary sm">⟳ Sync</button><span id="sync-text" class="muted small"></span></div>
+      <div id="sync-bar" class="sync-bar hidden"><div id="sync-fill"></div></div>
+      <ul id="mv-items" class="mv-items"></ul>
+      <p id="mv-empty" class="muted small pad hidden"></p>
+    </div>
+    <div id="mv-read" class="mv-pane mv-read">
+      <div class="mv-bar mv-bar-read"><button id="mv-back-list" class="icon-btn back" aria-label="Back">‹</button><span class="sp"></span>
+        <button id="rd-reply" class="sm">↩ Reply</button><button id="rd-delete" class="sm danger">Delete</button></div>
+      <div id="rd-none" class="muted center pad big-pad">Select a message</div>
+      <article id="rd-msg" class="rd hidden">
+        <div class="rd-head"><div id="rd-av"></div><div class="rd-meta">
+          <div id="rd-subject" class="rd-subject"></div>
+          <div id="rd-line1" class="small"></div><div id="rd-line2" class="small muted"></div>
+        </div></div>
+        <pre id="rd-body" class="rd-body"></pre>
+      </article>
+      <form id="cp" class="compose hidden" autocomplete="off">
+        <div class="cp-row"><label>Type</label>
+          <div class="seg"><button type="button" id="cp-p" class="on">Personal</button><button type="button" id="cp-b">Bulletin</button></div></div>
+        <div class="cp-row"><label for="cp-to" id="cp-to-l">To</label><input id="cp-to" maxlength="48" placeholder="OE3ABC or OE3ABC@OE3XYZ" spellcheck="false"></div>
+        <div class="cp-row"><label for="cp-subj">Subject</label><input id="cp-subj" maxlength="60"></div>
+        <textarea id="cp-body" rows="14" spellcheck="true"></textarea>
+        <div id="cp-info" class="muted small"></div>
+        <div id="cp-err" class="hint hidden"></div>
+        <div class="row"><button type="submit" class="primary">Put into outbox</button><button type="button" id="cp-discard">Discard</button></div>
+        <p class="muted small">Goes out with the next sync.</p>
+      </form>
+    </div>
+  </section>
+
   <aside id="people" class="people" aria-label="Stations">
     <div class="people-head"><span class="nav-h">In this board</span><button id="people-close" class="icon-btn" aria-label="Close">✕</button></div>
     <ul id="members" class="plist"></ul>
@@ -93,6 +132,9 @@
     <p class="muted">Shown as a badge on your avatar. Sent once when you join a board (2 bytes), others see a change the next time you join. “None”: others see the symbol of your APRS beacon, if they hear it.</p>
     <div class="row"><input id="sym-search" type="search" placeholder="Search, e.g. car, house"><button id="sym-none">None</button></div>
     <div id="sym-grid" class="sym-grid"></div>
+
+    <h3>Mailbox</h3>
+    <p id="mb-info" class="muted"></p>
 
     <h3>Monitor</h3>
     <pre id="console" class="console"></pre>

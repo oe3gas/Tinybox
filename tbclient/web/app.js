@@ -208,6 +208,7 @@ function render() {
   $("input").disabled = !inBoard; $("btn-send").disabled = !inBoard;
   $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
   renderMail();
+  renderMailbox();
   renderBoards();
   renderNav();
   renderPeople();
@@ -250,15 +251,15 @@ try { mailDismissed = +localStorage.getItem("tbc-mail-dismissed") || 0; } catch 
 
 function renderMail() {
   const n = S.mail ? S.mail.count : 0;
-  $("nav-mail").textContent = String(n);
-  $("nav-mail").classList.toggle("hidden", !n);
   const show = n > 0 && S.mail.at > mailDismissed;
   $("mail-banner").classList.toggle("hidden", !show);
   if (show) {
     $("mb-count").textContent = `${n} new message${n === 1 ? "" : "s"}`;
     $("mb-text").textContent = `for ${S.mycall.split("-")[0]} at ${S.tinybox} · ${hhmm(S.mail.at)}`;
   }
-  document.title = (n ? `(${n}) ` : "") + "TinyBox chat";
+  $("mb-sync").disabled = !!(S.sync && S.sync.running);
+  const unread = S.mailbox ? S.mailbox.unread : 0;
+  document.title = (unread ? `(${unread}) ` : "") + "TinyBox";
 }
 
 function renderNav() {
@@ -271,12 +272,12 @@ function renderNav() {
   for (const b of S.boards) {
     const active = S.board && S.board.n === b.n;
     const users = active ? S.members.length : b.users;
-    const it = el("button", "nav-item" + (active ? " active" : ""));
+    const it = el("button", "nav-item" + (active && view === "chat" ? " active" : ""));
     const name = el("span", "", b.name + " ");
     if (b.keep === "live") name.append(el("span", "n", "live"));
     it.append(name, el("span", "n", String(users)));
     it.title = b.desc;
-    it.onclick = () => { if (!active) api("join", { board: b.n }); };
+    it.onclick = () => { setView("chat"); if (!active) api("join", { board: b.n }); };
     box.append(it);
   }
 }
@@ -475,6 +476,377 @@ function renderSymbols() {
   }
 }
 
+
+// ---------------------------------------------------------------- mailbox (C3)
+/* Everything here is local in the client; only "Sync" goes on air.
+ * Mail texts are untrusted as well: textContent only. */
+let view = "chat";            // chat | mail
+let folder = "inbox";         // inbox | outbox | sent | b:<RUBRIC> | rubrics
+let items = [];               // list of the current folder
+let itemsFor = "";            // folder + mailbox version the list belongs to
+let selId = null;             // shown message (id) or outbox entry ("o<oid>")
+let level = "list";           // phone: folders | list | read | compose
+let cur = null;               // message in the reader
+let draft = null;             // {oid, type} while composing
+
+try { view = localStorage.getItem("tbc-view") === "mail" ? "mail" : "chat"; } catch (e) { /* ok */ }
+
+function setView(v) {
+  view = v;
+  try { localStorage.setItem("tbc-view", v); } catch (e) { /* ok */ }
+  $("app").classList.toggle("view-mail", v === "mail");
+  $("mailview").classList.toggle("hidden", v !== "mail");
+  if (S) render();
+}
+
+function setLevel(l) {
+  level = l;
+  const mv = $("mailview");
+  mv.classList.remove("lvl-folders", "lvl-list", "lvl-read", "lvl-compose");
+  mv.classList.add("lvl-" + l);
+}
+
+function openFolder(f) {
+  if (folder !== f) { folder = f; selId = null; cur = null; draft = null; items = []; itemsFor = ""; }
+  setView("mail");
+  setLevel("list");
+  showReader();
+  loadItems(true);
+}
+
+function folderName(f) {
+  if (f === "inbox") return "Inbox";
+  if (f === "outbox") return "Outbox";
+  if (f === "sent") return "Sent";
+  if (f === "rubrics") return "Bulletin rubrics";
+  return "Bulletins " + f.slice(2);
+}
+
+function dateStr(unix) {
+  if (!unix) return "";
+  const d = new Date(unix * 1000), now = new Date();
+  if (d.toDateString() === now.toDateString()) return hhmm(unix);
+  return d.toLocaleDateString([], { day: "2-digit", month: "2-digit" }) + " " + hhmm(unix);
+}
+function longDate(unix) {
+  return new Date(unix * 1000).toLocaleString([], { day: "2-digit", month: "2-digit", year: "numeric",
+                                                     hour: "2-digit", minute: "2-digit" });
+}
+
+function folderEntries() {
+  const M = S.mailbox || { rubrics: [] };
+  const f = [["inbox", "✉ Inbox", M.unread, true], ["outbox", "⇪ Outbox", M.outbox, false],
+             ["sent", "✓ Sent", 0, false]];
+  const r = M.rubrics.filter((x) => x.sub || x.local).map((x) => ["b:" + x.name, "▤ " + x.name, x.unread, true]);
+  return { folders: f, rubrics: [...r, ["rubrics", "⚙ Rubrics…", 0, false]] };
+}
+
+function navButton(key, label, n, strong, target) {
+  const active = view === "mail" && folder === key;
+  const b = el("button", "nav-item" + (active ? " active" : ""));
+  b.append(el("span", "", label));
+  if (n) b.append(el("span", strong ? "cnt" : "n", String(n)));
+  b.onclick = () => openFolder(key);
+  target.append(b);
+}
+
+function renderMailbox() {
+  const M = S.mailbox;
+  if (!M) return;
+  // badge on the top bar button; the icon switches between the two views
+  $("view-icon").textContent = view === "mail" ? "💬" : "✉";
+  $("btn-view").title = view === "mail" ? "Chat" : "Mailbox";
+  $("view-cnt").textContent = String(M.unread);
+  $("view-cnt").classList.toggle("hidden", !M.unread || view === "mail");
+  const { folders, rubrics } = folderEntries();
+  for (const [box, list] of [["nav-folders", folders], ["nav-rubrics", rubrics]]) {
+    $(box).replaceChildren();
+    for (const [k, l, n, strong] of list) navButton(k, l, n, strong, $(box));
+  }
+  const mvf = $("mvf-list");                     // phone: folder list in the mail view
+  mvf.replaceChildren(el("div", "nav-h", "Mail"));
+  for (const [k, l, n, strong] of folders) navButton(k, l, n, strong, mvf);
+  mvf.append(el("div", "nav-h", "Bulletins"));
+  for (const [k, l, n, strong] of rubrics) navButton(k, l, n, strong, mvf);
+  // sync status
+  const sy = S.sync || {};
+  $("btn-sync").disabled = false;
+  $("btn-sync").textContent = sy.running ? "✕ Cancel" : "⟳ Sync";
+  let txt;
+  if (sy.running) txt = sy.step + "…";
+  else if (sy.error) txt = "Sync failed: " + sy.error;
+  else txt = M.last_sync ? `Last sync ${dateStr(M.last_sync)}` : "Never synced";
+  if (!sy.running && (M.outbox || M.todo)) txt += ` · ${M.outbox + M.todo} change(s) waiting`;
+  if (!sy.running && M.missing) txt += ` · ${M.missing} text(s) to fetch`;
+  if (!sy.running && sy.step === "done" && sy.saved > 0) txt += ` · compression saved ${sy.saved} bytes`;
+  $("sync-text").textContent = txt;
+  $("sync-text").classList.toggle("err", !!sy.error && !sy.running);
+  $("sync-bar").classList.toggle("hidden", !sy.running);
+  $("sync-fill").style.width = sy.total ? `${Math.round(100 * sy.done / sy.total)}%` : "8%";
+  $("mb-info").textContent = `${M.inbox} message(s) in the inbox, ${M.sent} sent, ` +
+    `${M.rubrics.filter((r) => r.sub).length} rubric(s) subscribed. ` +
+    (M.last_sync ? `Last sync ${longDate(M.last_sync)}.` : "Not synced yet.");
+  $("mv-title").textContent = folderName(folder);
+  $("mv-new").classList.toggle("hidden", folder === "rubrics");
+  if (view === "mail") loadItems(false);
+}
+
+async function loadItems(force) {
+  if (!S || !S.mailbox) return;
+  const key = folder + "/" + S.mailbox.version;
+  if (!force && key === itemsFor) return;
+  itemsFor = key;
+  if (folder === "rubrics") { items = []; renderItems(); return; }
+  try {
+    const r = await fetch("/api/mail?folder=" + encodeURIComponent(folder), { cache: "no-store" });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.folder !== folder) return;
+    items = data.items;
+  } catch (e) { return; }
+  renderItems();
+}
+
+function renderItems() {
+  const ul = $("mv-items");
+  ul.replaceChildren();
+  const empty = $("mv-empty");
+  if (folder === "rubrics") { renderRubrics(ul); empty.classList.add("hidden"); return; }
+  for (const m of items) ul.append(folder === "outbox" ? outItem(m) : msgItem(m));
+  empty.classList.toggle("hidden", items.length > 0);
+  empty.textContent = folder === "outbox" ? "Nothing waiting to be sent."
+    : folder.startsWith("b:") ? "No bulletins here yet - they come with the next sync."
+    : "No messages. Sync to fetch new mail.";
+}
+
+function msgItem(m) {
+  const sent = folder === "sent";
+  const li = el("li", "mv-item" + (m.seen ? "" : " unread") + (selId === m.id ? " sel" : ""));
+  const who = sent ? m.to_call : m.from_call;
+  const txt = el("div", "txt");
+  const l1 = el("div", "l1");
+  const c = el("span", "c", (sent ? "→ " : "") + who + (m.at_addr ? " @" + m.at_addr.split(".")[0] : ""));
+  l1.append(c, el("span", "d", dateStr(m.created)));
+  const l2 = el("div", "l2", m.subject);
+  txt.append(l1, l2);
+  const tags = el("div", "l1");
+  const left = el("span");
+  left.append(el("span", "muted small", "#" + m.id + " "));
+  if (!m.has_body) left.append(el("span", "tag", "text not fetched"));
+  if (m.type === "P" && m.status === "Y" && sent) left.append(el("span", "tag", "read"));
+  tags.append(left);
+  txt.append(tags);
+  li.append(el("span", "dotu"), avatar(who, symOf(who), true), txt);
+  li.onclick = () => openMessage(m.id);
+  return li;
+}
+
+function outItem(o) {
+  const li = el("li", "mv-item" + (selId === "o" + o.oid ? " sel" : ""));
+  const txt = el("div", "txt");
+  const l1 = el("div", "l1");
+  l1.append(el("span", "c", "→ " + o.to_call), el("span", "d", dateStr(o.created)));
+  txt.append(l1, el("div", "l2", o.subject || "(no subject)"));
+  const l3 = el("div", "l1");
+  const t = el("span");
+  t.append(el("span", "tag", o.type === "B" ? "bulletin" : "personal"));
+  if (o.error) t.append(" ", el("span", "tag err", "refused: " + o.error));
+  l3.append(t);
+  txt.append(l3);
+  li.append(avatar(o.to_call.split("@")[0], "", true), txt);
+  li.onclick = () => openCompose(o);
+  return li;
+}
+
+function renderRubrics(ul) {
+  const M = S.mailbox;
+  const intro = el("li", "mv-item rub");
+  intro.append(el("span", "muted small", "Subscribed rubrics are fetched with each sync. " +
+                  "Numbers: in the TinyBox / here. The list of rubrics comes with the sync."));
+  ul.append(intro);
+  if (!M.rubrics.length) { ul.append(el("li", "mv-item rub muted small", "No rubrics known yet - sync first.")); return; }
+  for (const r of M.rubrics) {
+    const li = el("li", "mv-item rub");
+    const lab = el("label");
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = r.sub;
+    cb.onchange = () => api("mail/subscribe", { rubric: r.name, on: cb.checked });
+    const name = el("span", "c", r.name);
+    name.style.flex = "1";
+    lab.append(cb, name, el("span", "muted small", `${r.server} / ${r.local}`));
+    li.append(lab);
+    ul.append(li);
+  }
+}
+
+async function postJson(path, data) {
+  const r = await fetch("/api/" + path, {
+    method: "POST", headers: { "Content-Type": "application/json", "X-TBClient": "1" },
+    body: JSON.stringify(data || {}),
+  });
+  try { return { ok: r.ok, data: await r.json() }; } catch (e) { return { ok: false, data: {} }; }
+}
+
+async function openMessage(id) {
+  selId = id; draft = null;
+  const r = await postJson("mail/open", { id });
+  if (!r.ok) return;
+  cur = r.data;
+  setLevel("read");
+  showReader();
+  renderItems();
+}
+
+function showReader() {
+  const reading = !!cur && !draft;
+  $("rd-msg").classList.toggle("hidden", !reading);
+  $("cp").classList.toggle("hidden", !draft);
+  $("rd-none").classList.toggle("hidden", reading || !!draft);
+  $("rd-reply").classList.toggle("hidden", !reading);
+  $("rd-delete").classList.toggle("hidden", !reading);
+  if (!reading) return;
+  const m = cur;
+  $("rd-av").replaceChildren(avatar(m.from_call, symOf(m.from_call)));
+  $("rd-subject").textContent = m.subject;
+  const l1 = $("rd-line1");
+  l1.replaceChildren(el("span", "c", m.from_call), " → ",
+                     el("span", "c", m.to_call + (m.at_addr ? " @ " + m.at_addr : "")));
+  $("rd-line2").textContent = `${longDate(m.created)} · #${m.id}` + (m.bid ? ` · BID ${m.bid}` : "") +
+    (m.type === "B" ? " · bulletin" : "");
+  const body = $("rd-body");
+  body.replaceChildren();
+  body.className = "rd-body" + (m.body === null ? " missing" : "");
+  if (m.body === null) body.textContent = "The text has not been fetched yet - it comes with the next sync.";
+  else for (const [i, line] of m.body.split("\n").entries()) {
+    if (i) body.append("\n");
+    linkify(body, line);
+  }
+  $("rd-delete").title = m.type === "P" ? "Delete here and in the TinyBox (with the next sync)"
+                                        : "Delete here only (bulletins belong to everyone)";
+}
+
+function linkify(parent, text) {
+  let last = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    let url = m[0];
+    const trail = url.match(/[.,!?;:)\]'"]+$/);
+    if (trail) url = url.slice(0, -trail[0].length);
+    if (!url) continue;
+    parent.append(text.slice(last, m.index));
+    const a = el("a", "", url);
+    a.href = /^https?:\/\//i.test(url) ? url : "http://" + url;
+    a.target = "_blank"; a.rel = "noopener noreferrer";
+    parent.append(a);
+    last = m.index + url.length;
+  }
+  parent.append(text.slice(last));
+}
+
+// --- composing ---------------------------------------------------------------------
+function setType(t) {
+  draft.type = t;
+  $("cp-p").classList.toggle("on", t === "P");
+  $("cp-b").classList.toggle("on", t === "B");
+  $("cp-to-l").textContent = t === "P" ? "To" : "Rubric";
+  $("cp-to").placeholder = t === "P" ? "OE3ABC or OE3ABC@OE3XYZ" : "ALL, WX ... or ALL@WW";
+  composeInfo();
+}
+
+function openCompose(o) {
+  o = o || {};
+  draft = { oid: o.oid || null, type: o.type || "P" };
+  selId = o.oid ? "o" + o.oid : null;
+  cur = null;
+  $("cp-to").value = o.to_call || "";
+  $("cp-subj").value = o.subject || "";
+  $("cp-body").value = o.body || "";
+  $("cp-err").classList.toggle("hidden", !o.error);
+  $("cp-err").textContent = o.error ? "The TinyBox refused it: " + o.error : "";
+  $("cp-discard").textContent = o.oid ? "Delete from outbox" : "Discard";
+  setType(draft.type);
+  setView("mail");
+  setLevel("compose");
+  showReader();
+  renderItems();
+  setTimeout(() => $(o.to_call ? "cp-body" : "cp-to").focus(), 0);
+}
+
+function reply() {
+  if (!cur) return;
+  const subj = /^re:/i.test(cur.subject) ? cur.subject : "Re: " + cur.subject;
+  const quote = (cur.body || "").split("\n").slice(0, 20).map((l) => "> " + l).join("\n");
+  openCompose({ type: "P", to_call: cur.from_call.split("-")[0], subject: subj.slice(0, 60),
+                body: `\n\n${cur.from_call} wrote:\n${quote}\n` });
+  $("cp-body").setSelectionRange(0, 0);
+}
+
+function composeInfo() {
+  const enc = new TextEncoder();
+  const n = enc.encode($("cp-subj").value).length + enc.encode($("cp-body").value).length;
+  const sec = Math.ceil(n * 10 / 1200 * 1.3);          // 1200 Bd, ~30 % protocol overhead
+  $("cp-info").textContent = `${n} bytes · about ${sec < 60 ? sec + " s" : Math.ceil(sec / 60) + " min"} on air at 1200 Bd`;
+}
+
+async function saveCompose(ev) {
+  ev.preventDefault();
+  const to = $("cp-to").value.trim().toUpperCase().replace(/\s+/g, "");
+  const err = $("cp-err");
+  const ok = draft.type === "P" ? /^[A-Z0-9]{1,6}(-\d{1,2})?(@[A-Z0-9#.-]{1,40})?$/.test(to)
+                                : /^[A-Z0-9]{1,6}(@[A-Z0-9#.-]{1,40})?$/.test(to);
+  if (!ok) {
+    err.textContent = draft.type === "P" ? "Please enter a call, e.g. OE3ABC or OE3ABC@OE3XYZ."
+                                         : "Please enter a rubric, e.g. ALL or ALL@WW.";
+    err.classList.remove("hidden");
+    return;
+  }
+  if (!$("cp-subj").value.trim()) {
+    err.textContent = "Please enter a subject."; err.classList.remove("hidden"); return;
+  }
+  const r = await postJson("mail/save", { oid: draft.oid, type: draft.type, to,
+                                          subject: $("cp-subj").value, body: $("cp-body").value });
+  if (!r.ok) { err.textContent = "Not saved: " + (r.data.error || "error"); err.classList.remove("hidden"); return; }
+  draft = null; selId = null;
+  openFolder("outbox");
+}
+
+async function discardCompose() {
+  if (draft && draft.oid) await api("mail/discard", { oid: draft.oid });
+  draft = null; selId = null;
+  setLevel("list");
+  showReader();
+  renderItems();
+}
+
+async function deleteCurrent() {
+  if (!cur) return;
+  await api("mail/delete", { id: cur.id });
+  cur = null; selId = null;
+  setLevel("list");
+  showReader();
+  loadItems(true);
+}
+
+function initMail() {
+  $("btn-view").onclick = () => setView(view === "mail" ? "chat" : "mail");
+  document.querySelectorAll(".mv-tochat").forEach((b) => { b.onclick = () => setView("chat"); });
+  $("mv-back-folders").onclick = () => setLevel("folders");
+  $("mv-back-list").onclick = () => { draft = null; setLevel("list"); showReader(); };
+  $("mv-new").onclick = () => openCompose({ type: folder.startsWith("b:") ? "B" : "P",
+                                            to_call: folder.startsWith("b:") ? folder.slice(2) : "" });
+  $("btn-sync").onclick = () => api(S && S.sync && S.sync.running ? "mail/cancel" : "mail/sync");
+  $("mb-sync").onclick = () => { api("mail/sync"); openFolder("inbox"); };
+  $("rd-reply").onclick = reply;
+  $("rd-delete").onclick = deleteCurrent;
+  $("cp-p").onclick = () => setType("P");
+  $("cp-b").onclick = () => setType("B");
+  $("cp-subj").oninput = composeInfo;
+  $("cp-body").oninput = composeInfo;
+  $("cp").onsubmit = saveCompose;
+  $("cp-discard").onclick = discardCompose;
+  setView(view);
+  setLevel("list");
+  showReader();
+}
+
 // ---------------------------------------------------------------- polling
 async function poll() {
   let since = -1;
@@ -498,6 +870,7 @@ async function start() {
   try { EMO = await (await fetch("/emoji.json")).json(); } catch (e) { /* plain text then */ }
   try { SYMNAMES = await (await fetch("/aprs/names.json")).json(); } catch (e) { /* no names */ }
   initEmoji();
+  initMail();
   $("btn-connect").onclick = $("btn-connect2").onclick = () => api("connect");
   $("btn-disconnect").onclick = () => api("disconnect");
   $("bh-leave").onclick = () => api("leave");
