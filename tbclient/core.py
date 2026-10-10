@@ -52,6 +52,7 @@ class ClientCore:
         self.mail: dict | None = None             # {"count": n, "at": unix} - C1 notice
         self.sysmsg: dict | None = None           # system message (shutdown) from the TinyBox
         self.tinybox_direct_at = 0.0
+        self.channel_busy_at = 0.0                # last frame not between us and the TinyBox
         self.unwrap = proto.Unwrapper()
         self.seen: set[int] = set()
         self._next_hist = -10_000_000
@@ -220,6 +221,8 @@ class ClientCore:
     def _on_frame(self, f: RawFrame) -> None:
         if f.src == self.cfg.tinybox_call and f.direct:
             self.tinybox_direct_at = time.time()
+        if {f.src, f.dest} != {self.cfg.mycall, self.cfg.tinybox_call}:
+            self.channel_busy_at = time.monotonic()     # others use the frequency
         if f.src != self.cfg.mycall and not f.src.startswith("TBCHAT"):
             self.heard_at[f.src] = time.time()
             if len(self.heard_at) > 200:          # forget the oldest

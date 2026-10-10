@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import random
+import time
+from unittest import mock
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +14,7 @@ from pathlib import Path
 from tbclient.core import ClientCore
 from tbclient.links import LineSplitter
 from tbclient.mailstore import MailStore
+from tbclient import sync
 from tbclient.sync import parse_header
 from tinybox.adapters import agw as tb_agw
 from tinybox.fwd import lzhuf
@@ -71,8 +75,8 @@ class ServerTests(unittest.TestCase):
         self.assertIn("//OK TB1 caps=CHAT,SYNC\r", t.take())   # Z only on radio
         type_lines(s, "//MLIST")
         rows = t.take().split("\r")[:-1]
-        self.assertEqual(rows[-1], "//MEND 2")
-        h = parse_header(rows[1][4:])                    # newest first
+        self.assertEqual(rows[-1], "//MEND 2 0")
+        h = parse_header(rows[0][4:])                    # oldest first
         self.assertEqual((h["id"], h["type"], h["status"], h["from_call"], h["subject"]),
                          (self.a, "P", "N", "OE3TEC", "Hallo Gerhard"))
         self.assertGreater(h["created"], 1_700_000_000)
@@ -81,9 +85,20 @@ class ServerTests(unittest.TestCase):
         type_lines(s, f"//BLIST ALL=0 WX={self.e}")
         out = t.take().split("\r")
         self.assertTrue(out[0].startswith(f"//M {self.d} B "))
-        self.assertEqual(out[1], "//MEND 1")
+        self.assertEqual(out[1], "//MEND 1 0")
         type_lines(s, "//BLIST ALL=x")
         self.assertEqual(t.take(), "//ERR blist\r")
+        # page by page
+        type_lines(s, "//MLIST max=1")
+        out = t.take().split("\r")
+        self.assertTrue(out[0].startswith(f"//M {self.a} "))
+        self.assertEqual(out[1], "//MEND 1 1")
+        type_lines(s, f"//MLIST after={self.a} max=1")
+        out = t.take().split("\r")
+        self.assertTrue(out[0].startswith(f"//M {self.b} "))
+        self.assertEqual(out[1], "//MEND 1 0")
+        type_lines(s, "//BLIST ALL=0 WX=0 max=1")
+        self.assertTrue(t.take().endswith("//MEND 1 1\r"))
 
     def test_get_plain_and_foreign(self):
         s, t = client(self.app)
@@ -106,6 +121,26 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(lzhuf.decompress_b1(data).decode(), LONG)
         # short text: not worth compressing
         self.assertEqual(rest, f"//MSG {self.a} 2\rText 1\rZeile 2\r//GEND\r".encode())
+
+    def test_part(self):
+        s, t = client(self.app, radio=True)
+        whole = b""
+        while True:
+            type_lines(s, f"//PART {self.e} {len(whole)} 50")
+            head, _, rest = t.raw.partition(b"\r")
+            t.raw = b""
+            _, msg_id, kind, off, total, n = head.decode().split()
+            self.assertEqual((int(msg_id), kind, int(off), len(rest)), (self.e, "Z", len(whole),
+                                                                         int(n)))
+            whole += rest
+            if len(whole) >= int(total):
+                break
+        self.assertEqual(lzhuf.decompress_b1(whole).decode(), LONG)
+        type_lines(s, f"//PART {self.c} 0 50")             # not mine
+        self.assertEqual(t.raw, f"//NOMSG {self.c}\r".encode())
+        s2, t2 = client(self.app)                          # telnet: no pieces
+        type_lines(s2, f"//PART {self.e} 0 50")
+        self.assertEqual(t2.take(), "//ERR part\r")
 
     def test_send_kill_read(self):
         s, t = client(self.app)
@@ -212,27 +247,44 @@ class EndToEndTests(unittest.TestCase):
             await asyncio.wait_for(adapter.connected.wait(), 5)
             a = mail(app, "OE3TEC", "OE3GAS", "Lang", LONG)
             mail(app, "OE3TEC", "OE3GAS", "Kurz", "kurz")
+            rnd = random.Random(7)                         # hardly compressible: in pieces
+            noise = "\n".join(" ".join(f"{rnd.randrange(16**8):08x}" for _ in range(8))
+                              for _ in range(40))
+            big = mail(app, "OE1ABC", "OE3GAS", "Gross", noise)
+            for i in range(4):                             # more headers than one page
+                mail(app, "OE3TEC", "OE3GAS", f"Nr {i}", f"Text {i}")
             mail(app, "OE3TEC", "WX", "Wetter", LONG, type="B")
             mail(app, "OE3TEC", "ALL", "Nicht abonniert", type="B")
             with tempfile.TemporaryDirectory() as tmp:
-                core = ClientCore(client_cfg(tmp, agw_port=port))
+                core = ClientCore(client_cfg(tmp, agw_port=port, sync_chunk=256,
+                                             sync_pause=0.05))
                 box = core.mailbox
                 t2 = asyncio.create_task(core.run())
                 await asyncio.wait_for(core.link.agw_up.wait(), 5)
                 box.subscribe("WX", True)
                 box.save_out(None, "P", "OE3TEC", "Vom Client", "Hallo Tec\n73")
                 # offline: the sync connects, does its work and disconnects again
-                self.assertTrue(core.sync.start())
+                self.assertTrue(core.sync.start("mail"))
+                self.assertFalse(core.sync.start("bulletins"))       # one at a time
                 await until(lambda: not core.sync.running, 30)
                 self.assertEqual(core.sync.status["error"], "")
                 self.assertIn("*** client mode, caps: CHAT,SYNC,UI,Z", core.console)
                 await until(lambda: core.state == "offline")
                 inbox = box.folder("inbox")
-                self.assertEqual([m["subject"] for m in inbox], ["Kurz", "Lang"])
+                self.assertEqual([m["subject"] for m in inbox],
+                                 ["Nr 3", "Nr 2", "Nr 1", "Nr 0", "Gross", "Kurz", "Lang"])
                 self.assertEqual(box.message(a)["body"], LONG)
+                self.assertEqual(box.message(big)["body"], noise)
+                self.assertTrue(any(x.startswith(f"> //PART {big} ") for x in core.console))
+                self.assertGreater(core.sync.status["saved"], 1000)       # compression
+                self.assertEqual(box.folder("b:WX"), [])          # bulletins: own sync
+                self.assertTrue(box.summary()["last_mail"])
+                self.assertFalse(box.summary()["last_bulletins"])
+                self.assertTrue(core.sync.start("bulletins"))
+                await until(lambda: not core.sync.running, 30)
+                self.assertEqual(core.sync.status["error"], "")
                 self.assertEqual([m["subject"] for m in box.folder("b:WX")], ["Wetter"])
                 self.assertEqual(box.folder("b:ALL"), [])
-                self.assertGreater(core.sync.status["saved"], 1000)       # compression
                 sent = [m for m in app.service.store.list_messages() if m.subject == "Vom Client"]
                 self.assertEqual(sent[0].body, "Hallo Tec\n73")
                 self.assertEqual(box.folder("outbox"), [])
@@ -241,7 +293,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertEqual((names["ALL"]["server"], names["WX"]["local"]), (1, 1))
                 # read and delete here, then sync: the TinyBox follows
                 box.open(a)
-                kurz = inbox[0]["id"]
+                kurz = inbox[5]["id"]
                 box.delete(kurz)
                 core.sync.start()
                 await until(lambda: not core.sync.running, 30)
@@ -254,6 +306,27 @@ class EndToEndTests(unittest.TestCase):
                 t2.cancel()
             t1.cancel()
             dw.server.close()
+        asyncio.run(scenario())
+
+    def test_pause_and_busy_channel(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, sync_pause=0.2))
+                sent = []
+                core.link.send_line = lambda line: sent.append((line, time.monotonic()))
+                core.state = "online"
+                syncer = core.sync
+                with mock.patch.object(sync, "BUSY_QUIET_SEC", 0.3):
+                    await syncer._send("//MLIST")               # first request: at once
+                    t0 = time.monotonic()
+                    await syncer._send("//RUBRICS")              # pause
+                    self.assertGreaterEqual(time.monotonic() - t0, 0.19)
+                    core.channel_busy_at = time.monotonic() + 0.2   # others still talking
+                    t0 = time.monotonic()
+                    await syncer._send("//GET 1")
+                    self.assertGreaterEqual(time.monotonic() - t0, 0.45)
+                self.assertEqual([x[0] for x in sent], ["//MLIST", "//RUBRICS", "//GET 1"])
+                core.mailbox.close()
         asyncio.run(scenario())
 
     def test_sync_fails_cleanly_without_direwolf(self):

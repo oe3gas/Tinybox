@@ -1,16 +1,24 @@
 """Mailbox sync with the TinyBox (C3, protocol see tinybox/clientsync.py).
 
-One sync, in this order:
-  1. send the outbox            //SEND ... -> //SENT <id>
-  2. delete own mail            //KILL     -> //K ... //KEND
-  3. report what was read here  //READ     -> //REND
-  4. personal mail headers      //MLIST    -> //M ... //MEND   (always all)
-  5. rubrics                    //RUBRICS  -> //RU ... //RUEND
-  6. subscribed bulletins       //BLIST R=<last> ... -> //M ... //MEND
-  7. missing texts              //GET in small batches (compressed on radio)
+Two kinds of sync, each started on its own:
+
+mail       1. send the outbox            //SEND ... -> //SENT <id>
+           2. delete own mail            //KILL     -> //K ... //KEND
+           3. report what was read here  //READ     -> //REND
+           4. personal mail headers      //MLIST after= max= (page by page)
+           5. missing texts of personal mail
+bulletins  1. rubrics                    //RUBRICS
+           2. new bulletins of the subscribed rubrics   //BLIST ... max= (pages)
+           3. missing texts of bulletins
+
+Easy on the channel (radio only): every request asks for about chunk_bytes
+([sync] in tbclient.conf); between two requests the client pauses pause_sec
+and waits further while other stations are heard, so they get the frequency.
+A long text comes in pieces (//PART). Texts are fetched oldest first.
 
 Everything is stored at once. If the link breaks, the next sync goes on
-where this one stopped: texts already here are not fetched again.
+where this one stopped: texts already here are not fetched again, and the
+pieces of a long text that already came are kept while the client runs.
 """
 
 from __future__ import annotations
@@ -27,12 +35,15 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-GET_BATCH = 5
+HEADER_BYTES = 90        # about one //M line, to size the header pages
+BUSY_QUIET_SEC = 3       # the channel counts as free after this much silence
+BUSY_MAX_SEC = 30        # never wait longer than this for a free channel
 IDLE_SEC = 120            # no answer for this long: the sync gives up
 CONNECT_SEC = 90          # connect + handshake when the sync connects by itself
 MAX_LINE_OUT = 1000       # longer text lines are wrapped (TinyBox line limit 1024)
 CHUNK = 50                # ids per //KILL or //READ
 PREFIXES = ("//M ", "//MEND", "//RU ", "//RUEND", "//MSG ", "//ZMSG ", "//NOMSG ", "//GEND",
+            "//P ",
             "//SENT ", "//K ", "//KEND", "//REND", "//ERR")
 
 
@@ -71,8 +82,10 @@ class Syncer:
         self.own_connect = False          # the sync opened the connection itself
         self.queue: asyncio.Queue | None = None
         self._body: tuple[int, int, list[str]] | None = None    # (id, lines left, lines)
-        self.status = {"running": False, "step": "", "done": 0, "total": 0, "error": "",
-                       "bytes": 0, "saved": 0}
+        self.status = {"running": False, "scope": "", "step": "", "done": 0, "total": 0,
+                       "error": "", "bytes": 0, "saved": 0}
+        self.parts: dict[int, tuple[str, int, bytearray]] = {}   # id -> (kind, total, data)
+        self._last_req = 0.0
 
     @property
     def running(self) -> bool:
@@ -105,6 +118,14 @@ class Syncer:
                 else:
                     self._body = (int(p[1]), int(p[2]), [])
             return True
+        if line.startswith("//P "):
+            p = line.split()
+            if len(p) == 6 and p[1].isdigit() and all(x.isdigit() for x in p[3:]):
+                msg_id, kind, off, total = int(p[1]), p[2], int(p[3]), int(p[4])
+                q = self.queue
+                self.core.link.splitter.expect(
+                    int(p[5]), lambda data: q.put_nowait(("part", msg_id, kind, off, total, data)))
+            return True
         if line.startswith("//ZMSG "):
             p = line.split()
             if len(p) == 3 and p[1].isdigit() and p[2].isdigit():
@@ -117,10 +138,10 @@ class Syncer:
 
     # --- control -----------------------------------------------------------------
 
-    def start(self) -> bool:
-        if self.running:
+    def start(self, scope: str = "mail") -> bool:
+        if self.running or scope not in ("mail", "bulletins"):
             return False
-        self.task = asyncio.ensure_future(self._run())
+        self.task = asyncio.ensure_future(self._run(scope))
         return True
 
     def cancel(self) -> None:
@@ -131,18 +152,20 @@ class Syncer:
         self.status.update(kw)
         self.core._touch()
 
-    async def _run(self) -> None:
+    async def _run(self, scope: str) -> None:
         self.queue = asyncio.Queue()
         self._body = None
-        self._set(running=True, step="connecting", done=0, total=0, error="", bytes=0, saved=0)
+        self._last_req = 0.0
+        self._set(running=True, scope=scope, step="connecting", done=0, total=0, error="",
+                  bytes=0, saved=0)
         own_connect = self.own_connect = False
         try:
             if self.core.state != "online":
                 own_connect = self.own_connect = True
                 await self.core.connect()
             await self._wait_ready()
-            await self._sync()
-            self.store.put("last_sync", int(time.time()))
+            await (self._sync_mail() if scope == "mail" else self._sync_bulletins())
+            self.store.put(f"last_sync.{scope}", int(time.time()))
             self._set(step="done")
         except asyncio.CancelledError:
             self._set(step="cancelled", error="cancelled")
@@ -152,14 +175,22 @@ class Syncer:
         except Exception as exc:                  # a bug must not kill the client
             log.exception("sync failed")
             self._set(step="failed", error=f"internal error: {exc}")
-        finally:
+        try:
             self.queue = None
             self._body = None
-            self.own_connect = False
-            self.status["running"] = False
             self.core.after_sync()
             if own_connect and self.core.state == "online" and not self.core.board:
                 self.core.disconnect()             # offline again, as before
+                for _ in range(150):               # until it is really down (next sync!)
+                    if self.core.state == "offline":
+                        break
+                    await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self.queue = None
+            self.own_connect = False
+            self.status["running"] = False
             self.core._touch()
 
     async def _wait_ready(self) -> None:
@@ -206,23 +237,79 @@ class Syncer:
                 return out
             out.append(line)
 
-    def _send(self, *lines: str) -> None:
+    @property
+    def radio(self) -> bool:
+        return self.core.link.kind == "agw"
+
+    async def _send(self, *lines: str) -> None:
+        """One request. On radio with a pause before it (not before the first),
+        longer while other stations use the channel."""
+        if self.radio and self._last_req:
+            cfg = self.core.cfg
+            wait = self._last_req + cfg.sync_pause - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            until = time.monotonic() + BUSY_MAX_SEC
+            while time.monotonic() < until:
+                quiet = time.monotonic() - self.core.channel_busy_at
+                if quiet >= BUSY_QUIET_SEC:
+                    break
+                self._set(step=self.status["step"].split(" (")[0] + " (channel busy)")
+                await asyncio.sleep(BUSY_QUIET_SEC - quiet)
+        if self.core.state != "online":
+            raise SyncError("connection lost")
+        self._last_req = time.monotonic()
         self.core._send(lines[0])
         for line in lines[1:]:                   # message text: not into the monitor
             self.core.link.send_line(line)
 
-    async def _sync(self) -> None:
+    def _page_size(self) -> int:
+        return max(3, self.core.cfg.sync_chunk // HEADER_BYTES)
+
+    async def _headers(self, request: str, step: str) -> int:
+        """//MLIST or //BLIST page by page. Returns the number of headers."""
+        st, n, after = self.store, 0, 0
+        rub: dict[str, int] = {}
+        if request.startswith("//BLIST"):
+            rub = {r.split("=")[0]: int(r.split("=")[1]) for r in request.split()[1:]}
+        while True:
+            self._set(step=f"{step} ({n})" if n else step)
+            if rub:
+                line = "//BLIST " + " ".join(f"{r}={a}" for r, a in rub.items())
+            else:
+                line = request + (f" after={after}" if after else "")
+            await self._send(f"{line} max={self._page_size()}")
+            more = 0
+            while True:
+                item = await self._next()
+                if item[0] != "line":
+                    continue
+                text = item[1]
+                if text.startswith("//ERR"):
+                    raise SyncError(text[2:])
+                if text.startswith("//MEND"):
+                    p = text.split()
+                    more = int(p[2]) if len(p) > 2 and p[2].isdigit() else 0
+                    break
+                if text.startswith("//M ") and (h := parse_header(text[4:])):
+                    st.upsert_header(h)
+                    n += 1
+                    after = max(after, h["id"])
+                    if h["to_call"] in rub:
+                        rub[h["to_call"]] = max(rub[h["to_call"]], h["id"])
+            if not more:
+                return n
+
+    async def _sync_mail(self) -> None:
         st = self.store
-        # 1. outbox
         items = st.outbox()
         for i, item in enumerate(items):
             self._set(step=f"sending {i + 1}/{len(items)}")
             await self._send_one(item)
-        # 2. + 3. deleted / read here
         kills = st.todo("kill")
         for i in range(0, len(kills), CHUNK):
             self._set(step="deleting")
-            self._send("//KILL " + " ".join(map(str, kills[i:i + CHUNK])))
+            await self._send("//KILL " + " ".join(map(str, kills[i:i + CHUNK])))
             done = []
             for line in await self._lines_until("//KEND"):
                 p = line.split()
@@ -231,18 +318,17 @@ class Syncer:
             st.todo_done("kill", done)
         reads = st.todo("read")
         for i in range(0, len(reads), CHUNK):
-            self._send("//READ " + " ".join(map(str, reads[i:i + CHUNK])))
+            self._set(step="reporting read mail")
+            await self._send("//READ " + " ".join(map(str, reads[i:i + CHUNK])))
             await self._lines_until("//REND")
             st.todo_done("read", reads[i:i + CHUNK])
-        # 4. personal mail
-        self._set(step="mail list")
-        self._send("//MLIST")
-        for line in await self._lines_until("//MEND"):
-            if line.startswith("//M ") and (h := parse_header(line[4:])):
-                st.upsert_header(h)
-        # 5. + 6. bulletins
+        await self._headers("//MLIST", "mail list")
+        await self._texts("P")
+
+    async def _sync_bulletins(self) -> None:
+        st = self.store
         self._set(step="rubrics")
-        self._send("//RUBRICS")
+        await self._send("//RUBRICS")
         rubrics = []
         for line in await self._lines_until("//RUEND"):
             p = line.split()
@@ -253,19 +339,73 @@ class Syncer:
         want = [f"{r}={st.max_bulletin(r)}" for r in subs
                 if next(x["max"] for x in rubrics if x["name"] == r) > st.max_bulletin(r)]
         if want:
-            self._set(step="bulletin list")
-            self._send("//BLIST " + " ".join(want))
-            for line in await self._lines_until("//MEND"):
-                if line.startswith("//M ") and (h := parse_header(line[4:])):
-                    st.upsert_header(h)
-        # 7. texts
-        missing = st.missing_bodies()
-        self._set(total=len(missing), done=0)
-        for i in range(0, len(missing), GET_BATCH):
-            batch = missing[i:i + GET_BATCH]
-            self._set(step=f"texts {i + 1}-{i + len(batch)} of {len(missing)}")
-            self._send("//GET " + " ".join(map(str, batch)))
+            await self._headers("//BLIST " + " ".join(want), "bulletin list")
+        await self._texts("B")
+
+    async def _texts(self, kind: str) -> None:
+        """Missing texts, oldest first: short ones together up to chunk_bytes,
+        long ones (radio) piece by piece."""
+        chunk = self.core.cfg.sync_chunk
+        pieces = self.radio and "Z" in self.core.caps
+        todo = [(m, self.store.message(m)["size"]) for m in self.store.missing_bodies(kind)]
+        self._set(total=len(todo), done=0)
+        while todo:
+            n = self.status["done"]
+            if pieces and todo[0][1] > chunk:
+                msg_id = todo.pop(0)[0]
+                await self._fetch_parts(msg_id, n + 1, len(todo) + n + 1)
+                continue
+            batch, size = [], 0
+            while todo and len(batch) < 20 and (not batch or size + todo[0][1] <= chunk) \
+                    and not (pieces and todo[0][1] > chunk):
+                size += todo[0][1]
+                batch.append(todo.pop(0)[0])
+            total = self.status["total"]
+            self._set(step=f"texts {n + 1}-{n + len(batch)} of {total}")
+            await self._send("//GET " + " ".join(map(str, batch)))
             await self._get(batch)
+
+    async def _fetch_parts(self, msg_id: int, nr: int, total: int) -> None:
+        chunk = self.core.cfg.sync_chunk
+        while True:
+            kind, size, data = self.parts.get(msg_id, ("", 0, bytearray()))
+            pct = f", {100 * len(data) // size} %" if size else ""
+            self._set(step=f"text {nr} of {self.status['total']} in pieces{pct}")
+            await self._send(f"//PART {msg_id} {len(data)} {chunk}")
+            while True:
+                item = await self._next()
+                if item[0] == "part" and item[1] == msg_id:
+                    break
+                if item[0] == "line" and item[1].startswith(("//NOMSG", "//ERR")):
+                    self.parts.pop(msg_id, None)
+                    if item[1].startswith("//ERR"):
+                        raise SyncError(item[1][2:])
+                    self.store.remove(msg_id)
+                    self._set(done=self.status["done"] + 1)
+                    return
+            _, _, pkind, off, ptotal, piece = item
+            if (kind and (pkind != kind or ptotal != size)) or off != len(data):
+                data = bytearray()                 # the text changed meanwhile: start again
+                if off != 0:
+                    self.parts.pop(msg_id, None)
+                    continue
+            data += piece
+            self.status["bytes"] += len(piece)
+            self.parts[msg_id] = (pkind, ptotal, data)
+            if len(data) >= ptotal or not piece:
+                break
+        self.parts.pop(msg_id, None)
+        raw = bytes(data)
+        try:
+            text = decompress(raw) if pkind == "Z" else raw.decode("utf-8", "replace")
+        except ValueError as exc:
+            log.warning("msg %d: bad compressed data (%s), fetched later", msg_id, exc)
+            self._set(done=self.status["done"] + 1)
+            return
+        if pkind == "Z":
+            self.status["saved"] += len(text.encode()) - len(raw)
+        self.store.set_body(msg_id, text)
+        self._set(done=self.status["done"] + 1)
 
     async def _send_one(self, item: dict) -> None:
         to = item["to_call"].replace(" ", "")
@@ -278,7 +418,8 @@ class Syncer:
         if lines == [""]:
             lines = []
         subject = " ".join(item["subject"].split()) or "(no subject)"
-        self._send(f"//SEND {item['type']} {to} {len(lines)} mid={item['mid']}", subject, *lines)
+        await self._send(f"//SEND {item['type']} {to} {len(lines)} mid={item['mid']}", subject,
+                         *lines)
         while True:
             entry = await self._next()
             if entry[0] != "line":

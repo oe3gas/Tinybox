@@ -21,5 +21,11 @@ radio_port   = 0               # Direwolf channel
 host         = 0.0.0.0         # 0.0.0.0 = reachable in the LAN (no login! see PLANUNG.md 11/5)
 port         = 7744
 
+[sync]
+# Mailbox sync over radio, easy on the channel: each request asks for about
+# chunk_bytes, then the client pauses pause_sec (longer while others are heard).
+chunk_bytes  = 1024
+pause_sec    = 5
+
 [storage]
 data_dir     = data/tbclient   # settings (APRS symbol); relative to this file

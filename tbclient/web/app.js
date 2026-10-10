@@ -569,6 +569,55 @@ function navButton(key, label, n, strong, target) {
   target.append(b);
 }
 
+/* Section head "Mail" / "Bulletins" with its own sync button and, below it,
+ * what that sync is doing (or why it failed). */
+function syncHead(target, title, scope) {
+  const sy = S.sync || {};
+  const mine = sy.scope === scope;
+  const running = sy.running && mine;
+  const h = el("div", "nav-h sync-h");
+  const b = el("button", "sync-btn" + (running ? " run" : ""), running ? "✕ Cancel" : "⟳ Sync");
+  b.title = running ? "Stop the sync (it goes on from here next time)"
+    : scope === "mail" ? "Send the outbox and fetch new personal mail"
+                       : "Fetch new bulletins of the subscribed rubrics";
+  b.disabled = sy.running && !mine;              // one sync at a time
+  b.onclick = (ev) => { ev.stopPropagation(); api(running ? "mail/cancel" : "mail/sync", { scope }); };
+  h.append(el("span", "", title), b);
+  target.append(h);
+  let txt = "", err = false;
+  if (running) txt = sy.step + "…";
+  else if (mine && sy.error) { txt = "Sync failed: " + sy.error; err = true; }
+  if (txt) {
+    const st = el("div", "sync-st" + (err ? " err" : ""), txt);
+    if (running) {
+      const bar = el("div", "sync-bar"), fill = el("div");
+      fill.style.cssText = "height:3px;background:var(--accent);" +
+        `width:${sy.total ? Math.round(100 * sy.done / sy.total) : 8}%`;
+      bar.append(fill); st.append(bar);
+    }
+    target.append(st);
+  }
+}
+
+function buildMailNav(target) {
+  const { folders, rubrics } = folderEntries();
+  target.replaceChildren();
+  syncHead(target, "Mail", "mail");
+  for (const [k, l, n, strong] of folders) navButton(k, l, n, strong, target);
+  syncHead(target, "Bulletins", "bulletins");
+  for (const [k, l, n, strong] of rubrics) navButton(k, l, n, strong, target);
+}
+
+function lastSyncText(M) {
+  const bul = folder.startsWith("b:") || folder === "rubrics";
+  const t = bul ? M.last_bulletins : M.last_mail;
+  let txt = t ? `Last sync ${dateStr(t)}` : "Never synced";
+  if (!bul && M.outbox + M.todo) txt += ` · ${M.outbox + M.todo} change(s) waiting`;
+  if (!bul && M.missing) txt += ` · ${M.missing} text(s) to fetch`;
+  if (bul && M.missing_b) txt += ` · ${M.missing_b} text(s) to fetch`;
+  return txt;
+}
+
 function renderMailbox() {
   const M = S.mailbox;
   if (!M) return;
@@ -577,34 +626,13 @@ function renderMailbox() {
   $("btn-view").title = view === "mail" ? "Chat" : "Mailbox";
   $("view-cnt").textContent = String(M.unread);
   $("view-cnt").classList.toggle("hidden", !M.unread || view === "mail");
-  const { folders, rubrics } = folderEntries();
-  for (const [box, list] of [["nav-folders", folders], ["nav-rubrics", rubrics]]) {
-    $(box).replaceChildren();
-    for (const [k, l, n, strong] of list) navButton(k, l, n, strong, $(box));
-  }
-  const mvf = $("mvf-list");                     // phone: folder list in the mail view
-  mvf.replaceChildren(el("div", "nav-h", "Mail"));
-  for (const [k, l, n, strong] of folders) navButton(k, l, n, strong, mvf);
-  mvf.append(el("div", "nav-h", "Bulletins"));
-  for (const [k, l, n, strong] of rubrics) navButton(k, l, n, strong, mvf);
-  // sync status
-  const sy = S.sync || {};
-  $("btn-sync").disabled = false;
-  $("btn-sync").textContent = sy.running ? "✕ Cancel" : "⟳ Sync";
-  let txt;
-  if (sy.running) txt = sy.step + "…";
-  else if (sy.error) txt = "Sync failed: " + sy.error;
-  else txt = M.last_sync ? `Last sync ${dateStr(M.last_sync)}` : "Never synced";
-  if (!sy.running && (M.outbox || M.todo)) txt += ` · ${M.outbox + M.todo} change(s) waiting`;
-  if (!sy.running && M.missing) txt += ` · ${M.missing} text(s) to fetch`;
-  if (!sy.running && sy.step === "done" && sy.saved > 0) txt += ` · compression saved ${sy.saved} bytes`;
-  $("sync-text").textContent = txt;
-  $("sync-text").classList.toggle("err", !!sy.error && !sy.running);
-  $("sync-bar").classList.toggle("hidden", !sy.running);
-  $("sync-fill").style.width = sy.total ? `${Math.round(100 * sy.done / sy.total)}%` : "8%";
+  buildMailNav($("nav-mailbox"));
+  buildMailNav($("mvf-list"));                   // phone: folder list in the mail view
+  $("mv-last").textContent = lastSyncText(M);
   $("mb-info").textContent = `${M.inbox} message(s) in the inbox, ${M.sent} sent, ` +
     `${M.rubrics.filter((r) => r.sub).length} rubric(s) subscribed. ` +
-    (M.last_sync ? `Last sync ${longDate(M.last_sync)}.` : "Not synced yet.");
+    `Mail synced ${M.last_mail ? longDate(M.last_mail) : "never"}, ` +
+    `bulletins ${M.last_bulletins ? longDate(M.last_bulletins) : "never"}.`;
   $("mv-title").textContent = folderName(folder);
   $("mv-new").classList.toggle("hidden", folder === "rubrics");
   if (view === "mail") loadItems(false);
@@ -681,9 +709,9 @@ function renderRubrics(ul) {
   const M = S.mailbox;
   const intro = el("li", "mv-item rub");
   intro.append(el("span", "muted small", "Subscribed rubrics are fetched with each sync. " +
-                  "Numbers: in the TinyBox / here. The list of rubrics comes with the sync."));
+                  "Numbers: in the TinyBox / here. The list of rubrics comes with the bulletin sync."));
   ul.append(intro);
-  if (!M.rubrics.length) { ul.append(el("li", "mv-item rub muted small", "No rubrics known yet - sync first.")); return; }
+  if (!M.rubrics.length) { ul.append(el("li", "mv-item rub muted small", "No rubrics known yet - sync the bulletins first.")); return; }
   for (const r of M.rubrics) {
     const li = el("li", "mv-item rub");
     const lab = el("label");
@@ -851,8 +879,7 @@ function initMail() {
   $("mv-back-list").onclick = () => { draft = null; setLevel("list"); showReader(); };
   $("mv-new").onclick = () => openCompose({ type: folder.startsWith("b:") ? "B" : "P",
                                             to_call: folder.startsWith("b:") ? folder.slice(2) : "" });
-  $("btn-sync").onclick = () => api(S && S.sync && S.sync.running ? "mail/cancel" : "mail/sync");
-  $("mb-sync").onclick = () => { api("mail/sync"); openFolder("inbox"); };
+  $("mb-sync").onclick = () => { api("mail/sync", { scope: "mail" }); openFolder("inbox"); };
   $("rd-reply").onclick = reply;
   $("rd-delete").onclick = deleteCurrent;
   $("cp-p").onclick = () => setType("P");

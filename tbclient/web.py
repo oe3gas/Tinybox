@@ -24,7 +24,7 @@ Mailbox (C3), all local - only "sync" goes on air:
                            "body": "..."}   -> {"oid": n}  (into the outbox)
   POST /api/mail/discard  {"oid": n}
   POST /api/mail/subscribe {"rubric": "ALL", "on": true}
-  POST /api/mail/sync | /api/mail/cancel
+  POST /api/mail/sync {"scope": "mail"|"bulletins"} | /api/mail/cancel
 """
 
 from __future__ import annotations
@@ -191,7 +191,7 @@ class WebServer:
                 box.subscribe(rubric, bool(data.get("on")))
                 ok = True
             elif action == "sync":
-                ok = core.sync.start()
+                ok = core.sync.start(str(data.get("scope", "mail")))
             elif action == "cancel":
                 core.sync.cancel()
                 ok = True

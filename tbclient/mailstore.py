@@ -134,10 +134,12 @@ class MailStore:
         self.db.execute("DELETE FROM todo WHERE id=?", (msg_id,))
         self._changed()
 
-    def missing_bodies(self) -> list[int]:
+    def missing_bodies(self, kind: str | None = None) -> list[int]:
+        """Texts still to fetch, oldest first (kind P or B, None = both)."""
         return [r[0] for r in self.db.execute(
             "SELECT id FROM messages WHERE body IS NULL AND id NOT IN "
-            "(SELECT id FROM todo WHERE kind='kill') ORDER BY type DESC, id")]
+            "(SELECT id FROM todo WHERE kind='kill') AND type LIKE ? ORDER BY type DESC, id",
+            (kind or "%",))]
 
     def max_bulletin(self, rubric: str) -> int:
         row = self.db.execute("SELECT MAX(id) FROM messages WHERE type='B' AND to_call=?",
@@ -222,7 +224,8 @@ class MailStore:
     def summary(self) -> dict:
         if self.unused:
             return {"version": 0, "inbox": 0, "unread": 0, "outbox": 0, "sent": 0,
-                    "rubrics": [], "todo": 0, "missing": 0, "last_sync": 0}
+                    "rubrics": [], "todo": 0, "missing": 0, "missing_b": 0,
+                    "last_mail": 0, "last_bulletins": 0}
         q = self.db.execute
         hidden = "id NOT IN (SELECT id FROM todo WHERE kind='kill')"
         inbox = [dict(r) for r in q(f"SELECT to_call, seen FROM messages WHERE type='P' "
@@ -247,8 +250,10 @@ class MailStore:
             "sent": len(self.folder("sent")),
             "rubrics": rubrics,
             "todo": len(self.todo("kill")) + len(self.todo("read")),
-            "missing": len(self.missing_bodies()),
-            "last_sync": self.get("last_sync", 0),
+            "missing": len(self.missing_bodies("P")),
+            "missing_b": len(self.missing_bodies("B")),
+            "last_mail": self.get("last_sync.mail", 0) or self.get("last_sync", 0),
+            "last_bulletins": self.get("last_sync.bulletins", 0) or self.get("last_sync", 0),
         }
 
     # --- outbox --------------------------------------------------------------

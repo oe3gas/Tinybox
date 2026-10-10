@@ -30,10 +30,7 @@
   <aside id="nav" class="nav" aria-label="Navigation">
     <div class="nav-h">Chat boards</div>
     <div id="nav-boards"></div>
-    <div class="nav-h">Mail</div>
-    <div id="nav-folders"></div>
-    <div class="nav-h">Bulletins</div>
-    <div id="nav-rubrics"></div>
+    <div id="nav-mailbox"></div>
     <div class="nav-h">Station</div>
     <button id="nav-monitor" class="nav-item"><span>▸ Monitor</span></button>
     <button id="nav-settings" class="nav-item"><span>⚙ Settings</span></button>
@@ -84,9 +81,9 @@
       <div id="mvf-list"></div>
     </div>
     <div id="mv-list" class="mv-pane mv-list">
-      <div class="mv-bar"><button id="mv-back-folders" class="icon-btn back" aria-label="Folders">‹</button><b id="mv-title">Inbox</b><span class="sp"></span><button id="mv-new" class="sm">✎ New</button></div>
-      <div class="mv-sync"><button id="btn-sync" class="primary sm">⟳ Sync</button><span id="sync-text" class="muted small"></span></div>
-      <div id="sync-bar" class="sync-bar hidden"><div id="sync-fill"></div></div>
+      <div class="mv-bar"><button id="mv-back-folders" class="icon-btn back" aria-label="Folders">‹</button>
+        <div class="mv-tt"><b id="mv-title">Inbox</b><span id="mv-last" class="muted small"></span></div>
+        <span class="sp"></span><button id="mv-new" class="sm">✎ New</button></div>
       <ul id="mv-items" class="mv-items"></ul>
       <p id="mv-empty" class="muted small pad hidden"></p>
     </div>

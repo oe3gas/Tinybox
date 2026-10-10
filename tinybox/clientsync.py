@@ -4,17 +4,21 @@ Commands of a client session with the cap SYNC. Every answer ends with an
 end line, so the client knows when it is complete. Lines are plain text;
 only the message texts may come compressed (cap Z, radio only).
 
-    //MLIST                     own personal mail (to or from me)
-        -> //M <header> ... //MEND <n>
+    //MLIST [after=<id>] [max=<n>]   own personal mail (to or from me), oldest first
+        -> //M <header> ... //MEND <n> <more>      more = headers left after max
     //RUBRICS                   bulletin rubrics with count and highest number
         -> //RU <rubric> <count> <max id> ... //RUEND
-    //BLIST <rubric>=<after> ...  bulletins of these rubrics newer than <after>
-        -> //M <header> ... //MEND <n>
+    //BLIST <rubric>=<after> ... [max=<n>]  bulletins newer than <after>, oldest first
+        -> //M <header> ... //MEND <n> <more>
     //GET <id> [<id> ...]       message texts (at most MAX_GET)
         -> //MSG <id> <n lines> + n lines        plain text
            //ZMSG <id> <n bytes> + n bytes       LZHUF (as FBB B1: CRC + length + data)
            //NOMSG <id>                          gone or not yours
            //GEND
+    //PART <id> <offset> <max bytes>   a piece of one long text (cap Z, radio):
+        -> //P <id> <Z|T> <offset> <total> <n> + n bytes     (or //NOMSG <id>)
+           Z = piece of the LZHUF data, T = piece of the UTF-8 text. The client
+           asks piece by piece with pauses, so a long text never blocks the channel.
     //SEND <P|B> <to>[@<at>] <n> [mid=<id>] [bid=<bid>]
         + subject line + n text lines (sent without waiting)
         -> //SENT <id>  or  //ERR send <reason>
@@ -48,7 +52,8 @@ MAX_IDS = 100
 MAX_SEND_LINES = 2000
 MID_RE = re.compile(r"^[0-9A-Za-z-]{8,40}$")
 RUBRIC_RE = re.compile(r"^([A-Z0-9]{1,6})=(\d{1,9})$")
-COMMANDS = ("MLIST", "RUBRICS", "BLIST", "GET", "SEND", "KILL", "READ")
+COMMANDS = ("MLIST", "RUBRICS", "BLIST", "GET", "PART", "SEND", "KILL", "READ")
+MAX_PART = 8192
 
 
 def _epoch(iso: str) -> int:
@@ -76,8 +81,32 @@ def handle(s: Session, cmd: str, parts: list[str]) -> None:
     if "SYNC" not in s.client.caps:
         s.out(f"//ERR {cmd} needs SYNC")
         return
-    {"MLIST": _mlist, "RUBRICS": _rubrics, "BLIST": _blist, "GET": _get,
+    {"MLIST": _mlist, "RUBRICS": _rubrics, "BLIST": _blist, "GET": _get, "PART": _part,
      "SEND": _send, "KILL": _kill, "READ": _read}[cmd](s, parts)
+
+
+def _paging(parts: list[str]) -> tuple[list[str], int, int | None] | None:
+    """Takes after=/max= out of parts. Returns (rest, after, max) or None."""
+    rest, after, limit = [], 0, None
+    for p in parts:
+        key, sep, value = p.partition("=")
+        if sep and key in ("after", "max"):     # lower case: a rubric may be called MAX
+            if not value.isdigit():
+                return None
+            if key == "after":
+                after = int(value)
+            else:
+                limit = max(1, int(value))
+        else:
+            rest.append(p)
+    return rest, after, limit
+
+
+def _page(s: Session, msgs: list[Message], limit: int | None, what: str) -> None:
+    msgs = sorted(msgs, key=lambda m: m.id)
+    more = 0 if limit is None else max(0, len(msgs) - limit)
+    rows = [header(m) for m in (msgs if limit is None else msgs[:limit])]
+    _write(s, rows + [f"//MEND {len(rows)} {more}"], f"//{what}: {len(rows)} header(s)")
 
 
 def _visible(s: Session) -> list[Message]:
@@ -85,8 +114,12 @@ def _visible(s: Session) -> list[Message]:
 
 
 def _mlist(s: Session, parts: list[str]) -> None:
-    rows = [header(m) for m in _visible(s) if m.type == "P"]
-    _write(s, rows + [f"//MEND {len(rows)}"], f"//MLIST: {len(rows)} header(s)")
+    pg = _paging(parts)
+    if pg is None:
+        s.out("//ERR mlist")
+        return
+    _, after, limit = pg
+    _page(s, [m for m in _visible(s) if m.type == "P" and m.id > after], limit, "MLIST")
 
 
 def _rubrics(s: Session, parts: list[str]) -> None:
@@ -100,16 +133,47 @@ def _rubrics(s: Session, parts: list[str]) -> None:
 
 
 def _blist(s: Session, parts: list[str]) -> None:
+    pg = _paging(parts)
     after: dict[str, int] = {}
-    for p in parts:
+    for p in pg[0] if pg else ["?"]:
         m = RUBRIC_RE.match(p.upper())
         if not m:
             s.out("//ERR blist")
             return
         after[m.group(1)] = int(m.group(2))
-    rows = [header(m) for m in _visible(s)
-            if m.type == "B" and m.to_call in after and m.id > after[m.to_call]]
-    _write(s, rows + [f"//MEND {len(rows)}"], f"//BLIST: {len(rows)} header(s)")
+    _page(s, [m for m in _visible(s)
+              if m.type == "B" and m.to_call in after and m.id > after[m.to_call]],
+          pg[2], "BLIST")
+
+
+def payload(body: str, z: bool) -> tuple[str, bytes]:
+    """What goes on air for one text: ('Z', LZHUF data) if that is smaller,
+    else ('T', UTF-8 text)."""
+    raw = body.replace("\r", "").encode("utf-8")
+    if z and len(raw) > 64:
+        from .fwd import lzhuf              # only the codec, not the forward module
+        data = lzhuf.compress_b1(raw)
+        if len(data) < len(raw):
+            return "Z", data
+    return "T", raw
+
+
+def _part(s: Session, parts: list[str]) -> None:
+    if ("Z" not in s.client.caps or not hasattr(s.transport, "write_bytes")
+            or len(parts) != 3 or not all(p.isdigit() for p in parts)):
+        s.out("//ERR part")
+        return
+    msg_id, offset, size = (int(p) for p in parts)
+    msg = s.service.store.get(msg_id)
+    if msg is None or not s.service.can_see(msg, s.call, False):
+        s.out(f"//NOMSG {msg_id}")
+        return
+    kind, data = payload(msg.body, True)
+    piece = data[offset:offset + min(max(size, 1), MAX_PART)]
+    s.transport.write(f"//P {msg_id} {kind} {offset} {len(data)} {len(piece)}\r")
+    s.transport.write_bytes(piece)
+    log.info("%s > //PART %d: %d-%d of %d bytes (%s)", s.call, msg_id, offset,
+             offset + len(piece), len(data), kind)
 
 
 def _get(s: Session, parts: list[str]) -> None:
@@ -125,16 +189,14 @@ def _get(s: Session, parts: list[str]) -> None:
             s.transport.write(f"//NOMSG {msg_id}\r")
             continue
         body = msg.body.replace("\r", "")
-        raw = body.encode("utf-8")
-        plain += len(raw)
-        if z and len(raw) > 64:
-            from .fwd import lzhuf              # only the codec, not the forward module
-            data = lzhuf.compress_b1(raw)
-            if len(data) < len(raw):
-                s.transport.write(f"//ZMSG {msg_id} {len(data)}\r")
-                s.transport.write_bytes(data)
-                comp += len(data)
-                continue
+        kind, data = payload(body, z)
+        plain += len(body.encode("utf-8"))
+        if kind == "Z":
+            s.transport.write(f"//ZMSG {msg_id} {len(data)}\r")
+            s.transport.write_bytes(data)
+            comp += len(data)
+            continue
+        raw = data
         lines = body.split("\n")
         comp += len(raw)
         s.transport.write("".join(x + "\r" for x in [f"//MSG {msg_id} {len(lines)}", *lines]))

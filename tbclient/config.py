@@ -29,6 +29,8 @@ class Config:
     web_host: str = "0.0.0.0"
     web_port: int = 7744
     data_dir: Path = Path("data/tbclient")
+    sync_chunk: int = 1024            # bytes per request of a mailbox sync (radio)
+    sync_pause: float = 5.0           # seconds between two requests (radio)
 
 
 def _strip(value: str) -> str:
@@ -60,6 +62,13 @@ def load(path: str | Path) -> Config:
     cfg.web_port = int(get("web", "port", str(cfg.web_port)))
     data_dir = Path(get("storage", "data_dir", str(cfg.data_dir)))
     cfg.data_dir = data_dir if data_dir.is_absolute() else path.parent / data_dir
+
+    cfg.sync_chunk = int(get("sync", "chunk_bytes", str(cfg.sync_chunk)))
+    cfg.sync_pause = float(get("sync", "pause_sec", str(cfg.sync_pause)))
+    if not 128 <= cfg.sync_chunk <= 8192:
+        raise ConfigError("[sync] chunk_bytes must be 128 ... 8192")
+    if not 0 <= cfg.sync_pause <= 120:
+        raise ConfigError("[sync] pause_sec must be 0 ... 120")
 
     for name, call in (("[station] mycall", cfg.mycall), ("[tinybox] call", cfg.tinybox_call)):
         if not CALL_RE.match(call):

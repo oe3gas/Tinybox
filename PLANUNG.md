@@ -554,17 +554,23 @@ Strukturierter Modus (CBOR statt Menütext), Formulare, kleine Dateien, Sysop-Fe
 
 ### 12.8 Offline-Mailbox: Abgleich (umgesetzt 10.10.2026)
 
-**Ablauf eines Abgleichs** (Knopf „Sync“ im Client; ist der Client nicht verbunden, verbindet er sich selbst, tritt keinem Board bei und trennt danach wieder):
+**Zwei Abgleiche, getrennt gestartet** (geändert 10.10.2026): je ein Knopf „Sync“ in der linken Spalte bei „Mail“ und bei „Bulletins“; immer nur einer läuft. Neben dem Ordnertitel steht „Last sync“ des jeweiligen Abgleichs. Ist der Client nicht verbunden, verbindet er sich selbst, tritt keinem Board bei und trennt danach wieder.
 
+*Mail:*
 1. Ausgang senden (`//SEND`)
 2. hier gelöschte eigene Post in der TinyBox löschen (`//KILL`)
 3. hier gelesene Post melden, damit sie in der TinyBox den Status Y bekommt (`//READ`)
-4. Köpfe der eigenen Post holen – immer alle (`//MLIST`)
-5. Rubrikenliste holen (`//RUBRICS`)
-6. Köpfe neuer Bulletins aus den abonnierten Rubriken holen (`//BLIST`, je Rubrik ab der höchsten schon bekannten Nummer)
-7. fehlende Texte in Fünferpaketen holen (`//GET`)
+4. Köpfe der eigenen Post holen – immer alle, seitenweise (`//MLIST after= max=`)
+5. fehlende Texte der Post holen
 
-Alles wird sofort lokal gespeichert (`data/tbclient/mailbox.db`, SQLite). Bricht die Verbindung ab, setzt der nächste Abgleich dort fort: Vorhandene Texte werden nicht noch einmal geholt. Ein zweiter Abgleich ohne Neues überträgt nur die Köpfe der eigenen Post.
+*Bulletins:*
+1. Rubrikenliste holen (`//RUBRICS`)
+2. Köpfe neuer Bulletins aus den abonnierten Rubriken holen (`//BLIST … max=`, je Rubrik ab der höchsten schon bekannten Nummer)
+3. fehlende Texte der Bulletins holen
+
+**Kanalschonend (nur über Funk):** Jede Anfrage holt nur etwa `chunk_bytes` (Standard 1024): kurze Texte gemeinsam, lange Texte stückweise (`//PART`), Köpfe seitenweise. Zwischen zwei Anfragen pausiert der Client `pause_sec` (Standard 5 s). Hört er in der Pause andere Stationen, wartet er, bis der Kanal 3 s frei ist (höchstens 30 s zusätzlich). Einstellbar in `tbclient.conf`, Abschnitt `[sync]`. Texte kommen ältere zuerst.
+
+Alles wird sofort lokal gespeichert (`data/tbclient/mailbox.db`, SQLite). Bricht die Verbindung ab, setzt der nächste Abgleich dort fort: Vorhandene Texte werden nicht noch einmal geholt, bereits empfangene Stücke eines langen Texts behält der Client, solange er läuft. Ein zweiter Abgleich ohne Neues überträgt nur die Köpfe der eigenen Post.
 
 **Kompression:** Über Funk (Cap `Z`) kommen Texte über 64 Byte LZHUF-komprimiert, im selben Format wie FBB-B1 (CRC-16 + Länge + Daten, `tinybox/fwd/lzhuf.py`). Die TinyBox schickt einen Text nur komprimiert, wenn er dadurch kleiner wird. Über Telnet gibt es kein `Z`.
 
@@ -572,9 +578,10 @@ Alles wird sofort lokal gespeichert (`data/tbclient/mailbox.db`, SQLite). Bricht
 
 | Richtung | Zeile | Bedeutung |
 |---|---|---|
-| C → T | `//MLIST` | eigene Post (an mich oder von mir) → `//M <Kopf>` … `//MEND <n>` |
+| C → T | `//MLIST [after=<Nr.>] [max=<n>]` | eigene Post (an mich oder von mir), älteste zuerst → `//M <Kopf>` … `//MEND <n> <noch übrig>` |
 | C → T | `//RUBRICS` | → `//RU <Rubrik> <Anzahl> <höchste Nr.>` … `//RUEND` |
-| C → T | `//BLIST <Rubrik>=<ab Nr.> …` | Bulletins dieser Rubriken mit höherer Nummer → `//M …` … `//MEND <n>` |
+| C → T | `//BLIST <Rubrik>=<ab Nr.> … [max=<n>]` | Bulletins dieser Rubriken mit höherer Nummer → `//M …` … `//MEND <n> <noch übrig>` |
+| C → T | `//PART <Nr.> <ab Byte> <max. Bytes>` | Stück eines langen Texts (nur mit `Z`) → `//P <Nr.> <Z\|T> <ab> <gesamt> <n>` + n Bytes (Z = Stück der LZHUF-Daten, T = Stück des UTF-8-Texts) |
 | C → T | `//GET <Nr.> …` (max. 20) | `//MSG <Nr.> <Zeilen>` + Zeilen, oder `//ZMSG <Nr.> <Bytes>` + Binärdaten, oder `//NOMSG <Nr.>`; Ende `//GEND`. Liest nicht (Status bleibt N) |
 | C → T | `//SEND <P\|B> <An>[@<Adresse>] <Zeilen> mid=<Kennung>` + Betreff + Zeilen | → `//SENT <Nr.>` oder `//ERR send <Grund>` |
 | C → T | `//KILL <Nr.> …` | → `//K <Nr.> ok\|<Grund>` … `//KEND`; nur Privatpost |
