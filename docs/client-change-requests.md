@@ -26,6 +26,7 @@ Stand: 11.10.2026 (Abend)
 | 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
 | 18 | Versionskontrolle: Client prüft, ob er aktuell ist; User wird informiert und aufgefordert, die neue Version zu holen | ✅ siehe unten |
 | 19 | Rubriken sind Sysop-Sache: feste Rubrikenliste, User schreiben Bulletins nur an ALL und diese Rubriken (Auswahl im Composer), Forwarding nimmt nur diese Rubriken an | erfasst – noch nicht umgesetzt, siehe unten |
+| 20 | Bulletins zwischen Rubriken verschieben und kopieren | Vorschlag – Entscheidungen offen, siehe unten |
 | 20 | Verbindungsqualität: 1–5 Balken neben jeder Station im Board, Meldung bei Verbindungsabbruch, Befehl `STAT` | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
@@ -217,3 +218,25 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Client: Balken rechts in der Teilnehmerliste (grün 4–5, gelb 3, rot 1–2, grau = noch keine Daten), über das Chat-Ereignis `%`; bei Abbruch die Zeile „Connection to … lost“.
 - Terminal: `STAT` (eigene Verbindung) und `STAT ALL` (alle) als Text.
 - Client-Version 2026.10.11.4.
+
+## CR20 – Bulletins verschieben und kopieren (Vorschlag 11.10.2026, noch nicht umgesetzt)
+
+**Heute:** Der Sysop kann mit `E <Nr> TO <Rubrik>` (Terminal) bzw. „edit“ in der Sysop-Weboberfläche den Empfänger eines Bulletins ändern – das ist ein Verschieben, aber: die Nummer bleibt gleich, deshalb merken die Clients nichts davon (ihr Abgleich holt nur Nummern, die größer sind als die höchste bekannte der Rubrik). Kopieren gibt es nicht.
+
+**Vorschlag:**
+- **Wer:** nur der Sysop (Rubriken sind Sysop-Sache, CR19). Ziel muss eine angenommene Rubrik aus `[rubrics]` sein.
+- **Terminal (Sysop):**
+  - `MOVE <Nr>[,<Nr>…] <Rubrik>` – verschiebt, z. B. `MOVE 12,15 WX`
+  - `COPY <Nr>[,<Nr>…] <Rubrik>` – legt eine Kopie in der Ziel-Rubrik an
+- **Sysop-Weboberfläche der TinyBox:** in der Nachrichtenliste Mehrfachauswahl + Knöpfe „Move to…“ / „Copy to…“ mit Auswahlliste der Rubriken.
+- **Client:** dieselben Knöpfe im Bulletin-Leser, aber nur, wenn die TinyBox der Sitzung Sysop-Rechte gibt (lokal, `sysop_via_radio = no` bleibt).
+- **Verschieben:** Das Bulletin behält Text, Absender, Datum und BID und bekommt die neue Rubrik. Damit die Clients es mitbekommen, führt die TinyBox ein kleines Verschiebe-Protokoll (alte Nr. → neue Rubrik, Zeit). Beim nächsten Bulletin-Abgleich bekommt der Client eine Zeile `//MV <Nr> <Rubrik>` und hängt sein lokales Exemplar um – **der Text wird nicht noch einmal übertragen** (kanalschonend). Clients, die die neue Rubrik nicht abonniert haben, entfernen es.
+- **Kopieren:** neues Bulletin mit neuer Nummer und eigener BID in der Ziel-Rubrik, Text/Absender/Datum wie das Original, Vermerk „copied from <Rubrik> #<Nr>“ in der ersten Zeile. Wer die Ziel-Rubrik abonniert hat, bekommt es beim nächsten Abgleich wie ein neues Bulletin.
+- **Forwarding:** Verschieben und Kopieren wirken **nur lokal**; nichts wird erneut an Partner-Mailboxen geschickt (die Kopie bekommt keinen Forward-Status).
+- **Protokoll:** jede Aktion im Log („sysop moved #12 ALL -> WX“).
+
+**Offen:**
+1. Nur der Sysop – oder darf auch der Autor sein eigenes Bulletin verschieben (z. B. Tippfehler bei der Rubrik)?
+2. Wo zuerst: Terminal + Sysop-Weboberfläche reichen, oder auch gleich im Client?
+3. Soll beim Kopieren die Ablaufzeit neu beginnen (Kopie lebt wieder volle `bulletin_expire_days`) oder die des Originals übernommen werden?
+
