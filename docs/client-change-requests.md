@@ -31,6 +31,7 @@ Stand: 11.10.2026 (Abend, CR23 und CR24 umgesetzt und getestet)
 | 22 | Sysop-Konsole: Befehl RESTART (Neustart, z. B. nach Änderung in tinybox.conf) | ✅ siehe unten |
 | 23 | BUG – Emoji-Picker: Schnellauswahl-Leiste verdeckt die Gesamtauswahl | ✅ siehe unten |
 | 24 | BUG – Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte | ✅ siehe unten |
+| 25 | Board antippen: Button einfärben, bis man im Board angekommen ist | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -133,11 +134,12 @@ Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (
 - **Terminal-Teilnehmer** sehen z. B. `[Bild 5,1 KB – nur im TinyBox-Client]`.
 - **Aufbewahrung:** Ein Bild wird gelöscht, wenn keine Chat-Zeile in der History es mehr verwendet.
 
-### Noch offen
+### Weitere Entscheidungen (Gerhard, 11.10.2026)
 
-- Boards ohne History (`live`, z. B. RUNDE): wie lange bleibt dort ein Bild abrufbar (Vorschlag: 24 h)?
-- Maximalgröße: 8 KB als Standard bestätigen; Schlüssel in `[chat]`, z. B. `image_max = 8k`.
-- Wer darf Bilder posten (alle, oder pro Board abschaltbar)?
+- **Live-Boards** (`live`, z. B. RUNDE): **keine Bilder.**
+- **Maximalgröße:** Standard 8 KB, in `tinybox.conf` `[chat]` `image_max = 8k`.
+- **Abschaltbar durch den Sysop** pro Board in der `tinybox.conf` (Vorschlag: Zusatz in `[chat_boards]`, z. B. `TECH = 30d  Technical questions  noimg`, oder eigener Schlüssel – bei der Umsetzung festlegen). Der Client zeigt den Bild-Knopf nur in Boards, die Bilder erlauben (kommt mit der Board-Liste).
+- **Ladefortschritt** im Chat anzeigen: beim Hochladen in der eigenen Bubble, beim Laden über dem BlurHash (Balken + „2,3 / 5,1 KB“). Möglich, weil in Stücken übertragen wird.
 
 ## CR13 – History nur auf Wunsch (erledigt 11.10.2026)
 
@@ -337,3 +339,9 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 **Fix (4c080ac):** `openReactBar()` begrenzt die Position der Leiste jetzt auf die Chat-Spalte (`#chat`), links und rechts mit 8 px Abstand. Ist die Leiste breiter als die Spalte, beginnt sie am linken Rand der Spalte.
 
 **Test auf PC1 (11.10.2026):** PC-Ansicht ok – die Leiste endet innerhalb der Chat-Spalte (8 px vor dem Rand). Mobile Ansicht unverändert.
+
+## CR25 – Board antippen: Bestätigung (✅ 11.10.2026)
+
+- Das angetippte Board (Chip oben bzw. Eintrag in der linken Spalte) wird **orange und pulsiert leicht**, bis die TinyBox meldet, dass man im Board ist; dann wird es wie gewohnt blau (aktiv).
+- Kommt keine Bestätigung (z. B. Verbindung weg), endet die Markierung nach spätestens 2 Minuten. Bei „Bewegung reduzieren“ im System pulsiert nichts.
+- Client-Version 2026.10.11.6. Nur Oberfläche (`app.js`, `app.css`).

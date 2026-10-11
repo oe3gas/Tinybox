@@ -6,6 +6,8 @@ Weboberflaeche: am PC drei Spalten, am Handy eine eigene Ansicht
 (im LAN erreichbar).
 
 Neu in dieser Version
+- Board betreten: das angetippte Board bleibt farbig markiert, bis man
+  drin ist (ueber Funk kann das ein paar Sekunden dauern).
 - Rubriken: die Bulletin-Rubriken legt der Sysop fest. Beim Schreiben
   eines Bulletins waehlt man die Rubrik aus einer Liste (mit Beschreibung),
   das Verteilgebiet (@WW ...) bleibt ein eigenes Feld. Die Liste der

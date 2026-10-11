@@ -89,6 +89,12 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .chip .n { color: var(--muted); font-size: 11px; margin-left: 4px; }
 .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .chip.active .n { color: #dbe8ff; }
+/* CR24: tapped board, waiting until we are in it */
+.chip.joining, .nav-item.joining { background: var(--warn); color: #fff; border-color: var(--warn);
+  animation: joining 1.2s ease-in-out infinite; }
+.chip.joining .n, .nav-item.joining .n { color: #fff3dc; }
+@keyframes joining { 50% { opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { .chip.joining, .nav-item.joining { animation: none; } }
 .chip.leave { color: var(--muted); margin-left: auto; position: sticky; right: 0;
   box-shadow: -10px 0 8px -2px var(--surface); }
 

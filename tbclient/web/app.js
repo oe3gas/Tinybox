@@ -235,16 +235,37 @@ function render() {
   if (atEnd) con.scrollTop = con.scrollHeight;
 }
 
+/* Joining a board (CR24): the tapped board stays coloured until the TinyBox
+   reports us in it (on radio this can take a while). */
+let joining = null;           // {n, since}
+const JOIN_WAIT_MS = 120000;
+
+function joinBoard(n) {
+  joining = { n, since: Date.now() };
+  renderBoards(); renderNav();
+  api("join", { board: n }).then((ok) => { if (!ok) { joining = null; renderBoards(); renderNav(); } });
+}
+
+function isJoining(b) {
+  if (!joining) return false;
+  if (S.state !== "online" || (S.board && S.board.n === joining.n)
+      || Date.now() - joining.since > JOIN_WAIT_MS) {
+    joining = null;
+    return false;
+  }
+  return joining.n === b.n;
+}
+
 function renderBoards() {
   const nav = $("boards");
   nav.replaceChildren();
   if (S.state !== "online") return;
   for (const b of S.boards) {
     const active = S.board && S.board.n === b.n;
-    const c = el("button", "chip" + (active ? " active" : ""), b.name);
+    const c = el("button", "chip" + (active ? " active" : isJoining(b) ? " joining" : ""), b.name);
     c.title = b.desc + (b.keep === "live" ? " (live)" : ` (history ${b.keep})`);
     c.append(el("span", "n", b.keep === "live" ? "live" : b.keep));
-    c.onclick = () => { if (!active) api("join", { board: b.n }); };
+    c.onclick = () => { if (!active) joinBoard(b.n); };
     nav.append(c);
   }
   if (S.board) {                       // phone: leave the board right here (CR6)
@@ -336,12 +357,13 @@ function renderNav() {
   for (const b of S.boards) {
     const active = S.board && S.board.n === b.n;
     const users = active ? S.members.length : b.users;
-    const it = el("button", "nav-item" + (active && view === "chat" ? " active" : ""));
+    const it = el("button", "nav-item" + (active && view === "chat" ? " active"
+                                          : isJoining(b) ? " joining" : ""));
     const name = el("span", "", b.name + " ");
     if (b.keep === "live") name.append(el("span", "n", "live"));
     it.append(name, el("span", "n", String(users)));
     it.title = b.desc;
-    it.onclick = () => { setView("chat"); if (!active) api("join", { board: b.n }); };
+    it.onclick = () => { setView("chat"); if (!active) joinBoard(b.n); };
     box.append(it);
   }
 }
