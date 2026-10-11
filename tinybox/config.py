@@ -17,6 +17,7 @@ CALL_RE = re.compile(
 )
 # Bulletin destination, e.g. ALL, DX, WX
 DEST_RE = re.compile(r"^[A-Z0-9]{1,6}$")
+NEWS_RUBRIC = "TBNEWS"      # system rubric of the client feature bulletin (CR18/CR19)
 
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
@@ -269,8 +270,9 @@ def parse_keep(value: str) -> int:
 
 @dataclass
 class Rubric:
-    """[rubrics] (CR19): bulletin rubrics set by the sysop. Shown in the web GUI;
-    the rules for users and forwarding follow with CR19."""
+    """[rubrics] (CR19): bulletin rubrics set by the sysop. Users, scripts and
+    MQTT write bulletins only to ALL and the accepted ones; forwarding takes only
+    those (unknown ones go to the sysop, see fwd/receive.py). No [rubrics] = free."""
     name: str
     description: str = ""
     accepted: bool = True        # "NAME = -" = refused

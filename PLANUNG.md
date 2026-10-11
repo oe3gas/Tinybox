@@ -79,7 +79,7 @@ Orientiert sich am klassischen WORLI/MailDrop-Stil, den Packet-Nutzer kennen. Di
 | `RM` | Alle ungelesenen Nachrichten an mich lesen |
 | `S call` / `SP call` | Private Nachricht an `call` |
 | `SP call @ mailbox` | Private Nachricht an einen User einer anderen Mailbox, z. B. `SP OE1ABC @ OE1XAB.#WIE.AUT.EU` (nur mit Forwarding) |
-| `SB rubrik [@ gebiet]` | Bulletin, z. B. `SB ALL` oder `SB ALL @ WW`; optional am Ende `$BID` |
+| `SB rubrik [@ gebiet]` | Bulletin, z. B. `SB ALL` oder `SB ALL @ WW`; optional am Ende `$BID`. Mit `[rubrics]` nur ALL und die angenommenen Rubriken (CR19) |
 | `STAT` / `STAT ALL` | Verbindungsqualität: eigene Funkverbindung / alle (Abschnitt 14) |
 | `V` | Version |
 | `E n feld wert` | Nachrichtenkopf ändern (nur SYSOP), Felder TO, FROM, TYPE, STATUS, SUBJ, AT |
@@ -580,7 +580,7 @@ Alles wird sofort lokal gespeichert (`data/tbclient/mailbox.db`, SQLite). Bricht
 | Richtung | Zeile | Bedeutung |
 |---|---|---|
 | C → T | `//MLIST [after=<Nr.>] [max=<n>]` | eigene Post (an mich oder von mir), älteste zuerst → `//M <Kopf>` … `//MEND <n> <noch übrig>` |
-| C → T | `//RUBRICS` | → `//RU <Rubrik> <Anzahl> <höchste Nr.>` … `//RUEND` |
+| C → T | `//RUBRICS` | → `//RU <Rubrik> <Anzahl> <höchste Nr.>` … `//RUEND`; mit `[rubrics]` (CR19) zusätzlich `//RU <Rubrik> : <Beschreibung>` und `//RU + ALL WX …` (wohin User schreiben dürfen, Reihenfolge des Sysops) |
 | C → T | `//BLIST <Rubrik>=<ab Nr.> … [max=<n>]` | Bulletins dieser Rubriken mit höherer Nummer → `//M …` … `//MEND <n> <noch übrig>` |
 | C → T | `//PART <Nr.> <ab Byte> <max. Bytes>` | Stück eines langen Texts (nur mit `Z`) → `//P <Nr.> <Z\|T> <ab> <gesamt> <n>` + n Bytes (Z = Stück der LZHUF-Daten, T = Stück des UTF-8-Texts) |
 | C → T | `//GET <Nr.> …` (max. 20) | `//MSG <Nr.> <Zeilen>` + Zeilen, oder `//ZMSG <Nr.> <Bytes>` + Binärdaten, oder `//NOMSG <Nr.>`; Ende `//GEND`. Liest nicht (Status bleibt N) |

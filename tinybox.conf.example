@@ -98,10 +98,15 @@ RUNDE = live  Live round, nothing is stored
 [rubrics]
 # Bulletin rubrics, set by the sysop (CR19, docs/client-change-requests.md).
 # One line per rubric:
-#   NAME = description      accepted
-#   NAME = - [note]         refused
-# NAME: 1-6 letters/digits. ALL is always accepted. Shown in the web GUI
-# (dashboard); the rules for users and forwarding follow with CR19.
+#   NAME = description      accepted: users may write, forwarding is taken
+#   NAME = - [note]         refused: forwarding is declined
+# NAME: 1-6 letters/digits. ALL is always accepted. Order = order in the client.
+# Without any line here every rubric is free (as before).
+# Users, scripts (inbox folder) and MQTT write only to ALL and accepted rubrics;
+# the sysop is free. TBNEWS (client news) is a system rubric, never for users.
+# A partner mailbox offering an unknown rubric: the first bulletin is kept held
+# and the sysop gets a mail, further ones wait; enter the rubric here as
+# accepted or refused and RESTART.
 #ALL     = To everybody
 #WX      = Weather and warnings
 #HUMOR   = -  not wanted here

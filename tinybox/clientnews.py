@@ -22,13 +22,15 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .config import NEWS_RUBRIC
+
 if TYPE_CHECKING:
     from .app import App
 
 log = logging.getLogger(__name__)
 
 CLIENT_DIR = Path(__file__).resolve().parent.parent / "tbclient"
-RUBRIC = "TBNEWS"
+RUBRIC = NEWS_RUBRIC
 KEY = "fixed:tbclient-features"
 VERSION_RE = re.compile(r'^VERSION\s*=\s*"([0-9][0-9.]*)"', re.M)
 

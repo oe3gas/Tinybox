@@ -8,6 +8,11 @@ only the message texts may come compressed (cap Z, radio only).
         -> //M <header> ... //MEND <n> <more>      more = headers left after max
     //RUBRICS                   bulletin rubrics with count and highest number
         -> //RU <rubric> <count> <max id> ... //RUEND
+           with [rubrics] in tinybox.conf (CR19) also the accepted rubrics
+           without bulletins (0 0), and before //RUEND:
+           //RU <rubric> : <description>     one per accepted rubric with a text
+           //RU + ALL WX ...                 where users may write, in the sysop's order
+           (old clients take only lines with 4 fields and a number - they skip these)
     //BLIST <rubric>=<after> ... [max=<n>]  bulletins newer than <after>, oldest first
         -> //M <header> ... //MEND <n> <more>
     //GET <id> [<id> ...]       message texts (at most MAX_GET)
@@ -129,7 +134,18 @@ def _rubrics(s: Session, parts: list[str]) -> None:
             c = count.setdefault(m.to_call, [0, 0])
             c[0] += 1
             c[1] = max(c[1], m.id)
-    s.out(*[f"//RU {r} {n} {mx}" for r, (n, mx) in sorted(count.items())], "//RUEND")
+    svc = s.service
+    writable = svc.writable_rubrics()          # empty: no [rubrics], every rubric is free
+    for name in writable:
+        count.setdefault(name, [0, 0])
+    rows = [f"//RU {r} {n} {mx}" for r, (n, mx) in sorted(count.items())]
+    for name in writable:
+        desc = " ".join(svc.rubric_description(name).split())
+        if desc:
+            rows.append(f"//RU {name} : {desc}")
+    if writable:
+        rows.append("//RU + " + " ".join(writable))
+    s.out(*rows, "//RUEND")
 
 
 def _blist(s: Session, parts: list[str]) -> None:

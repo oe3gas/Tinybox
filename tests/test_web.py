@@ -158,8 +158,8 @@ class WebTests(unittest.TestCase):
         self.app.cfg.rubrics = [Rubric("WX", "Weather"), Rubric("HUMOR", "", False)]
         self.app.service.create(from_call="OE3TEC", to_call="WX", type="B", subject="Rain",
                                 body="x", origin="telnet")
-        self.app.service.create(from_call="OE3TEC", to_call="SWAP", type="B", subject="Rig",
-                                body="x", origin="telnet")
+        self.app.service.create(from_call="OE3GAS", to_call="SWAP", type="B", subject="Rig",
+                                body="x", origin="sysop", sysop=True)   # the sysop is free
         box = {}
 
         async def first(s):

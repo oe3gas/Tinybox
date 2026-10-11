@@ -108,6 +108,9 @@ class Session:
             self.out(texts.DUPLICATE_BID.format(bid=str(exc)))
         elif exc.code == "no_forward":
             self.out(texts.NO_FORWARD.format(addr=str(exc)))
+        elif exc.code == "bad_rubric":
+            self.out(texts.BAD_RUBRIC.format(rubric=str(exc),
+                                             rubrics=" ".join(self.service.writable_rubrics())))
         else:
             self.out(texts.INVALID_VALUE.format(value=str(exc)))
 

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from . import addressing
 from .addressing import AddressError
 from .chat import ChatHub
-from .config import DEST_RE, Config, base_call, is_valid_call, normalize_call
+from .config import DEST_RE, NEWS_RUBRIC, Config, base_call, is_valid_call, normalize_call
 from .events import EventBus
 from .store import Message, Store, utc_now
 
@@ -24,11 +24,12 @@ ORIGINS = {"radio", "telnet", "sysop", "mqtt", "inbox", "forward"}
 MAX_SUBJECT = 60          # what local users may type
 MAX_SUBJECT_FWD = 80      # what partner mailboxes may send (FBB limit)
 FWD_STATES = {"", "$", "F", "H"}
+NEW_RUBRIC_NOTE = "new rubric"     # note of bulletins held for the sysop's decision (CR19)
 
 
 class ServiceError(Exception):
     """code: not_found, not_allowed, invalid_call, invalid_value, too_large,
-    invalid_address, duplicate, no_forward"""
+    invalid_address, duplicate, no_forward, bad_rubric"""
 
     def __init__(self, code: str, detail: str = "") -> None:
         super().__init__(detail or code)
@@ -74,6 +75,81 @@ class MessageService:
             raise ServiceError("not_found")
         return msg
 
+    # --- rubrics (CR19) -------------------------------------------------
+
+    def rubric_state(self, name: str) -> str:
+        """accepted | refused | unknown | system (TBNEWS). Without a [rubrics]
+        section every rubric is accepted (as before CR19)."""
+        name = name.upper()
+        if name == NEWS_RUBRIC:
+            return "system"
+        if name == "ALL" or not self.cfg.rubrics:
+            return "accepted"
+        for r in self.cfg.rubrics:
+            if r.name == name:
+                return "accepted" if r.accepted else "refused"
+        return "unknown"
+
+    def writable_rubrics(self) -> list[str]:
+        """Rubrics users may write to, in the order of [rubrics] (ALL first if not
+        listed). Empty = no [rubrics] section, every rubric is free."""
+        if not self.cfg.rubrics:
+            return []
+        out = [r.name for r in self.cfg.rubrics
+               if (r.accepted or r.name == "ALL") and r.name != NEWS_RUBRIC]
+        return out if "ALL" in out else ["ALL"] + out
+
+    def rubric_description(self, name: str) -> str:
+        for r in self.cfg.rubrics:
+            if r.name == name:
+                return r.description
+        return "To everybody" if name == "ALL" else ""
+
+    def check_rubric(self, to_call: str) -> None:
+        if self.rubric_state(to_call) != "accepted":
+            raise ServiceError("bad_rubric", to_call)
+
+    def new_rubric_waiting(self, name: str | None = None) -> list[Message]:
+        """Bulletins from partners held because their rubric is new (CR19)."""
+        return [m for m in self.store.list_messages()
+                if m.type == "B" and m.fwd == "H" and m.note.startswith(NEW_RUBRIC_NOTE)
+                and (name is None or m.to_call == name)]
+
+    def new_rubric_mail(self, name: str, partner: str, msg_id: int) -> int:
+        """Personal mail to the sysop: a partner offers a rubric that is not in
+        [rubrics]. The first bulletin is kept here, held."""
+        msg = self.store.get(msg_id)
+        st = self.cfg.station
+        at = f" @ {msg.at_addr}" if msg.at_addr else ""
+        head = (
+            f"Partner mailbox {partner} offers bulletins in the rubric {name}.\n"
+            f"{name} is not in [rubrics] of tinybox.conf.\n"
+            "\n"
+            f"The first bulletin is kept here as message {msg.id} (held, users do not see it):\n"
+            f"  From: {msg.from_call}  To: {name}{at}  BID: {msg.bid or '-'}\n"
+            f"  Subject: {msg.subject}\n"
+            "\n"
+            "Further bulletins of this rubric are deferred until you decide.\n"
+            "Add one line under [rubrics] in tinybox.conf and restart (RESTART):\n"
+            f"  {name} = description   accept: message {msg.id} is released,\n"
+            "                          the partner offers the others again\n"
+            f"  {name} = -             refuse: message {msg.id} is deleted,\n"
+            "                          the partner does not offer them again\n"
+            "\n"
+            "--- text of the first bulletin ---\n")
+        room = self.cfg.mailbox.max_msg_bytes - len(head.encode("utf-8")) - 40
+        text = msg.body.encode("utf-8")
+        if len(text) > room:
+            text = text[:max(room, 0)].decode("utf-8", "ignore") + "\n[... shortened]"
+        else:
+            text = msg.body
+        new_id = self.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
+                             subject=f"New rubric {name} offered by {partner}",
+                             body=head + text, origin="sysop", sysop=True)
+        log.warning("new rubric %s offered by %s: msg %d held, sysop mail %d",
+                    name, partner, msg.id, new_id)
+        return new_id
+
     # --- sending --------------------------------------------------------
 
     def check_send(self, from_call: str, to_call: str, type: str, sysop: bool) -> str:
@@ -86,6 +162,8 @@ class MessageService:
         elif type == "B":
             if not DEST_RE.match(to_call):
                 raise ServiceError("invalid_call", to_call)
+            if not sysop:                       # the sysop is free (CR19)
+                self.check_rubric(to_call)
         else:
             raise ServiceError("invalid_value", f"type {type}")
         if (not self.cfg.mailbox.third_party and not sysop
@@ -137,6 +215,8 @@ class MessageService:
         forwarded = origin == "forward"
         # third-party rule is for local users, not for mail arriving from partners
         to_call = self.check_send(from_call, to_call, type, sysop or forwarded)
+        if type == "B" and origin in ("inbox", "mqtt"):
+            self.check_rubric(to_call)          # scripts and MQTT: only listed rubrics
         at_addr, bid = self.check_address(type, at_addr, bid, origin)
 
         if len(body.encode("utf-8")) > self.cfg.mailbox.max_msg_bytes:

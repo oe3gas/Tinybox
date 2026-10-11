@@ -17,6 +17,15 @@ Decision per offer (FBB proposal or W0RLI S command):
     otherwise                           -> accept
 (concept, decision BID/MID of 06.10.2026, following W0RLI)
 
+Bulletins, only when tinybox.conf has [rubrics] (CR19):
+    rubric accepted (or ALL)            -> as above
+    rubric refused, or TBNEWS           -> reject
+    rubric unknown, first offer         -> accept, keep it held (H) and mail the sysop
+    rubric unknown, sysop not decided   -> FBB: defer ('='); ASCII (no "later"
+                                           in W0RLI): accept and keep it held
+After the sysop's entry in [rubrics] and a restart, the held bulletins are
+released or deleted (ForwardModule.resolve_rubrics).
+
 A message is stored only after it arrived completely; the MessageService adds
 our own R: line, checks for loops and too old mail (then status H).
 """
@@ -27,12 +36,12 @@ import logging
 
 from .. import addressing
 from ..config import is_valid_call, normalize_call
-from ..service import MessageService, ServiceError
+from ..service import NEW_RUBRIC_NOTE, MessageService, ServiceError
 from .protocol import Proposal, Sid
 
 log = logging.getLogger("tinybox.forward")
 
-ACCEPT, REJECT = "+", "-"
+ACCEPT, REJECT, LATER = "+", "-", "="
 
 
 class Receiver:
@@ -43,6 +52,9 @@ class Receiver:
         self.peer_sid: Sid | None = None
         self.hold_dup: set[str] = set()        # known MIDs we take anyway (held)
         self.bad_addr: dict[str, str] = {}     # offer key -> unusable @ address (held)
+        self.new_rubric: dict[str, str] = {}   # offer key -> new rubric (held + sysop mail)
+        self.rubric_wait: dict[str, str] = {}  # offer key -> rubric waiting (held, ASCII)
+        self.offered_new: set[str] = set()     # new rubrics offered in this session
 
     @property
     def max_bytes(self) -> int:
@@ -56,6 +68,31 @@ class Receiver:
             log.info("%s: offer %s %s -> %s @ %s rejected: %s", self.partner, p.type,
                      p.bid or "(no BID)", p.to_call, p.at_addr or "-", why)
             return REJECT
+        return self._rubric_answer(p)
+
+    def _rubric_answer(self, p: Proposal) -> str:
+        if p.type != "B":
+            return ACCEPT
+        name = normalize_call(p.to_call)
+        state = self.service.rubric_state(name)
+        if state == "accepted":
+            return ACCEPT
+        key = self._key(p)
+        if state != "unknown":                  # refused, or the system rubric TBNEWS
+            self.bad_addr.pop(key, None)
+            log.info("%s: offer %s -> %s rejected: rubric %s", self.partner,
+                     p.bid or "(no BID)", name, state)
+            return REJECT
+        if name in self.offered_new or self.service.new_rubric_waiting(name):
+            if self.mode == "fbb":
+                self.bad_addr.pop(key, None)
+                log.info("%s: offer %s -> %s deferred: new rubric, sysop has not decided",
+                         self.partner, p.bid or "(no BID)", name)
+                return LATER
+            self.rubric_wait[key] = name
+            return ACCEPT
+        self.offered_new.add(name)
+        self.new_rubric[key] = name
         return ACCEPT
 
     def _reject_reason(self, p: Proposal, seen: set[str]) -> str:
@@ -119,6 +156,13 @@ class Receiver:
         if bad is not None:
             hold = f"unusable address @ {bad}"
             at_addr = ""
+        new = self.new_rubric.pop(self._key(p), None)
+        rubric = new or self.rubric_wait.pop(self._key(p), None)
+        if rubric and self.service._hold_reason(rlines):
+            new = rubric = None                 # loop / too old: held for that reason
+        if rubric:
+            hold = f"{NEW_RUBRIC_NOTE} {rubric}: waiting for the sysop" + (
+                f" (and unusable address @ {bad})" if bad is not None else "")
         try:
             msg_id = self.service.create(
                 from_call=p.from_call or self.partner, to_call=p.to_call, type=p.type,
@@ -129,4 +173,10 @@ class Receiver:
                         exc.code, exc)
             return None
         log.info("%s: message %s stored as %d", self.partner, p.bid or "-", msg_id)
+        if new:
+            try:
+                self.service.new_rubric_mail(new, self.partner, msg_id)
+            except ServiceError as exc:
+                log.warning("%s: no sysop mail for the new rubric %s: %s", self.partner,
+                            new, exc)
         return msg_id

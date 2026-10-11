@@ -224,7 +224,7 @@ class MailStore:
     def summary(self) -> dict:
         if self.unused:
             return {"version": 0, "inbox": 0, "unread": 0, "outbox": 0, "sent": 0,
-                    "rubrics": [], "todo": 0, "missing": 0, "missing_b": 0,
+                    "rubrics": [], "writable": [], "todo": 0, "missing": 0, "missing_b": 0,
                     "last_mail": 0, "last_bulletins": 0}
         q = self.db.execute
         hidden = "id NOT IN (SELECT id FROM todo WHERE kind='kill')"
@@ -242,13 +242,17 @@ class MailStore:
         for name in sorted(set(server) | set(local) | subs):
             n, unread = local.get(name, [0, 0])
             rubrics.append({"name": name, "local": n, "unread": unread, "sub": name in subs,
-                            "server": server.get(name, {}).get("count", 0)})
+                            "server": server.get(name, {}).get("count", 0),
+                            "desc": server.get(name, {}).get("desc", "")})
+        writable = [{"name": w, "desc": server.get(w, {}).get("desc", "")}
+                    for w in self.get("writable", [])]
         return {
             "version": self.version,
             "inbox": len(mine), "unread": sum(1 for r in mine if not r["seen"]),
             "outbox": q("SELECT COUNT(*) FROM outbox").fetchone()[0],
             "sent": len(self.folder("sent")),
             "rubrics": rubrics,
+            "writable": writable,       # CR19: rubrics for the composer, [] = free field
             "todo": len(self.todo("kill")) + len(self.todo("read")),
             "missing": len(self.missing_bodies("P")),
             "missing_b": len(self.missing_bodies("B")),

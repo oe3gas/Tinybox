@@ -37,7 +37,7 @@ from .link import Link
 from .protocol import (CTRL_Z, MAX_BLOCK, Proposal, ProtocolError, block_end_ok, checksum,
                        own_sid, parse_fs, parse_proposal, parse_rli_reply, parse_send_cmd,
                        parse_sid)
-from .receive import ACCEPT, Receiver
+from .receive import ACCEPT, LATER, Receiver
 from .send import Sender
 
 log = logging.getLogger("tinybox.forward")
@@ -333,6 +333,8 @@ class ForwardSession:
         for p, a in zip(props, answers):
             if a == ACCEPT or a.startswith("!"):
                 await self._take(p, a)
+            elif a == LATER:
+                self.r.deferred.append(p.bid)
             else:
                 self.r.rejected.append(p.bid)
         self._count()

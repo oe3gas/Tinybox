@@ -843,8 +843,10 @@ function renderRubrics(ul) {
     const lab = el("label");
     const cb = el("input"); cb.type = "checkbox"; cb.checked = r.sub;
     cb.onchange = () => api("mail/subscribe", { rubric: r.name, on: cb.checked });
-    const name = el("span", "c", r.name);
+    const name = el("span", "", "");
     name.style.flex = "1";
+    name.append(el("span", "c", r.name));
+    if (r.desc) name.append(el("span", "muted small rub-desc", r.desc));
     lab.append(cb, name, el("span", "muted small", `${r.server} / ${r.local}`));
     li.append(lab);
     ul.append(li);
@@ -915,18 +917,63 @@ function linkify(parent, text) {
 }
 
 // --- composing ---------------------------------------------------------------------
+/* Bulletins (CR19): when the TinyBox has a rubric list, the rubric is picked from
+   it and the text field only takes the optional area (@WW). Without a list (or
+   before the first bulletin sync) the rubric is typed as before. */
+function rubricList() {
+  return (S.mailbox && S.mailbox.writable) || [];
+}
+
 function setType(t) {
+  const wasPick = !!draft.pick;
   draft.type = t;
+  const list = t === "B" ? rubricList() : [];
+  draft.pick = list.length > 0;
   $("cp-p").classList.toggle("on", t === "P");
   $("cp-b").classList.toggle("on", t === "B");
   $("cp-to-l").textContent = t === "P" ? "To" : "Rubric";
-  $("cp-to").placeholder = t === "P" ? "OE3ABC or OE3ABC@OE3XYZ" : "ALL, WX ... or ALL@WW";
+  $("cp-rub").classList.toggle("hidden", !draft.pick);
+  if (draft.pick && !wasPick) {
+    const to = $("cp-to").value.trim().toUpperCase().replace(/\s+/g, "");
+    const [rub, area] = to.split("@");
+    const sel = $("cp-rub");
+    sel.replaceChildren();
+    for (const r of list) {
+      const o = el("option", "", r.desc ? `${r.name} – ${r.desc}` : r.name);
+      o.value = r.name;
+      sel.append(o);
+    }
+    let value = list[0].name, keep = "";
+    if (list.some((r) => r.name === rub)) { value = rub; keep = area || ""; }
+    else if (to && to === draft.origTo) {               // outbox draft to a closed rubric
+      const o = el("option", "", `${rub} – not open here`);
+      o.value = rub; o.disabled = true;
+      sel.append(o);
+      value = rub; keep = area || "";
+    }
+    sel.value = value;
+    $("cp-to").value = keep;
+  } else if (!draft.pick && wasPick) {
+    $("cp-to").value = "";
+  }
+  $("cp-to").placeholder = draft.pick ? "@ area, e.g. WW (optional)"
+    : t === "P" ? "OE3ABC or OE3ABC@OE3XYZ" : "ALL, WX ... or ALL@WW";
   composeInfo();
+}
+
+function composeTo() {
+  let to = $("cp-to").value.trim().toUpperCase().replace(/\s+/g, "");
+  if (draft.type === "B" && rubricList().length) {
+    to = to.replace(/^@/, "");
+    return $("cp-rub").value + (to ? "@" + to : "");
+  }
+  return to;
 }
 
 function openCompose(o) {
   o = o || {};
-  draft = { oid: o.oid || null, type: o.type || "P" };
+  draft = { oid: o.oid || null, type: o.type || "P",
+            origTo: o.type === "B" ? (o.to_call || "").toUpperCase() : "" };
   selId = o.oid ? "o" + o.oid : null;
   cur = null;
   $("cp-to").value = o.to_call || "";
@@ -961,12 +1008,13 @@ function composeInfo() {
 
 async function saveCompose(ev) {
   ev.preventDefault();
-  const to = $("cp-to").value.trim().toUpperCase().replace(/\s+/g, "");
+  const to = composeTo();
   const err = $("cp-err");
   const ok = draft.type === "P" ? /^[A-Z0-9]{1,6}(-\d{1,2})?(@[A-Z0-9#.-]{1,40})?$/.test(to)
                                 : /^[A-Z0-9]{1,6}(@[A-Z0-9#.-]{1,40})?$/.test(to);
   if (!ok) {
     err.textContent = draft.type === "P" ? "Please enter a call, e.g. OE3ABC or OE3ABC@OE3XYZ."
+                     : draft.pick ? "Please check the area, e.g. WW or AUT (or leave it empty)."
                                          : "Please enter a rubric, e.g. ALL or ALL@WW.";
     err.classList.remove("hidden");
     return;

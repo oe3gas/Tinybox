@@ -66,6 +66,7 @@ THIRD_PARTY_OFF = "Sorry, you can only send messages to the sysop {sysop}."
 INVALID_ADDRESS = "Invalid address: {addr}  (e.g. OE1XAB.#WIE.AUT.EU or WW)"
 DUPLICATE_BID = "BID {bid} is already known here - message not sent."
 NO_FORWARD = "This mailbox does not forward. Leave out @ {addr} for local mail."
+BAD_RUBRIC = "Rubric {rubric} is not open for bulletins here. Rubrics: {rubrics}"
 
 USAGE_R = "Usage: R n"
 USAGE_K = "Usage: K n"

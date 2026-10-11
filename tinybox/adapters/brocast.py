@@ -154,6 +154,8 @@ def wanted(msg: Message, app: App) -> bool:
     dests = app.cfg.brocast.destinations
     if msg.origin == "forward" and not app.cfg.forward.publish_to_brocast:
         return False                    # bulletins from other mailboxes stay off the air
+    if msg.fwd == "H":
+        return False                    # held for the sysop (e.g. new rubric, CR19)
     return msg.type == "B" and (not dests or msg.to_call in dests)
 
 

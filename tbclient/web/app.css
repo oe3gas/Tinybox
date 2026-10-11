@@ -286,6 +286,10 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .cp-row { display: flex; align-items: center; gap: 10px; }
 .cp-row label { width: 64px; flex: none; font-size: 13px; color: var(--muted); }
 .cp-row input { flex: 1; border-radius: 8px; }
+.cp-row select { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.cp-row select + input { flex: 0 1 140px; }
+.rub-desc { display: block; }
 #cp-to { font-family: ui-monospace, Consolas, monospace; text-transform: uppercase; }
 #cp-to::placeholder { text-transform: none; font-family: inherit; }
 .compose textarea { font: 13px/1.45 ui-monospace, Consolas, "Courier New", monospace; color: var(--text);

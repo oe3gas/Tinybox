@@ -6,6 +6,11 @@ Weboberflaeche: am PC drei Spalten, am Handy eine eigene Ansicht
 (im LAN erreichbar).
 
 Neu in dieser Version
+- Rubriken: die Bulletin-Rubriken legt der Sysop fest. Beim Schreiben
+  eines Bulletins waehlt man die Rubrik aus einer Liste (mit Beschreibung),
+  das Verteilgebiet (@WW ...) bleibt ein eigenes Feld. Die Liste der
+  Rubriken zum Abonnieren zeigt die Beschreibungen. Die Liste kommt mit
+  dem naechsten Bulletin-Abgleich.
 - Verbindungsqualitaet: neben jeder Station im Board zeigen 1 bis 5 Balken,
   wie gut ihre Funkverbindung zur TinyBox ist (grau = noch zu wenig Daten).
   Bricht eine Verbindung ab, steht im Chat "Connection to ... lost".

@@ -173,7 +173,8 @@ class Inbox:
         if isinstance(exc, ServiceError):
             texts = {"invalid_call": "ungültiges Rufzeichen/Ziel", "too_large":
                      f"Text zu lang (max. {self.app.cfg.mailbox.max_msg_bytes} Bytes)",
-                     "invalid_value": "ungültiger Wert"}
+                     "invalid_value": "ungültiger Wert",
+                     "bad_rubric": "Rubrik nicht in [rubrics] der tinybox.conf"}
             return f"{texts.get(exc.code, exc.code)}: {exc}"
         return str(exc)
 

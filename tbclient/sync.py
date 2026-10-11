@@ -51,6 +51,23 @@ class SyncError(Exception):
     pass
 
 
+def parse_rubrics(lines: list[str]) -> tuple[list[dict], list[str]]:
+    """Answer to //RUBRICS -> (rubrics with name/count/max/desc, rubrics users may
+    write to in the sysop's order; empty = the TinyBox has no list, free field)."""
+    rubrics, writable, desc = [], [], {}
+    for line in lines:
+        p = line.split()
+        if len(p) == 4 and p[0] == "//RU" and p[2].isdigit():
+            rubrics.append({"name": p[1], "count": int(p[2]), "max": int(p[3])})
+        elif len(p) >= 3 and p[0] == "//RU" and p[1] == "+":
+            writable = p[2:]
+        elif len(p) >= 3 and p[0] == "//RU" and p[2] == ":":
+            desc[p[1]] = line.split(None, 3)[3] if len(p) > 3 else ""
+    for r in rubrics:
+        r["desc"] = desc.get(r["name"], "")
+    return rubrics, writable
+
+
 def parse_header(rest: str) -> dict | None:
     """'<id> <P|B> <N|Y> <fwd> <size> <from> <to> <at> <bid> <unix> <subject>'"""
     p = rest.split(" ", 10)
@@ -329,12 +346,9 @@ class Syncer:
         st = self.store
         self._set(step="rubrics")
         await self._send("//RUBRICS")
-        rubrics = []
-        for line in await self._lines_until("//RUEND"):
-            p = line.split()
-            if len(p) == 4 and p[0] == "//RU" and p[2].isdigit():
-                rubrics.append({"name": p[1], "count": int(p[2]), "max": int(p[3])})
+        rubrics, writable = parse_rubrics(await self._lines_until("//RUEND"))
         st.put("rubrics", rubrics)
+        st.put("writable", writable)
         subs = [r for r in st.get("subscribed", []) if any(x["name"] == r for x in rubrics)]
         want = [f"{r}={st.max_bulletin(r)}" for r in subs
                 if next(x["max"] for x in rubrics if x["name"] == r) > st.max_bulletin(r)]

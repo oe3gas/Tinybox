@@ -11,6 +11,8 @@ Started by __main__ only when enabled; without it TinyBox is a standalone mailbo
   set, only inside the partner's window; after a failure, and for mail the
   partner wanted "later", it waits retry_min
 - HOLD n / REL n (sysop): keep a message from forwarding / release it again
+- at the start: bulletins held because of a new rubric (CR19) are released
+  or deleted when the sysop has put the rubric into [rubrics]
 
 Sessions receive (F3) and send (F4), see tinybox/fwd/.
 """
@@ -122,6 +124,24 @@ class ForwardModule:
         self.app.service.set_fwd_state(msg_id, "$", "")
         self._wake()
         return "$"
+
+    def resolve_rubrics(self) -> tuple[int, int]:
+        """Bulletins held for a new rubric (CR19): accepted now -> released,
+        refused now -> deleted, still unknown -> stay held. Returns (released, deleted)."""
+        svc = self.app.service
+        released = deleted = 0
+        for msg in svc.new_rubric_waiting():
+            state = svc.rubric_state(msg.to_call)
+            if state == "accepted":
+                self.release(msg.id)
+                released += 1
+            elif state in ("refused", "system"):
+                svc.delete(msg.id, self.app.cfg.station.sysop_call, sysop=True)
+                deleted += 1
+        if released or deleted:
+            log.info("new rubrics decided by the sysop: %d bulletin(s) released, %d deleted",
+                     released, deleted)
+        return released, deleted
 
     # --- partners ----------------------------------------------------------------
 
@@ -305,6 +325,7 @@ class ForwardModule:
 async def start(app: App) -> asyncio.Task:
     module = ForwardModule(app)
     app.forward = module
+    module.resolve_rubrics()
     await module.start_server()
     log.info("forward module on: %s, partners %s", app.cfg.station.address,
              ", ".join(module.cfg.partners) or "none")

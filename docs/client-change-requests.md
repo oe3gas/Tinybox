@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 11.10.2026 (Abend)
+Stand: 11.10.2026 (Abend, CR19 umgesetzt)
 
 ## Übersicht
 
@@ -25,7 +25,7 @@ Stand: 11.10.2026 (Abend)
 | 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
 | 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
 | 18 | Versionskontrolle: Client prüft, ob er aktuell ist; User wird informiert und aufgefordert, die neue Version zu holen | ✅ siehe unten |
-| 19 | Rubriken sind Sysop-Sache: feste Rubrikenliste, User schreiben Bulletins nur an ALL und diese Rubriken (Auswahl im Composer), Forwarding nimmt nur diese Rubriken an | erfasst – noch nicht umgesetzt, siehe unten |
+| 19 | Rubriken sind Sysop-Sache: feste Rubrikenliste, User schreiben Bulletins nur an ALL und diese Rubriken (Auswahl im Composer), Forwarding nimmt nur diese Rubriken an | ✅ siehe unten |
 | 20 | Verbindungsqualität: 1–5 Balken neben jeder Station im Board, Meldung bei Verbindungsabbruch, Befehl `STAT` | ✅ siehe unten |
 | 21 | Bulletins zwischen Rubriken verschieben und kopieren | Entschieden: nur Sysop, nur Sysop-Konsole und Sysop-Weboberfläche – noch nicht umgesetzt |
 | 22 | Sysop-Konsole: Befehl RESTART (Neustart, z. B. nach Änderung in tinybox.conf) | ✅ siehe unten |
@@ -141,7 +141,24 @@ Entscheidungen: Version automatisch aus dem Repo, Feature-Beschreibung als feste
 - **Unbekannte Emoji-Codes** (von einem neueren Client) erscheinen als `[?]` statt als Rohcode.
 - Tests: `tests/test_clientnews.py`; Praxistest mit TinyBox, aktuellem und altem Client (PC und Handy).
 
-## CR19 – Rubriken sind Sysop-Sache (erfasst 11.10.2026, noch nicht umgesetzt)
+## CR19 – Rubriken sind Sysop-Sache (erledigt 11.10.2026)
+
+### Umsetzung (11.10.2026)
+
+- **Ohne `[rubrics]`** (kein Eintrag) bleibt alles wie bisher: jede Rubrik ist frei. Nur **TBNEWS** ist immer gesperrt.
+- **User** (Terminal, Client): Bulletins nur an ALL und angenommene Rubriken. Terminal: `SB FUCHS` → `Rubric FUCHS is not open for bulletins here. Rubrics: ALL WX …` (vor der Texteingabe). Client: `//ERR send bad_rubric FUCHS`.
+- **Skripte (Eingangsordner) und MQTT:** nur Rubriken aus der Liste, sonst landet die Datei mit `.err` („Rubrik nicht in [rubrics] der tinybox.conf“) zurück. **Sysop** (Konsole, Sysop-Web) ist frei.
+- **Forwarding** (`tinybox/fwd/receive.py`):
+  - angenommen → `+`; abgelehnt oder TBNEWS → `-`.
+  - **unbekannt, erstes Angebot** → `+`. **Abweichung vom Vorschlag:** das Bulletin wird nicht verworfen, sondern **gehalten (H) gespeichert** (User sehen es nicht, brocast auch nicht), dazu geht die **Mail an den Sysop** („New rubric FUCHS offered by OE3GAS“, mit Kopf, Text und Anleitung). So ist das erste Bulletin nach dem Annehmen auch in der Rubrik.
+  - **unbekannt, Sysop hat noch nicht entschieden** → FBB/B1: `=` (später), Partner bietet es wieder an. **ASCII (W0RLI)** kennt kein „später“ → angenommen und gehalten, ohne weitere Mail.
+  - Woran „noch nicht entschieden“ erkannt wird: es gibt ein gehaltenes Bulletin dieser Rubrik mit dem Vermerk „new rubric …“. Löscht der Sysop es ohne Entscheidung, beginnt es beim nächsten Angebot von vorn (neue Mail).
+- **Nach dem Eintrag in `[rubrics]` und RESTART:** angenommen → gehaltene Bulletins werden freigegeben (wie `REL`), abgelehnt → gelöscht; zurückgestellte kommen beim nächsten Forward-Lauf bzw. werden abgelehnt.
+- **Client** (Version 2026.10.11.5): `//RUBRICS` liefert zusätzlich die angenommenen Rubriken ohne Bulletins (`//RU WX 0 0`), die Beschreibungen (`//RU WX : Weather and warnings`) und die Liste zum Schreiben (`//RU + ALL WX CONTEST`, Reihenfolge wie in `[rubrics]`). Alte Clients überlesen diese Zeilen. Composer: beim Typ *Bulletin* Auswahlliste „WX – Weather and warnings“, daneben das Feld für das Verteilgebiet (`@WW`, optional). Ohne Liste (alte TinyBox, noch kein Bulletin-Abgleich) bleibt das freie Feld. Die Rubrikenliste zum Abonnieren zeigt die Beschreibungen.
+- Tests: `tests/test_rubrics.py` (Regeln, Terminal, `//RUBRICS`, Forwarding inkl. fwdsim-Lauf FBB).
+- **Hinweis zur eigenen `tinybox.conf`:** `BROCAST` hat 7 Zeichen und wird ignoriert (Warnung im Log) – Rubriknamen höchstens 6 Zeichen, z. B. `BROCST`.
+
+### Ursprüngliche Erfassung
 
 **Heute:** Es gibt keine Rubrikenliste. Eine Rubrik entsteht mit dem ersten Bulletin an sie (Empfängerfeld, 1–6 Zeichen) – von Usern, per Forwarding, Skript oder Sysop – und verschwindet mit dem letzten. Tippfehler erzeugen eigene Rubriken, Beschreibungen gibt es nicht.
 
