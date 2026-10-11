@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 11.10.2026 (Nachmittag)
+Stand: 11.10.2026 (Abend)
 
 ## Übersicht
 
@@ -26,6 +26,7 @@ Stand: 11.10.2026 (Nachmittag)
 | 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
 | 18 | Versionskontrolle: Client prüft, ob er aktuell ist; User wird informiert und aufgefordert, die neue Version zu holen | ✅ siehe unten |
 | 19 | Rubriken sind Sysop-Sache: feste Rubrikenliste, User schreiben Bulletins nur an ALL und diese Rubriken (Auswahl im Composer), Forwarding nimmt nur diese Rubriken an | erfasst – noch nicht umgesetzt, siehe unten |
+| 20 | Verbindungsqualität: 1–5 Balken neben jeder Station im Board, Meldung bei Verbindungsabbruch, Befehl `STAT` | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -184,3 +185,13 @@ Entscheidungen: Version automatisch aus dem Repo, Feature-Beschreibung als feste
 
 Quellen: [Introduction to Packet Radio (ZL1RAH)](https://www.qsl.net/zl1rah/about_packet.htm) (ALL, QST, ARES, USERS, SWOP, AMSAT, PACKET, Verteilgebiete), [Packet Radio FAQ](https://papperlan.duckdns.org/textfiles.com/internet/FAQ/faq-pktr.txt) (ARRL-, AMSAT- und Ausbreitungs-Bulletins), [FBB (Wikipedia)](https://en.wikipedia.org/wiki/FBB_(software)).
 
+## CR20 – Verbindungsqualität (erledigt 11.10.2026)
+
+Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, Balken, `STAT`) und 1f3312c (Client, Empfangsquote, Abbruch).
+
+- Eigener Direwolf-Fork `oe3gas/direwolf-tinybox` (Zweig `tinybox`) zählt pro Verbindung Wiederholungen, REJ, T1-Abläufe usw.; TinyBox fragt sie alle 30 s über die neue AGW-Abfrage `Q` ab.
+- Bewertung: letzte 50 Frames pro Richtung, höchstens 30 Minuten; die schlechtere Richtung gibt die Balken, jeder T1-Ablauf kostet einen Balken; unter 20 Frames grau.
+- Für Clients im UI-Modus zählt zusätzlich die Empfangsquote der TBCHAT-Frames (aus `//RESEND` und neuem `//LOST`) – damit gibt es Balken auch ohne Fork-Direwolf.
+- Client: Balken rechts in der Teilnehmerliste (grün 4–5, gelb 3, rot 1–2, grau = noch keine Daten), über das Chat-Ereignis `%`; bei Abbruch die Zeile „Connection to … lost“.
+- Terminal: `STAT` (eigene Verbindung) und `STAT ALL` (alle) als Text.
+- Client-Version 2026.10.11.4.
