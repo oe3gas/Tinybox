@@ -309,7 +309,7 @@ a.extlink:hover { color: var(--accent-dark); }
   .wx-wind { grid-row: auto; }
   .wx-hero { grid-template-columns: 1fr; }
 }
-@container (max-width: 380px) {
+@container (max-width: 280px) {
   .wx-tile { grid-column: span 2; }
 }
 
@@ -398,4 +398,99 @@ a.extlink:hover { color: var(--accent-dark); }
   .fields { grid-template-columns: 1fr; }
   .fields input, .fields select { height: 44px; font-size: 16px; }
   .toast { left: 12px; right: 12px; bottom: 84px; max-width: none; }
+}
+
+/* ---------- phone, compact (≤ 700 px) ----------
+ * Smaller type and controls than the first mobile pass; touch targets stay
+ * ≥ 32 px. Inputs keep 16 px, otherwise iOS Safari zooms in on focus. */
+@media (max-width: 700px) {
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { font-size: 14px; line-height: 1.4; }
+
+  .top { gap: 6px 8px; padding: 6px 10px; padding-top: max(6px, env(safe-area-inset-top)); }
+  .logo { font-size: 17px; }
+  .badge-call { font-size: 12px; padding: 1px 5px; }
+  .stat { font-size: 12px; }
+  #btn-settings { width: 36px; height: 36px; font-size: 17px; }
+  .search, .goto input { height: 36px; }
+  .goto { font-size: 12px; }
+
+  .btn { height: 34px; padding: 0 10px; font-size: 13px; }
+  .filters .btn.sm { height: 32px; padding: 0 11px; font-size: 13px; }
+  select.sel { height: 32px; font-size: 14px; }
+
+  .mback { min-height: 38px; font-size: 15px; padding: 0 12px; }
+  .listhead { padding: 10px 12px 8px; }
+  .listhead .mback { margin: -10px -12px 8px; width: calc(100% + 24px); }
+  .listhead h2 { font-size: 17px; }
+  .tabs button { height: 40px; font-size: 14px; }
+  .nav { height: 44px; font-size: 15px; padding: 0 12px; }
+  .count { font-size: 12px; }
+  .row { padding: 9px 12px; grid-template-columns: 40px 1fr auto; }
+  .row .meta { font-size: 12px; }
+
+  .side-foot { padding: 4px; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+  .side-foot .nav { height: 42px; font-size: 13px; }
+  .side-foot .nav .count { font-size: 11px; }
+
+  /* page */
+  .tt { font-size: 11px; gap: 8px; padding: 5px 10px; }
+  .pagewrap { padding: 10px 12px 24px; }
+  .pagetitle { font-size: 19px; margin-bottom: 4px; }
+  .pmeta { font-size: 12px; gap: 2px 12px; margin-bottom: 10px; }
+  .actions { gap: 6px; padding-bottom: 10px; margin-bottom: 12px; }
+  .actions .btn { height: 32px; padding: 0 9px; font-size: 12px; }
+  .chip { min-width: 32px; height: 30px; }
+  .segment button { height: 32px; }
+
+  /* settings, status, receive log */
+  .settings { padding: 10px 12px 24px; }
+  .settings h2 { font-size: 19px; }
+  .settings h3 { font-size: 16px; margin-top: 18px; }
+  .hint { font-size: 12px; margin-bottom: 8px; }
+  .check { font-size: 13px; }
+  .fields input, .fields select { height: 38px; }
+  table.tbl { font-size: 12px; }
+  table.tbl th, table.tbl td { padding: 3px 6px; border-width: 1px; }
+  table.log td.mono, table.log th { white-space: nowrap; }
+  table.log td { min-width: 0; }
+
+  /* weather: two columns of small tiles */
+  .wx { gap: 6px; margin: 0 0 10px; }
+  .wx-tile { padding: 7px 9px 8px; border-radius: 7px; border-width: 1.5px; }
+  .wx-tile h5 { font-size: 10px; margin-bottom: 3px; letter-spacing: .05em; }
+  .wx-hero { gap: 2px 12px; }
+  .wx-big { font-size: 34px; }
+  .wx-big small { font-size: 15px; }
+  .wx-mid { font-size: 21px; }
+  .wx-mid small { font-size: 12px; }
+  .wx-sub, .wx-trend { font-size: 12px; margin-top: 2px; }
+  .wx-cap { font-size: 10px; margin-bottom: 4px; }
+  .wx-kv { font-size: 12px; gap: 1px 8px; margin-top: 6px; }
+  .wx-kv dd { font-size: 12px; }
+  .wx-range .bar { height: 9px; }
+  .wx-range .mk { top: -6px; height: 17px; }
+  .wx-range .ends { font-size: 11px; margin-top: 3px; }
+  .wx-gauge { margin: 6px 0 2px; }
+  .wx-scale, .wx-legend { font-size: 10px; }
+  .wx-bft { margin: 6px 0 2px; }
+  .wx-bft i { height: 10px; border-width: 1.5px; }
+  .wx-compass { max-width: 130px; }
+  .wx-spark svg { height: 70px; }
+  .wx-chart { margin-top: 14px; }
+  .wx-yax, .wx-xax { font-size: 10px; }
+
+  /* wind: compass left, figures right */
+  .wx-wind { display: grid; grid-template-columns: 104px minmax(0, 1fr); column-gap: 10px; align-items: start; }
+  .wx-wind > * { grid-column: 2; }
+  .wx-wind > h5 { grid-column: 1 / -1; }
+  .wx-wind > .wx-compass { grid-column: 1; grid-row: 2 / span 4; max-width: 104px; margin: 0; align-self: center; }
+  .wx-wind .wx-kv { margin-top: 0; }
+
+  /* other values (sun, UV, snow ...) as small cards, two per row */
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0 0 10px; }
+  .card { padding: 6px 9px; border-width: 1.5px; border-radius: 7px; }
+  .card .l { font-size: 11px; }
+  .card .v { font-size: 20px; }
+  .card .v small { font-size: 12px; }
 }

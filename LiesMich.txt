@@ -1,0 +1,24 @@
+==== STarten von LinBPQ auf WSL zu Testzwecken
+
+
+WSL > 
+cd ~/bpq
+./linbpq
+
+Oder:
+
+Das Skript liegt in deinem Ordner als C:\Tinybox\test\bpq\start_linbpq.ps1.
+
+Starten (in PowerShell, aus C:\Tinybox):
+
+powershell -ExecutionPolicy Bypass -File test\bpq\start_linbpq.ps1
+
+Das Skript prüft zuerst, ob alles da ist: WSL mit Debian, ~/bpq/linbpq und ~/bpq/bpq32.cfg. Fehlt etwas, sagt es was und bricht ab. Fehlt in .wslconfig der Eintrag networkingMode=mirrored, gibt es nur einen Hinweis und läuft weiter. Läuft LinBPQ schon, startet es kein zweites Mal.
+
+Sonst öffnet es LinBPQ in einem eigenen Fenster, wartet, bis die Weboberfläche auf Port 8008 antwortet, und öffnet sie im Browser.
+
+Beenden:
+
+powershell -ExecutionPolicy Bypass -File test\bpq\start_linbpq.ps1 -Stop
+
+Alternativ drückst du Ctrl+C im LinBPQ-Fenster.

@@ -18,7 +18,7 @@ Stand: 11.10.2026 (Abend, CR23 und CR24 umgesetzt und getestet)
 | 9 | Zeilenumbruch mit Shift+Enter | offen – braucht Zeilenumbruch-Kodierung über Funk (Protokoll ist zeilenbasiert) |
 | 10 | Mehrzeilige Texte einfügen | offen – wie CR9 |
 | 11 | Sticker und Animationen | Sticker-Set fertig (20 Dateien), Einbau und Animationen offen – siehe unten |
-| 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept offen |
+| 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept steht (nur Chat), Umsetzung offen – siehe unten |
 | 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | ✅ siehe unten |
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | offen |
 | 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
@@ -106,9 +106,38 @@ Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (
 
 - Offen: Auswahl bestätigen; Verfügbarkeit 7–10 in der Noto-Liste prüfen; Technik für eigene Animationen (animiertes SVG/CSS vs. Lottie).
 
-## CR12 – Kleine Bilder anhängen (Konzept offen)
+## CR12 – Kleine Bilder im Chat (Konzept 11.10.2026, Umsetzung offen)
 
-Zu klären: Umsetzung in Client und TinyBox, Maximalgröße, Binärübertragung (7PLUS oder andere).
+### Entscheidungen (Gerhard, 11.10.2026)
+
+1. **Nur Chat.** Binär-Anhänge in Mails werden später extra betrachtet (dann prüfen, was LinBPQ/FBB heute statt 7PLUS können, z. B. Winlink B2F-Anhänge bei LinBPQ, `#BIN#` bei FBB).
+2. **Maximalgröße** mit Standardwert (Vorschlag 8 KB), vom Sysop einstellbar. Der User sieht **vor dem Hochladen**, wie lange Upload und Download dauern, und entscheidet selbst.
+3. **Vorschau = BlurHash** (unscharfe Farbvorschau, ca. 20–30 Zeichen).
+4. **Upload-Dialog ohne Vorschau:** Bild wählen → Hinweis „Das Bild wird auf kleine Größe reduziert: ca. 5,1 KB, Upload ca. 1 min, Laden für andere ca. 1 min (1200 Bd)“ → **OK** oder **Abbruch**.
+5. **Aufbewahrung wie die History des Boards.** Auch beim Laden der History kommt nur der Verweis mit BlurHash; das Bild holt man mit Antippen. Unter dem BlurHash steht die Ladezeit – über Funk geht dafür nur die Größe, die Zeit rechnet der Client selbst aus.
+
+### Grundsätze
+
+- **Kompression = Bildformat, nicht LZHUF.** WebP (bzw. JPEG als Rückfall) ist schon komprimiert, LZHUF bringt darauf nichts. Gespart wird mit Auflösung (z. B. 320 px an der langen Seite) und Qualität. Der Browser macht das selbst (`canvas.toBlob("image/webp", q)`): er verkleinert und senkt die Qualität schrittweise, bis das Bild unter die Maximalgröße passt.
+- **Kein 7PLUS** zwischen Client und TinyBox: AX.25 connected ist 8-Bit-transparent und gesichert (CRC + Wiederholung). Übertragen wird binär in Stücken mit Offset wie beim Mail-Abgleich (`//PART`), ein abgebrochener Transfer setzt fort.
+- **Über Funk im Chat nur der Verweis**, nie das Bild. Wer es sehen will, holt es per I-Frame bei der TinyBox.
+- **TinyBox dekodiert keine Bilder:** sie speichert einen Blob unter seinem Hash, prüft nur Größe und Dateikennung (WebP/JPEG). Gleiches Bild = ein Exemplar.
+
+### Ablauf (Vorschlag, Details bei der Umsetzung)
+
+- **Chat-Beitrag** mit Bild: Escape `~#` + Kennung + Größe + Seitenverhältnis + BlurHash, z. B.
+  `~#3fa9c2d1 5120 4x3 LEHV6nWB2yk8pyo0adR*.7kCMdnj` (ca. 45 Byte). Optional danach Text als Bildunterschrift.
+- **Hochladen:** Client sendet `//IMGPUT <hash> <größe>` und die Daten in Stücken (z. B. 256 Byte, mit Pausen, damit Chat-Zeilen dazwischen durchkommen); TinyBox antwortet `//IMGOK` bzw. `//ERR img too_large`. Erst dann geht der Chat-Beitrag hinaus.
+- **Laden:** Antippen → `//IMG <hash> <offset> <länge>` → Antwort wie `//P` (binär). Der Client merkt sich geladene Bilder.
+- **Anzeige:** BlurHash im richtigen Seitenverhältnis mit „🖼 5,1 KB · ca. 1 min · antippen zum Laden“, nach dem Laden das Bild in der Bubble. Die Ladezeit schätzt der Client aus Größe und Link (Baudrate bzw. gemessene Rate beim Abgleich).
+- **Terminal-Teilnehmer** sehen z. B. `[Bild 5,1 KB – nur im TinyBox-Client]`.
+- **Aufbewahrung:** Ein Bild wird gelöscht, wenn keine Chat-Zeile in der History es mehr verwendet.
+
+### Noch offen
+
+- Boards ohne History (`live`, z. B. RUNDE): wie lange bleibt dort ein Bild abrufbar (Vorschlag: 24 h)?
+- Maximalgröße: 8 KB als Standard bestätigen; Schlüssel in `[chat]`, z. B. `image_max = 8k`.
+- Wer darf Bilder posten (alle, oder pro Board abschaltbar)?
 
 ## CR13 – History nur auf Wunsch (erledigt 11.10.2026)
 
