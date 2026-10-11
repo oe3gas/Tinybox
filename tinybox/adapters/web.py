@@ -26,7 +26,7 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from .. import VERSION
+from .. import VERSION, config
 from ..app import App
 from ..config import base_call, normalize_call
 from ..service import ServiceError
@@ -42,6 +42,7 @@ STATIC_FILES = {
 }
 MAX_HEADER = 16 * 1024
 MAX_BODY = 128 * 1024
+MAX_WEB_SESSIONS = 20      # remembered logins (data/web.sessions)
 SSE_PING_SEC = 15
 BACKLOG_LINES = 300
 
@@ -130,7 +131,7 @@ class WebServer:
         self.app = app
         self.cfg = app.cfg
         self.token = self._load_token()
-        self.sessions: dict[str, str] = {}  # session id -> csrf token
+        self.sessions: dict[str, str] = self._load_sessions()  # session id -> csrf token
         self.hub = Hub()
         self.port = self.cfg.web.port
         self.allowed_hosts: set[str] = set()
@@ -150,6 +151,28 @@ class WebServer:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(token + "\n", encoding="ascii")
         return token
+
+    # logins survive a RESTART too (else the open page would need the login link again)
+    def _sessions_path(self):
+        return self.cfg.storage.data_dir / "web.sessions"
+
+    def _load_sessions(self) -> dict[str, str]:
+        try:
+            data = json.loads(self._sessions_path().read_text(encoding="ascii"))
+            if isinstance(data, dict):
+                return {str(k): str(v) for k, v in list(data.items())[-MAX_WEB_SESSIONS:]}
+        except (OSError, ValueError):
+            pass
+        return {}
+
+    def _save_sessions(self) -> None:
+        try:
+            path = self._sessions_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(dict(list(self.sessions.items())[-MAX_WEB_SESSIONS:])),
+                            encoding="ascii")
+        except OSError as exc:
+            log.warning("web sessions not saved: %s", exc)
 
     async def start(self) -> None:
         self.server = await asyncio.start_server(self._handle, self.cfg.web.host,
@@ -276,6 +299,7 @@ class WebServer:
             raise HttpError(403, "wrong token")
         sid = secrets.token_urlsafe(32)
         self.sessions[sid] = secrets.token_urlsafe(24)
+        self._save_sessions()
         log.info("web login")
         self._redirect(writer, "/", {"Set-Cookie":
             f"tb_session={sid}; HttpOnly; SameSite=Strict; Path=/"})
@@ -337,6 +361,8 @@ class WebServer:
                 return [asdict(e) for e in app.store.jlog_list(100)]
             if parts == ["config"]:
                 return self._config()
+            if parts == ["rubrics"]:
+                return self._rubrics()
         else:
             if parts == ["messages"]:
                 msg_id = svc.create(from_call=sysop, to_call=str(data.get("to", "")),
@@ -356,12 +382,21 @@ class WebServer:
                 return {"disconnected": self._disconnect(parts[1])}
             if parts == ["shutdown"]:
                 delay = data.get("delay", 0)
+                restart = data.get("restart") is True
                 if not isinstance(delay, int) or delay < 0:
                     raise HttpError(400, "delay: seconds")
+                what = "restart" if restart else "shutdown"
+                if restart and app.config_path:      # never restart into a broken config
+                    try:
+                        config.load(app.config_path)
+                    except config.ConfigError as exc:
+                        raise HttpError(400, f"tinybox.conf has an error, not restarted: {exc}")
                 if delay and len(app.registry):        # warn the stations first
-                    log.info("shutdown in %d s requested from web GUI", delay)
-                    return {"ok": True, "delay": app.shutdown.schedule(delay, sysop)}
-                log.info("shutdown requested from web GUI")
+                    log.info("%s in %d s requested from web GUI", what, delay)
+                    return {"ok": True, "delay": app.shutdown.schedule(delay, sysop,
+                                                                       restart=restart)}
+                log.info("%s requested from web GUI", what)
+                app.restart = restart
                 if app.stop_event is not None:
                     asyncio.get_running_loop().call_later(0.3, app.stop_event.set)
                 return {"ok": True, "delay": 0}
@@ -387,6 +422,37 @@ class WebServer:
             d["note"] = m.note
         return d
 
+    def _rubrics(self) -> list[dict]:
+        """Rubrics for the dashboard: from [rubrics] (in that order), then the ones
+        that only exist because bulletins are addressed to them."""
+        from ..clientnews import RUBRIC as NEWS
+        stats: dict[str, dict] = {}
+        for m in self.app.store.list_messages():
+            if m.type != "B":
+                continue
+            st = stats.setdefault(m.to_call, {"count": 0, "unread": 0, "newest": ""})
+            st["count"] += 1
+            st["unread"] += m.status == "N"
+            st["newest"] = max(st["newest"], m.created)
+        rows, seen = [], set()
+
+        def row(name, desc, status):
+            seen.add(name)
+            st = stats.get(name, {"count": 0, "unread": 0, "newest": ""})
+            rows.append({"name": name, "description": desc, "status": status, **st})
+
+        conf = {r.name: r for r in self.app.cfg.rubrics}
+        if "ALL" not in conf:
+            row("ALL", "To everybody", "accepted")
+        for r in self.app.cfg.rubrics:
+            row(r.name, r.description, "accepted" if r.accepted or r.name == "ALL" else "refused")
+        if NEWS not in seen:
+            row(NEWS, "TinyBox News (client features)", "system")
+        for name in sorted(stats):
+            if name not in seen:
+                row(name, "", "unlisted")
+        return rows
+
     def _status(self) -> dict:
         cfg, msgs = self.app.cfg, self.app.store.list_messages()
         agw = self.app.agw
@@ -402,6 +468,8 @@ class WebServer:
             "max_msg_bytes": cfg.mailbox.max_msg_bytes,
             "web": f"127.0.0.1:{self.port}",
             "shutdown_in": self.app.shutdown.seconds_left() if self.app.shutdown else None,
+            "restart_pending": bool(self.app.shutdown and self.app.shutdown.pending
+                                    and self.app.shutdown.restart),
             "forward": (None if self.app.forward is None else
                         {"queued": len(self.app.store.fwd_queue_list()),
                          "held": sum(m.fwd == "H" for m in msgs),

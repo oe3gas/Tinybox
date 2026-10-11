@@ -12,6 +12,7 @@ const S = {
   feed: [],
   filter: "all",
   search: "",
+  rubric: "",          // show only the bulletins of this rubric (from the rubrics card)
   mon: true,
   view: null,        // references to live parts of the current view
   currentId: null,
@@ -116,7 +117,7 @@ async function refreshStatus() {
   $("nav-users").textContent = st.users || "";
   $("nav-ver").replaceChildren("TinyBox " + st.version, h("br"), st.web + " · local only");
   document.title = "TinyBox " + st.mailbox;
-  setShutdown(st.shutdown_in);
+  setShutdown(st.shutdown_in, st.restart_pending);
 }
 
 async function refreshMessages() {
@@ -201,6 +202,7 @@ function filteredMessages() {
     if (S.filter === "P" && m.type !== "P") return false;
     if (S.filter === "B" && m.type !== "B") return false;
     if (S.filter === "N" && m.status !== "N") return false;
+    if (S.rubric && (m.type !== "B" || m.to !== S.rubric)) return false;
     if (!q) return true;
     return m.to.includes(q) || m.from.includes(q) || m.subject.toUpperCase().includes(q);
   });
@@ -221,6 +223,8 @@ function messagesCard(opts) {
     type: "search", placeholder: "Search call or subject", value: S.search,
     oninput: (e) => { S.search = e.target.value; update(); },
   });
+  const chip = h("button", { class: "btn sm", type: "button", title: "Show all again",
+                             onclick: () => { S.rubric = ""; update(); } });
   const head = compact ? ["Msg#", "TS", "From", "Date (UTC)", "Subject"]
                        : ["Msg#", "TS", "Size", "To", "From", "Date (UTC)", "Subject", "Origin"];
 
@@ -252,11 +256,13 @@ function messagesCard(opts) {
       tbody.append(h("tr", {}, h("td", { colspan: head.length, class: "subject", text: "No messages." })));
     }
     foot.textContent = "Showing " + list.length + " of " + all.length;
+    chip.style.display = S.rubric ? "" : "none";      // .btn sets display: hidden is not enough
+    chip.replaceChildren("Rubric " + S.rubric + " ", h("span", { "aria-hidden": "true", text: "✕" }));
   }
 
   const card = h("section", { class: "card", style: "flex-grow: 1" },
     h("div", { class: "card-head" },
-      h("h2", { text: "Messages" }), seg,
+      h("h2", { text: "Messages" }), seg, chip,
       h("label", { class: "search" }, h("span", { class: "sr-only", text: "Search" }), search),
       h("a", { class: "btn primary", href: "#/compose", text: "New message" })),
     h("div", { class: "scroll" },
@@ -294,6 +300,42 @@ async function disconnect(call) {
     toast(call + " disconnected.");
     scheduleRefresh("sessions", "status");
   } catch (e) { toast(e.message, true); }
+}
+
+// Rubrics (CR19 groundwork): [rubrics] from tinybox.conf plus the ones that only
+// exist because bulletins are addressed to them. Click = show its bulletins.
+const RUBRIC_STATUS = { accepted: ["ok", "accepted"], refused: ["bad", "refused"],
+                        system: ["sys", "system"], unlisted: ["warn", "not in conf"] };
+
+function rubricsCard() {
+  const tbody = h("tbody");
+  const foot = h("span");
+  async function update() {
+    let rows = [];
+    try { rows = await api("rubrics"); } catch (e) { foot.textContent = e.message; return; }
+    tbody.replaceChildren(...rows.map((r) => {
+      const [cls, label] = RUBRIC_STATUS[r.status] || ["", r.status];
+      const show = () => { S.filter = "B"; S.rubric = r.name; S.search = ""; location.hash = "#/messages"; };
+      return h("tr", { class: "click", title: "Show the bulletins of " + r.name, onclick: show },
+        h("td", { class: "mono", style: "font-weight: 700", text: r.name }),
+        h("td", { class: "subject", text: r.description || "-" }),
+        h("td", { class: "mono", text: r.count ? r.count + (r.unread ? " (" + r.unread + " new)" : "") : "-" }),
+        h("td", {}, h("span", { class: "rstat " + cls, text: label })));
+    }));
+    if (!rows.length) tbody.append(h("tr", {}, h("td", { colspan: 4, class: "subject", text: "No rubrics." })));
+    const unlisted = rows.filter((r) => r.status === "unlisted").length;
+    foot.textContent = rows.length + " rubric(s)" +
+      (unlisted ? " · " + unlisted + " not in [rubrics] of tinybox.conf" : "");
+  }
+  const card = h("section", { class: "card", style: "flex-shrink: 0; max-height: 40vh" },
+    h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Rubrics" })),
+    h("div", { class: "scroll" },
+      h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Rubric", "Description", "Bulletins", "Status"].map((t) => h("th", { text: t })))),
+        tbody)),
+    h("div", { class: "card-foot" }, foot));
+  update();
+  return { card, update };
 }
 
 function monitorCard() {
@@ -374,10 +416,12 @@ const main = () => $("main");
 function viewDashboard() {
   const msgs = messagesCard();
   const sess = sessionsCard();
+  const rub = rubricsCard();
   const mon = monitorCard();
   main().className = "two";
-  main().replaceChildren(msgs.card, h("div", { class: "col" }, sess.card, mon.card));
-  return { updateMessages: msgs.update, updateSessions: sess.update, monitorBody: mon.body };
+  main().replaceChildren(msgs.card, h("div", { class: "col" }, sess.card, rub.card, mon.card));
+  return { updateMessages: () => { msgs.update(); rub.update(); }, updateSessions: sess.update,
+           monitorBody: mon.body };
 }
 
 function viewMessages() {
@@ -548,51 +592,81 @@ function route() {
   main().scrollTop = 0;
 }
 
-// Shutdown with warning: the stations get 60 s (button turns into "Cancel").
-let shutdownAt = null, shutdownTimer = null;
+// Shutdown / restart with warning: the stations get 60 s (button turns into "Cancel").
+let shutdownAt = null, shutdownTimer = null, restartMode = false;
 
-function setShutdown(left) {
+function setShutdown(left, restart) {
   shutdownAt = left === null || left === undefined ? null : Date.now() + left * 1000;
+  if (restart !== undefined) restartMode = !!restart;
   tickShutdown();
   if (shutdownAt && !shutdownTimer) shutdownTimer = setInterval(tickShutdown, 1000);
 }
 
 function tickShutdown() {
-  const b = $("btn-shutdown");
+  const bs = $("btn-shutdown"), br = $("btn-restart");
   if (shutdownAt === null) {
     clearInterval(shutdownTimer); shutdownTimer = null;
-    b.textContent = "Shutdown";
+    bs.textContent = "Shutdown"; br.textContent = "Restart";
+    bs.disabled = br.disabled = false;
     return;
   }
   const left = Math.max(0, Math.round((shutdownAt - Date.now()) / 1000));
-  b.textContent = `Cancel shutdown (${left} s)`;
+  (restartMode ? br : bs).textContent = `Cancel ${restartMode ? "restart" : "shutdown"} (${left} s)`;
+  (restartMode ? bs : br).disabled = true;
   if (left === 0 && Date.now() - shutdownAt > 2000) {
     clearInterval(shutdownTimer); shutdownTimer = null;
-    $("stopped").hidden = false;
+    stopped(restartMode);
   }
 }
 
-async function shutdown() {
+// After a restart the page waits until TinyBox answers again and reloads itself.
+function stopped(restart) {
+  $("stopped").hidden = false;
+  if (!restart) return;
+  $("stopped-title").textContent = "TinyBox restarts ...";
+  $("stopped-text").textContent = "This page reloads as soon as TinyBox is back.";
+  let tries = 0;
+  const wait = setInterval(async () => {
+    tries++;
+    try {
+      const r = await fetch("/api/status", { credentials: "same-origin", cache: "no-store" });
+      if (r.ok || r.status === 401) { clearInterval(wait); location.reload(); }
+    } catch (e) { /* not back yet */ }
+    if (tries > 90) {
+      clearInterval(wait);
+      $("stopped-text").textContent = "TinyBox did not come back - check the TinyBox window.";
+    }
+  }, 2000);
+}
+
+async function shutdown(restart) {
+  const word = restart ? "restart" : "shutdown";
   try {
     if (shutdownAt !== null) {
-      if (!confirm("Call off the shutdown? The stations are told.")) return;
+      if (!confirm(`Call off the ${word}? The stations are told.`)) return;
       await api("shutdown/cancel", {});
       setShutdown(null);
-      toast("Shutdown cancelled");
+      toast(restart ? "Restart cancelled" : "Shutdown cancelled");
       return;
     }
     const users = S.status ? S.status.users : 0;
-    if (!confirm(users ? `Stop TinyBox in 60 seconds?\n${users} connected station(s) get a ` +
-                         "system message now and are disconnected then."
-                       : "Stop TinyBox now? No station is connected.")) return;
-    const r = await api("shutdown", { delay: 60 });
-    if (r.delay) { setShutdown(r.delay); toast(`Shutdown in ${r.delay} s - stations warned`); }
-    else $("stopped").hidden = false;
+    const q = restart
+      ? (users ? `Restart TinyBox in 60 seconds?\n${users} connected station(s) get a system ` +
+                 "message now and are disconnected then. tinybox.conf is checked first."
+               : "Restart TinyBox now? No station is connected. tinybox.conf is checked first.")
+      : (users ? `Stop TinyBox in 60 seconds?\n${users} connected station(s) get a ` +
+                 "system message now and are disconnected then."
+               : "Stop TinyBox now? No station is connected.");
+    if (!confirm(q)) return;
+    const r = await api("shutdown", { delay: 60, restart: !!restart });
+    if (r.delay) { setShutdown(r.delay, restart); toast(`${restart ? "Restart" : "Shutdown"} in ${r.delay} s - stations warned`); }
+    else stopped(restart);
   } catch (e) { toast(e.message, true); }
 }
 
 async function init() {
-  $("btn-shutdown").addEventListener("click", shutdown);
+  $("btn-shutdown").addEventListener("click", () => shutdown(false));
+  $("btn-restart").addEventListener("click", () => shutdown(true));
   window.addEventListener("hashchange", route);
   try {
     S.csrf = (await api("session")).csrf;

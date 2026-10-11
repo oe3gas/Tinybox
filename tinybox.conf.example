@@ -95,6 +95,17 @@ DX    = 24h   DX spots and news
 TECH  = 30d   Technical questions
 RUNDE = live  Live round, nothing is stored
 
+[rubrics]
+# Bulletin rubrics, set by the sysop (CR19, docs/client-change-requests.md).
+# One line per rubric:
+#   NAME = description      accepted
+#   NAME = - [note]         refused
+# NAME: 1-6 letters/digits. ALL is always accepted. Shown in the web GUI
+# (dashboard); the rules for users and forwarding follow with CR19.
+#ALL     = To everybody
+#WX      = Weather and warnings
+#HUMOR   = -  not wanted here
+
 [forward]
 enabled  = no                  # exchange mail with other mailboxes (module from F2 on);
                                # no = standalone mailbox, @ addresses only for bulletins

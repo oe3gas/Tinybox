@@ -151,6 +151,58 @@ class WebTests(unittest.TestCase):
         self.assertEqual(o["shutdown"], 200)
         self.assertTrue(o["stopped"])
 
+    def test_restart_rubrics_and_logins_survive(self):
+        """Dashboard: Restart button (checks tinybox.conf), rubrics list; a login
+        survives a restart of the web server."""
+        from tinybox.config import Rubric
+        self.app.cfg.rubrics = [Rubric("WX", "Weather"), Rubric("HUMOR", "", False)]
+        self.app.service.create(from_call="OE3TEC", to_call="WX", type="B", subject="Rain",
+                                body="x", origin="telnet")
+        self.app.service.create(from_call="OE3TEC", to_call="SWAP", type="B", subject="Rig",
+                                body="x", origin="telnet")
+        box = {}
+
+        async def first(s):
+            box["cookie"], box["csrf"] = await self.login(s)
+            st, _, p = await request(s.port, "GET", "/api/rubrics", cookie=box["cookie"])
+            return json.loads(p)
+
+        rows = self.run_async(first)
+        by = {r["name"]: r for r in rows}
+        self.assertEqual([r["name"] for r in rows], ["ALL", "WX", "HUMOR", "TBNEWS", "SWAP"])
+        self.assertEqual((by["WX"]["status"], by["WX"]["count"], by["WX"]["description"]),
+                         ("accepted", 1, "Weather"))
+        self.assertEqual(by["HUMOR"]["status"], "refused")
+        self.assertEqual(by["TBNEWS"]["status"], "system")
+        self.assertEqual((by["SWAP"]["status"], by["SWAP"]["count"]), ("unlisted", 1))
+
+        async def second(s):          # a new web server (= after a restart)
+            post = lambda body: request(s.port, "POST", "/api/shutdown", cookie=box["cookie"],
+                                        csrf=box["csrf"], body=body,
+                                        origin=f"http://127.0.0.1:{s.port}")
+            out = {"status": (await request(s.port, "GET", "/api/status",
+                                            cookie=box["cookie"]))[0]}
+            with tempfile.TemporaryDirectory() as tmp:
+                bad = Path(tmp) / "tinybox.conf"
+                bad.write_text("[station]\nmailbox_call = !!\n", encoding="utf-8")
+                self.app.config_path = str(bad)
+                st, _, p = await post({"delay": 0, "restart": True})
+                out["bad"] = (st, json.loads(p).get("detail", json.loads(p).get("error")))
+            out["not_stopped"] = not self.app.stop_event.is_set()
+            self.app.config_path = str(Path(__file__).resolve().parent.parent / "tinybox.conf.example")
+            out["ok"] = (await post({"delay": 0, "restart": True}))[0]
+            await asyncio.sleep(0.5)
+            out["restart"] = self.app.stop_event.is_set() and self.app.restart
+            return out
+
+        o = self.run_async(second)
+        self.assertEqual(o["status"], 200)                  # still logged in
+        self.assertEqual(o["bad"][0], 400)
+        self.assertIn("not restarted", o["bad"][1])
+        self.assertTrue(o["not_stopped"])
+        self.assertEqual(o["ok"], 200)
+        self.assertTrue(o["restart"])
+
     def test_feed_delivers_events(self):
         async def scenario(s):
             cookie, _ = await self.login(s)

@@ -22,6 +22,7 @@
   </div>
   <div class="who">
     <span>Sysop <strong class="mono" id="hdr-sysop">-</strong></span>
+    <button class="btn" id="btn-restart" type="button" title="Restart TinyBox, e.g. after changing tinybox.conf">Restart</button>
     <button class="btn danger" id="btn-shutdown" type="button">Shutdown</button>
   </div>
 </header>
@@ -41,8 +42,8 @@
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="stopped" hidden>
   <div class="stopped-box">
-    <h1>TinyBox has been stopped.</h1>
-    <p>Start it again with tinybox.bat, then reload this page.</p>
+    <h1 id="stopped-title">TinyBox has been stopped.</h1>
+    <p id="stopped-text">Start it again with tinybox.bat, then reload this page.</p>
   </div>
 </div>
 </body>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import configparser
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -267,6 +268,15 @@ def parse_keep(value: str) -> int:
 
 
 @dataclass
+class Rubric:
+    """[rubrics] (CR19): bulletin rubrics set by the sysop. Shown in the web GUI;
+    the rules for users and forwarding follow with CR19."""
+    name: str
+    description: str = ""
+    accepted: bool = True        # "NAME = -" = refused
+
+
+@dataclass
 class Config:
     path: Path
     station: StationCfg
@@ -281,6 +291,7 @@ class Config:
     brocast: BrocastCfg = None  # type: ignore[assignment]  # set by load()
     inbox: InboxCfg = None  # type: ignore[assignment]  # set by load()
     chat: ChatCfg = field(default_factory=ChatCfg)
+    rubrics: list[Rubric] = field(default_factory=list)
     forward: ForwardCfg = field(default_factory=ForwardCfg)
     client: ClientCfg = field(default_factory=ClientCfg)
 
@@ -527,7 +538,7 @@ def load(path: str | Path) -> Config:
 
     return Config(path=path, station=station, direwolf=direwolf, mailbox=mailbox,
                   telnet=telnet, web=web, console=console, storage=storage, logging=logging_cfg,
-                  mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp),
+                  mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp), rubrics=_load_rubrics(cp),
                   forward=forward,
                   client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)))
 
@@ -585,6 +596,29 @@ def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
     except AddressError as exc:
         raise ConfigError(f"[{sec}] haddress: '{exc}' is not a valid address") from None
     return p
+
+
+def _load_rubrics(cp: configparser.ConfigParser) -> list[Rubric]:
+    """[rubrics]  NAME = description  (accepted)   NAME = - [note]  (refused).
+    Lenient: a wrong line is only logged, TinyBox still starts."""
+    rubrics: list[Rubric] = []
+    if not cp.has_section("rubrics"):
+        return rubrics
+    for key, value in cp.items("rubrics", raw=True):
+        if key in cp.defaults():
+            continue
+        name = key.strip().upper()
+        if not DEST_RE.match(name):
+            logging.getLogger(__name__).warning(
+                "[rubrics] %s: a rubric name has 1-6 letters/digits - ignored", key)
+            continue
+        value = value.strip()
+        refused = value == "-" or value.startswith("- ") or value.startswith("-\t")
+        desc = value[1:].strip() if refused else value
+        if any(r.name == name for r in rubrics):
+            continue
+        rubrics.append(Rubric(name, desc, not refused))
+    return rubrics
 
 
 def _load_chat(cp: configparser.ConfigParser) -> ChatCfg:

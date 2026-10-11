@@ -125,6 +125,14 @@ table.data tbody tr.current td { background: #DADAD5; }
 .monitor .warn { color: var(--danger); font-weight: 600; }
 .monitor.hide-mon .line.mon { display: none; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+
+/* rubrics */
+.rstat { display: inline-block; padding: 2px 8px; border: 2px solid var(--ink); border-radius: 4px;
+         font-size: 12px; font-weight: 700; }
+.rstat.ok { border-color: #1E6B35; color: #1E6B35; }
+.rstat.bad { border-color: var(--danger); color: var(--danger); }
+.rstat.warn { border-color: #8A5A00; color: #8A5A00; background: #FFF4D6; }
+.rstat.sys { border-color: var(--ink-3); color: var(--ink-3); }
 .check input { width: 20px; height: 20px; accent-color: var(--ink); }
 
 /* message reader */
