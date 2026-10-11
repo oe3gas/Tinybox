@@ -101,7 +101,7 @@ Eingabe einer Nachricht: zuerst wird der Betreff abgefragt, dann der Text. Ende 
 
 - Feste Boards, vom Sysop in `[chat_boards]` festgelegt: `NAME = Aufbewahrung Beschreibung`. Aufbewahrung `live` (nichts wird gespeichert) oder z. B. `12h` / `7d` (max. `365d`). Die Reihenfolge in der Datei ist die Nummer des Boards.
 - `C` listet die Boards, `C board` betritt eines. Im Board ist jede Zeile Chattext, Befehle beginnen mit `/`: `/Q`, `/EX` oder CTRL-Z zurück in die Mailbox, `/W` wer ist da, `/L` alle Boards, `/J board` wechseln, `/H` Hilfe.
-- Beim Betreten zeigt TinyBox bis zu `history_lines` alte Zeilen (Tabelle `chat_lines`). Zeilenlänge max. `max_line`.
+- Beim Betreten zeigt TinyBox nur, wie viele Zeilen gespeichert sind und von wann die letzte ist; `/H n` zeigt die letzten n (höchstens `history_lines` pro Abruf, Tabelle `chat_lines`). Clients holen die History mit `//HIST` (CR13, `docs/client-change-requests.md`). Zeilenlänge max. `max_line`.
 - Der `ChatHub` (`chat.py`) verteilt die Zeilen und meldet `chat.joined`, `chat.left`, `chat.message` an den Event-Bus. Sysop-Konsole und Web-GUI zeigen den Chat an.
 - Grenze: Jede Zeile geht per I-Frame einzeln an jeden Teilnehmer (1 Eingabe = n Ausgaben auf der Frequenz). Das soll der Client mit UI-Broadcast lösen (Abschnitt 12, C2).
 

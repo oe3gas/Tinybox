@@ -15,6 +15,8 @@ API:
   POST /api/say    {"text": "..."}
   POST /api/react  {"seq": n, "emoji": ":+1"}
   POST /api/symbol {"symbol": "/-"}  ("" = none)
+  POST /api/history  {"n": 10}   older history lines of the board (CR13)
+  POST /api/histmode {"mode": "missed"|"none"|"10"|"20"}   history when joining
 
 Mailbox (C3), all local - only "sync" goes on air:
   GET  /api/mail?folder=inbox|sent|outbox|b:<RUBRIC>   message list (no texts)
@@ -152,6 +154,10 @@ class WebServer:
                 ok = core.react(int(data.get("seq", -1)), str(data.get("emoji", "")))
             elif path == "/api/symbol":
                 ok = core.set_symbol(str(data.get("symbol", "")))
+            elif path == "/api/history":
+                ok = core.load_history(int(data.get("n", 10)))
+            elif path == "/api/histmode":
+                ok = core.set_history_mode(str(data.get("mode", "")))
             elif path.startswith("/api/mail/"):
                 return self._mail(path[10:], data)
             else:

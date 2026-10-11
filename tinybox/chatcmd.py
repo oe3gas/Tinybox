@@ -6,6 +6,7 @@ Inside a board every line is chat text, except lines starting with "/":
     /L            list all boards
     /J board      change to another board
     /R n emoji    reaction to event #n (used by TinyBox clients)
+    /H n          the last n stored lines (history on request, CR13)
     /H            help
     //...         client protocol (clientproto.py)
 
@@ -18,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from . import clientproto, texts
+from . import clientnews, clientproto, texts
 from .config import ChatBoard
 
 if TYPE_CHECKING:
@@ -66,14 +67,26 @@ def _epoch(iso: str) -> int:
                .replace(tzinfo=timezone.utc).timestamp())
 
 
+# clients from this version on ask for the history themselves (//HIST)
+HIST_CLIENT = "2026.10.11.3"
+
+
+def history_rows(lines) -> list[str]:
+    return [f"//H {_epoch(c.created)} {c.call}: {c.text}" for c in lines]
+
+
 def _enter_client(s: Session, board: ChatBoard) -> None:
     from .session import State
     hub = s.service.chat
     if s.chat_board is not None:
         hub.leave(s)
+    count, last = hub.history_info(board)
+    hist = f" hist={count}" + (f" last={_epoch(last)}" if last else "")
+    hist += f" now={int(datetime.now(timezone.utc).timestamp())}"   # the client's clock may be off
     lines = [f"//IN {hub.number(board.name)} {board.name} {board.keep_label} "
-             f"{hub.last_seq(board.name)}"]
-    lines += [f"//H {_epoch(c.created)} {c.call}: {c.text}" for c in hub.history(board)]
+             f"{hub.last_seq(board.name)}{hist}"]
+    if clientnews.version_key(s.client.version) < clientnews.version_key(HIST_CLIENT):
+        lines += history_rows(hub.history(board))       # older client: as before
     others = []
     for m in hub.members(board.name):
         sym = m.client.symbol if m.client else ""
@@ -82,6 +95,22 @@ def _enter_client(s: Session, board: ChatBoard) -> None:
     s.state = State.CHAT
     s.out(*lines)
     hub.join(s, board)            # the join event follows the //WHO line
+
+
+def _history(s: Session, n: int) -> None:
+    """/H n: the last n stored lines of the board (terminal users)."""
+    hub = s.service.chat
+    board = hub.cfg.chat.board(s.chat_board or "")
+    if board is None:
+        return
+    lines, _ = hub.history_page(board, n)
+    if not lines:
+        s.out(texts.CHAT_HISTORY_NONE.format(keep=board.keep_label))
+        return
+    s.out(texts.CHAT_HISTORY.format(keep=board.keep_label),
+          *[texts.CHAT_HISTORY_ROW.format(time=_time(c.created), call=c.call, text=c.text)
+            for c in lines],
+          texts.CHAT_HISTORY_END)
 
 
 def enter(s: Session, board: ChatBoard) -> None:
@@ -95,12 +124,11 @@ def enter(s: Session, board: ChatBoard) -> None:
     if board.live:
         lines.append(texts.CHAT_LIVE_NOTE)
     else:
-        history = hub.history(board)
-        if history:
-            lines.append(texts.CHAT_HISTORY.format(keep=board.keep_label))
-            lines += [texts.CHAT_HISTORY_ROW.format(time=_time(c.created), call=c.call,
-                                                    text=c.text) for c in history]
-            lines.append(texts.CHAT_HISTORY_END)
+        count, last = hub.history_info(board)
+        if count:                  # no history unasked (CR13), only how much there is
+            lines.append(texts.CHAT_HISTORY_STORED.format(
+                n=count, last=f"{last[:10]} {last[11:16]}"))
+            lines.append(texts.CHAT_HISTORY_ASK)
         else:
             lines.append(texts.CHAT_HISTORY_NONE.format(keep=board.keep_label))
     hub.join(s, board)
@@ -169,6 +197,8 @@ def handle(s: Session, line: str) -> None:
                 pass
             if not ok:
                 s.out("//ERR react" if s.client else texts.CHAT_UNKNOWN)
+        elif cmd in ("H", "HELP", "?") and arg.strip().isdigit():
+            _history(s, int(arg.strip()))
         elif cmd in ("H", "HELP", "?"):
             s.out(*texts.CHAT_HELP)
         else:

@@ -14,6 +14,10 @@ Neu in dieser Version
   Die Emoji-Auswahl ist nach Gruppen sortiert.
 - Ein neu gewaehltes APRS-Symbol sehen die anderen im Board sofort
   (vorher erst nach dem naechsten Betreten).
+- History nur auf Wunsch: beim Betreten eines Boards kommen nur die
+  Beitraege, die man seit dem letzten Besuch verpasst hat (einstellbar:
+  verpasste, keine, letzte 10 oder 20). Aeltere holt man mit der Leiste
+  oben im Chat ("load 10" / "load all"). Das schont den Kanal.
 
 Chat
 - Boards wie im Messenger: Avatar (Rufzeichen mit eigenem APRS-Symbol),

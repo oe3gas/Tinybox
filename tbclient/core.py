@@ -55,7 +55,11 @@ class ClientCore:
         self.channel_busy_at = 0.0                # last frame not between us and the TinyBox
         self.unwrap = proto.Unwrapper()
         self.seen: set[int] = set()
-        self._next_hist = -10_000_000
+        self._hist_buf: list[tuple[int, str, str]] | None = None   # //H lines of a //HIST
+        self._hist_older = False                  # the running //HIST asks for older lines
+        self._hist_lo = self._hist_hi = 0         # orders history lines of the same second
+        self._hist_keys: set[tuple] = set()       # (time, call, text) already shown
+        self.clock_off = 0                        # TinyBox time - own time (from //IN now=)
         self.version = 0
         self._changed = asyncio.Event()
         self._hs_task: asyncio.Task | None = None
@@ -160,6 +164,84 @@ class ClientCore:
             return False
         self._send(f"/J {n}" if self.board else f"C {n}")
         self._joining, self._early = n, []
+        return True
+
+    # --- history on request (CR13) ---------------------------------------------
+
+    HIST_MODES = ("missed", "none", "10", "20")
+    HIST_MISSED_MAX = 20
+
+    @property
+    def history_mode(self) -> str:
+        m = self.settings.get("history", "missed")
+        return m if m in self.HIST_MODES else "missed"
+
+    def set_history_mode(self, mode: str) -> bool:
+        if mode not in self.HIST_MODES:
+            return False
+        self.settings["history"] = mode
+        self._save_settings()
+        self._touch()
+        return True
+
+    def _history_on_join(self, in_line: str) -> None:
+        """//IN ... hist=<n> last=<unix> now=<unix>: ask for the history the way the
+        user wants it. A TinyBox without hist= sends the history by itself."""
+        args = dict(re.findall(r"\b(hist|last|now)=(\d+)", in_line))
+        if "hist" not in args:
+            return
+        if "now" in args:
+            self.clock_off = int(args["now"]) - int(time.time())
+        count, last = int(args["hist"]), int(args.get("last", 0))
+        self.board.update(hist=count, hist_last=last, older=count, loading=False)
+        mode = self.history_mode
+        if not count or mode == "none":
+            return
+        if mode == "missed":
+            since = self.settings.get("seen", {}).get(self.board["name"])
+            if since and last <= since:
+                return                                    # nothing new since the last visit
+            self._ask_history(self.HIST_MISSED_MAX, since=since)
+        else:
+            self._ask_history(int(mode))
+
+    def _add_history(self, lines: list[tuple[int, str, str]], older: bool) -> None:
+        """History lines (oldest first) into the chat. Ordered by time, always before
+        the live events (ids >= 0); within the same second an older page goes in
+        front of what is shown, a newer one behind it."""
+        new = []
+        for x in lines:                          # inclusive limits: drop what is here
+            if x not in self._hist_keys:
+                self._hist_keys.add(x)
+                new.append(x)
+        lines = new
+        if older:
+            self._hist_lo -= len(lines)
+            k0 = self._hist_lo
+        else:
+            k0 = self._hist_hi
+            self._hist_hi += len(lines)
+        for i, (t, call, text) in enumerate(lines):
+            self._add({"id": -(2 ** 50) + t * 1000 + k0 + i, "seq": -1, "kind": "line",
+                       "call": call, "text": text, "time": t - self.clock_off,
+                       "history": True, "srv_time": t, "reactions": {}})
+
+    def _ask_history(self, n: int, since: int | None = None, before: int | None = None) -> None:
+        self.board["loading"] = True
+        self._hist_buf, self._hist_older = [], before is not None
+        self._send(f"//HIST max={n}" + (f" since={since}" if since else "")
+                   + (f" before={before}" if before else ""))
+
+    def load_history(self, n: int) -> bool:
+        """Button "load 10 / load all": older lines than the ones shown."""
+        b = self.board
+        if not b or "hist" not in b or b.get("loading") or not b.get("older"):
+            return False
+        loaded = [m["srv_time"] for m in self.messages if "srv_time" in m]
+        # inclusive on the TinyBox side; lines we already have are dropped (_hist_keys)
+        before = min(loaded) if loaded else (b.get("hist_last") or None)
+        self._ask_history(max(1, min(n, 200)), before=before)
+        self._touch()
         return True
 
     def leave(self) -> None:
@@ -312,6 +394,7 @@ class ClientCore:
             if len(parts) >= 4:
                 self._clear_board()
                 self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2]}
+                self._history_on_join(rest)
                 last = None if parts[3] == "-" else int(parts[3], 16)
                 self.unwrap.reset(last)
                 early = self._early if self._joining == self.board["n"] else []
@@ -324,11 +407,18 @@ class ClientCore:
         elif cmd == "H":
             m = re.match(r"^(\d+) ([A-Z0-9-]+): ?(.*)$", rest)
             if m and self.board:
-                self._next_hist += 1
-                self._add({"id": self._next_hist, "seq": -1, "kind": "line",
-                                      "call": m.group(2), "text": m.group(3),
-                                      "time": int(m.group(1)), "history": True,
-                                      "reactions": {}})
+                line = (int(m.group(1)), m.group(2), m.group(3))
+                if self._hist_buf is not None:
+                    self._hist_buf.append(line)          # answer to //HIST: until //HEND
+                else:
+                    self._add_history([line], older=False)   # older TinyBox: right away
+        elif cmd == "HEND":
+            p = rest.split()
+            if self.board and len(p) == 2 and p[1].isdigit():
+                self._add_history(self._hist_buf or [], older=self._hist_older)
+                self._hist_buf = None
+                self.board["older"] = int(p[1])
+                self.board["loading"] = False
         elif cmd == "WHO":
             for item in rest.split():
                 call, _, sym = item.partition("=")
@@ -372,6 +462,12 @@ class ClientCore:
         self._touch()
 
     def _clear_board(self) -> None:
+        if self.board:                       # everything up to now was seen (CR13)
+            seen = self.settings.setdefault("seen", {})
+            seen[self.board["name"]] = int(time.time()) + self.clock_off
+            self._save_settings()
+        self._hist_keys = set()
+        self._hist_buf, self._hist_lo, self._hist_hi = None, 0, 0
         self.board = None
         self.members = {}
         self.messages = []
@@ -475,6 +571,7 @@ class ClientCore:
             "mailbox": self.mailbox.summary(),
             "sync": self.sync.status,
             "update": self.update,
+            "history_mode": self.history_mode,
         }
 
     async def run(self) -> None:

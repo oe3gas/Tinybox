@@ -136,6 +136,15 @@
     <p id="conn-info" class="muted"></p>
     <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button></div>
 
+    <h3>Chat history</h3>
+    <p class="muted">What the client fetches when you join a board with history. Older lines can always be loaded with the bar at the top of the chat.</p>
+    <div class="row hist-modes" id="hist-modes">
+      <label><input type="radio" name="histmode" value="missed"> Only what I missed (max. 20)</label>
+      <label><input type="radio" name="histmode" value="none"> None</label>
+      <label><input type="radio" name="histmode" value="10"> Last 10</label>
+      <label><input type="radio" name="histmode" value="20"> Last 20</label>
+    </div>
+
     <h3>My APRS symbol</h3>
     <p class="muted">Shown as a badge on your avatar. Sent when you join a board (2 bytes); a change is shown to the others in the board at once. “None”: others see the symbol of your APRS beacon, if they hear it.</p>
     <div class="row"><input id="sym-search" type="search" placeholder="Search, e.g. car, house"><button id="sym-none">None</button></div>

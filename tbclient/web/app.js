@@ -216,6 +216,7 @@ function render() {
   renderMail();
   renderSys();
   renderUpdate();
+  for (const r of document.querySelectorAll('input[name="histmode"]')) r.checked = r.value === S.history_mode;
   renderMailbox();
   renderBoards();
   renderNav();
@@ -377,12 +378,28 @@ function renderPeople() {
   $("heard-none").classList.toggle("hidden", (S.heard || []).length > 0);
 }
 
+/* Bar at the top of the chat (CR13): older stored lines on request. */
+function histBar(ol) {
+  const b = S.board;
+  if (!b || b.hist === undefined || (!b.older && !b.loading)) return;
+  const li = el("li", "histbar");
+  if (b.loading) { li.append(el("span", "muted", "📜 loading history…")); ol.append(li); return; }
+  li.append(el("span", "", `📜 ${b.older} older post${b.older === 1 ? "" : "s"}`));
+  const ten = el("button", "sm", "load 10");
+  ten.onclick = () => api("history", { n: 10 });
+  const all = el("button", "sm", "load all");
+  all.onclick = () => api("history", { n: 200 });
+  li.append(ten, all);
+  ol.append(li);
+}
+
 function renderMessages() {
   const box = $("chat");
   const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
   const ol = $("messages");
   ol.replaceChildren();
   if (!S.board) return;
+  histBar(ol);
   let prevCall = null, inHistory = false;
   for (const m of S.messages) {
     if (m.history && !inHistory) { ol.append(el("li", "divider", `history (${S.board.keep})`)); inHistory = true; }
@@ -1051,6 +1068,9 @@ async function start() {
   $("sheet").onclick = (e) => { if (e.target === $("sheet")) $("sheet").classList.add("hidden"); };
   $("sym-search").oninput = renderSymbols;
   $("sym-none").onclick = () => api("symbol", { symbol: "" });
+  for (const r of document.querySelectorAll('input[name="histmode"]')) {
+    r.onchange = () => api("histmode", { mode: r.value });
+  }
   $("btn-emoji").onclick = () => {
     if ($("picker").classList.contains("hidden")) { pickerMode = "input"; openPicker(); } else closePicker();
   };

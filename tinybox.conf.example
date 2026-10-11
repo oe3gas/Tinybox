@@ -82,7 +82,7 @@ mail_notify   = yes            # TinyBox clients: a UI frame to TBMAIL ("OE3ABC 
 
 [chat]
 enabled       = yes            # command C: chat boards for logged-in users
-history_lines = 20             # max lines shown when joining a board
+history_lines = 20             # max lines per history request (/H n, client)
 max_line      = 200            # max characters per chat line
 
 [chat_boards]

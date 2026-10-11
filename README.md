@@ -100,9 +100,10 @@ RUNDE = live  Live round, nothing is stored
 ```
 
 `live` = nichts wird gespeichert, nur wer gerade im Board ist, liest mit.
-`12h`/`7d` = Verlauf so lange aufbewahren; beim Betreten werden die letzten
-`history_lines` Zeilen gezeigt (`[chat]`). Ältere Zeilen löscht TinyBox
-automatisch. Im Chat gilt kein Idle-Timeout (Mitlesen ist erlaubt), zurück in
+`12h`/`7d` = Verlauf so lange aufbewahren. Beim Betreten zeigt TinyBox nur,
+wie viele Zeilen gespeichert sind; lesen mit `/H n` (höchstens `history_lines`
+Zeilen pro Abruf, `[chat]`). Der Client holt die History selbst (nur verpasste
+Zeilen oder auf Knopfdruck). Ältere Zeilen löscht TinyBox automatisch. Im Chat gilt kein Idle-Timeout (Mitlesen ist erlaubt), zurück in
 der Mailbox wieder `idle_timeout_min`. Änderungen an den Boards wirken nach einem Neustart. Konsole (`W`)
 und Weboberfläche zeigen, wer in welchem Board ist; mitchatten nur über die Mailbox.
 

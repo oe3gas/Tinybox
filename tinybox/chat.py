@@ -92,10 +92,29 @@ class ChatHub:
         return sum(len(self.members(b.name)) for b in self.boards)
 
     def history(self, board: ChatBoard) -> list[ChatLine]:
+        """The last history_lines lines (old clients get them when joining)."""
         if board.live or self.cfg.chat.history_lines == 0:
             return []
         return self.store.chat_recent(board.name, _iso_hours_ago(board.keep_hours),
                                       self.cfg.chat.history_lines)
+
+    # History on request (CR13): joining only tells how much is stored.
+
+    def history_info(self, board: ChatBoard) -> tuple[int, str | None]:
+        """(number of stored lines, time of the newest) - (0, None) for live boards."""
+        if board.live or self.cfg.chat.history_lines == 0:
+            return 0, None
+        return self.store.chat_stats(board.name, _iso_hours_ago(board.keep_hours))
+
+    def history_page(self, board: ChatBoard, n: int, after_iso: str | None = None,
+                     before_iso: str | None = None) -> tuple[list[ChatLine], int]:
+        """Up to n lines (at most history_lines per request), and how many older
+        lines are left."""
+        n = max(0, min(n, self.cfg.chat.history_lines))
+        if board.live or n == 0:
+            return [], 0
+        return self.store.chat_page(board.name, _iso_hours_ago(board.keep_hours), n,
+                                    after_iso, before_iso)
 
     def last_seq(self, board: str) -> str:
         n = self._seq.get(board)

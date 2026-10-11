@@ -8,6 +8,7 @@ import dataclasses
 import json
 import struct
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -211,6 +212,68 @@ class SymbolChangeTests(unittest.TestCase):
                 self.assertEqual(sent[-1], "//SYM />")
                 core.set_symbol("")
                 self.assertEqual(sent[-1], "//SYM -")
+        asyncio.run(scenario())
+
+
+class HistoryOnRequestTests(unittest.TestCase):
+    """CR13: the client asks for the history itself (missed lines by default)."""
+
+    def make(self, tmp):
+        core = ClientCore(client_cfg(tmp, link="telnet"))
+        sent: list[str] = []
+        core.link.send_line = sent.append
+        core.state, core.caps = "online", {"CHAT"}
+        return core, sent
+
+    def test_join_modes(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                core, sent = self.make(tmp)
+                now = int(time.time())
+                core._control(f"//IN 1 TREFF 7d 5 hist=7 last=1000 now={now}")
+                self.assertEqual(sent[-1], "//HIST max=20")          # first visit: last 20
+                self.assertTrue(core.board["loading"])
+                core._control("//H 990 OE3TEC: alt")
+                core._control("//H 1000 OE3TEC: neu")
+                core._control("//H 1000 OE3TEC: neu")               # same line twice: once
+                core._control("//HEND 2 5")
+                hist = [m for m in core.messages if m.get("history")]
+                self.assertEqual([m["text"] for m in hist], ["alt", "neu"])
+                self.assertEqual((core.board["older"], core.board["loading"]), (5, False))
+                # older ones on request: before the oldest one shown (inclusive)
+                self.assertTrue(core.load_history(10))
+                self.assertEqual(sent[-1], "//HIST max=10 before=990")
+                core._control("//H 980 OE3TEC: noch aelter")
+                core._control("//H 990 OE3TEC: auch 990")           # same second as "alt"
+                core._control("//H 990 OE3TEC: alt")                # inclusive: already here
+                core._control("//HEND 3 4")
+                texts = [m["text"] for m in core.messages if m.get("history")]
+                self.assertEqual(texts, ["noch aelter", "auch 990", "alt", "neu"])   # in order
+                # leaving remembers the visit (TinyBox time); next time only what was missed
+                core._clear_board()
+                seen = core.settings["seen"]["TREFF"]
+                self.assertLessEqual(abs(seen - now), 2)
+                n = len(sent)
+                core._control(f"//IN 1 TREFF 7d 9 hist=7 last=1000 now={now}")
+                self.assertEqual(len(sent), n)                       # nothing new: no request
+                core._control(f"//IN 1 TREFF 7d 9 hist=8 last={now + 60} now={now}")
+                self.assertEqual(sent[-1], f"//HIST max=20 since={seen}")
+                # other modes
+                core.set_history_mode("none")
+                n = len(sent)
+                core._control(f"//IN 1 TREFF 7d 9 hist=8 last={now + 60} now={now}")
+                self.assertEqual(len(sent), n)
+                self.assertEqual(core.board["older"], 8)             # the bar offers them
+                core.set_history_mode("10")
+                core._control(f"//IN 1 TREFF 7d 9 hist=8 last={now + 60} now={now}")
+                self.assertEqual(sent[-1], "//HIST max=10")
+                self.assertFalse(core.set_history_mode("all"))
+                self.assertEqual(core.snapshot()["history_mode"], "10")
+                # an older TinyBox (no hist=) sends the history by itself: no request
+                n = len(sent)
+                core._control("//IN 2 DX 24h 3")
+                self.assertEqual(len(sent), n)
+                self.assertFalse(core.load_history(10))
         asyncio.run(scenario())
 
 

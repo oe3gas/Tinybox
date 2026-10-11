@@ -243,7 +243,7 @@ class ClientCfg:
 @dataclass
 class ChatCfg:
     enabled: bool = False
-    history_lines: int = 20     # max lines replayed when joining a board
+    history_lines: int = 20     # max lines per history request (/H n, //HIST)
     max_line: int = 200         # max characters per chat line
     boards: list[ChatBoard] = field(default_factory=list)
 

@@ -65,7 +65,8 @@ class ClientProtoTests(unittest.TestCase):
         ct.take()
         type_lines(c, "C 1")
         out = ct.take().split("\r")
-        self.assertEqual(out[0], "//IN 1 TREFF 7d 1")      # 0 = join, 1 = 'vorher'
+        self.assertRegex(out[0], r"^//IN 1 TREFF 7d 1 hist=1 last=\d+ now=\d+$")  # 0 = join, 1 = 'vorher'
+        # a client without v= (older than CR13) still gets the history at once
         self.assertTrue(out[1].startswith("//H ") and out[1].endswith(" OE3XYZ: vorher"))
         self.assertEqual(out[2], "//WHO OE3XYZ")
         self.assertEqual(self.ui[-1], ("TBCHAT-1", "#2 +OE3GAS /-"))
@@ -88,6 +89,34 @@ class ClientProtoTests(unittest.TestCase):
         type_lines(c, "/Q")
         self.assertEqual(ct.take(), "//OUT TREFF\r")
         self.assertIn("*** OE3GAS left TREFF", tt.take())
+
+    def test_history_on_request(self):
+        """CR13: a current client gets only hist=/last= and asks with //HIST."""
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF", *[f"z{i}" for i in range(7)], "/Q")
+        c, ct = login(self.app, "OE3GAS")
+        type_lines(c, f"//CLIENT TB1 v={clientnews.client_version()} caps=CHAT")
+        ct.take()
+        type_lines(c, "C 1")
+        out = ct.take().split("\r")
+        self.assertRegex(out[0], r"^//IN 1 TREFF 7d \S+ hist=7 last=\d+ now=\d+$")
+        self.assertFalse(any(x.startswith("//H ") for x in out))
+        # newest 3, 4 older left
+        type_lines(c, "//HIST max=3")
+        out = ct.take().split("\r")
+        self.assertEqual([x.rsplit(" ", 1)[1] for x in out[:3]], ["z4", "z5", "z6"])
+        self.assertEqual(out[3], "//HEND 3 4")
+        # older than z4: at most history_lines (5) per request
+        t4 = out[0].split()[1]
+        type_lines(c, f"//HIST max=200 before={t4}")      # all in the same second here:
+        out = ct.take().split("\r")                        # inclusive, nothing lost
+        self.assertEqual(len(out), 7)                       # 5 lines, //HEND, ""
+        self.assertEqual(out[5], "//HEND 5 2")
+        # since: only newer lines; nothing newer -> 0 lines, all 7 are "older"
+        type_lines(c, "//HIST max=20 since=4102444800")          # year 2100
+        self.assertEqual(ct.take(), "//HEND 0 7\r")
+        type_lines(c, "//HIST max=x")
+        self.assertIn("//ERR hist", ct.take())
 
     def test_symbol_change_at_once(self):
         """CR7: a new APRS symbol reaches the board at once, terminals get nothing."""

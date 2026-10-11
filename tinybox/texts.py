@@ -112,6 +112,8 @@ CHAT_HISTORY = "--- Last messages ({keep}, UTC) ---"
 CHAT_HISTORY_ROW = "{time} {call}: {text}"
 CHAT_HISTORY_END = "--- End of history ---"
 CHAT_HISTORY_NONE = "No messages in the last {keep}."
+CHAT_HISTORY_STORED = "*** {n} lines stored. Last from {last} UTC"
+CHAT_HISTORY_ASK = "*** /H n to read"
 CHAT_WHO = "In this board: {calls}"
 CHAT_ALONE = "Nobody else is here right now."
 CHAT_HINT = "Type your text and press Enter. /H help, /Q back to the mailbox."
@@ -130,6 +132,7 @@ CHAT_HELP = [
     "  /L         List all boards",
     "  /J board   Change to another board",
     "  /R n emoji React to line #n with an emoji code, e.g. /R 4F :+1",
+    "  /H n       Show the last n stored lines",
     "  /H         This help",
 ]
 

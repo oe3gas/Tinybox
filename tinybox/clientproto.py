@@ -25,6 +25,9 @@ Other client commands:
     //BOARDS              -> //B <n> <board> <keep> <users> <description> ... //BEND
     //RESEND <a>-<b>      (inside a board) events a..b again, only to this client
     //SYM <symbol>|-      new APRS symbol; inside a board the others get "=<call> <sym>"
+    //HIST max=<n> [since=<unix>] [before=<unix>]   (inside a board) stored lines on
+                          request, only to this client: //H ... //HEND <n> <older>
+                          (CR13; //IN tells hist=<count> last=<unix> now=<unix>)
     //MLIST, //GET, //SEND ...   offline mailbox, see clientsync.py
 
 caps: CHAT = chat lines in the format above, UI = the client hears the
@@ -37,6 +40,7 @@ SYNC = offline mailbox commands, Z = message texts may come LZHUF-compressed
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -88,6 +92,8 @@ def handle(s: Session, line: str) -> None:
         _resend(s, parts[1:])
     elif cmd == "SYM":
         _symbol(s, parts[1:])
+    elif cmd == "HIST":
+        _hist(s, parts[1:])
     elif cmd in clientsync.COMMANDS:
         clientsync.handle(s, cmd, parts[1:])
     else:
@@ -117,6 +123,27 @@ def _client(s: Session, parts: list[str]) -> None:
             extra += f" news={s.service.client_news_id}"
     # the human prompt is still on the line: start the answer on a fresh line
     s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}{extra}")
+
+
+def _iso(unix: str) -> str | None:
+    if not unix.isdigit():
+        return None
+    return datetime.fromtimestamp(int(unix), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _hist(s: Session, parts: list[str]) -> None:
+    """//HIST max=n [since=unix] [before=unix]: history lines on request (CR13)."""
+    from .chatcmd import history_rows
+    hub = s.service.chat
+    board = hub.cfg.chat.board(s.chat_board or "")
+    args = _parse_args(parts)
+    if board is None or not args.get("max", "").isdigit():
+        s.out("//ERR hist")
+        return
+    lines, older = hub.history_page(board, int(args["max"]),
+                                    after_iso=_iso(args.get("since", "")),
+                                    before_iso=_iso(args.get("before", "")))
+    s.out(*history_rows(lines), f"//HEND {len(lines)} {older}")
 
 
 def _symbol(s: Session, parts: list[str]) -> None:

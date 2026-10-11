@@ -19,7 +19,7 @@ Stand: 11.10.2026 (Nachmittag)
 | 10 | Mehrzeilige Texte einfügen | offen – wie CR9 |
 | 11 | Sticker und Animationen | Sticker-Set fertig (20 Dateien), Einbau und Animationen offen – siehe unten |
 | 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept offen |
-| 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | offen – auch im Client? |
+| 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | ✅ siehe unten |
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | offen |
 | 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
 | 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
@@ -103,6 +103,19 @@ Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (
 ## CR12 – Kleine Bilder anhängen (Konzept offen)
 
 Zu klären: Umsetzung in Client und TinyBox, Maximalgröße, Binärübertragung (7PLUS oder andere).
+
+## CR13 – History nur auf Wunsch (erledigt 11.10.2026)
+
+- **Aufbewahrung** wie bisher pro Board in `tinybox.conf` `[chat_boards]` (Beispiel: TREFF 7d, DX 24h, TECH 30d, RUNDE live). `history_lines` (Standard 20) ist jetzt die **Höchstzahl pro Abruf**.
+- **Vorher:** Beim Betreten kamen ungefragt die letzten 20 Zeilen (~800 Byte, 6–10 s Kanal bei 1200 Bd), auch wenn man sie schon kannte.
+- **Terminal:** Beim Betreten nur noch
+  `*** 37 lines stored. Last from 2026-10-09 12:33 UTC` und `*** /H n to read`. `/H n` zeigt die letzten n Zeilen, `/H` allein bleibt die Hilfe.
+- **Client:** `//IN … hist=<Anzahl> last=<Zeit> now=<Zeit der TinyBox>`; die History holt er mit `//HIST max=<n> [since=<Zeit>] [before=<Zeit>]`, Antwort `//H …` + `//HEND <n> <ältere>` – nur an ihn, per I-Frame.
+  - Einstellung **„Chat history“**: *Only what I missed (max. 20)* (Standard), *None*, *Last 10*, *Last 20*. „Verpasst“ = seit dem letzten Verlassen des Boards; die Zeit wird mit der Uhr der TinyBox gerechnet (`now=`), falsch gehende PC-Uhren stören nicht.
+  - **Leiste oben im Chat:** „📜 37 older posts · load 10 · load all“ (all = höchstens `history_lines` pro Klick, die Leiste zeigt den Rest).
+  - Zeitgrenzen sind inklusiv, doppelte Zeilen verwirft der Client – keine Zeile geht verloren, die Reihenfolge stimmt auch bei Zeilen aus derselben Sekunde.
+- **Ältere Clients** (vor 2026.10.11.3) bekommen die History wie bisher beim Betreten.
+- Client-Version 2026.10.11.3. Tests in `tests/test_chat.py`, `tests/test_clientproto.py`, `tests/test_tbclient.py`; Praxistest mit 25 Zeilen (Client und Terminal).
 
 ## CR17 – „Cry out“ (erledigt 11.10.2026)
 

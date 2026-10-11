@@ -363,6 +363,44 @@ class Store:
             (board, since_iso, limit)).fetchall()
         return [ChatLine(**dict(r)) for r in reversed(rows)]
 
+    def chat_stats(self, board: str, since_iso: str) -> tuple[int, str | None]:
+        """Number of stored lines since `since_iso` and the time of the newest."""
+        row = self._db.execute(
+            "SELECT COUNT(*) AS n, MAX(created) AS last FROM chat_lines"
+            " WHERE board = ? AND created >= ?", (board, since_iso)).fetchone()
+        return row["n"], row["last"]
+
+    def chat_page(self, board: str, since_iso: str, limit: int, after_iso: str | None = None,
+                  before_iso: str | None = None) -> tuple[list[ChatLine], int]:
+        """The newest `limit` lines since `since_iso` (and from `after_iso`, up to
+        `before_iso` - both inclusive: lines of the same second are not lost, the
+        client drops what it has already), oldest first, and how many stored lines
+        are older than them."""
+        where, args = "board = ? AND created >= ?", [board, since_iso]
+        if after_iso:
+            where += " AND created >= ?"
+            args.append(after_iso)
+        if before_iso:
+            where += " AND created <= ?"
+            args.append(before_iso)
+        rows = self._db.execute(
+            f"SELECT id, board, call, text, created FROM chat_lines WHERE {where}"
+            " ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()
+        if rows:
+            older = self._db.execute(
+                "SELECT COUNT(*) FROM chat_lines WHERE board = ? AND created >= ? AND id < ?",
+                (board, since_iso, rows[-1]["id"])).fetchone()[0]
+        else:
+            older = self._db.execute(
+                "SELECT COUNT(*) FROM chat_lines WHERE board = ? AND created >= ?"
+                + (" AND created <= ?" if before_iso else ""),
+                (board, since_iso, *([before_iso] if before_iso else []))).fetchone()[0]
+            if after_iso:        # nothing new since then: everything stored is "older"
+                older = self.chat_stats(board, since_iso)[0]
+        lines = [ChatLine(board=r["board"], call=r["call"], text=r["text"], created=r["created"])
+                 for r in reversed(rows)]
+        return lines, older
+
     def chat_purge(self, keep: dict[str, str]) -> int:
         """keep: board -> oldest allowed ISO time. Lines of other boards
         (removed from the config or switched to live) are deleted too."""

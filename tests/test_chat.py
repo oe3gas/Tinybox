@@ -115,14 +115,27 @@ class ChatTests(unittest.TestCase):
         self.assertIn("back in the mailbox", self.ta.take())
         type_lines(self.b, "C TREFF")
         out = self.tb.take()
+        # CR13: no history unasked, only how much is stored and how to read it
+        self.assertNotIn("erste", out)
+        self.assertRegex(out, r"\*\*\* 2 lines stored\. Last from 20\d\d-\d\d-\d\d \d\d:\d\d UTC\r"
+                              r"\*\*\* /H n to read")
+        type_lines(self.b, "/H 10")
+        out = self.tb.take()
         self.assertIn("OE3ABC: erste", out)
         self.assertIn("OE3ABC: zweite", out)
         self.assertLess(out.index("erste"), out.index("zweite"))
+        type_lines(self.b, "/H 1")
+        out = self.tb.take()
+        self.assertNotIn("erste", out)
+        self.assertIn("OE3ABC: zweite", out)
+        type_lines(self.b, "/H")                                   # without a number: help
+        self.assertIn("/H n       Show the last n stored lines", self.tb.take())
 
     def test_history_limit(self):
         type_lines(self.a, "C TREFF", *[f"zeile {i}" for i in range(8)], "/Q")
-        type_lines(self.b, "C TREFF")
+        type_lines(self.b, "C TREFF", "/H 50")                     # at most history_lines (5)
         out = self.tb.take()
+        self.assertIn("8 lines stored", out)
         self.assertNotIn("zeile 2", out)
         self.assertIn("zeile 3", out)
         self.assertIn("zeile 7", out)
