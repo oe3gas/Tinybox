@@ -504,6 +504,7 @@ function bubble(m, cont) {
 
 // ---------------------------------------------------------------- reactions
 function openReactBar(m, anchor) {
+  if (pickerMode === "react") closePicker();   // never leave a picker aimed at another message
   selected = m.id;
   const bar = $("react-bar");
   bar.replaceChildren();
@@ -513,7 +514,15 @@ function openReactBar(m, anchor) {
     bar.append(btn);
   }
   const more = el("button", "", "＋");
-  more.onclick = () => { pickerMode = "react"; openPicker(m); };
+  more.onclick = (ev) => {
+    // CR23: close the quick bar before the full picker opens (it used to float
+    // over the picker). The target message travels with openPicker(target).
+    ev.stopPropagation();
+    const target = m;
+    closeReactBar();
+    pickerMode = "react";
+    openPicker(target);
+  };
   bar.append(more);
   bar.classList.remove("hidden");
   const r = anchor.getBoundingClientRect();

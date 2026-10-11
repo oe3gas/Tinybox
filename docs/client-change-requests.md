@@ -29,6 +29,7 @@ Stand: 11.10.2026 (Abend, CR19 umgesetzt)
 | 20 | Verbindungsqualität: 1–5 Balken neben jeder Station im Board, Meldung bei Verbindungsabbruch, Befehl `STAT` | ✅ siehe unten |
 | 21 | Bulletins zwischen Rubriken verschieben und kopieren | Entschieden: nur Sysop, nur Sysop-Konsole und Sysop-Weboberfläche – noch nicht umgesetzt |
 | 22 | Sysop-Konsole: Befehl RESTART (Neustart, z. B. nach Änderung in tinybox.conf) | ✅ siehe unten |
+| 23 | BUG – Emoji-Picker: Schnellauswahl-Leiste verdeckt die Gesamtauswahl | Fix umgesetzt, Test auf PC1 offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -274,3 +275,8 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Tests in `tests/test_shutdown.py`; README und PRODUCTION ergänzt.
 - Hinweis: Die neuen Batch-Dateien wirken erst, wenn TinyBox einmal mit ihnen gestartet wurde.
 
+## CR23 – BUG Emoji-Picker: Schnellauswahl-Leiste verdeckt die Gesamtauswahl (gemeldet 11.10.2026)
+
+**Fehler:** Wenn man die Emoji-Gesamtauswahl öffnet (über den ➕-Button in der Reaktions-/Schnellauswahl-Leiste mit 👍 ❤️ 😂 😮 😞 📻 ➕), bleibt diese Leiste als schwebendes Overlay über dem großen Emoji-Panel stehen und verdeckt Einträge (z. B. die Zeile „RADIO & TECH“).
+
+**Erwartet:** Sobald die Gesamtauswahl geöffnet wird, wird die Schnellauswahl-Leiste ausgeblendet/geschlossen.
