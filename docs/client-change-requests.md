@@ -7,21 +7,21 @@ Stand: 11.10.2026
 
 | CR | Inhalt | Status |
 |---|---|---|
-| 1 | Einzelnes Emoji als Nachricht groß anzeigen (≥ 2×) | erledigt (c376e16) |
+| 1 | Einzelnes Emoji als Nachricht groß anzeigen (≥ 2×) | ✅ (c376e16) |
 | 2 | Emojis 🤮 💩 ❓ dazu, dafür einige raus | offen – welche raus? Achtung: `emoji.json` ist „append only“ |
 | 3 | MOTD pro Board | offen – wer setzt sie (Sysop)? |
-| 4 | Schrift: `_fett_` und Monospace für ASCII-Art | erledigt: `_fett_`, `` `mono` `` (c376e16) |
-| 5 | URLs erkennen und klickbar | erledigt (c376e16) |
-| 6 | „Leave board“ im Chat statt in den Settings | erledigt (c376e16) |
+| 4 | Schrift: `_fett_` und Monospace für ASCII-Art | ✅ `_fett_`, `` `mono` `` (c376e16) |
+| 5 | URLs erkennen und klickbar | ✅ (c376e16) |
+| 6 | „Leave board“ im Chat statt in den Settings | ✅ (c376e16) |
 | 7 | Bug: APRS-Symbol-Änderung wirkt erst nach Board-Wechsel – soll sofort wirken (Avatar-Update aller bleibt) | offen |
-| 8 | Eigene Reaktion sofort anzeigen | erledigt: blass bis Echo, nach 2 min ohne Echo zurück (c376e16) |
+| 8 | Eigene Reaktion sofort anzeigen | ✅ blass bis Echo, nach 2 min ohne Echo zurück (c376e16) |
 | 9 | Zeilenumbruch mit Shift+Enter | offen – braucht Zeilenumbruch-Kodierung über Funk (Protokoll ist zeilenbasiert) |
 | 10 | Mehrzeilige Texte einfügen | offen – wie CR9 |
 | 11 | Sticker und Animationen | Sticker-Set entworfen (15), Animationen offen – siehe unten |
 | 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept offen |
 | 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | offen – auch im Client? |
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | offen |
-| 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | erledigt (c376e16) |
+| 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
 | 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
 
 ## CR11 – Sticker und Animationen
