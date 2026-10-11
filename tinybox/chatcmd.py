@@ -83,6 +83,8 @@ def _enter_client(s: Session, board: ChatBoard) -> None:
     count, last = hub.history_info(board)
     hist = f" hist={count}" + (f" last={_epoch(last)}" if last else "")
     hist += f" now={int(datetime.now(timezone.utc).timestamp())}"   # the client's clock may be off
+    if board.motd:                # CR3: only a check value, the text on request (//MOTD)
+        hist += f" motd={board.motd_crc}"
     lines = [f"//IN {hub.number(board.name)} {board.name} {board.keep_label} "
              f"{hub.last_seq(board.name)}{hist}"]
     if clientnews.version_key(s.client.version) < clientnews.version_key(HIST_CLIENT):
@@ -121,6 +123,8 @@ def enter(s: Session, board: ChatBoard) -> None:
         return
     lines = [texts.CHAT_HEADER.format(board=board.name, desc=board.description,
                                       keep=board.keep_label)]
+    if board.motd:
+        lines.append(texts.CHAT_MOTD.format(text=board.motd))
     if board.live:
         lines.append(texts.CHAT_LIVE_NOTE)
     else:

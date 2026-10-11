@@ -9,7 +9,7 @@ Stand: 11.10.2026 (Abend, CR23 und CR24 umgesetzt und getestet)
 |---|---|---|
 | 1 | Einzelnes Emoji als Nachricht groß anzeigen (≥ 2×) | ✅ (c376e16) |
 | 2 | Emojis: 🤮 💩 ❓ ❗ und Pfeile dazu, 🗼 raus, Auswahl nach Gruppen sortiert | ✅ siehe unten |
-| 3 | MOTD pro Board | offen – wer setzt sie (Sysop)? |
+| 3 | MOTD pro Board | ✅ siehe unten |
 | 4 | Schrift: `_fett_` und Monospace für ASCII-Art | ✅ `_fett_`, `` `mono` `` (c376e16) |
 | 5 | URLs erkennen und klickbar | ✅ (c376e16) |
 | 6 | „Leave board“ im Chat statt in den Settings | ✅ (c376e16) |
@@ -17,7 +17,7 @@ Stand: 11.10.2026 (Abend, CR23 und CR24 umgesetzt und getestet)
 | 8 | Eigene Reaktion sofort anzeigen | ✅ blass bis Echo, nach 2 min ohne Echo zurück (c376e16) |
 | 9 | Zeilenumbruch mit Shift+Enter | offen – braucht Zeilenumbruch-Kodierung über Funk (Protokoll ist zeilenbasiert) |
 | 10 | Mehrzeilige Texte einfügen | offen – wie CR9 |
-| 11 | Sticker und Animationen | Sticker-Set fertig (20 Dateien), Einbau und Animationen offen – siehe unten |
+| 11 | Sticker und Animationen | Sticker-Set fertig (20 Dateien), Kurznamen entschieden; Einbau und Animationen offen – siehe unten |
 | 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept steht (nur Chat), Umsetzung offen – siehe unten |
 | 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | ✅ siehe unten |
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | offen |
@@ -88,7 +88,10 @@ Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (
 | 19 | `19-dipole.webp` | „All you need is a Dipole!“ |
 | 20 | `20-antennenbau.webp` | „Bin am Antennenbauen“ |
 
-- Offen: Einbau in den Client (Sticker-Auswahl, Anzeige), Code über Funk (Vorschlag: Escape + Nummer, z. B. `~$01`), Anzeige für Terminal-Teilnehmer (z. B. „[Sticker: CQ CQ CQ]“).
+- **Entschieden (11.10.2026):** Jeder Sticker hat einen **Kurznamen mit höchstens 4 Zeichen** (Buchstaben/Ziffern, Varianten mit Ziffer: CQ1, CQ2, SWR1, SWR2). Terminal-Teilnehmer sehen **`[STK]CQ`**.
+- Vorschlag zur Umsetzung: über Funk geht genau dieser Text `[STK]CQ` als ganzer Beitrag (7–9 Byte). Damit braucht es keine Umsetzung für Terminal-Teilnehmer, und sie können selbst Sticker senden, indem sie `[STK]CQ` tippen.
+- Vorschlag Kurznamen (zu bestätigen): 01 CQ, 02 73, 03 88, 04 QSL, 05 S9P, 06 QRM, 07 QRT, 08 QRZ, 09 OHM, 10 PILE, 11 SMOK, 12 SWR1, 13 SWR2, 14 DUMY, 15 OPEN, 16 DEAD, 17 DX, 18 COFE, 19 DIPO, 20 ANT.
+- Offen: Einbau in den Client (Sticker-Auswahl, Anzeige).
 
 ### Animationen (Vorschlag, 10 Stück – noch nicht entschieden)
 
@@ -345,3 +348,14 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Das angetippte Board (Chip oben bzw. Eintrag in der linken Spalte) wird **orange und pulsiert leicht**, bis die TinyBox meldet, dass man im Board ist; dann wird es wie gewohnt blau (aktiv).
 - Kommt keine Bestätigung (z. B. Verbindung weg), endet die Markierung nach spätestens 2 Minuten. Bei „Bewegung reduzieren“ im System pulsiert nichts.
 - Client-Version 2026.10.11.6. Nur Oberfläche (`app.js`, `app.css`).
+
+## CR3 – MOTD pro Board (✅ 11.10.2026)
+
+- Der **Sysop** setzt sie in `tinybox.conf`, eigener Abschnitt `[chat_motd]`, eine Zeile pro Board, höchstens 120 Zeichen (kein `#` oder `;` im Text – die beginnen einen Kommentar). Ändern: Datei bearbeiten, `RESTART`.
+  ```
+  [chat_motd]
+  TREFF = Willkommen! Runde jeden Sonntag 19:00 auf dieser QRG.
+  ```
+- **Terminal:** beim Betreten eine Zeile `*** <Text>` unter der Board-Überschrift.
+- **Client:** über Funk geht beim Betreten nur eine Prüfsumme (`//IN … motd=ab12`, 10 Byte). Den Text holt der Client nur, wenn er neu ist (`//MOTD` → `//MOTD ab12 <Text>`) und merkt ihn sich. Anzeige oben im Chat als gelbe Notiz mit 📌.
+- Client-Version 2026.10.11.7. Tests in `tests/test_motd.py`.

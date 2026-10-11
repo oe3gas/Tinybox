@@ -95,6 +95,12 @@ DX    = 24h   DX spots and news
 TECH  = 30d   Technical questions
 RUNDE = live  Live round, nothing is stored
 
+[chat_motd]
+# Message of the day per board (optional), shown when entering it. Max 120
+# characters, no # or ; (they start a comment). Change: edit + RESTART.
+# The client fetches the text only when it changed.
+#TREFF = Welcome! Net every Sunday 19:00 local on this frequency.
+
 [rubrics]
 # Bulletin rubrics, set by the sysop (CR19, docs/client-change-requests.md).
 # One line per rubric:

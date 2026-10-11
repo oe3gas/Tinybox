@@ -143,6 +143,8 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .bang.pending { opacity: .55; }
 .cry-btn.active { background: #ffd23f; border-radius: 50%; }
 .sys { text-align: center; color: var(--sys); font-size: 12px; margin: 8px 0; }
+.motd { margin: 6px 4px 10px; padding: 8px 12px; border-radius: 10px; font-size: 13px;
+  background: var(--mention); border-left: 3px solid var(--mention-line); overflow-wrap: anywhere; }
 .divider { text-align: center; color: var(--muted); font-size: 11px; margin: 10px 0;
   display: flex; align-items: center; gap: 8px; }
 .histbar { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;

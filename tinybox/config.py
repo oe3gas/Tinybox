@@ -6,6 +6,7 @@ import configparser
 import logging
 import os
 import re
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -17,7 +18,8 @@ CALL_RE = re.compile(
 )
 # Bulletin destination, e.g. ALL, DX, WX
 DEST_RE = re.compile(r"^[A-Z0-9]{1,6}$")
-NEWS_RUBRIC = "TBNEWS"      # system rubric of the client feature bulletin (CR18/CR19)
+NEWS_RUBRIC = "TBNEWS"
+MOTD_MAX = 120              # characters of a board's message of the day (CR3)      # system rubric of the client feature bulletin (CR18/CR19)
 
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
@@ -223,6 +225,12 @@ class ChatBoard:
     name: str
     keep_hours: int        # 0 = live only, nothing is stored
     description: str = ""
+    motd: str = ""         # [chat_motd] (CR3): shown when entering the board
+
+    @property
+    def motd_crc(self) -> str:
+        """Short check value: the client fetches the text only when it changed."""
+        return f"{zlib.crc32(self.motd.encode('utf-8')) & 0xFFFF:04x}" if self.motd else ""
 
     @property
     def live(self) -> bool:
@@ -652,4 +660,17 @@ def _load_chat(cp: configparser.ConfigParser) -> ChatCfg:
             chat.boards.append(ChatBoard(name, keep, parts[1].strip() if len(parts) > 1 else ""))
     if chat.enabled and not chat.boards:
         raise ConfigError("[chat] enabled = yes, but [chat_boards] defines no boards")
+    if cp.has_section("chat_motd"):            # CR3: message of the day per board
+        for key, value in cp.items("chat_motd", raw=True):
+            if key in cp.defaults():
+                continue
+            board = chat.board(key)
+            text = " ".join(value.split())
+            if board is None:
+                logging.getLogger(__name__).warning(
+                    "[chat_motd] %s: no such board in [chat_boards] - ignored", key)
+            elif len(text) > MOTD_MAX:
+                raise ConfigError(f"[chat_motd] {board.name}: at most {MOTD_MAX} characters")
+            else:
+                board.motd = text
     return chat

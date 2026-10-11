@@ -434,6 +434,7 @@ function renderMessages() {
   const ol = $("messages");
   ol.replaceChildren();
   if (!S.board) return;
+  if (S.board.motd) ol.append(el("li", "motd", "📌 " + S.board.motd));   // CR3
   histBar(ol);
   let prevCall = null, inHistory = false;
   for (const m of S.messages) {

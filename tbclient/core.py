@@ -206,6 +206,20 @@ class ClientCore:
         else:
             self._ask_history(int(mode))
 
+    def _motd_on_join(self, in_line: str) -> None:
+        """//IN ... motd=<crc> (CR3): the text is fetched only when it is new."""
+        m = re.search(r"\bmotd=([0-9a-f]{4})\b", in_line)
+        name = self.board["name"]
+        if not m:
+            self.board["motd"] = ""
+            return
+        known = self.settings.get("motd", {}).get(name)
+        if known and known.get("crc") == m.group(1):
+            self.board["motd"] = known.get("text", "")
+        else:
+            self.board["motd"] = ""
+            self._send("//MOTD")
+
     def _add_history(self, lines: list[tuple[int, str, str]], older: bool) -> None:
         """History lines (oldest first) into the chat. Ordered by time, always before
         the live events (ids >= 0); within the same second an older page goes in
@@ -396,6 +410,7 @@ class ClientCore:
                 self._clear_board()
                 self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2]}
                 self._history_on_join(rest)
+                self._motd_on_join(rest)
                 last = None if parts[3] == "-" else int(parts[3], 16)
                 self.unwrap.reset(last)
                 early = self._early if self._joining == self.board["n"] else []
@@ -420,6 +435,17 @@ class ClientCore:
                 self._hist_buf = None
                 self.board["older"] = int(p[1])
                 self.board["loading"] = False
+        elif cmd == "MOTD":
+            crc, _, text = rest.partition(" ")
+            if self.board:
+                motds = self.settings.setdefault("motd", {})
+                if crc == "-":
+                    motds.pop(self.board["name"], None)
+                else:
+                    motds[self.board["name"]] = {"crc": crc, "text": text}
+                self._save_settings()
+                self.board["motd"] = text if crc != "-" else ""
+                self._touch()
         elif cmd == "WHO":
             for item in rest.split():
                 call, _, sym = item.partition("=")

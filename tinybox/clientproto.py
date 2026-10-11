@@ -30,6 +30,8 @@ Other client commands:
     //HIST max=<n> [since=<unix>] [before=<unix>]   (inside a board) stored lines on
                           request, only to this client: //H ... //HEND <n> <older>
                           (CR13; //IN tells hist=<count> last=<unix> now=<unix>)
+    //MOTD                (inside a board) -> //MOTD <crc> <text> | //MOTD -  (CR3;
+                          //IN tells motd=<crc>, the client asks only if it changed)
     //MLIST, //GET, //SEND ...   offline mailbox, see clientsync.py
 
 caps: CHAT = chat lines in the format above, UI = the client hears the
@@ -98,6 +100,8 @@ def handle(s: Session, line: str) -> None:
         _symbol(s, parts[1:])
     elif cmd == "HIST":
         _hist(s, parts[1:])
+    elif cmd == "MOTD":
+        _motd(s)
     elif cmd in clientsync.COMMANDS:
         clientsync.handle(s, cmd, parts[1:])
     else:
@@ -133,6 +137,16 @@ def _iso(unix: str) -> str | None:
     if not unix.isdigit():
         return None
     return datetime.fromtimestamp(int(unix), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _motd(s: Session) -> None:
+    """//MOTD: text of the current board's message of the day (CR3)
+    -> //MOTD <crc> <text>, or //MOTD - without one."""
+    board = s.service.chat.cfg.chat.board(s.chat_board or "")
+    if board is None:
+        s.out("//ERR motd")
+        return
+    s.out(f"//MOTD {board.motd_crc} {board.motd}" if board.motd else "//MOTD -")
 
 
 def _hist(s: Session, parts: list[str]) -> None:
