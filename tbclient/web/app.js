@@ -211,7 +211,8 @@ function render() {
     (S.state === "online" ? (S.ui ? ", chat as UI frames (heard directly)" : ", chat as I-frames") : "");
   const inBoard = !!S.board;
   $("input").disabled = !inBoard; $("btn-send").disabled = !inBoard;
-  $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
+  if (!cryMode) $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
+  $("btn-cry").disabled = !inBoard;
   renderMail();
   renderSys();
   renderMailbox();
@@ -364,8 +365,42 @@ function renderMessages() {
   if (atEnd) box.scrollTop = box.scrollHeight;
 }
 
+/* "Cry out" (CR17): a line "~!text" (max. 32 characters) is shown huge in a
+ * comic "Bang!" burst. Over the air it is just the two characters "~!" in front. */
+const CRY = "~!", CRY_MAX = 32;
+const isCry = (wire) => wire.startsWith(CRY);
+let BURST = "";
+function burstPath() {
+  if (BURST) return BURST;
+  const pts = [], n = 18;
+  for (let i = 0; i < 2 * n; i++) {
+    const a = (Math.PI * i) / n - Math.PI / 2;
+    const r = i % 2 ? 0.80 + 0.06 * ((i * 7) % 3) / 2 : 1;      // uneven spikes look hand drawn
+    pts.push(`${(50 + 50 * r * Math.cos(a)).toFixed(1)}% ${(50 + 50 * r * Math.sin(a)).toFixed(1)}%`);
+  }
+  return (BURST = `polygon(${pts.join(",")})`);
+}
+function cryBubble(m, own) {
+  const li = el("li", "msg cry" + (own ? " own" : ""));
+  const col = el("div", "col");
+  if (!own) col.append(el("div", "who", m.call));
+  const bang = el("div", "bang" + (m.pending ? " pending" : ""));
+  const outer = el("div", "burst outer"), inner = el("div", "burst inner");
+  outer.style.clipPath = inner.style.clipPath = burstPath();
+  const text = wireToText(m.text.slice(CRY.length));
+  const t = el("div", "bang-text", text);
+  // the longer the text (and its longest word), the smaller - but always big
+  const longest = Math.max(...text.split(/\s+/).map((w) => [...w].length));
+  t.style.fontSize = (text.length <= 12 && longest <= 9 ? 36 : longest <= 11 ? 28 : 23) + "px";
+  bang.append(outer, inner, t);
+  col.append(bang, el("div", "meta", m.pending ? "sending…" : hhmm(m.time)));
+  if (own) li.append(col); else li.append(avatar(m.call, symOf(m.call)), col);
+  return li;
+}
+
 function bubble(m, cont) {
   const own = m.call === S.mycall;
+  if (isCry(m.text || "")) return cryBubble(m, own);
   const li = el("li", "msg" + (own ? " own" : "") + (cont ? " cont" : ""));
   const col = el("div", "col");
   if (!own && !cont) col.append(el("div", "who", m.call));
@@ -469,19 +504,33 @@ function updateHint() {
     hint.className = "hint";
     hint.textContent = `Not sendable over radio: ${bad.join(" ")} – use the emoji button.`;
   } else {
+    const air = cryMode ? CRY + wire : wire;
     hint.className = "hint info";
-    hint.textContent = `${new TextEncoder().encode(wire).length} bytes on air: ${wire}`;
+    hint.textContent = `${new TextEncoder().encode(air).length} bytes on air: ${air}` +
+      (cryMode ? `  ·  ${[...$("input").value].length}/${CRY_MAX}` : "");
   }
+}
+let cryMode = false;
+function setCry(on) {
+  cryMode = on;
+  const i = $("input");
+  $("btn-cry").classList.toggle("active", on);
+  i.maxLength = on ? CRY_MAX : 200;
+  if (on && i.value.length > CRY_MAX) i.value = i.value.slice(0, CRY_MAX);
+  i.placeholder = on ? `Cry out! (max. ${CRY_MAX} characters)` : (S && S.board ? `Message to ${S.board.name}` : "");
+  i.focus(); updateHint();
 }
 async function send() {
   const i = $("input");
-  const { wire, bad } = textToWire(i.value);
+  const { wire: w0, bad } = textToWire(i.value);
+  const wire = cryMode && w0 ? CRY + w0 : w0;
   if (bad.length || !wire) { updateHint(); return; }
   if (wire.startsWith("/")) {
     $("hint").className = "hint"; $("hint").textContent = "Lines must not start with “/”.";
     return;
   }
-  i.value = ""; updateHint(); closePicker();
+  i.value = ""; closePicker();
+  if (cryMode) setCry(false); else updateHint();
   await api("say", { text: wire });
 }
 
@@ -952,6 +1001,7 @@ async function start() {
     if ($("picker").classList.contains("hidden")) { pickerMode = "input"; openPicker(); } else closePicker();
   };
   $("btn-send").onclick = send;
+  $("btn-cry").onclick = () => setCry(!cryMode);
   $("input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
   $("input").addEventListener("input", updateHint);
   document.addEventListener("click", (e) => {

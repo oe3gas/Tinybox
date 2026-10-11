@@ -113,6 +113,19 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .react { font-size: 13px; padding: 0 7px; border-radius: 10px; line-height: 20px; }
 .react.mine { border-color: var(--accent); }
 .react.pending { opacity: .55; border-style: dashed; }
+/* "Cry out" in a comic burst (CR17) */
+.msg.cry .col { max-width: 92%; }
+.bang { position: relative; display: grid; place-items: center; min-width: 200px; max-width: min(360px, 82vw);
+  min-height: 140px; padding: 44px 50px; transform: rotate(-3deg); }
+.msg.cry.own .bang { transform: rotate(3deg); }
+.bang .burst { position: absolute; inset: 0; }
+.bang .burst.outer { background: #e5484d; }
+.bang .burst.inner { inset: 9px; background: #ffd23f; }
+.bang-text { position: relative; font: 900 34px/1.05 Impact, "Arial Black", "Segoe UI Black", sans-serif;
+  text-transform: uppercase; color: #c3161c; text-align: center; overflow-wrap: break-word;
+  -webkit-text-stroke: 1.5px #5a0a0d; text-shadow: 3px 3px 0 #fff; letter-spacing: .5px; }
+.bang.pending { opacity: .55; }
+.cry-btn.active { background: #ffd23f; border-radius: 50%; }
 .sys { text-align: center; color: var(--sys); font-size: 12px; margin: 8px 0; }
 .divider { text-align: center; color: var(--muted); font-size: 11px; margin: 10px 0;
   display: flex; align-items: center; gap: 8px; }
