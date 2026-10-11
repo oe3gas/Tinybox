@@ -14,6 +14,10 @@ with differences: per direction the last 50 frames, at most 30 minutes.
 A direction counts only with at least 20 frames in its window. The worse
 direction gives the bars (5 = best), each T1 timeout in the window costs one
 more bar. No direction with enough frames -> no result yet (grey bars).
+
+TinyBox clients in UI mode get the chat as UI frames, which nobody acks. For
+them RxWindow counts the UI events sent and the ones the client asked for again
+(//RESEND, //LOST): that is the "out" direction (receive quote, 14.3).
 """
 
 from __future__ import annotations
@@ -78,6 +82,12 @@ class Result:
     bytes_new: int
     bytes_retry: int
     srt: float
+    rx: Direction | None = None   # UI events of a client (receive quote), if any
+
+    @property
+    def rx_quote(self) -> float | None:
+        """Received UI events in percent, None without enough events."""
+        return None if self.rx is None or self.rx.loss is None else 100.0 - self.rx.loss
 
 
 def _out_frames(c: dict) -> int:
@@ -122,13 +132,20 @@ class LinkQuality:
                 break
         return base
 
-    def evaluate(self, now: float | None = None) -> Result | None:
-        if self.last is None:
+    def evaluate(self, now: float | None = None, rx: Direction | None = None) -> Result | None:
+        """rx: UI receive window of a client; with enough events it counts for "out"
+        (the worse of the two, if the I-frames have enough too)."""
+        if self.last is None and rx is None:
             return None
         now = time.monotonic() if now is None else now
-        cur = self.last
-        to, bo = self._base(_out_frames, now)
-        ti, bi = self._base(_in_frames, now)
+        if self.last is None:                     # no counters from Direwolf: UI events only
+            zero = {k: 0 for k in FIELDS_INT} | {"srt": 0.0}
+            to = ti = now
+            cur = bo = bi = zero
+        else:
+            cur = self.last
+            to, bo = self._base(_out_frames, now)
+            ti, bi = self._base(_in_frames, now)
         d = lambda k, b: cur[k] - b[k]                                   # noqa: E731
 
         out = Direction(frames=_out_frames(cur) - _out_frames(bo), lost=d("i_retry", bo))
@@ -138,7 +155,10 @@ class LinkQuality:
         inn.enough = inn.frames >= self.cfg.min_frames
         t1 = cur["t1_exp"] - (bo if to <= ti else bi)["t1_exp"]     # since the older base
 
-        losses = [x.loss for x in (out, inn) if x.loss is not None]
+        worse_out = out
+        if rx is not None and rx.loss is not None and (out.loss is None or rx.loss > out.loss):
+            worse_out = rx
+        losses = [x.loss for x in (worse_out, inn) if x.loss is not None]
         bars = None
         if losses:
             worst = max(losses)
@@ -151,7 +171,64 @@ class LinkQuality:
         return Result(bars=bars, out=out, inn=inn, t1=t1,
                       rej_rx=d("rej_rx", bo), rej_tx=d("rej_tx", bi), retry_rx=d("retry_rx", bi),
                       i_retry=d("i_retry", bo), bytes_new=d("bytes_new", bo),
-                      bytes_retry=d("bytes_retry", bo), srt=cur["srt"])
+                      bytes_retry=d("bytes_retry", bo), srt=cur["srt"], rx=rx)
+
+
+class RxWindow:
+    """Chat events sent as UI frames to a client, and which of them it missed.
+    Last window_frames events, at most window_sec old (same window as above)."""
+
+    def __init__(self, cfg: QualityCfg | None = None) -> None:
+        self.cfg = cfg or QualityCfg()
+        self.events: deque[list] = deque(maxlen=self.cfg.window_frames)   # [time, seq, missed]
+
+    def sent(self, seq: int, now: float | None = None) -> None:
+        self.events.append([time.monotonic() if now is None else now, seq, False])
+
+    def missed(self, first: int, last: int) -> int:
+        """The client asked for events first..last (0-255, may wrap): mark them."""
+        count = (last - first) % 256 + 1
+        wanted = {(first + i) % 256 for i in range(count)}
+        marked = 0
+        for ev in reversed(self.events):           # the newest event with that number
+            if ev[1] in wanted:
+                wanted.discard(ev[1])
+                if not ev[2]:
+                    ev[2] = True
+                    marked += 1
+        return marked
+
+    def direction(self, now: float | None = None) -> Direction:
+        now = time.monotonic() if now is None else now
+        recent = [e for e in self.events if now - e[0] <= self.cfg.window_sec]
+        d = Direction(frames=len(recent), lost=sum(1 for e in recent if e[2]))
+        d.enough = d.frames >= self.cfg.min_frames
+        return d
+
+
+def cfg_from(dw) -> QualityCfg:
+    """QualityCfg from the [direwolf] settings."""
+    return QualityCfg(window_frames=dw.quality_window_frames,
+                      window_sec=dw.quality_window_min * 60,
+                      min_frames=dw.quality_min_frames, steps=dw.quality_steps)
+
+
+def result_for(service, call: str, session=None, now: float | None = None) -> Result | None:
+    """Everything known about one station: Direwolf counters (radio link) and,
+    for a client in UI mode, its receive window."""
+    q = service.links.get(call)
+    rxw = getattr(session, "ui_rx", None)
+    rx = rxw.direction(now) if rxw is not None else None
+    if q is None:
+        if rx is None:
+            return None
+        q = LinkQuality(rxw.cfg)
+    return q.evaluate(now, rx=rx)
+
+
+def bar_code(r: Result | None) -> str:
+    """For the chat event %: '1'..'5', '?' = no result yet."""
+    return "?" if r is None or r.bars is None else str(r.bars)
 
 
 def bar_text(bars: int | None) -> str:

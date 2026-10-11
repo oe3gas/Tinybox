@@ -24,6 +24,8 @@ the client gets machine-readable lines instead of the human text:
 Other client commands:
     //BOARDS              -> //B <n> <board> <keep> <users> <description> ... //BEND
     //RESEND <a>-<b>      (inside a board) events a..b again, only to this client
+    //LOST <a>-<b>        (inside a board) events a..b missed, too many to send again:
+                          only counted for the receive quote (PLANUNG.md 14.3)
     //SYM <symbol>|-      new APRS symbol; inside a board the others get "=<call> <sym>"
     //HIST max=<n> [since=<unix>] [before=<unix>]   (inside a board) stored lines on
                           request, only to this client: //H ... //HEND <n> <older>
@@ -90,6 +92,8 @@ def handle(s: Session, line: str) -> None:
         _boards(s)
     elif cmd == "RESEND":
         _resend(s, parts[1:])
+    elif cmd == "LOST":
+        _resend(s, parts[1:], replay=False)
     elif cmd == "SYM":
         _symbol(s, parts[1:])
     elif cmd == "HIST":
@@ -169,11 +173,15 @@ def _boards(s: Session) -> None:
     s.out(*rows, "//BEND")
 
 
-def _resend(s: Session, parts: list[str]) -> None:
+def _resend(s: Session, parts: list[str], replay: bool = True) -> None:
     m = re.match(r"^([0-9A-Fa-f]{1,2})-([0-9A-Fa-f]{1,2})$", parts[0] if parts else "")
     if s.chat_board is None or not m:
-        s.out("//ERR resend")
+        s.out("//ERR resend" if replay else "//ERR lost")
         return
-    lines = s.service.chat.replay(s.chat_board, int(m.group(1), 16), int(m.group(2), 16))
-    if lines:
-        s.out(*lines)
+    first, last = int(m.group(1), 16), int(m.group(2), 16)
+    if s.ui_rx is not None:                 # missed UI frames: receive quote (14.3)
+        s.ui_rx.missed(first, last)
+    if replay:
+        lines = s.service.chat.replay(s.chat_board, first, last)
+        if lines:
+            s.out(*lines)

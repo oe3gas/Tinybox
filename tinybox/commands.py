@@ -203,32 +203,38 @@ def cmd_dict(s: Session, arg: str) -> None:
 
 
 def _stat_row(call: str, r: "linkq.Result") -> str:
-    pct = lambda d: "-" if d.loss is None else f"{d.loss:.0f}%"           # noqa: E731
+    pct = lambda d: "-" if d is None or d.loss is None else f"{d.loss:.0f}%"   # noqa: E731
+    rxq = r.rx_quote
     return texts.STAT_ROW.format(
         call=call, bars=linkq.bar_text(r.bars), out=pct(r.out), inn=pct(r.inn),
         retry=r.i_retry, rej_rx=r.rej_rx, rej_tx=r.rej_tx, t1=r.t1,
-        net=f"{linkq.kbytes(r.bytes_new)}/{linkq.kbytes(r.bytes_retry)}", srt=f"{r.srt:.1f}s")
+        net=f"{linkq.kbytes(r.bytes_new)}/{linkq.kbytes(r.bytes_retry)}",
+        rxq="-" if rxq is None else f"{rxq:.0f}%",
+        srt=f"{r.srt:.1f}s" if r.srt else "-")
 
 
 def cmd_stat(s: Session, arg: str) -> None:
-    """Link quality (PLANUNG.md 14.4): STAT = own link, STAT ALL = all radio links."""
+    """Link quality (PLANUNG.md 14.4): STAT = own link, STAT ALL = all stations
+    with data (radio links via Direwolf, TinyBox clients in UI mode)."""
     which = arg.strip().upper()
     if which not in ("", "ALL", "ALLE"):
         s.out(texts.STAT_USAGE)
         return
-    links = s.service.links
+    hub = s.service.chat
+    in_chat = {m.call: m for b in hub.boards for m in hub.members(b.name)}
     if which:
-        calls = sorted(links)
+        calls = sorted(set(s.service.links) | {c for c, m in in_chat.items() if m.ui_rx})
     else:
-        calls = [s.call] if s.call in links else []
-    rows = [(c, links[c].evaluate()) for c in calls]
+        calls = [s.call]
+    rows = [(c, linkq.result_for(s.service, c, s if c == s.call else in_chat.get(c)))
+            for c in calls]
     rows = [(c, r) for c, r in rows if r is not None]
     if not rows:
         s.out(texts.STAT_NOBODY if which else texts.STAT_NONE)
         return
     dw = s.cfg.direwolf
     s.out(texts.STAT_TITLE.format(frames=dw.quality_window_frames, minutes=dw.quality_window_min),
-          texts.STAT_HEADER, *[_stat_row(c, r) for c, r in rows], texts.STAT_LEGEND)
+          texts.STAT_HEADER, *[_stat_row(c, r) for c, r in rows], *texts.STAT_LEGEND)
 
 
 def cmd_edit(s: Session, arg: str) -> None:

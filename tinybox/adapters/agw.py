@@ -222,10 +222,7 @@ class AgwAdapter:
         self._writer: asyncio.StreamWriter | None = None
         self.connected = asyncio.Event()  # AGW link up (used by tests)
         app.service.chat.ui_send = self.send_ui
-        dw = self.cfg.direwolf
-        self.quality_cfg = linkq.QualityCfg(
-            window_frames=dw.quality_window_frames, window_sec=dw.quality_window_min * 60,
-            min_frames=dw.quality_min_frames, steps=dw.quality_steps)
+        self.quality_cfg = linkq.cfg_from(self.cfg.direwolf)
         self.q_supported: bool | None = None    # None = not known yet (per AGW connect)
         self._q_reply = asyncio.Event()
 
@@ -317,7 +314,8 @@ class AgwAdapter:
             fut = self._pending.pop(remote, None)
             if fut is not None and not fut.done():
                 fut.set_exception(ConnectionError(f"connect to {remote} failed"))
-            self._on_disconnect(remote)
+            # Direwolf: "*** DISCONNECTED RETRYOUT With ..." = retries used up
+            self._on_disconnect(remote, lost=b"RETRYOUT" in f.data.upper())
         elif f.kind == "Y":
             conn = self.conns.get(self._remote_of(f))
             if conn and len(f.data) >= 4:
@@ -400,7 +398,7 @@ class AgwAdapter:
         log.info("connected to %s", remote)
         fut.set_result(conn)
 
-    def _on_disconnect(self, remote: str) -> None:
+    def _on_disconnect(self, remote: str, lost: bool = False) -> None:
         conn = self.conns.pop(remote, None)
         if conn is None:
             return
@@ -410,9 +408,12 @@ class AgwAdapter:
         if conn.pump_task:
             conn.pump_task.cancel()
         if conn.session is not None:
-            conn.session.end()
+            if isinstance(conn.session, Session):
+                conn.session.end(lost=lost)
+            else:
+                conn.session.end()                  # forward link
             self.app.registry.remove(conn.session)
-        log.info("radio disconnect %s", remote)
+        log.info("radio disconnect %s%s", remote, " (connection lost)" if lost else "")
 
     def _drop_all(self) -> None:
         for remote in list(self.conns):
@@ -426,24 +427,30 @@ class AgwAdapter:
             self.send(Frame("Q", self.radio_port, call_from=self.mycall, call_to=remote))
 
     async def _quality_poll(self) -> None:
+        """Every quality_poll_sec: ask Direwolf about all links, then let the chat
+        boards tell their clients about changed bars (event %)."""
         every = self.cfg.direwolf.quality_poll_sec
         if every <= 0:
             return
         while True:
             await asyncio.sleep(every)
-            if not self.conns:
-                continue
-            self._q_reply.clear()
-            for remote in list(self.conns):
-                self.ask_quality(remote)
-            if self.q_supported is None:
+            if self.conns and self.q_supported is not False:
+                self._q_reply.clear()
+                for remote in list(self.conns):
+                    self.ask_quality(remote)
                 try:
                     await asyncio.wait_for(self._q_reply.wait(), Q_TIMEOUT)
+                    await asyncio.sleep(0.5)             # the other answers
                 except asyncio.TimeoutError:
-                    self.q_supported = False
-                    log.info("Direwolf does not answer 'Q' (no TinyBox extension): "
-                             "link quality off until the next AGW connect")
-                    return
+                    if self.q_supported is None:
+                        self.q_supported = False
+                        log.info("Direwolf does not answer 'Q' (no TinyBox extension): "
+                                 "link quality only from TinyBox clients until the next "
+                                 "AGW connect")
+            try:
+                self.app.service.chat.quality_tick(self.app.service)
+            except Exception:
+                log.exception("link quality: chat update failed")
 
     async def _idle_watchdog(self) -> None:
         limit = self.cfg.mailbox.idle_timeout_min * 60

@@ -53,6 +53,16 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .plist li { display: flex; align-items: center; gap: 10px; padding: 5px 6px; }
 .plist .c { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .plist .x { font-size: 11px; color: var(--muted); }
+.plist .ptxt { flex: 1; min-width: 0; }
+/* link quality bars next to a station (PLANUNG.md 14.4) */
+.qbars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; flex: none; }
+.qbars i { display: block; width: 3px; background: var(--line); border-radius: 1px; }
+.qbars i:nth-child(1) { height: 4px; } .qbars i:nth-child(2) { height: 6px; }
+.qbars i:nth-child(3) { height: 8px; } .qbars i:nth-child(4) { height: 11px; }
+.qbars i:nth-child(5) { height: 14px; }
+.qbars.q5 i.on, .qbars.q4 i.on { background: var(--ok); }
+.qbars.q3 i.on { background: var(--warn); }
+.qbars.q2 i.on, .qbars.q1 i.on { background: var(--bad); }
 .people-head { display: flex; justify-content: space-between; align-items: center; }
 .people-head .nav-h { margin-top: 4px; }
 .pad { padding: 0 6px; }

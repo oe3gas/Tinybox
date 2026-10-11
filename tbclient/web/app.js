@@ -352,12 +352,25 @@ function ago(sec) {
   return `${Math.floor(sec / 3600)} h ago`;
 }
 
+/* Link quality (PLANUNG.md 14.4): 5 bars, grey = no result yet. */
+const QTEXT = { 1: "poor link", 2: "weak link", 3: "fair link", 4: "good link", 5: "very good link" };
+function qualityBars(call) {
+  if (!S.quality || !(call in S.quality)) return null;
+  const n = S.quality[call];
+  const box = el("span", "qbars" + (n ? ` q${n}` : " qnone"));
+  box.title = n ? `${QTEXT[n]} (${n}/5)` : "link quality: not enough data yet";
+  for (let i = 1; i <= 5; i++) box.append(el("i", n && i <= n ? "on" : ""));
+  return box;
+}
+
 function personRow(call, sym, note) {
   const li = el("li");
-  const txt = el("div");
+  const txt = el("div", "ptxt");
   txt.append(el("div", "c", call));
   if (note) txt.append(el("div", "x", note));
   li.append(avatar(call, sym, true), txt);
+  const q = qualityBars(call);
+  if (q) li.append(q);
   return li;
 }
 

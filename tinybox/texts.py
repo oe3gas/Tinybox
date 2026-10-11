@@ -121,6 +121,8 @@ CHAT_LINE = "{call}: {text}"
 CHAT_JOINED = "*** {call} joined {board}"
 CHAT_LEFT = "*** {call} left {board}{reason}"
 CHAT_REASON_DISC = " (disconnected)"
+CHAT_REASON_LOST = " (connection lost)"
+CHAT_LOST_SYS = "Connection to {call} lost"
 CHAT_REACT = "*** {call} {emoji} to: {target}"
 CHAT_BACK = "Left chat {board}, back in the mailbox."
 CHAT_CUT = "(Line cut to {max} characters.)"
@@ -137,13 +139,14 @@ CHAT_HELP = [
 ]
 
 STAT_TITLE = "Link quality, last {frames} frames per direction (max. {minutes} min):"
-STAT_ROW = ("{call:<10} {bars:<5}  {out:>4}  {inn:>4}  {retry:>5} {rej_rx:>5} {rej_tx:>5} "
-            "{t1:>3}  {net:>11}  {srt}")
-STAT_HEADER = STAT_ROW.format(call="Call", bars="Bars", out="Out", inn="In", retry="Retry",
-                              rej_rx="REJrx", rej_tx="REJtx", t1="T1", net="Net/Rep", srt="SRT")
-STAT_LEGEND = ("Bars ##### = best, ----- = not enough frames yet. "
-               "Out = to the station, In = from the station (loss).")
-STAT_NONE = "No link quality data (only for radio connections via Direwolf with TinyBox extension)."
+STAT_ROW = ("{call:<10} {bars:<5}  {out:>4}  {inn:>4}  {rxq:>4}  {retry:>5} {rej_rx:>5} "
+            "{rej_tx:>5} {t1:>3}  {net:>11}  {srt}")
+STAT_HEADER = STAT_ROW.format(call="Call", bars="Bars", out="Out", inn="In", rxq="RXq",
+                              retry="Retry", rej_rx="REJrx", rej_tx="REJtx", t1="T1",
+                              net="Net/Rep", srt="SRT")
+STAT_LEGEND = ["Bars ##### = best, ----- = not enough frames yet. Out = loss to the station,",
+               "In = loss from the station, RXq = chat frames a TinyBox client received."]
+STAT_NONE = "No link quality data yet (radio connections and TinyBox clients only)."
 STAT_NOBODY = "No radio connections with link quality data."
 STAT_USAGE = "Usage: STAT or STAT ALL"
 

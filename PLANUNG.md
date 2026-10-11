@@ -761,16 +761,20 @@ OE1ABC   2    14%   4%    -      -     2     1   -           86%
 | Schritt | Inhalt | Stand |
 |---|---|---|
 | 1 | `Q`-Abfrage im AGW-Adapter, Fenster, Balken (`tinybox/linkq.py`) | ✅ |
-| 2 | Empfangsquote aus `//RESEND`, `//LOST` im Client | offen |
-| 3 | Ereignis `%` im TBCHAT, Balken neben dem Avatar im Client | offen |
+| 2 | Empfangsquote aus `//RESEND`, `//LOST` im Client | ✅ |
+| 3 | Ereignis `%` im TBCHAT, Balken neben dem Avatar im Client | ✅ |
 | 4 | Befehl `STAT` / `STAT ALL` | ✅ |
-| 5 | Chat-Ereignis „Verbindung verloren“ aus `RETRYOUT` | offen |
+| 5 | Chat-Ereignis „Verbindung verloren“ aus `RETRYOUT` | ✅ |
 
 - TinyBox fragt alle `quality_poll_sec` Sekunden (Standard 30) alle Funkverbindungen ab. Antwortet Direwolf nicht (normaler Direwolf ohne Erweiterung), fragt TinyBox bis zum nächsten AGW-Connect nicht mehr und schreibt das einmal ins Log.
 - Einstellungen in `[direwolf]`: `quality_poll_sec`, `quality_window_frames` (50), `quality_window_min` (30), `quality_min_frames` (20), `quality_steps` (2, 5, 10, 20).
 - `STAT` nutzt den letzten Messwert (höchstens `quality_poll_sec` alt). Ausgabe englisch wie die übrige Bedienung; Balken als Text: `#####` = bestens, `#....` = schlecht, `-----` = noch kein Ergebnis.
 - Getestet: Unit-Tests (`tests/test_linkq.py`) und Ende-zu-Ende mit zwei Direwolf-Instanzen (Fork) über Audio-Schleife: TinyBox findet die Erweiterung, `STAT` zeigt die Werte der laufenden Verbindung.
-- Noch offen: zusätzlich nach jeder gesendeten Chat-Zeile abfragen (kommt mit Schritt 3).
+- **Empfangsquote (2):** TinyBox merkt sich pro UI-Client im Board die per UI gesendeten Ereignisse (`linkq.RxWindow`, gleiches Fenster 50/30 min) und markiert die per `//RESEND a-b` nachgeforderten. Neu `//LOST a-b`: der Client meldet Lücken über 32, ohne Nachsenden. Die Quote zählt als Richtung „Out“ (die schlechtere von I-Frames und UI), in `STAT` als Spalte `RXq`. Auch ohne Fork-Direwolf gibt es so Balken für UI-Clients.
+- **Ereignis `%` (3):** nach jeder Abfragerunde pro Board `#nn %CALL b CALL b …` (b = 1–5, `?` = noch kein Ergebnis), alle Stationen mit Daten, nur bei Änderung, höchstens 1× pro Minute, nur an Clients, nicht in der History. Der Client zeigt die Balken in der Teilnehmerliste rechts (grün 4–5, gelb 3, rot 1–2, grau = `?`).
+- **Abbruch (5):** meldet Direwolf `*** DISCONNECTED RETRYOUT`, gehen ans Board `-CALL` und danach die Systemzeile `!Connection to CALL lost` (auch ältere Clients zeigen sie an); Terminals lesen „left … (connection lost)“.
+- Abfrage nach jeder Chat-Zeile: nicht umgesetzt, der 30-s-Takt reicht (die Balken dürfen sich ohnehin nur 1× pro Minute ändern).
+- Client-Version 2026.10.11.4 (CR18: ältere Clients bekommen den Hinweis auf die neue Version).
 
 ---
 

@@ -244,3 +244,113 @@ class AgwQualityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- chat: receive quote, % event, lost link (PLANUNG.md 14.3-14.5) ----------------
+
+def _radio_client(app, call, ui=True):
+    from tinybox.session import Session
+    from tests.test_tinybox import FakeTransport
+    t = FakeTransport()
+    s = Session(call, app.service, app.cfg, t, origin="radio")
+    s.start()
+    s.handle_line(f"//CLIENT TB1 v=2026.10.11 caps=CHAT{',UI' if ui else ''}")
+    t.take()
+    return s, t
+
+
+class ChatQualityTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_chat import chat_app
+        self.app = chat_app()
+        self.ui: list[tuple[str, str]] = []
+        self.app.service.chat.ui_send = lambda dest, text: self.ui.append((dest, text))
+        self.a, self.ta = _radio_client(self.app, "OE3TEC")
+        self.b, self.tb = _radio_client(self.app, "OE1ABC")
+        self.a.handle_line("C 1")
+        self.b.handle_line("C 1")
+        self.hub = self.app.service.chat
+
+    def test_receive_window_and_lost(self):
+        self.assertIsNotNone(self.a.ui_rx)
+        for i in range(30):
+            self.b.handle_line(f"line {i}")
+        seqs = [e[1] for e in self.a.ui_rx.events]
+        self.a.handle_line(f"//RESEND {seqs[-3]:X}-{seqs[-2]:X}")     # 2 missed, sent again
+        self.assertIn(f"OE1ABC: line 28", self.ta.take())
+        self.a.handle_line(f"//LOST {seqs[0]:X}-{seqs[0]:X}")         # 1 missed, not resent
+        self.assertEqual(self.ta.take(), "")
+        r = linkq.result_for(self.app.service, "OE3TEC", self.a)
+        self.assertEqual((r.rx.frames, r.rx.lost), (len(seqs), 3))
+        self.assertAlmostEqual(r.rx_quote, 100 - 300 / len(seqs))
+        self.assertEqual(r.bars, 3)                         # 3 of 31 = 9.7 % -> 3 bars
+
+    def test_quality_event_on_change_only(self):
+        for i in range(25):
+            self.b.handle_line(f"x{i}")
+        self.ui.clear()
+        self.hub.quality_tick(self.app.service, now=1000)
+        texts = [t for _, t in self.ui]
+        self.assertEqual(len(texts), 1)
+        self.assertRegex(texts[0], r"^#[0-9A-F]+ %OE3TEC 5 OE1ABC 5$")
+        self.hub.quality_tick(self.app.service, now=1030)           # nothing changed
+        self.assertEqual(len(self.ui), 1)
+        self.a.handle_line("//LOST 0-9")                              # OE3TEC missed 10
+        self.hub.quality_tick(self.app.service, now=1040)           # within the minute
+        self.assertEqual(len(self.ui), 1)
+        self.hub.quality_tick(self.app.service, now=1070)
+        self.assertEqual(len(self.ui), 2)
+        self.assertIn("%OE3TEC 1 OE1ABC 5", self.ui[-1][1])
+        # not in the stored history
+        self.assertNotIn("%", " ".join(c.text for c in self.app.store.chat_recent(
+            "TREFF", "2000-01-01T00:00:00Z", 100)))
+
+    def test_lost_connection_event(self):
+        self.ui.clear()
+        self.b.end(lost=True)
+        texts = [t.split(" ", 1)[1] for _, t in self.ui]       # UI frames to TBCHAT-1
+        self.assertEqual(texts, ["-OE1ABC", "!Connection to OE1ABC lost"])
+
+    def test_stat_shows_receive_quote(self):
+        for i in range(25):
+            self.b.handle_line(f"x{i}")
+        self.ta.take()
+        self.a.handle_line("/Q")
+        self.a.handle_line("STAT ALL")
+        out = self.ta.take()
+        self.assertIn("RXq", out)
+        self.assertRegex(out, r"OE1ABC +#####")
+
+
+class ClientQualityTests(unittest.TestCase):
+    def test_parse(self):
+        from tbclient import proto
+        ev = proto.parse_event("#54 %OE3TEC 4 OE1ABC ?")
+        self.assertEqual((ev.kind, ev.bars), ("quality", {"OE3TEC": 4, "OE1ABC": None}))
+        self.assertIsNone(proto.parse_event("#54 %OE3TEC 9"))
+        self.assertIsNone(proto.parse_event("#54 %OE3TEC"))
+
+    def test_core(self):
+        import tempfile
+        from tbclient import proto
+        from tbclient.core import ClientCore
+        from tests.test_tbclient import client_cfg
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, link="telnet"))
+                sent: list[str] = []
+                core.link.send_line = sent.append
+                core.board = {"n": 1, "name": "TREFF", "keep": "7d"}
+                core._event(proto.Event(1, "join", "OE3TEC"))
+                core._event(proto.parse_event("#2 %OE3TEC 3 OE3GAS ?"))
+                self.assertEqual(core.snapshot()["quality"], {"OE3TEC": 3, "OE3GAS": None})
+                self.assertEqual([m["kind"] for m in core.messages], ["join"])
+                core._event(proto.Event(50, "line", "OE3TEC", text="far ahead"))
+                self.assertEqual(sent[-1], "//LOST 3-31")             # gap 47 > 32
+                core._event(proto.Event(52, "line", "OE3TEC", text="x"))
+                self.assertEqual(sent[-1], "//RESEND 33-33")
+                core._event(proto.Event(53, "leave", "OE3TEC"))
+                self.assertEqual(core.snapshot()["quality"], {"OE3GAS": None})
+
+        asyncio.run(scenario())

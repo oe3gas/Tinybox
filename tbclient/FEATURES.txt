@@ -6,6 +6,10 @@ Weboberflaeche: am PC drei Spalten, am Handy eine eigene Ansicht
 (im LAN erreichbar).
 
 Neu in dieser Version
+- Verbindungsqualitaet: neben jeder Station im Board zeigen 1 bis 5 Balken,
+  wie gut ihre Funkverbindung zur TinyBox ist (grau = noch zu wenig Daten).
+  Bricht eine Verbindung ab, steht im Chat "Connection to ... lost".
+  Mit dem Befehl STAT (STAT ALL) gibt es die Zahlen auch als Text.
 - Versionskontrolle: der Client meldet, wenn es eine neuere Version gibt,
   und fuehrt mit "Read about new features" zu diesem Bulletin.
 - "Cry out": bis 32 Zeichen riesig in einer Bang!-Blase (Knopf mit dem

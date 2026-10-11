@@ -43,6 +43,7 @@ class ClientCore:
         self._boards_tmp: list[dict] | None = None
         self.board: dict | None = None
         self.members: dict[str, str] = {}         # call -> symbol sent with the join
+        self.quality: dict[str, int | None] = {}  # call -> bars 1..5 (None = no result yet)
         self.messages: list[dict] = []
         self.pending: list[dict] = []
         self.pending_reacts: dict[tuple[int, str], float] = {}   # own reactions not echoed yet
@@ -470,6 +471,7 @@ class ClientCore:
         self._hist_buf, self._hist_lo, self._hist_hi = None, 0, 0
         self.board = None
         self.members = {}
+        self.quality = {}
         self.messages = []
         self.seen = set()
         self.unwrap = proto.Unwrapper()
@@ -483,9 +485,12 @@ class ClientCore:
         if pos in self.seen:
             return                                   # UI + I-frame, or a resend
         self.seen.add(pos)
-        if before is not None and pos > before + 1 and pos - before - 1 <= MAX_GAP:
+        if before is not None and pos > before + 1:
             first, last = (before + 1) % 256, (pos - 1) % 256
-            self._send(f"//RESEND {first:X}-{last:X}")
+            if pos - before - 1 <= MAX_GAP:
+                self._send(f"//RESEND {first:X}-{last:X}")
+            else:                 # too many to fetch: only tell, for the receive quote
+                self._send(f"//LOST {first:X}-{last:X}")
         now = int(time.time())
         if ev.kind == "line":
             self._add({"id": pos, "seq": ev.seq, "kind": "line", "call": ev.call,
@@ -503,6 +508,7 @@ class ClientCore:
                 self.members[ev.call] = ev.symbol
         elif ev.kind == "leave":
             self.members.pop(ev.call, None)
+            self.quality.pop(ev.call, None)
             self._add({"id": pos, "seq": ev.seq, "kind": "leave", "call": ev.call, "time": now})
         elif ev.kind == "react":
             for m in reversed(self.messages):
@@ -513,6 +519,8 @@ class ClientCore:
                     break
             if ev.call == self.cfg.mycall:
                 self.pending_reacts.pop((ev.ref, ev.text), None)
+        elif ev.kind == "quality":                   # bars next to the avatars (14.4)
+            self.quality = dict(ev.bars or {})
         elif ev.kind == "system":
             self._add({"id": pos, "seq": ev.seq, "kind": "system", "text": ev.text,
                        "time": now})
@@ -558,6 +566,7 @@ class ClientCore:
             "ui": "UI" in self.caps,
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),
+            "quality": self.quality,
             "mail": self.mail,
             "sysmsg": self.sysmsg,
             "heard": [{"call": c, "symbol": self.heard.get(c, ""), "ago": int(now - t)}

@@ -56,6 +56,7 @@ class Session:
         self.state = State.COMMAND
         self.chat_board: str | None = None  # set by ChatHub while in a board
         self.client = None  # clientproto.ClientInfo after //CLIENT (TinyBox client)
+        self.ui_rx = None   # linkq.RxWindow while a UI client is in a chat board
         # message being composed
         self._to = ""
         self._type = "P"
@@ -146,12 +147,13 @@ class Session:
             self.state = State.CLOSED
             self.transport.close()
 
-    def end(self) -> None:
-        """Called by the adapter when the connection is gone."""
+    def end(self, lost: bool = False) -> None:
+        """Called by the adapter when the connection is gone (lost: retries used up)."""
         if self.state in (State.SEND_SUBJECT, State.SEND_BODY):
             log.info("%s disconnected while sending, message discarded", self.call)
         self.state = State.CLOSED
-        self.service.chat.leave(self, reason=texts.CHAT_REASON_DISC)
+        self.service.chat.leave(self, reason=texts.CHAT_REASON_LOST if lost
+                                else texts.CHAT_REASON_DISC, lost=lost)
         self.service.logout(self.call, self.origin)
 
     # --- input ----------------------------------------------------------

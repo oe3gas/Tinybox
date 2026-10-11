@@ -13,6 +13,9 @@ readable text form for TinyBox clients (PLANUNG.md 12.4):
     #51 -OE3GAS                    left
     #53 =OE3GAS /k                 new APRS symbol (no symbol: "=OE3GAS"), clients only
     #52 OE3TEC *4F :+1             reaction to event 4F
+    #54 %OE3TEC 4 OE1ABC ?         link quality bars 1-5 per station, ? = no result
+                                   yet (PLANUNG.md 14.4), clients only, not stored
+    #55 !Connection to OE1ABC lost system text (after "-OE1ABC" when the link broke)
 
 Terminal users get the usual human text. Clients get the event line: if at
 least one client in the board hears the mailbox directly (UI mode), the line
@@ -28,7 +31,7 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable
 
-from . import texts
+from . import linkq, texts
 from .config import ChatBoard, Config
 from .events import EventBus
 from .store import ChatLine, Store, utc_now
@@ -59,6 +62,8 @@ class ChatHub:
         self._recent: dict[str, deque[tuple[int, str]]] = {}  # for //RESEND
         # set by the AGW adapter: ui_send(dest_call, text) sends one UI frame
         self.ui_send: Callable[[str, str], None] | None = None
+        self._q_text: dict[str, str] = {}       # board -> last % event (link quality)
+        self._q_at: dict[str, float] = {}       # board -> when it was sent
 
     # --- boards ---------------------------------------------------------
 
@@ -126,6 +131,8 @@ class ChatHub:
         self.leave(session, quiet=False)
         self._members.setdefault(board.name, []).append(session)
         session.chat_board = board.name
+        session.ui_rx = (linkq.RxWindow(linkq.cfg_from(self.cfg.direwolf))
+                         if session.client and session.client.ui else None)
         sym = session.client.symbol if session.client else ""
         self._deliver(board.name, f"+{session.call}" + (f" {sym}" if sym else ""),
                       texts.CHAT_JOINED.format(call=session.call, board=board.name),
@@ -133,11 +140,15 @@ class ChatHub:
         self.bus.publish("chat.joined", board=board.name, call=session.call)
         log.info("%s joined chat %s", session.call, board.name)
 
-    def leave(self, session: Session, quiet: bool = False, reason: str = "") -> None:
+    def leave(self, session: Session, quiet: bool = False, reason: str = "",
+              lost: bool = False) -> None:
+        """lost: the radio link broke (Direwolf: retries used up) - clients also
+        get a system line, so everybody sees why the station is gone."""
         board = session.chat_board
         if board is None:
             return
         session.chat_board = None
+        session.ui_rx = None
         members = self._members.get(board, [])
         if session in members:
             members.remove(session)
@@ -145,6 +156,9 @@ class ChatHub:
             self._deliver(board, f"-{session.call}",
                           texts.CHAT_LEFT.format(call=session.call, board=board,
                                                  reason=reason), sender=session)
+            if lost:
+                self._deliver(board, "!" + texts.CHAT_LOST_SYS.format(call=session.call), None,
+                              sender=session)
         self.bus.publish("chat.left", board=board, call=session.call)
         log.info("%s left chat %s%s", session.call, board, reason)
 
@@ -215,12 +229,44 @@ class ChatHub:
         if ui_clients and self.ui_send is not None and 1 <= n <= MAX_UI_BOARD:
             self.ui_send(f"{UI_DEST}-{n}", line)
             sent_ui = True
+            seq = self._seq[board]
+            for s in ui_clients:                # receive quote: they should hear it
+                if s.ui_rx is not None:
+                    s.ui_rx.sent(seq)
         for s in members:
             if s.client:
                 if not (sent_ui and s.client.ui):
                     s.out(line)            # clients get every event, also their own
             elif s is not sender and human is not None:   # a terminal shows what was typed
                 s.out(human)
+
+    # --- link quality (PLANUNG.md 14.4) -----------------------------------
+
+    QUALITY_MIN_SEC = 60        # at most one % event per board and minute
+
+    def quality_tick(self, service, now: float | None = None) -> None:
+        """Called after each round of Direwolf queries: per board one % event with
+        the bars of all stations that have link data - only if something changed."""
+        import time
+        now = time.monotonic() if now is None else now
+        for b in self.boards:
+            members = self.members(b.name)
+            if not members or not any(s.client for s in members):
+                continue
+            items = []
+            for s in members:
+                r = linkq.result_for(service, s.call, s)
+                if r is not None or s.call in service.links:
+                    items.append(f"{s.call} {linkq.bar_code(r)}")
+            if not items:
+                continue
+            text = "%" + " ".join(items)
+            if text == self._q_text.get(b.name):
+                continue
+            if now - self._q_at.get(b.name, -1e9) < self.QUALITY_MIN_SEC:
+                continue
+            self._q_text[b.name], self._q_at[b.name] = text, now
+            self._deliver(b.name, text, None, sender=members[0])
 
     # --- housekeeping ---------------------------------------------------
 
