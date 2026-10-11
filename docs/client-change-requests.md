@@ -25,6 +25,7 @@ Stand: 11.10.2026 (Nachmittag)
 | 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
 | 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
 | 18 | Versionskontrolle: Client prüft, ob er aktuell ist; User wird informiert und aufgefordert, die neue Version zu holen | ✅ siehe unten |
+| 19 | Rubriken sind Sysop-Sache: feste Rubrikenliste, User schreiben Bulletins nur an ALL und diese Rubriken (Auswahl im Composer), Forwarding nimmt nur diese Rubriken an | erfasst – noch nicht umgesetzt, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -136,3 +137,50 @@ Entscheidungen: Version automatisch aus dem Repo, Feature-Beschreibung als feste
 - **Seite veraltet:** Wurde der Client aktualisiert, die Seite im Browser ist aber noch alt, zeigt sie „The client was updated … – reload the page“ mit Knopf „Reload page“.
 - **Unbekannte Emoji-Codes** (von einem neueren Client) erscheinen als `[?]` statt als Rohcode.
 - Tests: `tests/test_clientnews.py`; Praxistest mit TinyBox, aktuellem und altem Client (PC und Handy).
+
+## CR19 – Rubriken sind Sysop-Sache (erfasst 11.10.2026, noch nicht umgesetzt)
+
+**Heute:** Es gibt keine Rubrikenliste. Eine Rubrik entsteht mit dem ersten Bulletin an sie (Empfängerfeld, 1–6 Zeichen) – von Usern, per Forwarding, Skript oder Sysop – und verschwindet mit dem letzten. Tippfehler erzeugen eigene Rubriken, Beschreibungen gibt es nicht.
+
+**Gewünscht (Gerhard):**
+- Rubriken legt **nur der Sysop** fest.
+- **Forwarding:** Bulletins von Partner-Mailboxen kommen **nur in den freigegebenen Rubriken** in die Box, alles andere nicht automatisch.
+- **User** schreiben Bulletins **nur an ALL und die freigegebenen Rubriken**.
+- **Bulletin-Composer im Client:** Auswahl der Rubrik (statt freiem Feld).
+
+**Vorschlag zur Umsetzung:**
+- Neuer Abschnitt `[rubrics]` in `tinybox.conf`: `NAME = Beschreibung`, eine Zeile pro Rubrik. `ALL` ist immer dabei. Änderungen wirken nach einem Neustart (wie bei den Chat-Boards).
+- **Forwarding:** Bulletin-Vorschläge an nicht freigegebene Rubriken lehnt die TinyBox im Forward-Protokoll ab (FBB: Antwort „-“ = nicht gewünscht), damit der Partner sie nicht immer wieder anbietet. Persönliche Post ist davon nicht betroffen.
+- **Terminal:** Bulletin an eine nicht freigegebene Rubrik → Fehlermeldung mit der Liste der erlaubten Rubriken.
+- **Client:** `//RUBRICS` liefert auch die freigegebenen Rubriken ohne Bulletins und ihre Beschreibung (z. B. `//RU WX 0 0 Wetter und Warnungen`). Der Composer zeigt beim Typ *Bulletin* eine Auswahlliste „ALL – an alle“, „WX – Wetter …“; die Rubrikenliste zum Abonnieren zeigt die Beschreibungen.
+- **Bestehende Bulletins** in nicht mehr freigegebenen Rubriken bleiben bis zum Ablauf.
+- **Offen:**
+  - Dürfen Sysop, Eingangsordner-Skripte (z. B. GeoSphere) und MQTT weiterhin an beliebige Rubriken schreiben, oder gilt die Liste auch für sie? Vorschlag: Sysop frei, Skripte nur Rubriken aus der Liste.
+  - Sollen abgelehnte Forward-Bulletins irgendwo protokolliert werden (Log/Konsole), damit der Sysop sieht, welche Rubriken angeboten werden?
+  - Gilt die Liste nur für den Namen oder auch für das Verteilgebiet (`@WW`, `@OE` …)?
+
+**Übliche PR-Rubriken (Recherche 11.10.2026)** – neben ALL und DX. Englische Bezeichnungen aus US-/internationalen Boxen (FBB, BPQ) sind belegt; die deutschsprachigen Namen stammen aus der Praxis der DL/OE-Boxen (OpenBCM/FBB) und sind nicht online belegt, bitte gegen die Rubriken der Partnerboxen prüfen:
+
+| Rubrik | Inhalt | Herkunft |
+|---|---|---|
+| AMSAT | Amateurfunk-Satelliten, AMSAT-Nachrichten | international (belegt) |
+| KEPS / KEPLER | Bahndaten (Keplerelemente) der Satelliten | international / DL |
+| PACKET | Packet Radio, Netz, Software | international (belegt) |
+| SWOP / SALE / FLOHMA | Verkauf, Tausch, Suche („Flohmarkt“) | US (belegt) / DL |
+| QST | Nachrichten an alle Funkamateure, Verbände (ARRL) | US (belegt) |
+| ARES / NOTFUNK | Notfunk | US (belegt) / OE |
+| WX / WETTER | Wetter und Wetterwarnungen | international / DL |
+| PROPAG | Ausbreitung, Sonnenaktivität | international |
+| CONTEST | Contest-Ankündigungen und -Ergebnisse | international |
+| DXNEWS | DX-Meldungen, DXpeditionen (oft neben DX) | DL |
+| APRS | APRS | international |
+| ATV | Amateurfunk-Fernsehen | DL |
+| TECHNIK / ANTENNE | Technik, Selbstbau, Antennen | DL |
+| LINUX | Linux im Amateurfunk | DL |
+| HUMOR | Witze, Funkerhumor | DL |
+| QSL | QSL-Karten, -Büro | DL |
+| RUNDSP | Rundsprüche (DARC/ÖVSV) | DL/OE |
+| (Verband/Region) | z. B. Landesverband, Ortsstelle | OE |
+
+Quellen: [Introduction to Packet Radio (ZL1RAH)](https://www.qsl.net/zl1rah/about_packet.htm) (ALL, QST, ARES, USERS, SWOP, AMSAT, PACKET, Verteilgebiete), [Packet Radio FAQ](https://papperlan.duckdns.org/textfiles.com/internet/FAQ/faq-pktr.txt) (ARRL-, AMSAT- und Ausbreitungs-Bulletins), [FBB (Wikipedia)](https://en.wikipedia.org/wiki/FBB_(software)).
+
