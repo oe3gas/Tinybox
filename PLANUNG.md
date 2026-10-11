@@ -80,6 +80,7 @@ Orientiert sich am klassischen WORLI/MailDrop-Stil, den Packet-Nutzer kennen. Di
 | `S call` / `SP call` | Private Nachricht an `call` |
 | `SP call @ mailbox` | Private Nachricht an einen User einer anderen Mailbox, z. B. `SP OE1ABC @ OE1XAB.#WIE.AUT.EU` (nur mit Forwarding) |
 | `SB rubrik [@ gebiet]` | Bulletin, z. B. `SB ALL` oder `SB ALL @ WW`; optional am Ende `$BID` |
+| `STAT` / `STAT ALL` | Verbindungsqualität: eigene Funkverbindung / alle (Abschnitt 14) |
 | `V` | Version |
 | `E n feld wert` | Nachrichtenkopf ändern (nur SYSOP), Felder TO, FROM, TYPE, STATUS, SUBJ, AT |
 | `DICT` | brocast-Dictionary als Text ausgeben (für den Import im brocast-Listener) |
@@ -194,7 +195,7 @@ INI-Format (Python `configparser`, Standardbibliothek). Die vollständige, komme
 | Abschnitt | Inhalt |
 |---|---|
 | `[station]` | Mailbox-Call, Sysop-Call, `sysop_via_radio`; neu `haddress` (z. B. `OE3XTC.#NOE.AUT.EU`) und `qth` für die R:-Zeilen |
-| `[direwolf]` | AGW-Host und -Port, Funkkanal, Reconnect, `paclen`, `max_outstanding` |
+| `[direwolf]` | AGW-Host und -Port, Funkkanal, Reconnect, `paclen`, `max_outstanding`; Verbindungsqualität `quality_*` (Abschnitt 14) |
 | `[mailbox]` | Begrüßung, `third_party`, `max_users`, Größen, Idle-Timeout, `bulletin_expire_days` (0 = nie löschen) |
 | `[telnet]` | Testport, nur Loopback |
 | `[web]` | Sysop-Web-GUI, nur Loopback, Port 8080 |
@@ -704,7 +705,7 @@ Pro Richtung eine Verlustquote:
 
 | Richtung | Terminal-User (I-Frames) | Client im UI-Modus |
 |---|---|---|
-| TinyBox → Station | (`i_retry` + `t1_exp`) / gesendete I-Frames, `rej_rx` | Empfangsquote der TBCHAT-Frames (14.3) |
+| TinyBox → Station | `i_retry` / (`i_new` + `i_retry`); `rej_rx` nur Anzeige | Empfangsquote der TBCHAT-Frames (14.3) |
 | Station → TinyBox | (`rej_tx` + `retry_rx`) / empfangene I-Frames | wie links |
 
 - **Fenster:** die letzten **50 Frames pro Richtung, höchstens aber die letzten 30 Minuten** – was zuerst greift (TinyBox bildet Differenzen zwischen den Abfragen). Zeigt den aktuellen Zustand, nicht den Durchschnitt seit Verbindungsaufbau. Die Zeitgrenze kam nach dem ersten Funktest dazu: in 40 Minuten BBS-/Chat-Betrieb fielen nur 21 bzw. 13 Frames an, 50 Frames hätten also weit über eine Stunde zurückgereicht.
@@ -755,9 +756,21 @@ OE3TEC   4    3%    1%    3%     1     0     0   2.1k/64     -
 OE1ABC   2    14%   4%    -      -     2     1   -           86%
 ```
 
-### 14.5 Offen
+### 14.5 Stand der Umsetzung (11.10.2026)
 
-- Wie oft TinyBox `Q` abfragt (Vorschlag: nach jeder gesendeten Chat-Zeile und alle 30 s).
+| Schritt | Inhalt | Stand |
+|---|---|---|
+| 1 | `Q`-Abfrage im AGW-Adapter, Fenster, Balken (`tinybox/linkq.py`) | ✅ |
+| 2 | Empfangsquote aus `//RESEND`, `//LOST` im Client | offen |
+| 3 | Ereignis `%` im TBCHAT, Balken neben dem Avatar im Client | offen |
+| 4 | Befehl `STAT` / `STAT ALL` | ✅ |
+| 5 | Chat-Ereignis „Verbindung verloren“ aus `RETRYOUT` | offen |
+
+- TinyBox fragt alle `quality_poll_sec` Sekunden (Standard 30) alle Funkverbindungen ab. Antwortet Direwolf nicht (normaler Direwolf ohne Erweiterung), fragt TinyBox bis zum nächsten AGW-Connect nicht mehr und schreibt das einmal ins Log.
+- Einstellungen in `[direwolf]`: `quality_poll_sec`, `quality_window_frames` (50), `quality_window_min` (30), `quality_min_frames` (20), `quality_steps` (2, 5, 10, 20).
+- `STAT` nutzt den letzten Messwert (höchstens `quality_poll_sec` alt). Ausgabe englisch wie die übrige Bedienung; Balken als Text: `#####` = bestens, `#....` = schlecht, `-----` = noch kein Ergebnis.
+- Getestet: Unit-Tests (`tests/test_linkq.py`) und Ende-zu-Ende mit zwei Direwolf-Instanzen (Fork) über Audio-Schleife: TinyBox findet die Erweiterung, `STAT` zeigt die Werte der laufenden Verbindung.
+- Noch offen: zusätzlich nach jeder gesendeten Chat-Zeile abfragen (kommt mit Schritt 3).
 
 ---
 

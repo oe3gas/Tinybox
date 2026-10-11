@@ -1,0 +1,246 @@
+"""Link quality: parsing, window, bars, STAT command, AGW 'Q' (PLANUNG.md section 14)."""
+
+from __future__ import annotations
+
+import asyncio
+import dataclasses
+import unittest
+
+from tinybox import linkq
+from tinybox.adapters import agw
+from tinybox.adapters.agw import Frame
+
+from tests.test_agw import FakeDirewolf, MYCALL, stop
+from tests.test_tinybox import make_app
+
+LINE = ("v=1 state=3 i_new=21 i_retry=0 bytes_new=2189 bytes_retry=0 i_rx=13 retry_rx=0 "
+        "rej_rx=0 rej_tx=0 t1_exp=0 rnr_rx=0 srt=1.38 t1v=2.76 rc=0 unack=4 age=2405")
+
+
+def counters(**kw) -> dict:
+    c = {k: 0 for k in linkq.FIELDS_INT} | {"srt": 1.0, "t1v": 2.0, "age": 0.0}
+    c.update(kw)
+    return c
+
+
+class ParseTests(unittest.TestCase):
+    def test_line_from_the_fork(self):
+        c = linkq.parse(LINE)
+        self.assertEqual((c["i_new"], c["i_rx"], c["unack"], c["srt"], c["age"]),
+                         (21, 13, 4, 1.38, 2405.0))
+
+    def test_no_link_or_garbage(self):
+        self.assertIsNone(linkq.parse("v=1 none"))
+        self.assertIsNone(linkq.parse("v=2 i_new=1"))
+        self.assertIsNone(linkq.parse("v=1 i_new=x"))
+        self.assertIsNone(linkq.parse(""))
+
+    def test_unknown_keys_are_ignored(self):
+        self.assertEqual(linkq.parse(LINE + " future=7")["i_new"], 21)
+
+
+class EvaluateTests(unittest.TestCase):
+    def test_grey_until_enough_frames(self):
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=10, i_rx=19, age=60), now=1000)
+        r = q.evaluate(now=1000)
+        self.assertIsNone(r.bars)
+        self.assertIsNone(r.out.loss)
+        self.assertEqual(linkq.bar_text(r.bars), "-----")
+
+    def test_one_direction_is_enough(self):
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=25, i_rx=3, age=60), now=1000)
+        r = q.evaluate(now=1000)
+        self.assertEqual(r.bars, 5)
+        self.assertEqual(r.out.loss, 0.0)
+        self.assertIsNone(r.inn.loss)
+
+    def test_bars_follow_the_worse_direction(self):
+        q = linkq.LinkQuality()
+        # out: 3 of 40 repeated = 7.5 % -> 3 bars; in: 1 of 40 = 2.5 % -> 4 bars
+        q.add(counters(i_new=37, i_retry=3, i_rx=40, rej_tx=1, age=60), now=1000)
+        r = q.evaluate(now=1000)
+        self.assertAlmostEqual(r.out.loss, 7.5)
+        self.assertAlmostEqual(r.inn.loss, 2.5)
+        self.assertEqual(r.bars, 3)
+        self.assertEqual(linkq.bar_text(3), "###..")
+
+    def test_t1_costs_one_bar_each(self):
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=30, t1_exp=2, age=60), now=1000)
+        self.assertEqual(q.evaluate(now=1000).bars, 3)
+        q2 = linkq.LinkQuality()
+        q2.add(counters(i_new=30, t1_exp=9, age=60), now=1000)
+        self.assertEqual(q2.evaluate(now=1000).bars, 1)      # never below 1
+
+    def test_thresholds(self):
+        for retry, bars in ((0, 5), (3, 4), (6, 3), (15, 2), (25, 1)):
+            q = linkq.LinkQuality()
+            q.add(counters(i_new=100 - retry, i_retry=retry, age=60), now=1000)
+            self.assertEqual(q.evaluate(now=1000).bars, bars, retry)
+
+    def test_window_shows_now_not_the_past(self):
+        """Bad start, then 60 clean frames: the window (50) no longer sees the losses."""
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=20, i_retry=10, age=60), now=1000)
+        self.assertEqual(q.evaluate(now=1000).bars, 1)
+        q.add(counters(i_new=80, i_retry=10, age=120), now=1060)
+        r = q.evaluate(now=1060)
+        self.assertEqual((r.out.frames, r.out.lost, r.bars), (60, 0, 5))
+
+    def test_window_max_30_minutes(self):
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=20, i_retry=10, age=60), now=1000)
+        q.add(counters(i_new=25, i_retry=10, age=60 + 1900), now=2900)   # 31 min later
+        r = q.evaluate(now=2900)
+        self.assertEqual(r.out.frames, 0)      # only 5 new frames, old sample is gone
+        self.assertIsNone(r.bars)
+
+    def test_long_link_without_baseline(self):
+        """Link older than 30 min: the first sample is the baseline, no result yet."""
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=500, i_retry=50, age=5000), now=1000)
+        self.assertIsNone(q.evaluate(now=1000).bars)
+        q.add(counters(i_new=530, i_retry=50, age=5030), now=1030)
+        self.assertEqual(q.evaluate(now=1030).bars, 5)
+
+    def test_link_restarted(self):
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=90, i_retry=10, age=600), now=1000)
+        q.add(counters(i_new=30, age=30), now=1030)            # counters fell: new link
+        r = q.evaluate(now=1030)
+        self.assertEqual((r.out.frames, r.bars), (30, 5))
+
+
+class StatCommandTests(unittest.TestCase):
+    def _session(self, call="OE1ABC"):
+        from tinybox.session import Session
+        from tests.test_tinybox import FakeTransport
+        app = make_app()
+        t = FakeTransport()
+        s = Session(call, app.service, app.cfg, t, origin="radio")
+        s.start()
+        t.take()
+        return app, s, t
+
+    def test_own_link(self):
+        app, s, t = self._session()
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=37, i_retry=3, i_rx=40, rej_tx=1, bytes_new=2100, bytes_retry=64,
+                       age=60, srt=1.4))
+        app.service.links["OE1ABC"] = q
+        s.handle_line("STAT")
+        out = t.take()
+        self.assertIn("last 50 frames", out)
+        self.assertIn("OE1ABC     ###..", out)
+        self.assertIn("8%", out)
+        self.assertIn("2.1k/64", out)
+        self.assertIn("1.4s", out)
+
+    def test_all_and_none(self):
+        app, s, t = self._session()
+        s.handle_line("STAT")
+        self.assertIn("No link quality data", t.take())
+        s.handle_line("STAT ALL")
+        self.assertIn("No radio connections", t.take())
+        q = linkq.LinkQuality()
+        q.add(counters(i_new=5, age=10))
+        app.service.links["OE3TEC"] = q
+        s.handle_line("stat alle")
+        self.assertIn("OE3TEC     -----", t.take())
+        s.handle_line("STAT x")
+        self.assertIn("Usage: STAT", t.take())
+
+
+class QDirewolf(FakeDirewolf):
+    """FakeDirewolf that also answers 'Q' like the TinyBox fork (or not at all)."""
+
+    def __init__(self, answer: bool = True) -> None:
+        super().__init__()
+        self.answer = answer
+        self.q_asked = 0
+
+    async def handle(self, reader, writer) -> None:
+        self.writer = writer
+        try:
+            while True:
+                f = await agw.read_frame(reader)
+                self.frames.append(f)
+                if f.kind == "Q":
+                    self.q_asked += 1
+                    if self.answer:
+                        self.send(Frame("Q", call_from=f.call_from, call_to=f.call_to,
+                                        data=LINE.replace("age=2405", "age=120").encode()))
+                elif f.kind == "Y":
+                    self.send(Frame("Y", call_from=f.call_from, call_to=f.call_to,
+                                    data=b"\x00\x00\x00\x00"))
+                elif f.kind == "R":
+                    self.send(Frame("R", data=b"\x01\x00\x00\x00\x07\x00\x00\x00"))
+                elif f.kind == "X":
+                    self.send(Frame("X", call_from=f.call_from, data=b"\x01"))
+                    self.registered.set()
+                elif f.kind == "d":
+                    self.send(Frame("d", call_from=f.call_to, call_to=f.call_from,
+                                    data=b"*** DISCONNECTED\r"))
+                    self.disconnected.set()
+        except (asyncio.IncompleteReadError, ConnectionError):
+            pass
+
+
+async def start_q(app, dw):
+    server = await asyncio.start_server(dw.handle, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, agw_port=port, reconnect_sec=1,
+                                           quality_poll_sec=1)
+    adapter = agw.AgwAdapter(app)
+    task = asyncio.create_task(adapter.run())
+    await asyncio.wait_for(dw.registered.wait(), 5)
+    return server, adapter, task
+
+
+class AgwQualityTests(unittest.TestCase):
+    def test_poll_and_stat_over_radio(self):
+        async def scenario():
+            app = make_app()
+            dw = QDirewolf()
+            server, adapter, task = await start_q(app, dw)
+            dw.connect("OE1ABC-7")
+            await asyncio.sleep(1.5)                      # one poll round
+            dw.data("OE1ABC-7", "STAT\rB\r")
+            await asyncio.wait_for(dw.disconnected.wait(), 5)
+            await asyncio.sleep(0.1)
+            links_after = dict(app.service.links)
+            await stop(server, task, dw)
+            return dw, adapter, links_after
+
+        dw, adapter, links_after = asyncio.run(scenario())
+        qs = [f for f in dw.frames if f.kind == "Q"]
+        self.assertTrue(qs)
+        self.assertEqual((qs[0].call_from, qs[0].call_to), (MYCALL, "OE1ABC-7"))
+        self.assertTrue(adapter.q_supported)
+        out = dw.output_for("OE1ABC-7")
+        self.assertIn("OE1ABC-7   #####", out)
+        self.assertEqual(links_after, {})               # gone with the connection
+
+    def test_plain_direwolf_is_asked_once(self):
+        async def scenario():
+            app = make_app()
+            dw = QDirewolf(answer=False)
+            server, adapter, task = await start_q(app, dw)
+            agw.Q_TIMEOUT, saved = 0.5, agw.Q_TIMEOUT
+            try:
+                dw.connect("OE1ABC-7")
+                await asyncio.sleep(4)
+            finally:
+                agw.Q_TIMEOUT = saved
+            await stop(server, task, dw)
+            return dw, adapter
+
+        dw, adapter = asyncio.run(scenario())
+        self.assertEqual(dw.q_asked, 1)
+        self.assertIs(adapter.q_supported, False)
+
+
+if __name__ == "__main__":
+    unittest.main()

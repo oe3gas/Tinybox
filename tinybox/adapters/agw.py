@@ -15,6 +15,9 @@ Frames used:
     R  version        X  register call     C  connected
     D  connected data d  disconnect        Y  outstanding frames
     M  UI frame (sent by us: chat events to TBCHAT-<n> for TinyBox clients)
+    Q  link quality counters - only the TinyBox Direwolf fork knows it
+       (PLANUNG.md section 14); a normal Direwolf does not answer, then TinyBox
+       stops asking until the next AGW connect.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 
-from .. import texts
+from .. import linkq, texts
 from ..app import App
 from ..config import is_valid_call, normalize_call
 from ..session import MAX_LINE, Session
@@ -39,6 +42,7 @@ PID_NO_L3 = 0xF0
 CTRL_Z = 0x1A
 DRAIN_TIMEOUT = 120  # s to wait for the last packets before disconnecting
 Y_TIMEOUT = 5
+Q_TIMEOUT = 5
 
 
 class AgwProtocolError(Exception):
@@ -98,6 +102,7 @@ class AgwConnection:
         self._last_cr = False
         self._after_z = False
         self.pump_task: asyncio.Task | None = None
+        self.quality = linkq.LinkQuality(adapter.quality_cfg)
 
     # --- Transport interface -------------------------------------------
 
@@ -217,6 +222,12 @@ class AgwAdapter:
         self._writer: asyncio.StreamWriter | None = None
         self.connected = asyncio.Event()  # AGW link up (used by tests)
         app.service.chat.ui_send = self.send_ui
+        dw = self.cfg.direwolf
+        self.quality_cfg = linkq.QualityCfg(
+            window_frames=dw.quality_window_frames, window_sec=dw.quality_window_min * 60,
+            min_frames=dw.quality_min_frames, steps=dw.quality_steps)
+        self.q_supported: bool | None = None    # None = not known yet (per AGW connect)
+        self._q_reply = asyncio.Event()
 
     def send(self, frame: Frame) -> None:
         if self._writer is not None and not self._writer.is_closing():
@@ -248,6 +259,8 @@ class AgwAdapter:
             log.info("connected to Direwolf AGW %s:%d", dw.agw_host, dw.agw_port)
             self._writer = writer
             watchdog = asyncio.create_task(self._idle_watchdog())
+            self.q_supported = None
+            quality = asyncio.create_task(self._quality_poll())
             try:
                 self.send(Frame("R"))
                 self.send(Frame("X", self.radio_port, call_from=self.mycall))
@@ -266,6 +279,7 @@ class AgwAdapter:
             finally:
                 self.connected.clear()
                 watchdog.cancel()
+                quality.cancel()
                 self._drop_all()
                 self._writer = None
                 writer.close()
@@ -308,6 +322,15 @@ class AgwAdapter:
             conn = self.conns.get(self._remote_of(f))
             if conn and len(f.data) >= 4:
                 conn.on_outstanding(struct.unpack("<I", f.data[:4])[0])
+        elif f.kind == "Q":
+            self._q_reply.set()
+            if not self.q_supported:
+                self.q_supported = True
+                log.info("Direwolf with TinyBox extension: link quality available")
+            conn = self.conns.get(normalize_call(self._remote_of(f)))
+            counters = linkq.parse(f.data.decode("ascii", "replace"))
+            if conn and counters:
+                conn.quality.add(counters)
         else:
             log.debug("AGW frame '%s' ignored", f.kind)
 
@@ -318,6 +341,7 @@ class AgwAdapter:
             return
         conn = AgwConnection(self, remote)
         self.conns[remote] = conn
+        self.app.service.links[remote] = conn.quality
         conn.pump_task = asyncio.create_task(conn.pump())
         if not is_valid_call(remote):
             log.warning("connect from invalid call %r refused", remote)
@@ -370,6 +394,7 @@ class AgwAdapter:
     def _on_outgoing_connected(self, remote: str, fut: asyncio.Future) -> None:
         conn = AgwConnection(self, remote)
         self.conns[remote] = conn
+        self.app.service.links[remote] = conn.quality
         conn.pump_task = asyncio.create_task(conn.pump())
         fut.attach(conn)             # sink in place before the next frame arrives
         log.info("connected to %s", remote)
@@ -379,6 +404,7 @@ class AgwAdapter:
         conn = self.conns.pop(remote, None)
         if conn is None:
             return
+        self.app.service.links.pop(remote, None)
         conn.gone = True
         conn._wakeup.set()
         if conn.pump_task:
@@ -391,6 +417,33 @@ class AgwAdapter:
     def _drop_all(self) -> None:
         for remote in list(self.conns):
             self._on_disconnect(remote)
+
+    # --- link quality (AGW 'Q', TinyBox Direwolf fork) ---------------------------
+
+    def ask_quality(self, remote: str) -> None:
+        """Ask Direwolf for the counters of one link (answer arrives as 'Q' frame)."""
+        if self.q_supported is not False:
+            self.send(Frame("Q", self.radio_port, call_from=self.mycall, call_to=remote))
+
+    async def _quality_poll(self) -> None:
+        every = self.cfg.direwolf.quality_poll_sec
+        if every <= 0:
+            return
+        while True:
+            await asyncio.sleep(every)
+            if not self.conns:
+                continue
+            self._q_reply.clear()
+            for remote in list(self.conns):
+                self.ask_quality(remote)
+            if self.q_supported is None:
+                try:
+                    await asyncio.wait_for(self._q_reply.wait(), Q_TIMEOUT)
+                except asyncio.TimeoutError:
+                    self.q_supported = False
+                    log.info("Direwolf does not answer 'Q' (no TinyBox extension): "
+                             "link quality off until the next AGW connect")
+                    return
 
     async def _idle_watchdog(self) -> None:
         limit = self.cfg.mailbox.idle_timeout_min * 60

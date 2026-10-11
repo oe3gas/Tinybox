@@ -6,7 +6,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Callable
 
-from . import addressing, chatcmd, dictfile, texts
+from . import addressing, chatcmd, dictfile, linkq, texts
 from .service import ServiceError
 from .store import Message
 
@@ -202,6 +202,35 @@ def cmd_dict(s: Session, arg: str) -> None:
     s.out(texts.DICT_DONE)
 
 
+def _stat_row(call: str, r: "linkq.Result") -> str:
+    pct = lambda d: "-" if d.loss is None else f"{d.loss:.0f}%"           # noqa: E731
+    return texts.STAT_ROW.format(
+        call=call, bars=linkq.bar_text(r.bars), out=pct(r.out), inn=pct(r.inn),
+        retry=r.i_retry, rej_rx=r.rej_rx, rej_tx=r.rej_tx, t1=r.t1,
+        net=f"{linkq.kbytes(r.bytes_new)}/{linkq.kbytes(r.bytes_retry)}", srt=f"{r.srt:.1f}s")
+
+
+def cmd_stat(s: Session, arg: str) -> None:
+    """Link quality (PLANUNG.md 14.4): STAT = own link, STAT ALL = all radio links."""
+    which = arg.strip().upper()
+    if which not in ("", "ALL", "ALLE"):
+        s.out(texts.STAT_USAGE)
+        return
+    links = s.service.links
+    if which:
+        calls = sorted(links)
+    else:
+        calls = [s.call] if s.call in links else []
+    rows = [(c, links[c].evaluate()) for c in calls]
+    rows = [(c, r) for c, r in rows if r is not None]
+    if not rows:
+        s.out(texts.STAT_NOBODY if which else texts.STAT_NONE)
+        return
+    dw = s.cfg.direwolf
+    s.out(texts.STAT_TITLE.format(frames=dw.quality_window_frames, minutes=dw.quality_window_min),
+          texts.STAT_HEADER, *[_stat_row(c, r) for c, r in rows], texts.STAT_LEGEND)
+
+
 def cmd_edit(s: Session, arg: str) -> None:
     if not s.sysop:
         s.out(texts.NOT_ALLOWED)
@@ -241,6 +270,7 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "S": cmd_send,
     "SP": cmd_send,
     "SB": cmd_send_bulletin,
+    "STAT": cmd_stat,
     "V": cmd_version,
 }
 

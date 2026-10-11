@@ -116,6 +116,12 @@ class DirewolfCfg:
     reconnect_sec: int
     paclen: int
     max_outstanding: int
+    # link quality (TinyBox Direwolf fork, AGW 'Q'), PLANUNG.md section 14
+    quality_poll_sec: int = 30            # 0 = off
+    quality_window_frames: int = 50
+    quality_window_min: int = 30
+    quality_min_frames: int = 20
+    quality_steps: tuple[float, ...] = (2.0, 5.0, 10.0, 20.0)
 
 
 @dataclass
@@ -290,6 +296,17 @@ def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
         raise ConfigError(f"[{sec}] {key}: {exc}") from None
 
 
+def _steps(value: str) -> tuple[float, ...]:
+    """quality_steps: four rising loss limits in % for 5 / 4 / 3 / 2 bars."""
+    try:
+        steps = tuple(float(x) for x in value.replace(";", ",").split(","))
+    except ValueError:
+        steps = ()
+    if len(steps) != 4 or list(steps) != sorted(steps) or steps[0] <= 0:
+        raise ConfigError("[direwolf] quality_steps: four rising numbers, e.g. 2, 5, 10, 20")
+    return steps
+
+
 def _require_call(sec: str, key: str, value) -> str:
     if not value:
         raise ConfigError(f"[{sec}] {key} is missing")
@@ -364,12 +381,22 @@ def load(path: str | Path) -> Config:
         reconnect_sec=_get(cp, "direwolf", "reconnect_sec", 5, int),
         paclen=_get(cp, "direwolf", "paclen", 128, int),
         max_outstanding=_get(cp, "direwolf", "max_outstanding", 4, int),
+        quality_poll_sec=_get(cp, "direwolf", "quality_poll_sec", 30, int),
+        quality_window_frames=_get(cp, "direwolf", "quality_window_frames", 50, int),
+        quality_window_min=_get(cp, "direwolf", "quality_window_min", 30, int),
+        quality_min_frames=_get(cp, "direwolf", "quality_min_frames", 20, int),
+        quality_steps=_steps(_get(cp, "direwolf", "quality_steps", "2, 5, 10, 20")),
     )
     _check_port("direwolf", "agw_port", direwolf.agw_port)
     _check_range("direwolf", "paclen", direwolf.paclen, 32, 256)
     _check_range("direwolf", "max_outstanding", direwolf.max_outstanding, 1, 7)
     _check_range("direwolf", "agw_radio_port", direwolf.agw_radio_port, 0, 255)
     _check_range("direwolf", "reconnect_sec", direwolf.reconnect_sec, 1, 3600)
+    _check_range("direwolf", "quality_poll_sec", direwolf.quality_poll_sec, 0, 3600)
+    _check_range("direwolf", "quality_window_frames", direwolf.quality_window_frames, 5, 1000)
+    _check_range("direwolf", "quality_window_min", direwolf.quality_window_min, 1, 1440)
+    _check_range("direwolf", "quality_min_frames", direwolf.quality_min_frames, 1,
+                 direwolf.quality_window_frames)
 
     mailbox = MailboxCfg(
         welcome_enabled=_get(cp, "mailbox", "welcome_enabled", True, bool),

@@ -38,6 +38,7 @@ HELP = [
     "             e.g. SP OE1ABC @ OE1XAB.#WIE.AUT.EU",
     "  SB topic   Send bulletin, e.g. SB ALL  (SB ALL @ WW: to the whole network)",
     "             Optional at the end: $BID, e.g. SB DX @ EU $DX0815",
+    "  STAT       Link quality of your radio connection (STAT ALL: all stations)",
     "  V          Version",
 ]
 HELP_SYSOP = [
@@ -131,6 +132,17 @@ CHAT_HELP = [
     "  /R n emoji React to line #n with an emoji code, e.g. /R 4F :+1",
     "  /H         This help",
 ]
+
+STAT_TITLE = "Link quality, last {frames} frames per direction (max. {minutes} min):"
+STAT_ROW = ("{call:<10} {bars:<5}  {out:>4}  {inn:>4}  {retry:>5} {rej_rx:>5} {rej_tx:>5} "
+            "{t1:>3}  {net:>11}  {srt}")
+STAT_HEADER = STAT_ROW.format(call="Call", bars="Bars", out="Out", inn="In", retry="Retry",
+                              rej_rx="REJrx", rej_tx="REJtx", t1="T1", net="Net/Rep", srt="SRT")
+STAT_LEGEND = ("Bars ##### = best, ----- = not enough frames yet. "
+               "Out = to the station, In = from the station (loss).")
+STAT_NONE = "No link quality data (only for radio connections via Direwolf with TinyBox extension)."
+STAT_NOBODY = "No radio connections with link quality data."
+STAT_USAGE = "Usage: STAT or STAT ALL"
 
 JLOG_HEADER = "Call       Last seen (UTC)   Count"
 JLOG_ROW = "{call:<10} {last:<17} {count:>5}"
