@@ -601,6 +601,7 @@ class ClientCore:
             "symbols": {c: self.symbol_of(c) for c in calls if self.symbol_of(c)},
             "my_symbol": self.my_symbol,
             "messages": self.messages, "pending": [p["text"] for p in self.pending],
+            "clock_off": self.clock_off,     # TinyBox time - own time (quotes, CR14)
             "pending_reacts": [f"{seq}:{e}" for seq, e in self.pending_reacts],
             "console": list(self.console)[-80:],
             "mailbox": self.mailbox.summary(),

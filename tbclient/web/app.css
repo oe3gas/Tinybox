@@ -143,6 +143,17 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .bang.pending { opacity: .55; }
 .cry-btn.active { background: #ffd23f; border-radius: 50%; }
 .sys { text-align: center; color: var(--sys); font-size: 12px; margin: 8px 0; }
+/* CR14: quotes */
+.quote { border-left: 3px solid var(--accent); background: rgba(127,127,127,.12); border-radius: 6px;
+  padding: 3px 8px; margin: 0 0 4px; font-size: 12px; cursor: pointer; max-width: 100%; }
+.quote .q-who { font-weight: 600; color: var(--accent); }
+.quote .q-text { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-bar { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 14px; font-size: 13px;
+  border-top: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.quote-bar > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-bar b { color: var(--text); }
+.react-bar .q-btn { font-size: 18px; border-right: 1px solid var(--line); border-radius: 0; }
+li.msg.flash .bubble { outline: 2px solid var(--accent); transition: outline-color .3s; }
 .motd { margin: 6px 4px 10px; padding: 8px 12px; border-radius: 10px; font-size: 13px;
   background: var(--mention); border-left: 3px solid var(--mention-line); overflow-wrap: anywhere; }
 .divider { text-align: center; color: var(--muted); font-size: 11px; margin: 10px 0;

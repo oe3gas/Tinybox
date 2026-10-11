@@ -210,6 +210,7 @@ function render() {
   $("conn-info").textContent = `${S.mycall} → ${S.tinybox} via ${S.link}` +
     (S.state === "online" ? (S.ui ? ", chat as UI frames (heard directly)" : ", chat as I-frames") : "");
   const inBoard = !!S.board;
+  if (!inBoard && quoteTo) setQuote(null);
   $("input").disabled = !inBoard; $("btn-send").disabled = !inBoard;
   if (!cryMode) $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
   $("btn-cry").disabled = !inBoard;
@@ -489,18 +490,85 @@ function cryBubble(m, own) {
   return li;
 }
 
+/* Quote (CR14, variant B): over the air only a reference in front of the text,
+ *   ~^OE3TEC 1402 I am QRV
+ * = call and minute (UTC, TinyBox clock) of the quoted message, ~13 bytes. The
+ * client finds the message in its own chat and shows an excerpt; without it,
+ * only "↩ OE3TEC 14:02". The same call twice in one minute: the latest one. */
+const QUOTE_RE = /^~\^([A-Z0-9]{1,6}(?:-\d{1,2})?) (\d{4}) ?/;
+let quoteTo = null;                      // message to quote with the next send
+const srvMinute = (m) => {               // HHMM in UTC by the TinyBox clock
+  const d = new Date(((m.srv_time || (m.time + (S.clock_off || 0)))) * 1000);
+  return String(d.getUTCHours()).padStart(2, "0") + String(d.getUTCMinutes()).padStart(2, "0");
+};
+function quotedMessage(call, hhmm, before) {
+  const want = +hhmm.slice(0, 2) * 60 + +hhmm.slice(2);
+  let hit = null;
+  for (const x of S.messages) {
+    if (x === before) break;
+    if (x.kind !== "line" && x.kind !== undefined) continue;
+    if (x.call !== call || !x.text) continue;
+    const t = srvMinute(x), mins = +t.slice(0, 2) * 60 + +t.slice(2);
+    const diff = Math.min(Math.abs(mins - want), 1440 - Math.abs(mins - want));
+    if (diff <= 1) hit = x;                // the latest one wins
+  }
+  return hit;
+}
+function excerpt(wire, n = 60) {
+  const t = wireToText(wire.replace(QUOTE_RE, "").replace(/^~!/, ""));
+  return [...t].length > n ? [...t].slice(0, n).join("") + "…" : t;
+}
+function quoteBlock(call, hhmm, orig) {
+  const q = el("div", "quote");
+  const local = orig ? hhmmOf(orig) : utcToLocal(hhmm);
+  q.append(el("div", "q-who", `↩ ${call} ${local}`));
+  if (orig) {
+    q.append(el("div", "q-text", excerpt(orig.text)));
+    q.title = "Show the message";
+    q.onclick = (ev) => {
+      ev.stopPropagation();
+      const li = document.querySelector(`li[data-mid="${CSS.escape(String(orig.id))}"]`);
+      if (li) { li.scrollIntoView({ block: "center", behavior: "smooth" }); li.classList.add("flash");
+                setTimeout(() => li.classList.remove("flash"), 1200); }
+    };
+  }
+  return q;
+}
+const hhmmOf = (m) => hhmm(m.time);
+function utcToLocal(h) {
+  const d = new Date();
+  d.setUTCHours(+h.slice(0, 2), +h.slice(2), 0, 0);
+  return hhmm(d.getTime() / 1000 - (S.clock_off || 0));
+}
+function setQuote(m) {
+  quoteTo = m;
+  if (m && cryMode) setCry(false);
+  const box = $("quote-bar");
+  box.classList.toggle("hidden", !m);
+  if (!cryMode) $("input").maxLength = 200 - (m ? quotePrefix().length : 0);
+  if (m) {
+    $("qb-text").replaceChildren(el("b", "", m.call + " "), excerpt(m.text, 50));
+    $("input").focus();
+  }
+  updateHint();
+}
+
 function bubble(m, cont) {
   const own = m.call === S.mycall;
   if (isCry(m.text || "")) return cryBubble(m, own);
   const li = el("li", "msg" + (own ? " own" : "") + (cont ? " cont" : ""));
+  li.dataset.mid = String(m.id);
   const col = el("div", "col");
   if (!own && !cont) col.append(el("div", "who", m.call));
-  const text = wireToText(m.text);
+  const qm = (m.text || "").match(QUOTE_RE);
+  const text = wireToText(qm ? m.text.slice(qm[0].length) : m.text);
+  const quotesMe = qm && !own && baseCall(qm[1]) === baseCall(S.mycall);
   const b = el("div", "bubble" + (m.pending ? " pending" : "") + (m.history ? " history" : "")
-               + (selected === m.id ? " selected" : "") + (isSingleEmoji(text) ? " jumbo" : "")
-               + (!own && mentionsMe(text) ? " mention" : ""));
+               + (selected === m.id ? " selected" : "") + (isSingleEmoji(text) && !qm ? " jumbo" : "")
+               + (!own && (mentionsMe(text) || quotesMe) ? " mention" : ""));
+  if (qm) b.append(quoteBlock(qm[1], qm[2], m.pending ? null : quotedMessage(qm[1], qm[2], m)));
   richText(b, text);
-  if (!m.pending && !m.history && m.seq >= 0) {
+  if (!m.pending) {
     b.onclick = (ev) => { ev.stopPropagation(); openReactBar(m, b); };
   }
   col.append(b);
@@ -537,6 +605,19 @@ function openReactBar(m, anchor) {
   selected = m.id;
   const bar = $("react-bar");
   bar.replaceChildren();
+  const q = el("button", "q-btn", "↩");
+  q.title = "Quote / reply";
+  q.onclick = (ev) => { ev.stopPropagation(); closeReactBar(); setQuote(m); };
+  bar.append(q);
+  if (m.history || m.seq < 0) {                 // history: quote only, no reactions
+    bar.classList.remove("hidden");
+    const r = anchor.getBoundingClientRect(), c = $("chat").getBoundingClientRect();
+    bar.style.top = Math.max(8, r.top - 48) + "px";
+    bar.style.left = Math.max(c.left + 8, Math.min(c.right - bar.offsetWidth - 8, r.left)) + "px";
+    anchor.classList.add("selected");
+    selected = m.id;
+    return;
+  }
   for (const e of QUICK) {
     const btn = el("button", "", e);
     btn.onclick = () => { sendReaction(m, e); };
@@ -614,15 +695,19 @@ function updateHint() {
     hint.className = "hint";
     hint.textContent = `Not sendable over radio: ${bad.join(" ")} – use the emoji button.`;
   } else {
-    const air = cryMode ? CRY + wire : wire;
+    const air = cryMode ? CRY + wire : quotePrefix() + wire;
     hint.className = "hint info";
     hint.textContent = `${new TextEncoder().encode(air).length} bytes on air: ${air}` +
       (cryMode ? `  ·  ${[...$("input").value].length}/${CRY_MAX}` : "");
   }
 }
 let cryMode = false;
+function quotePrefix() {
+  return quoteTo ? `~^${quoteTo.call} ${srvMinute(quoteTo)} ` : "";
+}
 function setCry(on) {
   cryMode = on;
+  if (on && quoteTo) { quoteTo = null; $("quote-bar").classList.add("hidden"); }
   const i = $("input");
   $("btn-cry").classList.toggle("active", on);
   i.maxLength = on ? CRY_MAX : 200;
@@ -633,13 +718,14 @@ function setCry(on) {
 async function send() {
   const i = $("input");
   const { wire: w0, bad } = textToWire(i.value);
-  const wire = cryMode && w0 ? CRY + w0 : w0;
+  const wire = cryMode && w0 ? CRY + w0 : w0 ? quotePrefix() + w0 : w0;
   if (bad.length || !wire) { updateHint(); return; }
   if (wire.startsWith("/")) {
     $("hint").className = "hint"; $("hint").textContent = "Lines must not start with “/”.";
     return;
   }
   i.value = ""; closePicker();
+  if (quoteTo) setQuote(null);
   if (cryMode) setCry(false); else updateHint();
   await api("say", { text: wire });
 }
@@ -1179,6 +1265,7 @@ async function start() {
   };
   $("btn-send").onclick = send;
   $("btn-cry").onclick = () => setCry(!cryMode);
+  $("qb-close").onclick = () => setQuote(null);
   $("input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
   $("input").addEventListener("input", updateHint);
   document.addEventListener("click", (e) => {

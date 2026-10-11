@@ -20,7 +20,7 @@ Stand: 11.10.2026 (Abend, CR23 und CR24 umgesetzt und getestet)
 | 11 | Sticker und Animationen | Sticker-Set fertig (20 Dateien), Kurznamen entschieden; Einbau und Animationen offen – siehe unten |
 | 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept steht (nur Chat), Umsetzung offen – siehe unten |
 | 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | ✅ siehe unten |
-| 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | offen |
+| 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | ✅ siehe unten |
 | 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
 | 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
 | 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
@@ -359,3 +359,12 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - **Terminal:** beim Betreten eine Zeile `*** <Text>` unter der Board-Überschrift.
 - **Client:** über Funk geht beim Betreten nur eine Prüfsumme (`//IN … motd=ab12`, 10 Byte). Den Text holt der Client nur, wenn er neu ist (`//MOTD` → `//MOTD ab12 <Text>`) und merkt ihn sich. Anzeige oben im Chat als gelbe Notiz mit 📌.
 - Client-Version 2026.10.11.7. Tests in `tests/test_motd.py`.
+
+## CR14 – Zitieren (✅ 11.10.2026, Variante B)
+
+- **Bedienung:** Beitrag antippen → in der Leiste ganz links **↩** → über dem Eingabefeld steht „↩ OE3TEC Wer ist heute…“ (✕ = kein Zitat) → Text schreiben, senden. Auch Beiträge aus der History lassen sich zitieren (dort nur ↩, keine Reaktionen).
+- **Über Funk nur ein Verweis** vor dem Text: `~^OE3TEC 1402 Ich bin QRV` – Rufzeichen und Minute (UTC, Uhr der TinyBox) des zitierten Beitrags, ca. 13 Byte.
+- **Anzeige:** Der Client sucht den Beitrag im eigenen Chat (±1 Minute, bei mehreren der letzte) und zeigt über der Antwort einen Zitatblock „↩ OE3TEC 14:02“ mit Auszug; Antippen springt zum Original. Ohne Original (später gekommen, History nicht geladen) nur „↩ OE3TEC 14:02“.
+- Wer zitiert wird, sieht die Antwort hervorgehoben wie bei @CALL (CR15).
+- **Terminal-Teilnehmer** sehen `~^OE3TEC 1402 Ich bin QRV`.
+- Kein Zitat im Cry-out-Modus. Client-Version 2026.10.11.8, nur Client (`app.js`, `app.css`, `index.html`).
