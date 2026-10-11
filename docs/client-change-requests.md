@@ -149,16 +149,38 @@ Entscheidungen: Version automatisch aus dem Repo, Feature-Beschreibung als feste
 - **User** schreiben Bulletins **nur an ALL und die freigegebenen Rubriken**.
 - **Bulletin-Composer im Client:** Auswahl der Rubrik (statt freiem Feld).
 
-**Vorschlag zur Umsetzung:**
-- Neuer Abschnitt `[rubrics]` in `tinybox.conf`: `NAME = Beschreibung`, eine Zeile pro Rubrik. `ALL` ist immer dabei. Änderungen wirken nach einem Neustart (wie bei den Chat-Boards).
-- **Forwarding:** Bulletin-Vorschläge an nicht freigegebene Rubriken lehnt die TinyBox im Forward-Protokoll ab (FBB: Antwort „-“ = nicht gewünscht), damit der Partner sie nicht immer wieder anbietet. Persönliche Post ist davon nicht betroffen.
-- **Terminal:** Bulletin an eine nicht freigegebene Rubrik → Fehlermeldung mit der Liste der erlaubten Rubriken.
-- **Client:** `//RUBRICS` liefert auch die freigegebenen Rubriken ohne Bulletins und ihre Beschreibung (z. B. `//RU WX 0 0 Wetter und Warnungen`). Der Composer zeigt beim Typ *Bulletin* eine Auswahlliste „ALL – an alle“, „WX – Wetter …“; die Rubrikenliste zum Abonnieren zeigt die Beschreibungen.
-- **Bestehende Bulletins** in nicht mehr freigegebenen Rubriken bleiben bis zum Ablauf.
-- **Offen:**
-  - Dürfen Sysop, Eingangsordner-Skripte (z. B. GeoSphere) und MQTT weiterhin an beliebige Rubriken schreiben, oder gilt die Liste auch für sie? Vorschlag: Sysop frei, Skripte nur Rubriken aus der Liste.
-  - Sollen abgelehnte Forward-Bulletins irgendwo protokolliert werden (Log/Konsole), damit der Sysop sieht, welche Rubriken angeboten werden?
-  - Gilt die Liste nur für den Namen oder auch für das Verteilgebiet (`@WW`, `@OE` …)?
+**Entscheidungen (11.10.2026):**
+- Skripte (Eingangsordner, z. B. GeoSphere) und MQTT schreiben nur an Rubriken aus der Liste; der Sysop ist frei.
+- **Neue Rubriken aus dem Forwarding** werden nicht angelegt, sondern kommen als **Mail an den Sysop**; er entscheidet und trägt sie in `tinybox.conf` ein – als angenommen oder als abgelehnt.
+- Die Liste gilt vorerst **nur für den Rubriknamen**, nicht für das Verteilgebiet (`@WW`, `@OE` …) – Forwarding über Funk gibt es in OE/DL derzeit kaum.
+
+**Syntax in `tinybox.conf` (Vorschlag):**
+
+```
+[rubrics]
+# Bulletin rubrics, set by the sysop. One line per rubric:
+#   NAME = description      accepted: users may write, forwarding is taken
+#   NAME = - [note]         refused: forwarding is declined, no sysop mail
+# NAME: 1-6 letters/digits. ALL is always accepted. Order = order in the client.
+ALL    = To everybody
+WX     = Weather and warnings
+AMSAT  = Amateur radio satellites
+KEPLER = Satellite orbit data
+CONTEST= Contests, results
+FLOHMA = Buy, sell, swap
+HUMOR  = -  not wanted here
+```
+
+**Ablauf beim Forwarding:**
+- Rubrik **angenommen** → Bulletin wird angenommen (FBB „+“) und gespeichert.
+- Rubrik **abgelehnt** → Vorschlag wird abgelehnt (FBB „-“), der Partner bietet ihn nicht mehr an.
+- Rubrik **unbekannt** → das **erste** Bulletin wird angenommen, aber **nicht als Bulletin** gespeichert, sondern als **persönliche Mail an den Sysop**: „Neue Rubrik XYZ, angeboten von PARTNER“ mit Betreff und Text des Bulletins und dem Hinweis, wie man sie in `[rubrics]` annimmt oder ablehnt. Weitere Bulletins derselben Rubrik werden zurückgestellt (FBB „=“ = später), bis der Sysop entschieden hat – so geht nichts verloren und es kommt nur eine Mail pro Rubrik.
+- Nach dem Eintrag in `tinybox.conf` (und Neustart) gilt die Entscheidung; zurückgestellte Bulletins kommen beim nächsten Forward-Lauf herein bzw. werden abgelehnt.
+
+**Weitere Umsetzung:**
+- **Terminal:** Bulletin an eine nicht angenommene Rubrik → Fehlermeldung mit der Liste der erlaubten Rubriken.
+- **Client:** `//RUBRICS` liefert auch die angenommenen Rubriken ohne Bulletins und ihre Beschreibung (z. B. `//RU WX 0 0 Weather and warnings`). Der Composer zeigt beim Typ *Bulletin* eine Auswahlliste („ALL – To everybody“, „WX – Weather …“); die Rubrikenliste zum Abonnieren zeigt die Beschreibungen.
+- **Bestehende Bulletins** in nicht angenommenen Rubriken bleiben bis zum Ablauf.
 
 **Übliche PR-Rubriken (Recherche 11.10.2026)** – neben ALL und DX. Englische Bezeichnungen aus US-/internationalen Boxen (FBB, BPQ) sind belegt; die deutschsprachigen Namen stammen aus der Praxis der DL/OE-Boxen (OpenBCM/FBB) und sind nicht online belegt, bitte gegen die Rubriken der Partnerboxen prüfen:
 
