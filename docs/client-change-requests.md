@@ -182,6 +182,7 @@ HUMOR  = -  not wanted here
 - **Terminal:** Bulletin an eine nicht angenommene Rubrik → Fehlermeldung mit der Liste der erlaubten Rubriken.
 - **Client:** `//RUBRICS` liefert auch die angenommenen Rubriken ohne Bulletins und ihre Beschreibung (z. B. `//RU WX 0 0 Weather and warnings`). Der Composer zeigt beim Typ *Bulletin* eine Auswahlliste („ALL – To everybody“, „WX – Weather …“); die Rubrikenliste zum Abonnieren zeigt die Beschreibungen.
 - **Bestehende Bulletins** in nicht angenommenen Rubriken bleiben bis zum Ablauf.
+- **TBNEWS** („TinyBox News“, Feature-Bulletin aus CR18) ist eine System-Rubrik: immer vorhanden, muss nicht in `[rubrics]` stehen, User können dort nicht schreiben, Forwarding nimmt sie nicht an.
 
 **Übliche PR-Rubriken (Recherche 11.10.2026)** – neben ALL und DX. Englische Bezeichnungen aus US-/internationalen Boxen (FBB, BPQ) sind belegt; die deutschsprachigen Namen stammen aus der Praxis der DL/OE-Boxen (OpenBCM/FBB) und sind nicht online belegt, bitte gegen die Rubriken der Partnerboxen prüfen:
 
@@ -235,8 +236,15 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - **Forwarding:** Verschieben und Kopieren wirken **nur lokal**; nichts wird erneut an Partner-Mailboxen geschickt (die Kopie bekommt keinen Forward-Status).
 - **Protokoll:** jede Aktion im Log („sysop moved #12 ALL -> WX“).
 
-**Offen:**
-1. Nur der Sysop – oder darf auch der Autor sein eigenes Bulletin verschieben (z. B. Tippfehler bei der Rubrik)?
-2. Wo zuerst: Terminal + Sysop-Weboberfläche reichen, oder auch gleich im Client?
-3. Soll beim Kopieren die Ablaufzeit neu beginnen (Kopie lebt wieder volle `bulletin_expire_days`) oder die des Originals übernommen werden?
+**Entscheidungen (11.10.2026):**
+1. Nur der Sysop, nicht der Autor.
+2. Wo: offen, bis geklärt ist, wie Sysop-Rechte im Client funktionieren (siehe unten).
+3. Eine Kopie übernimmt die Ablaufzeit des Originals.
+
+**Sysop-Rechte im Client (Vorschlag):**
+- **Lokal (Client auf dem TinyBox-PC, `link = telnet`):** schon heute bekommt eine Telnet-Sitzung mit dem Sysop-Rufzeichen Sysop-Rechte (der Testport hört nur auf 127.0.0.1). Die TinyBox meldet das im Handshake (`//OK … sysop=1`), der Client zeigt dann die Sysop-Knöpfe.
+- **Über Funk:** Rufzeichen sind nicht authentisch (`sysop_via_radio = no`). Neu: Anmeldung mit **Challenge-Response** wie Winlink „Secure Login“: Die TinyBox schickt eine Zufallszahl, der Client antwortet mit einem daraus und einem geheimen Sysop-Passwort berechneten Code (HMAC). Das Passwort geht nie über Funk, ein mitgehörter Code nützt beim nächsten Mal nichts. Der Inhalt bleibt Klartext – es wird nur angemeldet, nichts verschlüsselt.
+  - `tinybox.conf`: `sysop_via_radio = auth`, `sysop_secret = …`; `tbclient.conf` bzw. Client-Einstellung: dasselbe Passwort, nur lokal gespeichert.
+  - Befehle: `//SYSOP` → `//CHAL <zufall>` → `//SYSOP <code>` → `//OK sysop=1` bzw. `//ERR sysop`.
+- **Sysop-Weboberfläche der TinyBox** (Port 8080, mit Login-Link) bleibt der Weg für die Verwaltung am TinyBox-PC.
 
