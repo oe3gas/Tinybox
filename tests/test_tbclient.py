@@ -189,6 +189,31 @@ class OwnReactionTests(unittest.TestCase):
         asyncio.run(scenario())
 
 
+class SymbolChangeTests(unittest.TestCase):
+    """CR7: own change goes out as //SYM, a change of others updates the avatars."""
+
+    def test_symbol_change(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, link="telnet"))
+                sent: list[str] = []
+                core.link.send_line = sent.append
+                core.state, core.caps = "online", {"CHAT"}
+                core.board = {"n": 1, "name": "TREFF", "keep": "7d"}
+                core._event(proto.Event(1, "join", "OE3TEC", symbol="/-"))
+                self.assertEqual(core.snapshot()["symbols"]["OE3TEC"], "/-")
+                core._event(proto.parse_event("#2 =OE3TEC /k"))
+                self.assertEqual(core.snapshot()["symbols"]["OE3TEC"], "/k")
+                self.assertEqual([m["kind"] for m in core.messages], ["join"])  # no chat line
+                core._event(proto.parse_event("#3 =OE3TEC"))
+                self.assertNotIn("OE3TEC", core.snapshot()["symbols"])
+                self.assertTrue(core.set_symbol("/>"))
+                self.assertEqual(sent[-1], "//SYM />")
+                core.set_symbol("")
+                self.assertEqual(sent[-1], "//SYM -")
+        asyncio.run(scenario())
+
+
 class EndToEndTests(unittest.TestCase):
     def test_radio_with_ui(self):
         async def scenario():

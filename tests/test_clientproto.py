@@ -89,6 +89,31 @@ class ClientProtoTests(unittest.TestCase):
         self.assertEqual(ct.take(), "//OUT TREFF\r")
         self.assertIn("*** OE3GAS left TREFF", tt.take())
 
+    def test_symbol_change_at_once(self):
+        """CR7: a new APRS symbol reaches the board at once, terminals get nothing."""
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF")
+        c, ct = radio_login(self.app, "OE3GAS")
+        type_lines(c, "//CLIENT TB1 caps=CHAT,UI sym=/-", "C 1")
+        other, ot = login(self.app, "OE3TEC")             # client without UI (I-frames)
+        type_lines(other, "//CLIENT TB1 caps=CHAT", "C 1")
+        tt.take(); ct.take(); ot.take()
+        type_lines(c, "//SYM /k")
+        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "=OE3GAS /k")
+        self.assertTrue(ot.take().endswith("=OE3GAS /k\r"))
+        self.assertEqual(tt.take(), "")                    # nothing for terminal users
+        self.assertEqual(c.client.symbol, "/k")
+        n = len(self.ui)
+        type_lines(c, "//SYM /k")                          # unchanged: no event
+        self.assertEqual(len(self.ui), n)
+        type_lines(c, "//SYM -")                           # none
+        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "=OE3GAS")
+        type_lines(c, "//SYM xx")
+        self.assertIn("//ERR sym", ct.take())
+        # outside a board: only remembered, the next join carries it
+        type_lines(c, "/Q", "//SYM />", "C 1")
+        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "+OE3GAS />")
+
     def test_non_ui_client_gets_iframes_incl_own(self):
         c, ct = login(self.app, "OE3GAS")
         type_lines(c, "//CLIENT TB1 caps=CHAT")

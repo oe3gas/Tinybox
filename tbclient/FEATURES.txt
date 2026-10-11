@@ -12,6 +12,8 @@ Neu in dieser Version
   Knall-Symbol neben den Emojis).
 - Neue Emojis: Kotzen, Haufen, Fragezeichen, Rufzeichen, acht Pfeile.
   Die Emoji-Auswahl ist nach Gruppen sortiert.
+- Ein neu gewaehltes APRS-Symbol sehen die anderen im Board sofort
+  (vorher erst nach dem naechsten Betreten).
 
 Chat
 - Boards wie im Messenger: Avatar (Rufzeichen mit eigenem APRS-Symbol),

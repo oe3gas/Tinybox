@@ -124,9 +124,8 @@ class ClientCore:
             return False
         self.settings["symbol"] = symbol
         self._save_settings()
-        if self.state == "online" and self.caps:     # tell the TinyBox (next join shows it)
-            self.handshake_done = False
-            self._handshake()
+        if self.state == "online" and self.caps:     # the board sees it at once (CR7)
+            self._send(f"//SYM {symbol or '-'}")
         self._touch()
         return True
 
@@ -403,6 +402,9 @@ class ClientCore:
         elif ev.kind == "join":
             self.members[ev.call] = ev.symbol
             self._add({"id": pos, "seq": ev.seq, "kind": "join", "call": ev.call, "time": now})
+        elif ev.kind == "symbol":                    # nothing to show, only the avatars
+            if ev.call in self.members:
+                self.members[ev.call] = ev.symbol
         elif ev.kind == "leave":
             self.members.pop(ev.call, None)
             self._add({"id": pos, "seq": ev.seq, "kind": "leave", "call": ev.call, "time": now})

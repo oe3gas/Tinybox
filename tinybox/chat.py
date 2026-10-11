@@ -11,6 +11,7 @@ readable text form for TinyBox clients (PLANUNG.md 12.4):
     #4F OE3GAS: Servus             line
     #50 +OE3GAS /-                 joined (with APRS symbol, if the client sent one)
     #51 -OE3GAS                    left
+    #53 =OE3GAS /k                 new APRS symbol (no symbol: "=OE3GAS"), clients only
     #52 OE3TEC *4F :+1             reaction to event 4F
 
 Terminal users get the usual human text. Clients get the event line: if at
@@ -153,6 +154,16 @@ class ChatHub:
         self._deliver(board, f"{session.call} *{ref:X} {emoji}", human, sender=session)
         return True
 
+    def symbol_changed(self, session: Session) -> None:
+        """The client chose another APRS symbol: tell the board at once (CR7),
+        so every avatar of this station changes. Only for clients (2-3 bytes)."""
+        board = session.chat_board
+        if board is None or session.client is None:
+            return
+        sym = session.client.symbol
+        self._deliver(board, f"={session.call}" + (f" {sym}" if sym else ""), None,
+                      sender=session)
+
     def replay(self, board: str, first: int, last: int) -> list[str]:
         """Events first..last (inclusive, may wrap) still in memory."""
         count = (last - first) % SEQ_MOD + 1
@@ -175,7 +186,8 @@ class ChatHub:
         self._recent.setdefault(board, deque(maxlen=SEQ_MOD)).append((seq, line))
         return line
 
-    def _deliver(self, board: str, payload: str, human: str, sender: Session) -> None:
+    def _deliver(self, board: str, payload: str, human: str | None, sender: Session) -> None:
+        """human None: an event only for clients (terminals get nothing)."""
         line = self._next_event(board, payload)
         members = self.members(board)
         ui_clients = [s for s in members if s.client and s.client.ui]
@@ -188,7 +200,7 @@ class ChatHub:
             if s.client:
                 if not (sent_ui and s.client.ui):
                     s.out(line)            # clients get every event, also their own
-            elif s is not sender:          # a terminal shows what was typed: no echo
+            elif s is not sender and human is not None:   # a terminal shows what was typed
                 s.out(human)
 
     # --- housekeeping ---------------------------------------------------

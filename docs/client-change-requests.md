@@ -13,7 +13,7 @@ Stand: 11.10.2026 (Nachmittag)
 | 4 | Schrift: `_fett_` und Monospace für ASCII-Art | ✅ `_fett_`, `` `mono` `` (c376e16) |
 | 5 | URLs erkennen und klickbar | ✅ (c376e16) |
 | 6 | „Leave board“ im Chat statt in den Settings | ✅ (c376e16) |
-| 7 | Bug: APRS-Symbol-Änderung wirkt erst nach Board-Wechsel – soll sofort wirken (Avatar-Update aller bleibt) | offen |
+| 7 | Bug: APRS-Symbol-Änderung wirkt erst nach Board-Wechsel – soll sofort wirken (Avatar-Update aller bleibt) | ✅ siehe unten |
 | 8 | Eigene Reaktion sofort anzeigen | ✅ blass bis Echo, nach 2 min ohne Echo zurück (c376e16) |
 | 9 | Zeilenumbruch mit Shift+Enter | offen – braucht Zeilenumbruch-Kodierung über Funk (Protokoll ist zeilenbasiert) |
 | 10 | Mehrzeilige Texte einfügen | offen – wie CR9 |
@@ -31,6 +31,13 @@ Stand: 11.10.2026 (Nachmittag)
 - Neu in `emoji.json` (Version 2, angehängt): 🤮 `~1Q`, 💩 `~1R`, ❓ `~1S`, ❗ `~1T`, Pfeile ⬆️ ➡️ ⬇️ ⬅️ ↗️ ↘️ ↙️ ↖️ (`~1U` … `~21`).
 - 🗼 (`~10`, der rote Turm) wird nicht mehr angeboten: Eintrag in `"hidden"`. Kommt der Code an, wird er weiter angezeigt – Codes ändern nie ihre Bedeutung.
 - Die Auswahl ist nach Gruppen sortiert (`"picker"` in `emoji.json`): Gesichter, Hände & Herz, Zeichen & Pfeile, Funk & Technik, Wetter & Natur, Unterwegs, Essen & Feiern, Tiere & Sonstiges.
+
+## CR7 – APRS-Symbol sofort (erledigt 11.10.2026)
+
+- Ursache: Das Symbol ging nur beim Betreten eines Boards mit (`+CALL sym`); eine Änderung meldete der Client zwar der TinyBox, aber niemand gab sie an das Board weiter.
+- Neu: Der Client sendet `//SYM <symbol>` (`-` = keins). Ist er in einem Board, bekommen alle Clients dort sofort das Ereignis `=CALL <symbol>` (bzw. `=CALL`), per UI-Frame ca. 12 Byte Nutzdaten. Alle Avatare dieser Station wechseln das Symbol. Terminal-Teilnehmer bekommen nichts.
+- Außerhalb eines Boards wird das Symbol nur gemerkt und beim nächsten Betreten mitgeschickt. Gleiches Symbol noch einmal: kein Ereignis.
+- Client-Version 2026.10.11.2. Tests in `tests/test_clientproto.py` und `tests/test_tbclient.py`; Praxistest mit TinyBox und zwei Clients.
 
 ## CR11 – Sticker und Animationen
 

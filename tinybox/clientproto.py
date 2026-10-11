@@ -24,6 +24,7 @@ the client gets machine-readable lines instead of the human text:
 Other client commands:
     //BOARDS              -> //B <n> <board> <keep> <users> <description> ... //BEND
     //RESEND <a>-<b>      (inside a board) events a..b again, only to this client
+    //SYM <symbol>|-      new APRS symbol; inside a board the others get "=<call> <sym>"
     //MLIST, //GET, //SEND ...   offline mailbox, see clientsync.py
 
 caps: CHAT = chat lines in the format above, UI = the client hears the
@@ -85,6 +86,8 @@ def handle(s: Session, line: str) -> None:
         _boards(s)
     elif cmd == "RESEND":
         _resend(s, parts[1:])
+    elif cmd == "SYM":
+        _symbol(s, parts[1:])
     elif cmd in clientsync.COMMANDS:
         clientsync.handle(s, cmd, parts[1:])
     else:
@@ -114,6 +117,19 @@ def _client(s: Session, parts: list[str]) -> None:
             extra += f" news={s.service.client_news_id}"
     # the human prompt is still on the line: start the answer on a fresh line
     s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}{extra}")
+
+
+def _symbol(s: Session, parts: list[str]) -> None:
+    """//SYM <symbol>  ("-" = none): new APRS symbol, the board sees it at once."""
+    sym = parts[0] if parts else ""
+    if sym == "-":
+        sym = ""
+    if sym and not SYMBOL_RE.match(sym):
+        s.out("//ERR sym")
+        return
+    if sym != s.client.symbol:
+        s.client.symbol = sym
+        s.service.chat.symbol_changed(s)
 
 
 def _boards(s: Session) -> None:
