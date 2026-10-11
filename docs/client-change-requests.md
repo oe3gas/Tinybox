@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 11.10.2026 (Abend, CR23 nachgebessert, CR24 neu)
+Stand: 11.10.2026 (Abend, CR23 nachgebessert, CR24 umgesetzt)
 
 ## Übersicht
 
@@ -30,7 +30,7 @@ Stand: 11.10.2026 (Abend, CR23 nachgebessert, CR24 neu)
 | 21 | Bulletins zwischen Rubriken verschieben und kopieren | Entschieden: nur Sysop, nur Sysop-Konsole und Sysop-Weboberfläche – noch nicht umgesetzt |
 | 22 | Sysop-Konsole: Befehl RESTART (Neustart, z. B. nach Änderung in tinybox.conf) | ✅ siehe unten |
 | 23 | BUG – Emoji-Picker: Schnellauswahl-Leiste verdeckt die Gesamtauswahl | Fix umgesetzt, Test auf PC1 11.10.: a, b, c, e ok, d nachgebessert – erneuter Test von d offen – siehe unten |
-| 24 | BUG – Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte | offen – siehe unten |
+| 24 | BUG – Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte | Fix umgesetzt, Test auf PC1 offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -304,3 +304,7 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 **Ursache:** `openReactBar()` begrenzt die Position auf `window.innerWidth`, nicht auf die Breite der Chat-Spalte.
 
 **Erwartet:** Die Leiste bleibt innerhalb der Chat-Spalte.
+
+**Fix:** `openReactBar()` begrenzt die Position der Leiste jetzt auf die Chat-Spalte (`#chat`), links und rechts mit 8 px Abstand. Ist die Leiste breiter als die Spalte, beginnt sie am linken Rand der Spalte.
+
+**Offen:** Test auf PC1 (PC-Ansicht: Leiste bei eigener Nachricht bleibt links von der rechten Spalte; mobile Ansicht unverändert).

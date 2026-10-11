@@ -533,7 +533,11 @@ function openReactBar(m, anchor) {
   bar.classList.remove("hidden");
   const r = anchor.getBoundingClientRect();
   bar.style.top = Math.max(8, r.top - 48) + "px";
-  bar.style.left = Math.max(8, Math.min(window.innerWidth - bar.offsetWidth - 8, r.left)) + "px";
+  // CR24: keep the bar inside the chat column, not just inside the window
+  // (in the 3-column view it used to reach into the right column).
+  const c = $("chat").getBoundingClientRect();
+  const minLeft = c.left + 8, maxLeft = c.right - bar.offsetWidth - 8;
+  bar.style.left = Math.max(minLeft, Math.min(maxLeft, r.left)) + "px";
   anchor.classList.add("selected");
 }
 function closeReactBar() {
