@@ -23,7 +23,7 @@ Stand: 11.10.2026 (Nachmittag)
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | offen |
 | 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
 | 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
-| 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | Entwurf – siehe unten |
+| 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -96,11 +96,11 @@ Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (
 
 Zu klären: Umsetzung in Client und TinyBox, Maximalgröße, Binärübertragung (7PLUS oder andere).
 
-## CR17 – „Cry out“ (Entwurf 11.10.2026)
+## CR17 – „Cry out“ (erledigt 11.10.2026)
 
 - Ein Beitrag mit höchstens **32 Zeichen** wird in **sehr großer Schrift** (Großbuchstaben, Comic-Stil) in einer gelb-roten **„Bang!“-Blase** angezeigt, leicht schräg.
 - **Über Funk:** nur zwei Zeichen `~!` vor dem Text, z. B. `~!PILEUP!` (9 Byte). `~!` ist frei, weil eine echte Tilde als `~~` gesendet wird. Terminal-Teilnehmer sehen `~!PILEUP!`.
 - **Eingabe:** Knopf 💥 neben dem Emoji-Knopf schaltet den Cry-out-Modus ein (Feld auf 32 Zeichen begrenzt, Zähler im Hinweis), nach dem Senden wieder aus.
 - **Schriftgröße** passt sich an: kurze Texte 36 px, längere 28 bzw. 23 px; Wörter werden nicht mitten drin getrennt.
-- Status: im Client umgesetzt und mit TinyBox + zwei Clients getestet, **noch nicht committet** – wartet auf Freigabe.
+- Status: von Gerhard freigegeben und eingebaut; getestet mit TinyBox + zwei Clients (PC- und Handy-Ansicht).
 
