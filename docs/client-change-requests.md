@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 11.10.2026 (Abend, CR19 umgesetzt)
+Stand: 11.10.2026 (Abend, CR23 nachgebessert, CR24 neu)
 
 ## Übersicht
 
@@ -29,7 +29,8 @@ Stand: 11.10.2026 (Abend, CR19 umgesetzt)
 | 20 | Verbindungsqualität: 1–5 Balken neben jeder Station im Board, Meldung bei Verbindungsabbruch, Befehl `STAT` | ✅ siehe unten |
 | 21 | Bulletins zwischen Rubriken verschieben und kopieren | Entschieden: nur Sysop, nur Sysop-Konsole und Sysop-Weboberfläche – noch nicht umgesetzt |
 | 22 | Sysop-Konsole: Befehl RESTART (Neustart, z. B. nach Änderung in tinybox.conf) | ✅ siehe unten |
-| 23 | BUG – Emoji-Picker: Schnellauswahl-Leiste verdeckt die Gesamtauswahl | Fix umgesetzt, Test auf PC1 offen – siehe unten |
+| 23 | BUG – Emoji-Picker: Schnellauswahl-Leiste verdeckt die Gesamtauswahl | Fix umgesetzt, Test auf PC1 11.10.: a, b, c, e ok, d nachgebessert – erneuter Test von d offen – siehe unten |
+| 24 | BUG – Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -280,3 +281,26 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 **Fehler:** Wenn man die Emoji-Gesamtauswahl öffnet (über den ➕-Button in der Reaktions-/Schnellauswahl-Leiste mit 👍 ❤️ 😂 😮 😞 📻 ➕), bleibt diese Leiste als schwebendes Overlay über dem großen Emoji-Panel stehen und verdeckt Einträge (z. B. die Zeile „RADIO & TECH“).
 
 **Erwartet:** Sobald die Gesamtauswahl geöffnet wird, wird die Schnellauswahl-Leiste ausgeblendet/geschlossen.
+
+**Fix (b5714a8):** In `openReactBar()` schließt der ➕-Button zuerst die Leiste und öffnet dann die Gesamtauswahl für die gemerkte Nachricht. Wird eine andere Nachricht angetippt, während die Gesamtauswahl im Reaktionsmodus offen ist, schließt sie sich.
+
+**Test auf PC1 (11.10.2026), PC- und mobile Ansicht:**
+- a) Nachricht antippen → Leiste erscheint: ok
+- b) ➕ → Leiste weg, Gesamtauswahl frei („RADIO & TECH“ sichtbar): ok
+- c) Emoji aus der Gesamtauswahl → Reaktion an der angetippten Nachricht, Gesamtauswahl zu: ok
+- d) ➕ bei Nachricht A offen, dann B antippen: **Fehler** – die Gesamtauswahl schließt sich, die Leiste für B erscheint aber nicht (erst beim zweiten Antippen). Die Reaktion landet dann richtig bei B.
+- e) Emoji-Button im Eingabefeld fügt Emojis weiter in den Text ein: ok
+
+**Ursache von d:** Schließt sich die Gesamtauswahl, wird `#chat` höher und der Browser verschiebt die Scroll-Position von selbst. Das `scroll`-Ereignis von `#chat` ruft `closeReactBar()` auf und schließt die gerade geöffnete Leiste sofort wieder.
+
+**Nachbesserung:** `openReactBar()` merkt sich beim Schließen der Gesamtauswahl einen Zeitpunkt (`ignoreChatScrollUntil`, 150 ms). Scroll-Ereignisse von `#chat` innerhalb dieser Zeit schließen die Leiste nicht. Echtes Scrollen durch den User schließt sie weiterhin.
+
+**Offen:** Test d auf PC1 wiederholen (PC- und mobile Ansicht), danach CR23 mit ✅ markieren.
+
+## CR24 – BUG Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte (gemeldet 11.10.2026)
+
+**Fehler:** In der PC-Ansicht (3 Spalten) ragt die Schnellauswahl-Leiste bei eigenen (rechtsbündigen) Nachrichten über den rechten Rand der Chat-Spalte hinaus in die rechte Spalte („IN THIS BOARD“).
+
+**Ursache:** `openReactBar()` begrenzt die Position auf `window.innerWidth`, nicht auf die Breite der Chat-Spalte.
+
+**Erwartet:** Die Leiste bleibt innerhalb der Chat-Spalte.

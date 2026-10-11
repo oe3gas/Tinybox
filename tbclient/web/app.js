@@ -503,8 +503,14 @@ function bubble(m, cont) {
 }
 
 // ---------------------------------------------------------------- reactions
+// CR23: closing the full picker makes #chat taller, so the browser scrolls it by
+// itself. That scroll event must not close the quick bar we are just opening.
+let ignoreChatScrollUntil = 0;
 function openReactBar(m, anchor) {
-  if (pickerMode === "react") closePicker();   // never leave a picker aimed at another message
+  if (pickerMode === "react") {                // never leave a picker aimed at another message
+    closePicker();
+    ignoreChatScrollUntil = performance.now() + 150;
+  }
   selected = m.id;
   const bar = $("react-bar");
   bar.replaceChildren();
@@ -1151,7 +1157,9 @@ async function start() {
   document.addEventListener("click", (e) => {
     if (!$("react-bar").contains(e.target)) closeReactBar();
   });
-  $("chat").addEventListener("scroll", closeReactBar);
+  $("chat").addEventListener("scroll", () => {
+    if (performance.now() > ignoreChatScrollUntil) closeReactBar();   // CR23
+  });
   poll();
 }
 start();
