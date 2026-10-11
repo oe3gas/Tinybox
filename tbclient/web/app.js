@@ -75,10 +75,15 @@ function textToWire(text) {
   return { wire: s.trim(), bad: bad ? [...new Set(bad)] : [] };
 }
 
-function allEmojis() {
-  // sort the codes: JS would put number-like keys ("10") before "01"
-  const codes = Object.entries(EMO.codes).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([, e]) => e);
-  return [...EMO.emoticons.map(([, e]) => e), ...codes];
+/* What the picker offers, in groups (emoji.json "picker"). Codes in "hidden"
+ * are still shown when they arrive, but not offered any more (CR2). */
+function emojiGroups() {
+  if (Array.isArray(EMO.picker) && EMO.picker.length) return EMO.picker;
+  // old table without groups: everything in code order
+  const hidden = new Set(EMO.hidden || []);
+  const codes = Object.entries(EMO.codes).filter(([k]) => !hidden.has(k))
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([, e]) => e);
+  return [{ name: "", items: [...EMO.emoticons.map(([, e]) => e), ...codes] }];
 }
 
 // ---------------------------------------------------------------- rich text
@@ -430,13 +435,16 @@ function openPicker(target) {
   pickerTarget = target || null;
   const grid = $("picker-grid");
   grid.replaceChildren();
-  for (const e of allEmojis()) {
-    const b = el("button", "", e);
-    b.onclick = () => {
-      if (pickerMode === "react" && pickerTarget) { sendReaction(pickerTarget, e); return; }
-      insertAtCursor(e);
-    };
-    grid.append(b);
+  for (const g of emojiGroups()) {
+    if (g.name) grid.append(el("div", "picker-h", g.name));
+    for (const e of g.items) {
+      const b = el("button", "", e);
+      b.onclick = () => {
+        if (pickerMode === "react" && pickerTarget) { sendReaction(pickerTarget, e); return; }
+        insertAtCursor(e);
+      };
+      grid.append(b);
+    }
   }
   $("picker").classList.remove("hidden");
 }

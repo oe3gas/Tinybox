@@ -1,14 +1,14 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 11.10.2026
+Stand: 11.10.2026 (Nachmittag)
 
 ## Übersicht
 
 | CR | Inhalt | Status |
 |---|---|---|
 | 1 | Einzelnes Emoji als Nachricht groß anzeigen (≥ 2×) | ✅ (c376e16) |
-| 2 | Emojis 🤮 💩 ❓ dazu, dafür einige raus | offen – welche raus? Achtung: `emoji.json` ist „append only“ |
+| 2 | Emojis: 🤮 💩 ❓ ❗ und Pfeile dazu, 🗼 raus, Auswahl nach Gruppen sortiert | ✅ siehe unten |
 | 3 | MOTD pro Board | offen – wer setzt sie (Sysop)? |
 | 4 | Schrift: `_fett_` und Monospace für ASCII-Art | ✅ `_fett_`, `` `mono` `` (c376e16) |
 | 5 | URLs erkennen und klickbar | ✅ (c376e16) |
@@ -17,12 +17,19 @@ Stand: 11.10.2026
 | 8 | Eigene Reaktion sofort anzeigen | ✅ blass bis Echo, nach 2 min ohne Echo zurück (c376e16) |
 | 9 | Zeilenumbruch mit Shift+Enter | offen – braucht Zeilenumbruch-Kodierung über Funk (Protokoll ist zeilenbasiert) |
 | 10 | Mehrzeilige Texte einfügen | offen – wie CR9 |
-| 11 | Sticker und Animationen | Sticker-Set entworfen (15), Animationen offen – siehe unten |
+| 11 | Sticker und Animationen | Sticker-Set fertig (20 Dateien), Einbau und Animationen offen – siehe unten |
 | 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept offen |
 | 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | offen – auch im Client? |
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | offen |
 | 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
 | 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
+| 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | Entwurf – siehe unten |
+
+## CR2 – Emojis (erledigt 11.10.2026)
+
+- Neu in `emoji.json` (Version 2, angehängt): 🤮 `~1Q`, 💩 `~1R`, ❓ `~1S`, ❗ `~1T`, Pfeile ⬆️ ➡️ ⬇️ ⬅️ ↗️ ↘️ ↙️ ↖️ (`~1U` … `~21`).
+- 🗼 (`~10`, der rote Turm) wird nicht mehr angeboten: Eintrag in `"hidden"`. Kommt der Code an, wird er weiter angezeigt – Codes ändern nie ihre Bedeutung.
+- Die Auswahl ist nach Gruppen sortiert (`"picker"` in `emoji.json`): Gesichter, Hände & Herz, Zeichen & Pfeile, Funk & Technik, Wetter & Natur, Unterwegs, Essen & Feiern, Tiere & Sonstiges.
 
 ## CR11 – Sticker und Animationen
 
@@ -37,35 +44,36 @@ Stand: 11.10.2026
 
 - Fertige, frei nutzbare **Funk-Sticker gibt es praktisch nicht**. Radioddity „Ramoji“ (6 animierte GIFs: CQCQ, QRL, Morse, Roger, Over, 73) ist „free to use“, aber © Radioddity ohne Lizenz – Weitergabe nur nach Rückfrage.
 - Allgemeine Emojis mit offener Lizenz: **Noto Emoji Animation** (CC BY 4.0; Lottie/WebP/GIF), OpenMoji (CC BY-SA 4.0), Microsoft Fluent Emoji (MIT, statisch), Twemoji (CC BY 4.0). Quelle im Client-„About“ nennen.
-- Entscheidung: **Funk-Sticker selbst als SVG zeichnen** (keine Lizenzfragen, wenige KB). Allgemeine Animationen von Noto.
+- Erste Idee: Funk-Sticker selbst als SVG zeichnen. Ersetzt durch das von Gerhard gelieferte Set (siehe unten). Allgemeine Animationen weiter von Noto.
 
-### Sticker-Set (Entwurf 2, 15 Stück)
+### Sticker-Set (initiales Set, 20 Stück, 11.10.2026)
 
-Dateien und Vorschau: `docs/sticker-entwurf/` (`vorschau.png`, SVGs, Generator `make_stickers.py`). Zusammen ca. 64 KB.
+Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (WebP mit Transparenz, je ca. 20–37 KB, zusammen ca. 0,5 MB). Übersicht: `docs/sticker-set.png`. Die gezeichneten SVG-Entwürfe vom 10.10. sind damit ersetzt (in der Git-Historie noch vorhanden).
 
-| Datei | Motiv |
-|---|---|
-| `cq.svg` | Sprechblase „CQ CQ CQ“ |
-| `73.svg` | „73!“ mit Wellen |
-| `88.svg` | Herz mit „88“ |
-| `qsl.svg` | QSL-Karte mit grünem Haken |
-| `qrm.svg` | genervtes Gesicht mit Kopfhörer, „QRM!“ |
-| `qrt.svg` | schlafendes Gesicht, Mond, „QRT“ |
-| `dummy.svg` | Dummy Load 50 Ω mit schlafendem Gesicht |
-| `open.svg` | Globus mit Skip-Bogen, „BAND OFFEN!“ |
-| `dead.svg` | Oszilloskop mit Nulllinie, „BAND TOT“ |
-| `smoke.svg` | Transceiver mit ERR-Anzeige, Riss, Funken, Rauchsäule, „MAGIC SMOKE“ |
-| `resistor.svg` | Widerstand 4,7 kΩ mit Gesicht, „OHM SWEET OHM“ |
-| `transistor.svg` | TO-92 mit Muskeln, „GAIN!“ |
-| `tube.svg` | glühende Röhre, „WARMING UP“ |
-| `gonedx.svg` | Türschild „GONE DXING“ mit Globus |
-| `onant.svg` | Techniker mit Helm am Yagi-Mast, „ON MY ANTENNA“ |
+| Nr. | Datei | Motiv |
+|---|---|---|
+| 1 | `01-cq.webp` | „CQ CQ CQ“, Mikrofon und Transceiver |
+| 2 | `02-73.webp` | „73!“, OM mit Daumen hoch |
+| 3 | `03-88.webp` | „88 ❤“, zwei Funker formen ein Herz |
+| 4 | `04-qsl.webp` | „QSL? / QSL ✓“ mit QSL-Karten |
+| 5 | `05-59plus20.webp` | „5/9+20“, jubelnder OM, Signalbalken |
+| 6 | `06-qrm.webp` | „QRM!“, genervter OM |
+| 7 | `07-qrt.webp` | „QRT – gute Nacht“, Shack bei Nacht, Katze |
+| 8 | `08-qrz.webp` | „QRZ?“, OM mit Kopfhörer im Dunkeln |
+| 9 | `09-widerstand.webp` | „Widerstand“, muskulöser Widerstand mit Sonnenbrille |
+| 10 | `10-pileup.webp` | „PILEUP“, schreiende Menge |
+| 11 | `11-magic-smoke.webp` | „Magic Smoke“, rauchendes Gerät |
+| 12 | `12-swr-1-1.webp` | „SWR 1:1“, zufriedenes Messgerät |
+| 13 | `13-swr-unendlich.webp` | „SWR ∞“, verzweifelter OM |
+| 14 | `14-dummy-load.webp` | „Dummy Load“, cooler Kühlkörper |
+| 15 | `15-band-offen.webp` | „Band offen!“, Erdkugel mit Verbindungen |
+| 16 | `16-band-tot.webp` | „Band tot“, toter Planet |
+| 17 | `17-bin-dxen.webp` | „Bin DXen“, Funken am Strand |
+| 18 | `18-kaffee.webp` | „Kaffee im Shack“, Tasse „DX FUEL“ |
+| 19 | `19-dipole.webp` | „All you need is a Dipole!“ |
+| 20 | `20-antennenbau.webp` | „Bin am Antennenbauen“ |
 
-- Übernommen aus Entwurf 1 unverändert: 73!, 88, QSL, QRM, QRT, Dummy Load, Band offen, Band tot.
-- Angepasst: CQ (nur Sprechblase, ohne Antenne), Magic Smoke (neue Grafik).
-- Neu: Widerstand, Transistor, Röhre, Gone DXing, On my Antenna.
-- Gestrichen: 5/9+20, QRZ?, HI HI, Pileup, SWR 1:1, SWR ∞, Lid, Kaffee, Dipol im Baum, Antennenbau.
-- Offen: 5 freie Plätze bis 20 füllen oder bei 15 bleiben; deutsche Texte („BAND OFFEN!“, „BAND TOT“) evtl. englisch.
+- Offen: Einbau in den Client (Sticker-Auswahl, Anzeige), Code über Funk (Vorschlag: Escape + Nummer, z. B. `~$01`), Anzeige für Terminal-Teilnehmer (z. B. „[Sticker: CQ CQ CQ]“).
 
 ### Animationen (Vorschlag, 10 Stück – noch nicht entschieden)
 
@@ -87,3 +95,12 @@ Dateien und Vorschau: `docs/sticker-entwurf/` (`vorschau.png`, SVGs, Generator `
 ## CR12 – Kleine Bilder anhängen (Konzept offen)
 
 Zu klären: Umsetzung in Client und TinyBox, Maximalgröße, Binärübertragung (7PLUS oder andere).
+
+## CR17 – „Cry out“ (Entwurf 11.10.2026)
+
+- Ein Beitrag mit höchstens **32 Zeichen** wird in **sehr großer Schrift** (Großbuchstaben, Comic-Stil) in einer gelb-roten **„Bang!“-Blase** angezeigt, leicht schräg.
+- **Über Funk:** nur zwei Zeichen `~!` vor dem Text, z. B. `~!PILEUP!` (9 Byte). `~!` ist frei, weil eine echte Tilde als `~~` gesendet wird. Terminal-Teilnehmer sehen `~!PILEUP!`.
+- **Eingabe:** Knopf 💥 neben dem Emoji-Knopf schaltet den Cry-out-Modus ein (Feld auf 32 Zeichen begrenzt, Zähler im Hinweis), nach dem Senden wieder aus.
+- **Schriftgröße** passt sich an: kurze Texte 36 px, längere 28 bzw. 23 px; Wörter werden nicht mitten drin getrennt.
+- Status: im Client umgesetzt und mit TinyBox + zwei Clients getestet, **noch nicht committet** – wartet auf Freigabe.
+

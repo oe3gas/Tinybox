@@ -149,6 +149,8 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .picker { background: var(--surface); border-top: 1px solid var(--line); max-height: 40vh; overflow-y: auto; }
 .picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); padding: 6px; }
 .picker-grid button { border: none; background: transparent; font-size: 24px; padding: 4px; }
+.picker-h { grid-column: 1 / -1; font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .4px; padding: 8px 4px 2px; }
 .react-bar { position: fixed; z-index: 5; display: flex; gap: 2px; background: var(--surface);
   border: 1px solid var(--line); border-radius: 22px; padding: 3px 6px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
 .react-bar button { border: none; background: transparent; font-size: 22px; padding: 2px 5px; }

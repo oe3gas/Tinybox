@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
-<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity=".25"/></filter></defs>
-<rect x="8" y="8" width="144" height="144" rx="30" fill="#1f6fd1" stroke="#fff" stroke-width="6" filter="url(#sh)"/>
-<path d="M40.2 55.0 A46 46 0 0 1 119.8 55.0" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/><path d="M31.5 50.0 A56 56 0 0 1 128.5 50.0" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/><path d="M22.8 45.0 A66 66 0 0 1 137.2 45.0" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/><text x="80" y="112" font-family="'Arial Black','Segoe UI Black',Impact,sans-serif" font-weight="900" font-size="64" fill="#ffc93c" text-anchor="middle" stroke="#1d2b3a" stroke-width="8" paint-order="stroke" stroke-linejoin="round" >73!</text>
-</svg>

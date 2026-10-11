@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
-<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity=".25"/></filter></defs>
-<rect x="8" y="8" width="144" height="144" rx="30" fill="#ffffff" stroke="#fff" stroke-width="6" filter="url(#sh)"/>
-<path d="M30 32 h100 a14 14 0 0 1 14 14 v52 a14 14 0 0 1 -14 14 h-58 l-26 22 v-22 h-16 a14 14 0 0 1 -14 -14 v-52 a14 14 0 0 1 14 -14z" fill="#ffc93c" stroke="#1d2b3a" stroke-width="4" stroke-linejoin="round"/><text x="80" y="68" font-family="'Arial Black','Segoe UI Black',Impact,sans-serif" font-weight="900" font-size="30" fill="#1d2b3a" text-anchor="middle" >CQ CQ</text><text x="80" y="100" font-family="'Arial Black','Segoe UI Black',Impact,sans-serif" font-weight="900" font-size="30" fill="#1d2b3a" text-anchor="middle" >CQ</text>
-</svg>

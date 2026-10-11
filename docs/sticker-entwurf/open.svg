@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
-<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity=".25"/></filter></defs>
-<rect x="8" y="8" width="144" height="144" rx="30" fill="#ffffff" stroke="#fff" stroke-width="6" filter="url(#sh)"/>
-<circle cx="80" cy="74" r="38" fill="#bfe3ff" stroke="#1d2b3a" stroke-width="3"/><path d="M50 60 q12 -10 22 -2 q6 10 -4 16 q-12 4 -12 14 q-10 -6 -6 -28z M88 46 q14 0 20 12 q-10 4 -8 14 q-10 8 -16 -2 q4 -14 4 -24z M86 98 q12 -4 16 6 q-6 8 -16 4z" fill="#2e9b4f"/><path d="M24 114 Q80 20 136 114" fill="none" stroke="#f08c2e" stroke-width="4" stroke-dasharray="7 5"/><text x="80" y="140" font-family="'Arial Black','Segoe UI Black',Impact,sans-serif" font-weight="900" font-size="17" fill="#2e9b4f" text-anchor="middle" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round" >BAND OFFEN!</text>
-</svg>
