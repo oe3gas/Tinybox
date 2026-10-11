@@ -25,3 +25,11 @@
 - Client-Change-Requests stehen nur in `docs/client-change-requests.md`.
 - Erledigte CRs mit ✅ markieren (nicht mit „erledigt“).
 - Planung und Entscheidungen: `PLANUNG.md`.
+
+## Client-Versionen und News
+- Bei jeder Änderung am Client `VERSION` in `tbclient/__init__.py` erhöhen
+  (Datum, am selben Tag `.2`, `.3` …).
+- Dazu **immer** eine News-Datei `tbclient/news/<VERSION>.txt` anlegen: nur
+  das Neue dieser Version, wenige Stichwort-Zeilen, ASCII ohne Emojis. Sie
+  geht als eigenes Bulletin über Funk – jedes Byte zählt, also kurz halten.
+- `tbclient/FEATURES.txt` ist nur die Übersicht im Repo (wird nicht gesendet).

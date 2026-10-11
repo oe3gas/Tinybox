@@ -15,12 +15,17 @@ from tests.test_tbclient import client_cfg
 from tests.test_tinybox import login, make_app, type_lines
 
 
-def fake_client(tmp: str, version: str, features: str | None = "Chat\nMailbox\n") -> Path:
+def fake_client(tmp: str, version: str, news: dict[str, str] | None = None) -> Path:
     d = Path(tmp) / "tbclient"
     d.mkdir(exist_ok=True)
     (d / "__init__.py").write_text(f'"""x"""\n\nVERSION = "{version}"\n', encoding="utf-8")
-    if features is not None:
-        (d / "FEATURES.txt").write_text(features, encoding="utf-8")
+    (d / "news").mkdir(exist_ok=True)
+    for v, text in (news or {}).items():
+        f = d / "news" / f"{v}.txt"
+        if text is None:
+            f.unlink()
+        else:
+            f.write_text(text, encoding="utf-8")
     return d
 
 
@@ -28,7 +33,11 @@ class VersionTests(unittest.TestCase):
     def test_repo_client_version_is_a_date(self):
         self.assertEqual(clientnews.client_version(), VERSION)
         self.assertRegex(VERSION, r"^20\d\d\.\d{1,2}\.\d{1,2}(\.\d+)?$")
-        self.assertTrue((clientnews.CLIENT_DIR / "FEATURES.txt").is_file())
+        # every client version has its short news file (CR18, incremental)
+        self.assertTrue((clientnews.CLIENT_DIR / "news" / f"{VERSION}.txt").is_file())
+        for _, f in clientnews.news_files():
+            self.assertLess(len(f.read_bytes()), 400, f"{f.name}: keep it short (radio)")
+            f.read_text(encoding="ascii")
 
     def test_order(self):
         k = clientnews.version_key
@@ -43,25 +52,49 @@ class VersionTests(unittest.TestCase):
 
 
 class BulletinTests(unittest.TestCase):
-    def test_create_keep_renew(self):
+    def test_incremental(self):
         app = make_app()
         with tempfile.TemporaryDirectory() as tmp:
-            d = fake_client(tmp, "2026.10.11")
+            d = fake_client(tmp, "2026.10.11", {"2026.10.11": "- Chat\n"})
             first = clientnews.ensure_bulletin(app, d)
             m = app.store.get(first)
-            self.assertEqual((m.type, m.to_call, m.at_addr), ("B", "TBNEWS", ""))
-            self.assertEqual(m.subject, "TinyBox client 2026.10.11: features")
+            self.assertEqual((m.type, m.to_call, m.subject, m.body),
+                             ("B", "TBNEWS", "Client 2026.10.11", "- Chat\n"))
             self.assertEqual(clientnews.ensure_bulletin(app, d), first)   # unchanged
-            fake_client(tmp, "2026.10.12", "Chat\nMailbox\nStickers\n")
+            fake_client(tmp, "2026.10.12", {"2026.10.12": "- Stickers\n"})
             second = clientnews.ensure_bulletin(app, d)
-            self.assertGreater(second, first)            # new number -> clients fetch it
+            self.assertGreater(second, first)
+            self.assertIsNotNone(app.store.get(first))          # the old one stays
+            self.assertEqual(app.store.get(second).body, "- Stickers\n")
+            # text changed -> new number, so the clients fetch it again
+            fake_client(tmp, "2026.10.12", {"2026.10.12": "- Stickers (20)\n"})
+            third = clientnews.ensure_bulletin(app, d)
+            self.assertGreater(third, second)
+            self.assertIsNone(app.store.get(second))
+            # file deleted from the repository -> bulletin gone
+            fake_client(tmp, "2026.10.12", {"2026.10.11": None})
+            self.assertEqual(clientnews.ensure_bulletin(app, d), third)
             self.assertIsNone(app.store.get(first))
-            self.assertIn("Stickers", app.store.get(second).body)
 
-    def test_no_features_file(self):
+    def test_old_feature_bulletin_removed_and_limit(self):
+        app = make_app()
+        old = app.service.create(from_call="OE3GAS-1", to_call="TBNEWS", type="B",
+                                 subject="features", body="long", origin="sysop", sysop=True,
+                                 replace_key="fixed:tbclient-features")
+        with tempfile.TemporaryDirectory() as tmp:
+            news = {f"2026.10.{n}": f"- {n}\n" for n in range(1, 13)}
+            d = fake_client(tmp, "2026.10.12", news)
+            newest = clientnews.ensure_bulletin(app, d)
+        self.assertIsNone(app.store.get(old))
+        subjects = [m.subject for m in app.store.list_messages()]
+        self.assertEqual(len(subjects), clientnews.MAX_NEWS)
+        self.assertEqual(app.store.get(newest).subject, "Client 2026.10.12")
+        self.assertNotIn("Client 2026.10.2", subjects)
+
+    def test_no_news(self):
         app = make_app()
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertIsNone(clientnews.ensure_bulletin(app, fake_client(tmp, "1", None)))
+            self.assertIsNone(clientnews.ensure_bulletin(app, fake_client(tmp, "1")))
 
     def test_fixed_bulletin_does_not_expire_by_age(self):
         app = make_app()

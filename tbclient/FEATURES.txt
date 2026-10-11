@@ -5,7 +5,11 @@ Der TinyBox-Client ist Chat und Mailbox fuer die TinyBox mit einer
 Weboberflaeche: am PC drei Spalten, am Handy eine eigene Ansicht
 (im LAN erreichbar).
 
-Neu in dieser Version
+(Uebersicht im Repository, wird nicht gesendet. Was in einer Version
+neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
+Bulletin in die Rubrik TBNEWS.)
+
+Zuletzt dazugekommen
 - Board betreten: das angetippte Board bleibt farbig markiert, bis man
   drin ist (ueber Funk kann das ein paar Sekunden dauern).
 - Rubriken: die Bulletin-Rubriken legt der Sysop fest. Beim Schreiben
