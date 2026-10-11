@@ -24,6 +24,7 @@ Stand: 11.10.2026 (Nachmittag)
 | 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
 | 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
 | 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
+| 18 | Versionskontrolle: Client prüft, ob er aktuell ist; User wird informiert und aufgefordert, die neue Version zu holen | Konzept – Entscheidungen offen, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -103,4 +104,13 @@ Zu klären: Umsetzung in Client und TinyBox, Maximalgröße, Binärübertragung 
 - **Eingabe:** Knopf 💥 neben dem Emoji-Knopf schaltet den Cry-out-Modus ein (Feld auf 32 Zeichen begrenzt, Zähler im Hinweis), nach dem Senden wieder aus.
 - **Schriftgröße** passt sich an: kurze Texte 36 px, längere 28 bzw. 23 px; Wörter werden nicht mitten drin getrennt.
 - Status: von Gerhard freigegeben und eingebaut; getestet mit TinyBox + zwei Clients (PC- und Handy-Ansicht).
+
+## CR18 – Versionskontrolle (Konzept 11.10.2026)
+
+- **Handshake:** Client meldet seine Version (`//CLIENT TB1 v=0.3 caps=…`), TinyBox antwortet mit der aktuellen (`//OK TB1 caps=… cur=0.3`), optional Mindestversion `min=`. Kostet ca. 6–12 Byte, nur einmal pro Verbindung.
+- **Hinweis im Client:** Banner wie beim Post-Hinweis: „Neue Client-Version 0.3 verfügbar (du hast 0.2) – git pull, Client neu starten.“ Wegklickbar, kommt bei der nächsten neuen Version wieder. Unter `min`: rot, „manche Funktionen gehen nicht“. Die TinyBox sperrt niemanden aus.
+- **Unbekannte Codes:** Kommt ein Emoji-/Sticker-Code an, den der Client nicht kennt, zeigt er einen Platzhalter mit „neuere Version nötig“.
+- **Browser-Cache:** Die Weboberfläche lädt `app.js`/`app.css` mit Versionsnummer und merkt, wenn der Client neuer ist als die geladene Seite → „Seite neu laden“-Hinweis statt Strg+F5.
+- **Voraussetzung:** Bei jeder Client-Änderung wird `tbclient/__init__.py` VERSION erhöht (heute steht noch überall 0.1).
+- Offen: Woher kennt die TinyBox die aktuelle Version (automatisch aus dem Repo oder Eintrag in `tinybox.conf`)? Soll die TinyBox einen kurzen „Was ist neu“-Text mitschicken? Nummernschema (0.2, 0.3 … oder Datum)?
 
