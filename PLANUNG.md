@@ -692,6 +692,8 @@ Geprüft am Quelltext (Stand `eda1383`, Mai 2026), alles in `src/ax25_link.c`, Z
 
 Abfrage über eine **AGW-Erweiterung**: neuer Frame-Typ `Q` (in Direwolf bisher unbenutzt), Ablauf wie das vorhandene `Y` (Anfrage → dlq → `ax25_link.c` → Antwort an den Client). Antwort: eine Textzeile mit allen Zählern seit Verbindungsaufbau. Normale AGW-Clients schicken nie `Q`, es bricht also nichts.
 
+**Umgesetzt (11.10.2026):** Repo `oe3gas/direwolf-tinybox`, Zweig `tinybox` (`master` = unverändertes Original), lokal `C:\direwolf-tinybox`. Format und alle Schlüssel in `TINYBOX.md` dort, z. B. `v=1 state=3 i_new=21 i_retry=0 … srt=1.38 unack=4 age=2405`; ohne Verbindung `v=1 none`. Jeder AGW-Client darf fragen (nur lesend); Diagnose-Werkzeug `tinybox-tools\agw_q.py`. Windows-Programm per MinGW gebaut, unter Windows 11 mit echtem Funk getestet.
+
 Der **Abbruchgrund** braucht keinen Fork: Direwolf meldet ihn schon im AGW-Frame `d` als Text (`*** DISCONNECTED RETRYOUT With …` statt `*** DISCONNECTED From Station …`). TinyBox wertet das heute noch nicht aus.
 
 ### 14.2 Messung in der TinyBox
@@ -705,7 +707,7 @@ Pro Richtung eine Verlustquote:
 | TinyBox → Station | (`i_retry` + `t1_exp`) / gesendete I-Frames, `rej_rx` | Empfangsquote der TBCHAT-Frames (14.3) |
 | Station → TinyBox | (`rej_tx` + `retry_rx`) / empfangene I-Frames | wie links |
 
-- **Fenster:** die letzten **50 Frames pro Richtung** (TinyBox bildet Differenzen zwischen den Abfragen). Zeigt den aktuellen Zustand, nicht den Durchschnitt seit Verbindungsaufbau.
+- **Fenster:** die letzten **50 Frames pro Richtung, höchstens aber die letzten 30 Minuten** – was zuerst greift (TinyBox bildet Differenzen zwischen den Abfragen). Zeigt den aktuellen Zustand, nicht den Durchschnitt seit Verbindungsaufbau. Die Zeitgrenze kam nach dem ersten Funktest dazu: in 40 Minuten BBS-/Chat-Betrieb fielen nur 21 bzw. 13 Frames an, 50 Frames hätten also weit über eine Stunde zurückgereicht.
 - **Mindestmenge:** eine Richtung zählt erst ab **20 Frames**. Hat keine Richtung 20 Frames → noch kein Ergebnis.
 - **Die schlechtere Richtung bestimmt die Balken.**
 - **Schwellen** (Startwerte, in `tinybox.conf` einstellbar):
@@ -755,8 +757,6 @@ OE1ABC   2    14%   4%    -      -     2     1   -           86%
 
 ### 14.5 Offen
 
-- Fork-Repo anlegen (z. B. `oe3gas/direwolf`), Bau unter Windows 11 einrichten.
-- Antwortformat der `Q`-Abfrage festlegen.
 - Wie oft TinyBox `Q` abfragt (Vorschlag: nach jeder gesendeten Chat-Zeile und alle 30 s).
 
 ---
