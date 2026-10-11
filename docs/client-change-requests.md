@@ -17,7 +17,7 @@ Stand: 11.10.2026 (Abend, CR23 und CR24 umgesetzt und getestet)
 | 8 | Eigene Reaktion sofort anzeigen | ✅ blass bis Echo, nach 2 min ohne Echo zurück (c376e16) |
 | 9 | Zeilenumbruch mit Shift+Enter | offen – braucht Zeilenumbruch-Kodierung über Funk (Protokoll ist zeilenbasiert) |
 | 10 | Mehrzeilige Texte einfügen | offen – wie CR9 |
-| 11 | Sticker und Animationen | Sticker-Set fertig (20 Dateien), Kurznamen entschieden; Einbau und Animationen offen – siehe unten |
+| 11 | Sticker und Animationen | Sticker ✅ (Animationen offen) – siehe unten |
 | 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept steht (nur Chat), Umsetzung offen – siehe unten |
 | 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | ✅ siehe unten |
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | ✅ siehe unten |
@@ -90,8 +90,13 @@ Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (
 
 - **Entschieden (11.10.2026):** Jeder Sticker hat einen **Kurznamen mit höchstens 4 Zeichen** (Buchstaben/Ziffern, Varianten mit Ziffer: CQ1, CQ2, SWR1, SWR2). Terminal-Teilnehmer sehen **`[STK]CQ`**.
 - Vorschlag zur Umsetzung: über Funk geht genau dieser Text `[STK]CQ` als ganzer Beitrag (7–9 Byte). Damit braucht es keine Umsetzung für Terminal-Teilnehmer, und sie können selbst Sticker senden, indem sie `[STK]CQ` tippen.
-- Vorschlag Kurznamen (zu bestätigen): 01 CQ, 02 73, 03 88, 04 QSL, 05 S9P, 06 QRM, 07 QRT, 08 QRZ, 09 OHM, 10 PILE, 11 SMOK, 12 SWR1, 13 SWR2, 14 DUMY, 15 OPEN, 16 DEAD, 17 DX, 18 COFE, 19 DIPO, 20 ANT.
-- Offen: Einbau in den Client (Sticker-Auswahl, Anzeige).
+- Kurznamen (von Gerhard bestätigt 11.10.2026): 01 CQ, 02 73, 03 88, 04 QSL, 05 S9P, 06 QRM, 07 QRT, 08 QRZ, 09 OHM, 10 PILE, 11 SMOK, 12 SWR1, 13 SWR2, 14 DUMY, 15 OPEN, 16 DEAD, 17 DX, 18 COFE, 19 DIPO, 20 ANT. Liste: `tbclient/web/stickers/stickers.json` – Namen ändern nie ihre Bedeutung, neue nur anhängen.
+
+### Umsetzung Sticker (✅ 11.10.2026)
+
+- **Über Funk** genau `[STK]CQ` als ganzer Beitrag (7–9 Byte), auch mit Zitat davor (`~^OE3TEC 1402 [STK]73`). Terminal-Teilnehmer sehen `[STK]CQ` und können Sticker so auch selbst senden.
+- **Client:** Knopf 🏷️ neben dem Emoji-Knopf öffnet die Sticker-Auswahl, Antippen sendet sofort. Anzeige ohne Sprechblase, ca. 128 px; Reaktionen und Zitieren gehen wie bei Text. Unbekannter Name (neuerer Client) → der Text `[STK]XYZ`.
+- Client-Version 2026.10.11.9.
 
 ### Animationen (Vorschlag, 10 Stück – noch nicht entschieden)
 

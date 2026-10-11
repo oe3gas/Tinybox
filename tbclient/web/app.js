@@ -10,6 +10,9 @@ const $ = (id) => document.getElementById(id);
 let S = null;                 // last snapshot from /api/state
 let EMO = { emoticons: [], codes: {} };
 let SYMNAMES = {};
+let STK = {};                  // CR11: sticker name -> {file, title}
+let STK_LIST = [];             // in the order of stickers.json ("73" would sort first in STK)
+const STK_RE = /^\[STK\]([A-Z0-9]{1,4})$/;
 let selected = null;          // message id with open reaction bar
 let pickerMode = "input";     // input | react
 const QUICK = ["👍", "❤️", "😂", "😮", "🙁", "📻"];
@@ -214,6 +217,7 @@ function render() {
   $("input").disabled = !inBoard; $("btn-send").disabled = !inBoard;
   if (!cryMode) $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
   $("btn-cry").disabled = !inBoard;
+  $("btn-stk").disabled = !inBoard || !Object.keys(STK).length;
   renderMail();
   renderSys();
   renderUpdate();
@@ -515,7 +519,10 @@ function quotedMessage(call, hhmm, before) {
   return hit;
 }
 function excerpt(wire, n = 60) {
-  const t = wireToText(wire.replace(QUOTE_RE, "").replace(/^~!/, ""));
+  const rest = wire.replace(QUOTE_RE, "");
+  const sm = rest.match(STK_RE);
+  if (sm && STK[sm[1]]) return "🏷️ " + STK[sm[1]].title;
+  const t = wireToText(rest.replace(/^~!/, ""));
   return [...t].length > n ? [...t].slice(0, n).join("") + "…" : t;
 }
 function quoteBlock(call, hhmm, orig) {
@@ -567,7 +574,16 @@ function bubble(m, cont) {
                + (selected === m.id ? " selected" : "") + (isSingleEmoji(text) && !qm ? " jumbo" : "")
                + (!own && (mentionsMe(text) || quotesMe) ? " mention" : ""));
   if (qm) b.append(quoteBlock(qm[1], qm[2], m.pending ? null : quotedMessage(qm[1], qm[2], m)));
-  richText(b, text);
+  const sm = (qm ? m.text.slice(qm[0].length) : m.text || "").match(STK_RE);
+  if (sm && STK[sm[1]]) {                        // CR11: sticker instead of text
+    b.classList.add("stk");
+    const img = el("img");
+    img.src = "/stickers/" + STK[sm[1]].file;
+    img.alt = img.title = STK[sm[1]].title;
+    b.append(img);
+  } else {
+    richText(b, text);
+  }
   if (!m.pending) {
     b.onclick = (ev) => { ev.stopPropagation(); openReactBar(m, b); };
   }
@@ -661,6 +677,7 @@ function openPicker(target) {
   pickerTarget = target || null;
   const grid = $("picker-grid");
   grid.replaceChildren();
+  grid.classList.remove("stk-grid");
   for (const g of emojiGroups()) {
     if (g.name) grid.append(el("div", "picker-h", g.name));
     for (const e of g.items) {
@@ -675,6 +692,29 @@ function openPicker(target) {
   $("picker").classList.remove("hidden");
 }
 function closePicker() { $("picker").classList.add("hidden"); pickerMode = "input"; pickerTarget = null; }
+/* CR11: sticker selection - a tap sends it at once, over the air only "[STK]CQ" */
+function openStickers() {
+  pickerMode = "sticker";
+  const grid = $("picker-grid");
+  grid.replaceChildren();
+  for (const s of STK_LIST) {
+    const b = el("button", "stk-btn");
+    const img = el("img");
+    img.src = "/stickers/" + s.file; img.alt = s.title;
+    b.title = `${s.title}  ([STK]${s.name})`;
+    b.append(img);
+    b.onclick = async () => {
+      closePicker();
+      const wire = quotePrefix() + "[STK]" + s.name;
+      if (quoteTo) setQuote(null);
+      if (cryMode) setCry(false);
+      await api("say", { text: wire });
+    };
+    grid.append(b);
+  }
+  grid.classList.add("stk-grid");
+  $("picker").classList.remove("hidden");
+}
 function insertAtCursor(t) {
   const i = $("input");
   const a = i.selectionStart ?? i.value.length, z = i.selectionEnd ?? i.value.length;
@@ -1217,6 +1257,10 @@ async function poll() {
 async function start() {
   try { EMO = await (await fetch("/emoji.json")).json(); } catch (e) { /* plain text then */ }
   try { SYMNAMES = await (await fetch("/aprs/names.json")).json(); } catch (e) { /* no names */ }
+  try {
+    STK_LIST = (await (await fetch("/stickers/stickers.json")).json()).stickers;
+    for (const s of STK_LIST) STK[s.name] = s;
+  } catch (e) { /* no stickers: shown as text */ }
   initEmoji();
   initMail();
   $("sys-disc").onclick = () => api("disconnect");
@@ -1265,6 +1309,10 @@ async function start() {
   };
   $("btn-send").onclick = send;
   $("btn-cry").onclick = () => setCry(!cryMode);
+  $("btn-stk").onclick = () => {
+    if (pickerMode === "sticker" && !$("picker").classList.contains("hidden")) closePicker();
+    else openStickers();
+  };
   $("qb-close").onclick = () => setQuote(null);
   $("input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
   $("input").addEventListener("input", updateHint);

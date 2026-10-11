@@ -1,0 +1,105 @@
+{
+ "note": "CR11: over the air only [STK]NAME (NAME max 4 letters/digits). Names never change meaning; append only.",
+ "stickers": [
+  {
+   "name": "CQ",
+   "file": "01-cq.webp",
+   "title": "CQ CQ CQ"
+  },
+  {
+   "name": "73",
+   "file": "02-73.webp",
+   "title": "73!"
+  },
+  {
+   "name": "88",
+   "file": "03-88.webp",
+   "title": "88"
+  },
+  {
+   "name": "QSL",
+   "file": "04-qsl.webp",
+   "title": "QSL?"
+  },
+  {
+   "name": "S9P",
+   "file": "05-59plus20.webp",
+   "title": "5/9+20"
+  },
+  {
+   "name": "QRM",
+   "file": "06-qrm.webp",
+   "title": "QRM!"
+  },
+  {
+   "name": "QRT",
+   "file": "07-qrt.webp",
+   "title": "QRT - gute Nacht"
+  },
+  {
+   "name": "QRZ",
+   "file": "08-qrz.webp",
+   "title": "QRZ?"
+  },
+  {
+   "name": "OHM",
+   "file": "09-widerstand.webp",
+   "title": "Widerstand"
+  },
+  {
+   "name": "PILE",
+   "file": "10-pileup.webp",
+   "title": "Pileup"
+  },
+  {
+   "name": "SMOK",
+   "file": "11-magic-smoke.webp",
+   "title": "Magic Smoke"
+  },
+  {
+   "name": "SWR1",
+   "file": "12-swr-1-1.webp",
+   "title": "SWR 1:1"
+  },
+  {
+   "name": "SWR2",
+   "file": "13-swr-unendlich.webp",
+   "title": "SWR unendlich"
+  },
+  {
+   "name": "DUMY",
+   "file": "14-dummy-load.webp",
+   "title": "Dummy Load"
+  },
+  {
+   "name": "OPEN",
+   "file": "15-band-offen.webp",
+   "title": "Band offen!"
+  },
+  {
+   "name": "DEAD",
+   "file": "16-band-tot.webp",
+   "title": "Band tot"
+  },
+  {
+   "name": "DX",
+   "file": "17-bin-dxen.webp",
+   "title": "Bin DXen"
+  },
+  {
+   "name": "COFE",
+   "file": "18-kaffee.webp",
+   "title": "Kaffee im Shack"
+  },
+  {
+   "name": "DIPO",
+   "file": "19-dipole.webp",
+   "title": "All you need is a Dipole"
+  },
+  {
+   "name": "ANT",
+   "file": "20-antennenbau.webp",
+   "title": "Bin am Antennenbauen"
+  }
+ ]
+}

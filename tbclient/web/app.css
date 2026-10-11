@@ -143,6 +143,11 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .bang.pending { opacity: .55; }
 .cry-btn.active { background: #ffd23f; border-radius: 50%; }
 .sys { text-align: center; color: var(--sys); font-size: 12px; margin: 8px 0; }
+/* CR11: stickers */
+.bubble.stk { background: transparent !important; border: none; box-shadow: none; padding: 0; }
+.bubble.stk img { display: block; width: 128px; height: auto; }
+.picker-grid.stk-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 4px; }
+.stk-btn img { width: 76px; height: auto; display: block; }
 /* CR14: quotes */
 .quote { border-left: 3px solid var(--accent); background: rgba(127,127,127,.12); border-radius: 6px;
   padding: 3px 8px; margin: 0 0 4px; font-size: 12px; cursor: pointer; max-width: 100%; }
