@@ -79,6 +79,42 @@ class ClientCore:
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         self.settings_path.write_text(json.dumps(self.settings, indent=1), encoding="utf-8")
 
+    # --- newer client version (CR18) ---------------------------------------------
+
+    @staticmethod
+    def version_key(v: str) -> tuple[int, ...]:
+        return tuple(int(p) for p in re.findall(r"\d+", v or ""))
+
+    def _update_info(self, ok_line: str) -> None:
+        """//OK ... cur=<newest version> news=<feature bulletin>: remember it, so
+        the hint stays after disconnecting. A TinyBox without cur= means: up to date."""
+        cur = re.search(r"\bcur=(\S+)", ok_line)
+        news = re.search(r"\bnews=(\d+)", ok_line)
+        info = None
+        if cur and self.version_key(cur.group(1)) > self.version_key(VERSION):
+            info = {"cur": cur.group(1), "news": int(news.group(1)) if news else None}
+            self.console.append(f"*** newer client available: {info['cur']} (this is {VERSION})")
+        if info != self.settings.get("update"):
+            if info:
+                self.settings["update"] = info
+            else:
+                self.settings.pop("update", None)
+            self._save_settings()
+
+    @property
+    def update(self) -> dict | None:
+        info = self.settings.get("update")
+        if info and self.version_key(info.get("cur", "")) > self.version_key(VERSION):
+            return info
+        return None                      # meanwhile updated
+
+    def open_news(self) -> bool:
+        """'Read about new features': fetch the rubric TBNEWS and the bulletin."""
+        self.mailbox.subscribe("TBNEWS", True)
+        if not self.sync.running:
+            self.sync.start("bulletins")
+        return True
+
     @property
     def my_symbol(self) -> str:
         return self.settings.get("symbol", "")
@@ -197,7 +233,7 @@ class ClientCore:
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
         caps += ",SYNC" + (",Z" if self.link.kind == "agw" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
-        self._send(f"//CLIENT {PROTO} caps={caps}{sym}")
+        self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
     def _on_line(self, line: str) -> None:
         if self.sync.take(line):                 # mailbox sync answers and texts
@@ -255,6 +291,7 @@ class ClientCore:
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
             self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
+            self._update_info(rest)
             self._send("//BOARDS")
         elif cmd == "B":
             parts = rest.split(" ", 4)
@@ -435,6 +472,7 @@ class ClientCore:
             "console": list(self.console)[-80:],
             "mailbox": self.mailbox.summary(),
             "sync": self.sync.status,
+            "update": self.update,
         }
 
     async def run(self) -> None:

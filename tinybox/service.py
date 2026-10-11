@@ -42,6 +42,7 @@ class MessageService:
         self.cfg = cfg
         self.chat = ChatHub(store, bus, cfg)
         self.shutdown_left = None   # callable -> seconds, while a shutdown is pending
+        self.client_news_id: int | None = None   # feature bulletin of the client (CR18)
 
     # --- helpers --------------------------------------------------------
 

@@ -2,11 +2,15 @@
 
 A TinyBox client announces itself right after login with one line:
 
-    //CLIENT TB1 caps=CHAT,UI sym=/-
+    //CLIENT TB1 v=2026.10.11 caps=CHAT,UI sym=/-
 
 and the mailbox answers with the features both sides know:
 
     //OK TB1 caps=CHAT,UI
+
+v = client version (date). If the client in this repository is newer, the
+answer also has cur=<newest version> and news=<number of the feature bulletin
+in the rubric TBNEWS>, see clientnews.py.
 
 From then on the session is in client mode: no prompts, and in a chat board
 the client gets machine-readable lines instead of the human text:
@@ -35,7 +39,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from . import clientsync
+from . import clientnews, clientsync
 
 if TYPE_CHECKING:
     from .session import Session
@@ -51,6 +55,7 @@ class ClientInfo:
     proto: str
     caps: set[str] = field(default_factory=set)
     symbol: str = ""
+    version: str = ""          # v= of the client ('' = older client without it)
 
     @property
     def ui(self) -> bool:
@@ -98,9 +103,17 @@ def _client(s: Session, parts: list[str]) -> None:
     if s.origin != "radio" or not hasattr(s.transport, "write_bytes"):
         caps.discard("Z")         # compressed texts are binary: radio (AGW) only
     symbol = args.get("sym", "")
-    s.client = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "")
+    s.client = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "",
+                          args.get("v", "")[:20])
+    # newer client available (CR18): tell the version and the feature bulletin
+    extra = ""
+    cur = clientnews.client_version()
+    if cur and clientnews.version_key(s.client.version) < clientnews.version_key(cur):
+        extra = f" cur={cur}"
+        if s.service.client_news_id:
+            extra += f" news={s.service.client_news_id}"
     # the human prompt is still on the line: start the answer on a fresh line
-    s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}")
+    s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}{extra}")
 
 
 def _boards(s: Session) -> None:

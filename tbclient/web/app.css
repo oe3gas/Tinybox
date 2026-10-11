@@ -187,6 +187,18 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
   font-size: 11px; max-height: 200px; overflow: auto; white-space: pre-wrap; }
 a { color: var(--accent); }
 
+/* --- newer client version (CR18) ------------------------------------------------- */
+.upd-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 7px 8px 7px 14px; background: #ffe9a8; color: #5a4300; font-size: 13px;
+  border-bottom: 1px solid #e8c766; }
+.upd-banner .icon-btn { font-size: 14px; color: inherit; }
+.upd-banner button.sm { background: #fff; border-color: #e8c766; color: #5a4300; }
+.upd-banner b { font-weight: 700; }
+@media (prefers-color-scheme: dark) {
+  .upd-banner { background: #4a3b12; color: #ffe9a8; border-color: #6b5520; }
+  .upd-banner button.sm { background: #2c2410; color: #ffe9a8; border-color: #6b5520; }
+}
+
 /* --- system message from the TinyBox (shutdown) ------------------------------ */
 .sys-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 8px 8px 8px 14px; background: var(--bad); color: #fff; font-size: 13px; font-weight: 600; }

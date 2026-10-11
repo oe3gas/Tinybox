@@ -55,7 +55,7 @@ function initEmoji() {
 function wireToText(wire) {
   return wire.replace(wireRe, (m, code, pre, emo) => {
     if (m === "~~") return "~";
-    if (code !== undefined) return EMO.codes[code.toUpperCase()] || m;
+    if (code !== undefined) return EMO.codes[code.toUpperCase()] || "[?]";   // newer client sent it
     return pre + (EMOTICON_EMOJI[emo] || emo);
   });
 }
@@ -215,6 +215,7 @@ function render() {
   $("btn-cry").disabled = !inBoard;
   renderMail();
   renderSys();
+  renderUpdate();
   renderMailbox();
   renderBoards();
   renderNav();
@@ -267,6 +268,43 @@ function renderMail() {
   $("mb-sync").disabled = !!(S.sync && S.sync.running);
   const unread = S.mailbox ? S.mailbox.unread : 0;
   document.title = (unread ? `(${unread}) ` : "") + "TinyBox";
+}
+
+/* Newer client (CR18). Two cases:
+ *  - the TinyBox knows a newer client (S.update) -> "please git pull", button to
+ *    the feature bulletin in the rubric TBNEWS
+ *  - the client program was updated, but this page is still the old one -> reload */
+const PAGE_VERSION = (document.querySelector('meta[name="tbc-version"]') || {}).content || "";
+let updDismissed = "";
+try { updDismissed = localStorage.getItem("tbc-upd-dismissed") || ""; } catch (e) { /* none */ }
+let newsWanted = null;                     // {id, seen}: bulletin to open after the sync
+
+function renderUpdate() {
+  const stale = PAGE_VERSION && !PAGE_VERSION.startsWith("__") && S.client_version !== PAGE_VERSION;
+  const u = S.update;
+  const show = stale || (!!u && u.cur !== updDismissed);
+  $("upd-banner").classList.toggle("hidden", !show);
+  if (!show) return;
+  const t = $("upd-text");
+  if (stale) {
+    t.replaceChildren("The client was updated to ", el("b", "", S.client_version),
+                      " - reload the page to use it.");
+  } else {
+    t.replaceChildren("New client version ", el("b", "", u.cur), ` available (you have ${S.client_version}). ` +
+                      "Get it with git pull and restart the client.");
+  }
+  $("upd-reload").classList.toggle("hidden", !stale);
+  $("upd-news").classList.toggle("hidden", stale || !u || !u.news);
+  $("upd-close").classList.toggle("hidden", stale);
+  // feature bulletin asked for: open it as soon as the sync has fetched it
+  const running = !!(S.sync && S.sync.running);
+  if (newsWanted && running) newsWanted.seen = true;
+  if (newsWanted && newsWanted.seen && !running) {
+    const id = newsWanted.id;
+    newsWanted = null;
+    openFolder("b:TBNEWS");
+    openMessage(id);
+  }
 }
 
 // System message of the TinyBox (sysop shuts down): red banner with countdown.
@@ -595,7 +633,7 @@ function folderName(f) {
   if (f === "outbox") return "Outbox";
   if (f === "sent") return "Sent";
   if (f === "rubrics") return "Bulletin rubrics";
-  return "Bulletins " + f.slice(2);
+  return f === "b:TBNEWS" ? "TinyBox News" : "Bulletins " + f.slice(2);
 }
 
 function dateStr(unix) {
@@ -613,7 +651,8 @@ function folderEntries() {
   const M = S.mailbox || { rubrics: [] };
   const f = [["inbox", "✉ Inbox", M.unread, true], ["outbox", "⇪ Outbox", M.outbox, false],
              ["sent", "✓ Sent", 0, false]];
-  const r = M.rubrics.filter((x) => x.sub || x.local).map((x) => ["b:" + x.name, "▤ " + x.name, x.unread, true]);
+  const r = M.rubrics.filter((x) => x.sub || x.local)
+    .map((x) => ["b:" + x.name, "▤ " + (x.name === "TBNEWS" ? "TinyBox News" : x.name), x.unread, true]);
   return { folders: f, rubrics: [...r, ["rubrics", "⚙ Rubrics…", 0, false]] };
 }
 
@@ -975,6 +1014,21 @@ async function start() {
   initEmoji();
   initMail();
   $("sys-disc").onclick = () => api("disconnect");
+  $("upd-reload").onclick = () => location.reload();
+  $("upd-close").onclick = () => {
+    updDismissed = S && S.update ? S.update.cur : "";
+    try { localStorage.setItem("tbc-upd-dismissed", updDismissed); } catch (e) { /* ok */ }
+    render();
+  };
+  $("upd-news").onclick = async () => {
+    if (!S || !S.update || !S.update.news) return;
+    const id = S.update.news;
+    openFolder("b:TBNEWS");
+    const have = await postJson("mail/open", { id });
+    if (have.ok && have.data.body !== null) { openMessage(id); return; }   // already here
+    newsWanted = { id, seen: false };
+    await api("mail/news");              // subscribe TBNEWS and fetch the bulletins
+  };
   $("sys-close").onclick = () => { sysDismissed = S && S.sysmsg ? S.sysmsg.at : 0; renderSys(); };
   $("btn-connect").onclick = $("btn-connect2").onclick = () => api("connect");
   $("btn-disconnect").onclick = () => api("disconnect");

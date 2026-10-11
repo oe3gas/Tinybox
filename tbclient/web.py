@@ -25,6 +25,7 @@ Mailbox (C3), all local - only "sync" goes on air:
   POST /api/mail/discard  {"oid": n}
   POST /api/mail/subscribe {"rubric": "ALL", "on": true}
   POST /api/mail/sync {"scope": "mail"|"bulletins"} | /api/mail/cancel
+  POST /api/mail/news   subscribe TBNEWS + fetch bulletins ("Read about new features")
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from . import VERSION
 from .core import ClientCore
 
 log = logging.getLogger(__name__)
@@ -160,8 +162,10 @@ class WebServer:
         name = FILES.get(path)
         if name is None or not (STATIC / name).is_file():
             return 404, {"error": "not found"}, None
-        return 200, (STATIC / name).read_bytes(), TYPES.get(Path(name).suffix,
-                                                           "application/octet-stream")
+        data = (STATIC / name).read_bytes()
+        if name == "index.html":                 # the page knows its version (CR18)
+            data = data.replace(b"__TBC_VERSION__", VERSION.encode())
+        return 200, data, TYPES.get(Path(name).suffix, "application/octet-stream")
 
     def _mail(self, action: str, data: dict):
         core, box = self.core, self.core.mailbox
@@ -192,6 +196,8 @@ class WebServer:
                 ok = True
             elif action == "sync":
                 ok = core.sync.start(str(data.get("scope", "mail")))
+            elif action == "news":
+                ok = core.open_news()
             elif action == "cancel":
                 core.sync.cancel()
                 ok = True

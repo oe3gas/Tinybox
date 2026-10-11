@@ -1,0 +1,42 @@
+TinyBox-Client - Funktionen
+===========================
+
+Der TinyBox-Client ist Chat und Mailbox fuer die TinyBox mit einer
+Weboberflaeche: am PC drei Spalten, am Handy eine eigene Ansicht
+(im LAN erreichbar).
+
+Neu in dieser Version
+- Versionskontrolle: der Client meldet, wenn es eine neuere Version gibt,
+  und fuehrt mit "Read about new features" zu diesem Bulletin.
+- "Cry out": bis 32 Zeichen riesig in einer Bang!-Blase (Knopf mit dem
+  Knall-Symbol neben den Emojis).
+- Neue Emojis: Kotzen, Haufen, Fragezeichen, Rufzeichen, acht Pfeile.
+  Die Emoji-Auswahl ist nach Gruppen sortiert.
+
+Chat
+- Boards wie im Messenger: Avatar (Rufzeichen mit eigenem APRS-Symbol),
+  Sprechblasen, Reaktionen auf Beitraege.
+- Wird die TinyBox direkt gehoert, kommen die Chat-Beitraege als UI-Frame
+  (einmal fuer alle, spart Funkzeit).
+- Emojis kosten ueber Funk nur 1 bis 3 Byte.
+- Ein einzelnes Emoji wird gross angezeigt.
+- _fett_ und `Monospace` (fuer ASCII-Art).
+- Internet-Adressen im Text sind anklickbar.
+- @RUFZEICHEN hebt einen Beitrag beim Angesprochenen farbig hervor.
+- Die eigene Reaktion erscheint sofort.
+- "Leave" verlaesst das Board direkt aus dem Chat.
+
+Mailbox
+- Offline-Mailbox: persoenliche Post und Bulletins abgleichen,
+  dann offline lesen und schreiben.
+- Bulletins aus abonnierten Rubriken; der Abgleich schont den Kanal
+  (komprimiert, in Paketen mit Pausen).
+- Hinweis auf neue Post.
+
+Station
+- Teilnehmer im Board und gehoerte Stationen.
+- Monitor der Verbindung.
+
+Update holen
+Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu
+starten und die Seite im Browser neu laden.

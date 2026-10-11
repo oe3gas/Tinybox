@@ -339,7 +339,8 @@ class Store:
     def delete_bulletins_older_than(self, days: int) -> list[int]:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
         rows = self._db.execute(
-            "SELECT id FROM messages WHERE type = 'B' AND created < ?", (cutoff,)
+            "SELECT id FROM messages WHERE type = 'B' AND created < ?"
+            " AND (replace_key IS NULL OR replace_key NOT LIKE 'fixed:%')", (cutoff,)
         ).fetchall()
         ids = [r["id"] for r in rows]
         with self._db:

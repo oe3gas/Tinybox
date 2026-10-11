@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 
+from tinybox import clientnews
 from tinybox.session import Session, State
 from tests.test_chat import chat_app
 from tests.test_tinybox import FakeTransport, login, type_lines
@@ -26,7 +27,7 @@ class ClientProtoTests(unittest.TestCase):
     def test_handshake_telnet_has_no_ui(self):
         s, t = login(self.app, "OE3ABC")
         t.take()
-        type_lines(s, "//CLIENT TB1 caps=CHAT,UI,FOO sym=/-")
+        type_lines(s, f"//CLIENT TB1 v={clientnews.client_version()} caps=CHAT,UI,FOO sym=/-")
         out = t.take()
         self.assertTrue(out.startswith("\r//OK TB1 caps=CHAT\r"), out)
         self.assertNotIn("TinyBox (", out)            # no prompt in client mode

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1d2b3a">
+<meta name="tbc-version" content="__TBC_VERSION__">
 <title>TinyBox</title>
 <link rel="icon" href="data:,">
 <link rel="manifest" href="/manifest.json">
@@ -21,6 +22,10 @@
     <button id="btn-menu" class="icon-btn" aria-label="Settings">☰</button>
   </header>
 
+  <div id="upd-banner" class="upd-banner hidden" role="status">
+    <span id="upd-text"></span>
+    <span class="row nowrap"><button id="upd-news" class="sm">Read about new features</button><button id="upd-reload" class="sm hidden">Reload page</button><button id="upd-close" class="icon-btn" aria-label="Dismiss">✕</button></span>
+  </div>
   <div id="sys-banner" class="sys-banner hidden" role="alert">
     <span id="sys-text"></span>
     <span class="row nowrap"><button id="sys-disc" class="sm">Disconnect</button><button id="sys-close" class="icon-btn" aria-label="Dismiss">✕</button></span>

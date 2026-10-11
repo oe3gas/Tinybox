@@ -64,6 +64,8 @@ async def close_sessions(app: App) -> None:
 async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter) -> None:
     app = App.create(cfg)
     app.stop_event = asyncio.Event()
+    from . import clientnews
+    app.service.client_news_id = clientnews.ensure_bulletin(app)
     log.info("TinyBox %s starting, mailbox %s, sysop %s",
              VERSION, cfg.station.mailbox_call, cfg.station.sysop_call)
     log.info("data directory: %s", cfg.storage.data_dir)

@@ -14,7 +14,7 @@ from pathlib import Path
 from tbclient.core import ClientCore
 from tbclient.links import LineSplitter
 from tbclient.mailstore import MailStore
-from tbclient import sync
+from tbclient import VERSION, sync
 from tbclient.sync import parse_header
 from tinybox.adapters import agw as tb_agw
 from tinybox.fwd import lzhuf
@@ -71,7 +71,7 @@ class ServerTests(unittest.TestCase):
         t.take()
         type_lines(s, "//MLIST")
         self.assertIn("//ERR", t.take())                  # not a client yet
-        type_lines(s, "//CLIENT TB1 caps=CHAT,SYNC,Z")
+        type_lines(s, f"//CLIENT TB1 v={VERSION} caps=CHAT,SYNC,Z")   # current client
         self.assertIn("//OK TB1 caps=CHAT,SYNC\r", t.take())   # Z only on radio
         type_lines(s, "//MLIST")
         rows = t.take().split("\r")[:-1]
