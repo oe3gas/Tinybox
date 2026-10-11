@@ -1,9 +1,11 @@
-"""Shutdown with advance warning, like 'shutdown +1' on Unix.
+"""Shutdown (and restart) with advance warning, like 'shutdown +1' on Unix.
 
 The sysop starts it with SHUTDOWN [seconds] on the console (default 60) or
 with the button in the web GUI. Every connected station gets a system
 message at once and again shortly before (30 s, 10 s), stations that
 connect in the meantime get it at login. SHUTDOWN CANCEL stops it.
+RESTART [seconds] works the same way, then TinyBox starts again (new
+tinybox.conf, new code after a git pull); RESTART CANCEL calls it off.
 
 Client sessions get the message as a control line they can show:
     //SYS <seconds left> <text>          (seconds = -1: cancelled)
@@ -40,6 +42,7 @@ class ShutdownTimer:
         self.task: asyncio.Task | None = None
         self.at: float | None = None          # time.monotonic() of the shutdown
         self.by = ""
+        self.restart = False                  # stop for a restart
 
     @property
     def pending(self) -> bool:
@@ -50,15 +53,17 @@ class ShutdownTimer:
             return None
         return max(0, round(self.at - time.monotonic()))
 
-    def schedule(self, seconds: int, by: str = "") -> int:
-        """Start (or restart with a new time). Returns the seconds used."""
+    def schedule(self, seconds: int, by: str = "", restart: bool = False) -> int:
+        """Start (or restart with a new time). Returns the seconds used.
+        restart: TinyBox starts again afterwards (RESTART)."""
         seconds = max(0, min(int(seconds), MAX_SEC))
         if self.pending:
             self.task.cancel()
+        self.restart = restart
         self.by = by or self.app.cfg.station.sysop_call
         self.at = time.monotonic() + seconds
         self.app.service.shutdown_left = self.seconds_left
-        log.warning("shutdown in %d s (by %s)", seconds, self.by)
+        log.warning("%s in %d s (by %s)", "restart" if restart else "shutdown", seconds, self.by)
         if seconds > 0:                       # at once, before the console answers
             self.broadcast(self.message(seconds), seconds)
         self.task = asyncio.ensure_future(self._run())
@@ -77,8 +82,9 @@ class ShutdownTimer:
         return True
 
     def message(self, sec: int) -> str:
-        return texts.SHUTDOWN_WARNING.format(mailbox=self.app.cfg.station.mailbox_call,
-                                             sysop=self.by, left=_left_text(sec))
+        tpl = texts.RESTART_WARNING if self.restart else texts.SHUTDOWN_WARNING
+        return tpl.format(mailbox=self.app.cfg.station.mailbox_call,
+                          sysop=self.by, left=_left_text(sec))
 
     def broadcast(self, text: str, sec: int) -> None:
         for s in self.app.registry:
@@ -99,6 +105,7 @@ class ShutdownTimer:
                 self.broadcast(self.message(mark), mark)
         await asyncio.sleep(self.seconds_left() or 0)
         self.app.service.shutdown_left = None
-        log.warning("shutdown now")
+        log.warning("restart now" if self.restart else "shutdown now")
+        self.app.restart = self.restart
         if self.app.stop_event is not None:
             self.app.stop_event.set()

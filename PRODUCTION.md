@@ -124,7 +124,7 @@ To see what is installed: `cat /opt/tinybox/VERSION`.
 | Web GUI from the PC | The GUI only listens on 127.0.0.1. Open a tunnel with `ssh -L 8080:127.0.0.1:8080 nanopi`, then browse to `http://127.0.0.1:8080/login?token=...` |
 | Sysop console | There is no interactive console under systemd. Use the web GUI, or telnet with the sysop call: `ssh nanopi` then `telnet 127.0.0.1 6300` |
 
-`SHUTDOWN` makes systemd restart TinyBox after 15 s, just like `tinybox_dauerbetrieb.bat` did. To stop it for good, run `sudo systemctl stop tinybox`.
+`SHUTDOWN` makes systemd restart TinyBox after 15 s, just like `tinybox_dauerbetrieb.bat` did. To stop it for good, run `sudo systemctl stop tinybox`. `RESTART` restarts at once (the process replaces itself, systemd keeps the same service).
 
 The web GUI deliberately stays on 127.0.0.1, so it is never exposed on the LAN; use the SSH tunnel above. The login link contains the secret token and is written to the journal, which only root and the `adm` group can read. To invalidate it, delete `/opt/tinybox/data/web.token` and restart TinyBox.
 

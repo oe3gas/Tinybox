@@ -27,6 +27,8 @@ class App:
     brocast: Any = None                  # BrocastPublisher, set when publishing
     forward: Any = None                  # ForwardModule, only with [forward] enabled = yes
     shutdown: Any = None                 # ShutdownTimer (SHUTDOWN with warning)
+    restart: bool = False                # stop for a restart (RESTART), not for good
+    config_path: str | None = None       # tinybox.conf, checked again before RESTART
 
     @classmethod
     def create(cls, cfg: Config, db_path: str | None = None) -> "App":

@@ -26,8 +26,9 @@ Stand: 11.10.2026 (Abend)
 | 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
 | 18 | Versionskontrolle: Client prüft, ob er aktuell ist; User wird informiert und aufgefordert, die neue Version zu holen | ✅ siehe unten |
 | 19 | Rubriken sind Sysop-Sache: feste Rubrikenliste, User schreiben Bulletins nur an ALL und diese Rubriken (Auswahl im Composer), Forwarding nimmt nur diese Rubriken an | erfasst – noch nicht umgesetzt, siehe unten |
-| 20 | Bulletins zwischen Rubriken verschieben und kopieren | Vorschlag – Entscheidungen offen, siehe unten |
 | 20 | Verbindungsqualität: 1–5 Balken neben jeder Station im Board, Meldung bei Verbindungsabbruch, Befehl `STAT` | ✅ siehe unten |
+| 21 | Bulletins zwischen Rubriken verschieben und kopieren | Entschieden: nur Sysop, nur Sysop-Konsole und Sysop-Weboberfläche – noch nicht umgesetzt |
+| 22 | Sysop-Konsole: Befehl RESTART (Neustart, z. B. nach Änderung in tinybox.conf) | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -220,7 +221,7 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Terminal: `STAT` (eigene Verbindung) und `STAT ALL` (alle) als Text.
 - Client-Version 2026.10.11.4.
 
-## CR20 – Bulletins verschieben und kopieren (Vorschlag 11.10.2026, noch nicht umgesetzt)
+## CR21 – Bulletins verschieben und kopieren (Vorschlag 11.10.2026, noch nicht umgesetzt)
 
 **Heute:** Der Sysop kann mit `E <Nr> TO <Rubrik>` (Terminal) bzw. „edit“ in der Sysop-Weboberfläche den Empfänger eines Bulletins ändern – das ist ein Verschieben, aber: die Nummer bleibt gleich, deshalb merken die Clients nichts davon (ihr Abgleich holt nur Nummern, die größer sind als die höchste bekannte der Rubrik). Kopieren gibt es nicht.
 
@@ -238,13 +239,21 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 
 **Entscheidungen (11.10.2026):**
 1. Nur der Sysop, nicht der Autor.
-2. Wo: offen, bis geklärt ist, wie Sysop-Rechte im Client funktionieren (siehe unten).
+2. Wo: **nur in der Sysop-Konsole (Terminal am TinyBox-PC) und in der Sysop-Weboberfläche** – **keine Sysop-Rechte über Funk und keine im Client** (Entscheidung Gerhard, 11.10.2026).
 3. Eine Kopie übernimmt die Ablaufzeit des Originals.
 
-**Sysop-Rechte im Client (Vorschlag):**
+**Sysop-Rechte im Client – verworfen (11.10.2026):** Es gibt keine Sysop-Rechte über Funk und keine im Client. Der folgende Vorschlag bleibt nur zur Dokumentation stehen:
 - **Lokal (Client auf dem TinyBox-PC, `link = telnet`):** schon heute bekommt eine Telnet-Sitzung mit dem Sysop-Rufzeichen Sysop-Rechte (der Testport hört nur auf 127.0.0.1). Die TinyBox meldet das im Handshake (`//OK … sysop=1`), der Client zeigt dann die Sysop-Knöpfe.
 - **Über Funk:** Rufzeichen sind nicht authentisch (`sysop_via_radio = no`). Neu: Anmeldung mit **Challenge-Response** wie Winlink „Secure Login“: Die TinyBox schickt eine Zufallszahl, der Client antwortet mit einem daraus und einem geheimen Sysop-Passwort berechneten Code (HMAC). Das Passwort geht nie über Funk, ein mitgehörter Code nützt beim nächsten Mal nichts. Der Inhalt bleibt Klartext – es wird nur angemeldet, nichts verschlüsselt.
   - `tinybox.conf`: `sysop_via_radio = auth`, `sysop_secret = …`; `tbclient.conf` bzw. Client-Einstellung: dasselbe Passwort, nur lokal gespeichert.
   - Befehle: `//SYSOP` → `//CHAL <zufall>` → `//SYSOP <code>` → `//OK sysop=1` bzw. `//ERR sysop`.
 - **Sysop-Weboberfläche der TinyBox** (Port 8080, mit Login-Link) bleibt der Weg für die Verwaltung am TinyBox-PC.
+
+## CR22 – RESTART in der Sysop-Konsole (erledigt 11.10.2026)
+
+- `RESTART [s]` startet die TinyBox neu, z. B. nach einer Änderung in `tinybox.conf` oder nach einem `git pull`. Ablauf wie `SHUTDOWN`: verbundene Stationen werden gewarnt („OE3GAS-1 restarts in 60 seconds and is back shortly …“, Erinnerung bei 30 und 10 s), Standard 60 s, `RESTART NOW` sofort, `RESTART CANCEL` sagt ab. Ist niemand verbunden, sofort.
+- **Vorher wird `tinybox.conf` geprüft.** Hat sie einen Fehler, startet die TinyBox **nicht** neu und zeigt den Fehler – sie läuft mit der alten Konfiguration weiter.
+- **Neustart im selben Fenster:** `tinybox.bat` und `tinybox_dauerbetrieb.bat` starten die TinyBox sofort wieder (Exit-Code 3); ohne Batch-Datei (Linux, systemd) ersetzt sich der Prozess selbst. Neue Konfiguration und neuer Code werden dabei geladen.
+- Tests in `tests/test_shutdown.py`; README und PRODUCTION ergänzt.
+- Hinweis: Die neuen Batch-Dateien wirken erst, wenn TinyBox einmal mit ihnen gestartet wurde.
 

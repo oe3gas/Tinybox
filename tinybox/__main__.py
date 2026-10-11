@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from datetime import datetime
 
@@ -61,9 +62,12 @@ async def close_sessions(app: App) -> None:
         await asyncio.sleep(0.1)
 
 
-async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter) -> None:
+async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter,
+              config_path: str | None = None) -> bool:
+    """Runs until SHUTDOWN/RESTART. Returns True for a restart."""
     app = App.create(cfg)
     app.stop_event = asyncio.Event()
+    app.config_path = config_path
     from . import clientnews
     app.service.client_news_id = clientnews.ensure_bulletin(app)
     log.info("TinyBox %s starting, mailbox %s, sysop %s",
@@ -109,7 +113,8 @@ async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter) -> None:
             web_server.close()
         await asyncio.gather(*tasks, return_exceptions=True)
         app.store.close()
-        log.info("TinyBox stopped.")
+        log.info("TinyBox stopped%s.", " for a restart" if app.restart else "")
+    return app.restart
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -123,11 +128,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[tinyb] Config error: {exc}", file=sys.stderr)
         return 2
     monitor_filter = setup_logging(cfg)
+    restart = False
     try:
-        asyncio.run(run(cfg, monitor_filter))
+        restart = asyncio.run(run(cfg, monitor_filter, args.config))
     except KeyboardInterrupt:
         log.info("TinyBox stopped (Ctrl+C).")
+    if restart:
+        return restart_process(argv)
     return 0
+
+
+RESTART_EXIT = 3      # tinybox.bat / tinybox_dauerbetrieb.bat start again on this code
+
+
+def restart_process(argv: list[str] | None) -> int:
+    """RESTART: started from tinybox.bat (TINYBOX_LAUNCHER=1) the batch file starts
+    TinyBox again on exit code 3 - in the same window, with new code and config.
+    Otherwise the process replaces itself."""
+    logging.shutdown()
+    if os.environ.get("TINYBOX_LAUNCHER") == "1":
+        return RESTART_EXIT
+    args = sys.argv[1:] if argv is None else argv
+    print("[tinyb] restarting ...", flush=True)
+    os.execv(sys.executable, [sys.executable, "-m", "tinybox", *args])
+    return RESTART_EXIT                   # not reached
 
 
 if __name__ == "__main__":

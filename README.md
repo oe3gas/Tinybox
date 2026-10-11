@@ -78,6 +78,7 @@ Im TinyBox-Fenster tippen. Es gelten alle Mailbox-Befehle mit Sysop-Rechten
 | `SHUTDOWN [s]` | TinyBox in s Sekunden beenden (Standard 60). Alle verbundenen Stationen bekommen sofort eine Systemnachricht, Erinnerung bei 30 und 10 s; wer sich in der Zeit anmeldet, wird beim Login gewarnt. Ist niemand verbunden, sofort |
 | `SHUTDOWN NOW` | Sofort beenden (Benutzer werden verabschiedet) |
 | `SHUTDOWN CANCEL` | Angekündigten Shutdown absagen, die Stationen werden informiert |
+| `RESTART [s]` | TinyBox neu starten, z. B. nach einer Änderung in `tinybox.conf` oder einem `git pull`. Prüft zuerst `tinybox.conf` – bei einem Fehler wird nicht neu gestartet. Warnung an die Stationen wie bei `SHUTDOWN` (Standard 60 s, `NOW`, `CANCEL`). Mit `tinybox.bat` / `tinybox_dauerbetrieb.bat` startet TinyBox im selben Fenster sofort wieder |
 
 Nachricht beenden mit `/EX`. Log-Meldungen und Monitor erscheinen
 zwischen den Eingaben – das ist normal.

@@ -7,11 +7,14 @@ import tempfile
 import unittest
 from unittest import mock
 
+from pathlib import Path
+
 from tbclient.core import ClientCore
+from tinybox import __main__ as tb_main
 from tinybox import shutdown
 from tinybox.adapters.sysop import MonitorFilter, SysopConsole
 from tests.test_tbclient import client_cfg
-from tests.test_tinybox import login, make_app, type_lines
+from tests.test_tinybox import ROOT, login, make_app, type_lines
 
 
 class ShutdownTests(unittest.TestCase):
@@ -90,6 +93,74 @@ class ShutdownTests(unittest.TestCase):
                 core._on_state("offline", "disconnected")
                 self.assertIsNone(core.snapshot()["sysmsg"])
         asyncio.run(scenario())
+
+
+class RestartTests(unittest.TestCase):
+    """CR22: RESTART in the sysop console (checks tinybox.conf first)."""
+
+    def setUp(self):
+        self.app = make_app()
+        self.app.config_path = str(ROOT / "tinybox.conf.example")
+        self.out = []
+        self.console = SysopConsole(self.app, MonitorFilter(False), self.out.append)
+
+    def cmd(self, line):
+        self.out.clear()
+        self.console.handle_line(line)
+        return "".join(self.out)
+
+    def test_restart_now_and_bad_config(self):
+        async def scenario():
+            self.app.stop_event = asyncio.Event()
+            with tempfile.TemporaryDirectory() as tmp:
+                bad = Path(tmp) / "tinybox.conf"
+                bad.write_text("[station]\nmailbox_call = nonsense!\n", encoding="utf-8")
+                self.app.config_path = str(bad)
+                out = self.cmd("RESTART NOW")
+                self.assertIn("tinybox.conf has an error, NOT restarted", out)
+                self.assertFalse(self.app.stop_event.is_set() or self.app.restart)
+            self.app.config_path = str(ROOT / "tinybox.conf.example")
+            self.assertIn("Usage: RESTART", self.cmd("RESTART later"))
+            out = self.cmd("RESTART")                     # nobody connected: at once
+            self.assertIn("checked: OK", out)
+            self.assertIn("restarts now", out)
+            self.assertTrue(self.app.stop_event.is_set() and self.app.restart)
+        asyncio.run(scenario())
+
+    def test_restart_with_warning(self):
+        async def scenario():
+            self.app.stop_event = asyncio.Event()
+            s, t = login(self.app, "OE3TEC")
+            self.app.registry.add(s)
+            t.take()
+            with mock.patch.object(shutdown, "REMINDERS", ()):
+                self.assertIn("Restart in 1 s, 1 station(s) warned", self.cmd("RESTART 1"))
+                self.assertIn("OE3GAS-1 restarts in 1 second and is back shortly", t.take())
+                await asyncio.wait_for(self.app.stop_event.wait(), 5)
+            self.assertTrue(self.app.restart)
+        asyncio.run(scenario())
+
+    def test_restart_cancel(self):
+        async def scenario():
+            self.app.stop_event = asyncio.Event()
+            s, t = login(self.app, "OE3TEC")
+            self.app.registry.add(s)
+            self.cmd("RESTART 60")
+            self.assertIn("Shutdown cancelled", self.cmd("RESTART CANCEL"))
+            self.assertFalse(self.app.restart)
+            # a later SHUTDOWN is a real shutdown again
+            self.cmd("SHUTDOWN 60")
+            self.assertFalse(self.app.shutdown.restart)
+            self.app.shutdown.cancel()
+        asyncio.run(scenario())
+
+    def test_exit_code_for_batch_file(self):
+        with mock.patch.dict("os.environ", {"TINYBOX_LAUNCHER": "1"}):
+            self.assertEqual(tb_main.restart_process([]), 3)
+        with mock.patch.dict("os.environ", {"TINYBOX_LAUNCHER": ""}), \
+                mock.patch("os.execv") as execv:
+            tb_main.restart_process(["-c", "x.conf"])
+            self.assertEqual(execv.call_args[0][1][1:], ["-m", "tinybox", "-c", "x.conf"])
 
 
 if __name__ == "__main__":

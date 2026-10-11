@@ -1,7 +1,7 @@
 """Local sysop console in the TinyBox window.
 
 All mailbox commands work here with sysop rights (L, R, K, E, S, SB ...),
-plus console commands: W, MON, DISC, STATUS, SHUTDOWN.
+plus console commands: W, MON, DISC, STATUS, SHUTDOWN, RESTART.
 Input comes from a background thread reading the keyboard, so the
 mailbox keeps running while the sysop types.
 """
@@ -15,7 +15,7 @@ import threading
 import time
 from typing import Callable
 
-from .. import VERSION, commands, texts
+from .. import VERSION, commands, config, texts
 from ..app import App
 from ..config import base_call, normalize_call
 from ..session import Session, State
@@ -260,6 +260,35 @@ class SysopConsole:
         sec = timer.schedule(int(arg) if arg else 60, self.app.cfg.station.sysop_call)
         self.out(texts.SHUTDOWN_SCHEDULED.format(sec=sec, n=users))
 
+    def cmd_restart(self, arg: str) -> None:
+        """RESTART [seconds|NOW|CANCEL]: like SHUTDOWN, then TinyBox starts again.
+        tinybox.conf is checked first - with an error nothing happens."""
+        arg = arg.strip().upper()
+        timer = self.app.shutdown
+        if arg == "CANCEL":
+            self.out(texts.SHUTDOWN_CANCEL_DONE if timer.cancel() else texts.SHUTDOWN_NONE)
+            return
+        if arg and arg != "NOW" and not arg.isdigit():
+            self.out(texts.USAGE_RESTART)
+            return
+        if self.app.config_path:
+            try:
+                config.load(self.app.config_path)
+            except config.ConfigError as exc:
+                self.out(texts.RESTART_BAD_CONFIG.format(error=exc))
+                return
+            self.out(texts.RESTART_CONFIG_OK)
+        users = len(self.app.registry)
+        if arg == "NOW" or arg == "0" or (not arg and users == 0):
+            self.out(texts.RESTARTING)
+            self.app.restart = True
+            if self.app.stop_event is not None:
+                self.app.stop_event.set()
+            return
+        sec = timer.schedule(int(arg) if arg else 60, self.app.cfg.station.sysop_call,
+                             restart=True)
+        self.out(texts.RESTART_SCHEDULED.format(sec=sec, n=users))
+
     COMMANDS: dict[str, Callable[["SysopConsole", str], None]] = {
         "H": cmd_help, "?": cmd_help, "HELP": cmd_help,
         "B": cmd_bye, "BYE": cmd_bye,
@@ -273,4 +302,5 @@ class SysopConsole:
         "HOLD": cmd_hold,
         "REL": cmd_rel,
         "SHUTDOWN": cmd_shutdown,
+        "RESTART": cmd_restart,
     }

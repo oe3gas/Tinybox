@@ -162,6 +162,8 @@ SHUTDOWN = "TinyBox is shutting down. 73."
 SHUTDOWN_WARNING = ("*** System message from {sysop}: {mailbox} goes down in {left}. "
                     "Please finish and disconnect (B). ***")
 SHUTDOWN_CANCELLED = "*** System message: shutdown of {mailbox} cancelled. ***"
+RESTART_WARNING = ("*** System message from {sysop}: {mailbox} restarts in {left} "
+                   "and is back shortly. Please finish and disconnect (B). ***")
 
 # sysop console only
 CONSOLE_BANNER = "*** TinyBox sysop console - type H for help ***"
@@ -180,8 +182,10 @@ HELP_CONSOLE = [
     "  SHUTDOWN [s]   Stop TinyBox in s seconds (default 60), users are warned",
     "  SHUTDOWN NOW   Stop at once",
     "  SHUTDOWN CANCEL  Call off a pending shutdown",
+    "  RESTART [s]    Restart TinyBox (e.g. after changing tinybox.conf) in s",
+    "                 seconds (default 60), users are warned; NOW, CANCEL as above",
 ]
-CONSOLE_NO_BYE = "This is the local console. Use SHUTDOWN to stop TinyBox."
+CONSOLE_NO_BYE = "This is the local console. Use SHUTDOWN to stop or RESTART to restart TinyBox."
 WHO_HEADER = "Call       Via     Since (UTC)       State"
 WHO_ROW = "{call:<10} {via:<7} {since:<17} {state}"
 WHO_EMPTY = "No users connected."
@@ -204,6 +208,12 @@ SHUTDOWN_PENDING = "Shutdown pending: {sec} s left."
 SHUTDOWN_CANCEL_DONE = "Shutdown cancelled, stations informed."
 SHUTDOWN_NONE = "No shutdown pending."
 USAGE_SHUTDOWN = "Usage: SHUTDOWN [seconds | NOW | CANCEL]"
+USAGE_RESTART = "Usage: RESTART [seconds | NOW | CANCEL]"
+RESTARTING = "TinyBox restarts now ..."
+RESTART_SCHEDULED = ("Restart in {sec} s, {n} station(s) warned. "
+                     "RESTART CANCEL calls it off.")
+RESTART_BAD_CONFIG = "tinybox.conf has an error, NOT restarted: {error}"
+RESTART_CONFIG_OK = "tinybox.conf checked: OK."
 FWD_OFF = "Forwarding is off ([forward] enabled = no)."
 FWD_START = "Connecting to {call} ..."
 FWD_DONE = "Forward {call}: {result}"
