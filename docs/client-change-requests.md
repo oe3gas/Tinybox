@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.10.2026 (CR26 umgesetzt, CR27 entschieden)
+Stand: 12.10.2026 (CR26 umgesetzt, CR27 und CR28 erfasst)
 
 ## Übersicht
 
@@ -34,6 +34,7 @@ Stand: 12.10.2026 (CR26 umgesetzt, CR27 entschieden)
 | 25 | Board antippen: Button einfärben, bis man im Board angekommen ist | ✅ siehe unten |
 | 26 | Delta-Abgleich: Mail-/Bulletin-Sync mit minimaler Payload (ein Wechsel, nur Änderungen, kleine Texte gleich mit, Z für Köpfe) | ✅ siehe unten |
 | 27 | Persönliche Post an mehrere Empfänger (`OE3TEC,OE1ABC`): Text einmal über Funk, TinyBox legt je Empfänger eine eigene Nachricht an | entschieden 12.10.2026, noch nicht umgesetzt – siehe unten |
+| 28 | Emoticons ↔ Emojis: `;-)` beim Tippen sofort als Emoji, Terminal-Eingabe `;-)` im Client als Emoji, Emojis mit ASCII-Form gehen als `:-)` statt `~0B` über Funk | erfasst 12.10.2026, noch nicht umgesetzt – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -400,3 +401,17 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Alte Clients: schicken nie ein Komma, nichts ändert sich.
 
 **Aufwand:** klein – `SEND_RE`/`check_send` für die Liste, Schleife um `service.create` in `commands.py` und `clientsync._send`, `//SENT` mit mehreren Nummern im Client (`add_sent` je Nummer), Composer-Hinweis „mehrere durch Komma". Tests in `test_mailsync.py` und `test_tinybox.py`.
+
+## CR28 – Emoticons und Emojis in beide Richtungen (erfasst 12.10.2026, noch nicht umgesetzt)
+
+**Beobachtet (Funktest 12.10.2026):** Vom Terminal kam `das funktioniert ;-)` – der Client zeigte `;-)` als Text, weil nur die nasenlosen Formen (`;)`) bekannt sind. Vom Client ging `sehr nett!~0B` – 🙂 aus dem Picker hat keine Emoticon-Form, also der Code; dazu klebte er am `!`. Am Terminal liest sich das als `~0B`.
+
+**Heute:** Stufe 1 (PLANUNG 12.4) kennt neun Emoticons ohne Nase (`:)` `:(` `;)` `:D` `:P` `:O` `<3` `:+1` `:-1`), umgewandelt erst beim Senden bzw. beim Anzeigen, nur als eigenes Wort (Leerzeichen davor).
+
+**Gewünscht:**
+1. **Eingabe im Client:** Ein Emoticon wird **sofort beim Tippen** zum Emoji (sobald Leerzeichen, Satzzeichen oder Enter folgt), wie in Messengern. Die Tabelle kennt die Formen mit und ohne Nase: `:-)` `:)` `;-)` `;)` `:-D` `:D` `:-(` `:(` `:-P` `:P` `:-O` `:O` `:-/` `:-|` `<3` `:+1` `:-1` … Der Picker bleibt für den Rest.
+2. **Senden:** Jedes Emoji, das eine Emoticon-Form hat, geht **als Emoticon** über Funk, nie als `~XY` – auch Varianten, die nur im Aussehen abweichen (🙂 😊 😀 → `:-)`, 😄 😃 😁 → `:-D`, 😉 → `;-)`, 🙁 😢 → `:-(`). Gesendet wird die Form **mit Nase** (`:-)`, wie am Terminal üblich; 1 Byte mehr, dafür für Terminal-User eindeutig). Fehlt vor dem Emoticon ein Leerzeichen (`nett!:-)`), fügt der Client es ein. `~XY` nur noch für Emojis ohne ASCII-Form.
+3. **Anzeige im Client:** Emoticons aus jeder Quelle (Terminal, alter Client, History `//H`) werden zum **kanonischen Emoji** der Tabelle (`:-)` und `:)` → 🙂; `:-D` → 😄 …), auch direkt nach Satzzeichen (`Hallo!:-)`), nicht aber mitten im Wort (`QTH:Pinkafeld`, `http://`).
+4. **Terminal:** nichts zu tun – die TinyBox reicht Text durch; wer `;-)` tippt, erscheint im Client als 😉. Reaktionen (`~XY` als Reaktionscode) bleiben, wie sie sind.
+
+**Umsetzung:** nur Client. `emoji.json`: `emoticons` wird zu Einträgen `{wire: ":-)", aliases: [":)", ...], emoji: "🙂", also: ["😊", "😀"]}` (Version 3; alte Einträge bleiben gültig). `app.js`: `wireToText`/`textToWire` auf die neue Tabelle, Live-Ersetzung im Eingabefeld (`#msg-input`) bei Leerzeichen/Satzzeichen/Enter mit Erhalt der Cursorposition, Picker zeigt die Emoticon-Emojis in einer Gruppe „ASCII“ (gehen am günstigsten über Funk). Tests in `test_tbclient.py` (Konvertierung beider Richtungen, Wortgrenzen). Client-Version + News.
