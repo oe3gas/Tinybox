@@ -113,13 +113,15 @@ def parse_ref(text: str) -> tuple[str, int, str, int, int] | None:
     return m.group(1), int(m.group(2), 16) * SIZE_UNIT, bh, m.start(), m.end() + n
 
 
-def terminal_text(text: str) -> str:
-    """What a terminal user reads instead of the reference."""
+def terminal_text(text: str, short: bool = False) -> str:
+    """What a terminal user reads instead of the reference. short: inside a
+    quoted excerpt, where the long note would eat the whole excerpt."""
     r = parse_ref(text)
     if r is None:
         return text
     _, size, _, a, z = r
-    return f"{text[:a]}[Image {kb(size)} - TinyBox client only]{text[z:]}"
+    mark = "[Image]" if short else f"[Image {kb(size)} - TinyBox client only]"
+    return f"{text[:a]}{mark}{text[z:]}"
 
 
 class ChatImages:
@@ -171,6 +173,8 @@ class ChatImages:
             p = self._partial[h] = [size, bytearray(), time.monotonic()]
         p[2] = time.monotonic()
         s.out(f"//IMGGO {h} {len(p[1])}")
+        # CR30: the others see "OE1ABC uploading picture" with a progress bar
+        s.service.chat.upload_started(s, size_code(size), size)
         # everything that comes now is image data - the client holds back its
         # other lines until the last byte is out (CR12, 12.10.2026)
         s.collect_raw(size - len(p[1]), lambda chunk: self._chunk(h, chunk),

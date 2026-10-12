@@ -512,6 +512,7 @@ function renderMessages() {
   }
   const up = S.images && S.images.upload;         // CR12: the picture on its way up
   if (up && up.state !== "done") ol.append(uploadBubble(up));
+  for (const u of S.uploads || []) ol.append(uploadRow(u));      // CR30: the others' pictures
   if (atEnd) box.scrollTop = box.scrollHeight;
 }
 
@@ -548,12 +549,25 @@ function cryBubble(m, own) {
   return li;
 }
 
-/* Quote (CR14, variant B): over the air only a reference in front of the text,
- *   ~^OE3TEC 1402 I am QRV
- * = call and minute (UTC, TinyBox clock) of the quoted message, ~13 bytes. The
- * client finds the message in its own chat and shows an excerpt; without it,
- * only "↩ OE3TEC 14:02". The same call twice in one minute: the latest one. */
-const QUOTE_RE = /^~\^([A-Z0-9]{1,6}(?:-\d{1,2})?) (\d{4}) ?/;
+// ---------------------------------------------------------------- comments (CR14, CR31)
+/* Comment (CR14, CR31): over the air only the number of the event it answers,
+ *   ~^4F I am QRV
+ * = 5 bytes, unique within the last 256 events of the board - exactly the
+ * window in which commenting is allowed. Lines from before CR31 carry call and
+ * minute (~^OE3TEC 1402) and are still read that way. */
+const QUOTE_RE = /^~\^([0-9A-Fa-f]{1,2})(?: |$)/;
+const QUOTE_OLD_RE = /^~\^([A-Z0-9]{1,6}(?:-\d{1,2})?) (\d{4}) ?/;
+/* -> {len, seq} (CR31) or {len, call, hhmm} (old lines), null without a quote */
+function quoteOf(wire) {
+  const m = (wire || "").match(QUOTE_RE);
+  if (m) return { len: m[0].length, seq: parseInt(m[1], 16) };
+  const o = (wire || "").match(QUOTE_OLD_RE);
+  return o ? { len: o[0].length, call: o[1], hhmm: o[2] } : null;
+}
+const stripQuote = (wire) => { const q = quoteOf(wire); return q ? wire.slice(q.len) : (wire || ""); };
+function quotePrefix() {
+  return quoteTo ? `~^${(quoteTo.seq & 255).toString(16).toUpperCase()} ` : "";
+}
 let quoteTo = null;                      // message to quote with the next send
 // A message from the history (loaded afterwards, or from before we joined) is
 // read-only: no comment, no reaction – only what happens in the live chat.
@@ -562,21 +576,25 @@ const srvMinute = (m) => {               // HHMM in UTC by the TinyBox clock
   const d = new Date(((m.srv_time || (m.time + (S.clock_off || 0)))) * 1000);
   return String(d.getUTCHours()).padStart(2, "0") + String(d.getUTCMinutes()).padStart(2, "0");
 };
-function quotedMessage(call, hhmm, before) {
-  const want = +hhmm.slice(0, 2) * 60 + +hhmm.slice(2);
+function quotedMessage(q, before) {
   let hit = null;
   for (const x of S.messages) {
     if (x === before) break;
     if (x.kind !== "line" && x.kind !== undefined) continue;
-    if (x.call !== call || !x.text) continue;
+    if (q.seq !== undefined) {
+      if (x.seq === q.seq) hit = x;        // CR31: unique, the newest one before us
+      continue;
+    }
+    if (x.call !== q.call || !x.text) continue;      // old lines: call and minute
+    const want = +q.hhmm.slice(0, 2) * 60 + +q.hhmm.slice(2);
     const t = srvMinute(x), mins = +t.slice(0, 2) * 60 + +t.slice(2);
     const diff = Math.min(Math.abs(mins - want), 1440 - Math.abs(mins - want));
-    if (diff <= 1) hit = x;                // the latest one wins
+    if (diff <= 1) hit = x;
   }
   return hit;
 }
 function excerpt(wire, n = 60) {
-  const rest = wire.replace(QUOTE_RE, "");
+  const rest = stripQuote(wire);
   const sm = rest.match(STK_RE);
   if (sm && STK[sm[1]]) return "🏷️ " + STK[sm[1]].title;
   const ir = imageRef(rest);
@@ -584,10 +602,13 @@ function excerpt(wire, n = 60) {
   const t = wireToText(rest.replace(/^~!/, ""));
   return [...t].length > n ? [...t].slice(0, n).join("") + "…" : t;
 }
-function quoteBlock(call, hhmm, orig) {
+function quoteBlock(ref, orig) {
   const q = el("div", "quote");
-  const local = orig ? hhmmOf(orig) : utcToLocal(hhmm);
-  q.append(el("div", "q-who", `↩ ${call} ${local}`));
+  let who;
+  if (orig) who = `↩ ${orig.call} ${hhmmOf(orig)}`;
+  else if (ref.seq !== undefined) who = `↩ message #${ref.seq.toString(16).toUpperCase()}`;
+  else who = `↩ ${ref.call} ${utcToLocal(ref.hhmm)}`;
+  q.append(el("div", "q-who", who));
   if (orig) {
     q.append(el("div", "q-text", excerpt(orig.text)));
     q.title = "Show the message";
@@ -623,6 +644,7 @@ function setQuote(m) {
   updateHint();
 }
 
+// ---------------------------------------------------------------- bubbles
 function bubble(m, cont) {
   const own = m.call === S.mycall;
   if (isCry(m.text || "")) return cryBubble(m, own);
@@ -630,16 +652,18 @@ function bubble(m, cont) {
   li.dataset.mid = String(m.id);
   const col = el("div", "col");
   if (!own && !cont) col.append(el("div", "who", m.call));
-  const qm = (m.text || "").match(QUOTE_RE);
-  const body = qm ? m.text.slice(qm[0].length) : (m.text || "");
+  const qm = quoteOf(m.text);
+  const body = qm ? m.text.slice(qm.len) : (m.text || "");
   const ir = imageRef(body);                      // CR12: a picture with a caption
   const text = wireToText(ir ? ir.caption : body);
-  const quotesMe = qm && !own && baseCall(qm[1]) === baseCall(S.mycall);
+  const orig = qm && !m.pending ? quotedMessage(qm, m) : null;
+  const quotesMe = qm && !own && baseCall((orig && orig.call) || qm.call || "")
+                   === baseCall(S.mycall);
   const b = el("div", "bubble" + (m.pending ? " pending" : "") + (m.history ? " history" : "")
                + (selected === m.id ? " selected" : "") + (isSingleEmoji(text) && !qm && !ir ? " jumbo" : "")
                + (ir ? " img" : "")
                + (!own && (mentionsMe(text) || quotesMe) ? " mention" : ""));
-  if (qm) b.append(quoteBlock(qm[1], qm[2], m.pending ? null : quotedMessage(qm[1], qm[2], m)));
+  if (qm) b.append(quoteBlock(qm, orig));
   const sm = body.match(STK_RE);
   if (ir) {
     b.append(imageBlock(ir, own));
@@ -805,9 +829,6 @@ function updateHint() {
   }
 }
 let cryMode = false;
-function quotePrefix() {
-  return quoteTo ? `~^${quoteTo.call} ${srvMinute(quoteTo)} ` : "";
-}
 function setCry(on) {
   cryMode = on;
   if (on && quoteTo) { quoteTo = null; $("quote-bar").classList.add("hidden"); }
@@ -1017,13 +1038,34 @@ function imageBlock(ref, own) {
   return box;
 }
 
+/* CR30: another station is sending a picture. The TinyBox announces it once
+ * ("^OE1ABC 50"); the bar shows what we hear of those frames on the channel.
+ * A station we cannot hear directly (digipeater, too weak) gives no bytes -
+ * then the bar runs over the expected time instead. */
+function uploadRow(u) {
+  const li = el("li", "sys uprow");
+  const bar = el("div", "bar"), fill = el("div", "fill");
+  const heard = u.got > 0;
+  li.append(el("div", "uptxt", `🖼 ${u.call} uploading picture · ` +
+    (heard ? `${kbText(u.got)} / ${kbText(u.size)}` : kbText(u.size))));
+  if (heard) {
+    fill.style.width = Math.min(100, Math.round((100 * u.got) / u.size)) + "%";
+  } else {
+    const secs = Math.max(5, imgTime(u.size, true));
+    fill.style.animation = `upgrow ${secs}s linear ${-Math.max(0, Date.now() / 1000 - u.at)}s forwards`;
+  }
+  bar.append(fill);
+  li.append(bar);
+  return li;
+}
+
 /* The own upload under way (or failed): a bubble of its own until the chat
  * line with the reference comes back from the TinyBox. */
 function uploadBubble(up) {
   const li = el("li", "msg own");
   const col = el("div", "col");
   const b = el("div", "bubble img pending");
-  const ref = imageRef(up.line.replace(QUOTE_RE, ""));
+  const ref = imageRef(stripQuote(up.line));
   const box = el("div", "imgbox");
   if (ref && (S.images.have || []).includes(ref.hash)) {
     const img = el("img"); img.src = "/img/" + ref.hash; img.alt = "image"; box.append(img);

@@ -24,6 +24,13 @@ class RawFrame:
         return self.control & 0xEF == UI_CONTROL
 
     @property
+    def is_i(self) -> bool:
+        """An I-frame (data of a connection). Modulo 8 - what Direwolf uses
+        with maxframe <= 7; with modulo 128 one byte more belongs to the
+        control field, which only shifts the counted length by one byte."""
+        return self.control & 0x01 == 0
+
+    @property
     def direct(self) -> bool:
         """Heard straight from the source, not through a digipeater."""
         return not self.path
@@ -51,7 +58,7 @@ def decode(data: bytes) -> RawFrame | None:
         return None
     control = data[pos]
     frame = RawFrame(calls[0], calls[1], calls[2:], control)
-    if frame.is_ui:
+    if frame.is_ui or frame.is_i:
         frame.info = bytes(data[pos + 2:])      # skip the PID
     return frame
 

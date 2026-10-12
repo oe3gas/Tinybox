@@ -10,6 +10,13 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Laedt jemand ein Bild hoch, sehen es die anderen sofort im Chat:
+  "OE1ABC uploading picture" mit Fortschrittsbalken. Der Balken zaehlt die
+  Frames mit, die man von der Station hoert; hoert man sie nicht direkt,
+  laeuft er ueber die geschaetzte Dauer. Terminal-Teilnehmer lesen
+  "*** OE1ABC is sending a picture (5.0 KB)".
+- Kommentare treffen jetzt immer den richtigen Beitrag: ueber Funk geht die
+  Nummer des Beitrags (5 Byte statt 14) statt Rufzeichen und Minute.
 - Bilder im Chat: ein Knopf neben den Emojis, das Bild wird im Browser
   klein gemacht (WebP, laengste Seite 320 px, unter dem Limit der TinyBox,
   Standard 8 KB) und geht einmal zur TinyBox. Vorher zeigt ein Dialog

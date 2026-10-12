@@ -1,0 +1,4 @@
+- Laedt jemand ein Bild hoch, steht es im Chat: "OE1ABC uploading picture"
+  mit Fortschrittsbalken (echt, solange man die Station hoert).
+- Kommentare beziehen sich jetzt eindeutig auf den Beitrag (vorher konnte
+  der falsche getroffen werden, wenn zwei in derselben Minute kamen).

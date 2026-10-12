@@ -467,6 +467,8 @@ Info:   lesbarer Text, Folgenummer hexadezimal (1–2 Zeichen)
 | Verlassen | `#<nr> -<Call>` | `#51 -OE3GAS` |
 | Reaktion | `#<nr> <Call> *<Bezug-nr> <Emoji>` | `#52 OE3TEC *4F :+1` |
 | System | `#<nr> !<Text>` | `#53 !Board schließt um 22:00` |
+| Bild-Upload läuft | `#<nr> ^<Call> <Größe>` | `#54 ^OE1ABC 50` – einmal beim Start, Fortschrittsbalken im Client (CR30) |
+| Kommentar | `#<nr> <Call>: ~^<Bezug-nr> <Text>` | `#55 OE3GAS: ~^4E Ich bin QRV` – Bezug auf Ereignis 4E (CR31) |
 | Beitrag mit Bild | `#<nr> <Call>: ~#<Hash 6 hex><Größe 2 hex><BlurHash> [Text]` | `#54 OE3GAS: ~#a1b2c350BjElSA\|nsR,x$0n~ Blick vom Berg` (CR12, 12.10) |
 
 - Keine Steuerbytes: Mithörer mit Terminalprogramm oder Direwolf lesen den Chat ohne Client mit.

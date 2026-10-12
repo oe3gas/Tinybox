@@ -63,8 +63,8 @@ def upload(s, t, data: bytes) -> str:
     """The way the client does it: //IMGPUT, //IMGGO, then the bytes at once."""
     h = h6(data)
     type_lines(s, f"//IMGPUT {h} {len(data)}")
-    out = t.take()
-    assert out == f"//IMGGO {h} 0\r", out
+    out = t.take()      # //IMGGO, then the event the whole board gets (CR30)
+    assert out.startswith(f"//IMGGO {h} 0\r"), out
     s.feed_raw(data[:100])             # arrives in whatever pieces Direwolf makes
     assert t.take() == ""
     s.feed_raw(data[100:])
@@ -213,7 +213,7 @@ class UploadTests(unittest.TestCase):
         s.end(lost=True)
         s, t = client(self.app)
         type_lines(s, f"//IMGPUT {h} {len(WEBP)}")
-        self.assertEqual(t.take(), f"//IMGGO {h} 200\r")
+        self.assertTrue(t.take().startswith(f"//IMGGO {h} 200\r"))
         s.feed_raw(WEBP[200:])
         self.assertEqual(t.take(), f"//IMGOK {h}\r")
         # wrong hash
@@ -316,7 +316,7 @@ class RawStreamTests(unittest.TestCase):
         s, t = client(self.app)
         h = h6(WEBP)
         type_lines(s, f"//IMGPUT {h} {len(WEBP)}")
-        self.assertEqual(t.take(), f"//IMGGO {h} 0\r")
+        self.assertTrue(t.take().startswith(f"//IMGGO {h} 0\r"))
         s.feed_raw(WEBP[:300])
         self.assertGreater(s.raw_need, 0)
         self.assertFalse(s.raw_timeout(120, now=s.raw_since + 10))     # still fresh
@@ -326,7 +326,7 @@ class RawStreamTests(unittest.TestCase):
         type_lines(s, "/W")                       # lines work again at once
         self.assertIn("here", t.take())
         type_lines(s, f"//IMGPUT {h} {len(WEBP)}")   # go on where it stopped
-        self.assertEqual(t.take(), f"//IMGGO {h} 300\r")
+        self.assertTrue(t.take().startswith(f"//IMGGO {h} 300\r"))
         s.feed_raw(WEBP[300:])
         self.assertEqual(t.take(), f"//IMGOK {h}\r")
         self.assertEqual(self.app.store.image_get(h), WEBP)
@@ -347,3 +347,58 @@ class RawStreamTests(unittest.TestCase):
         self.assertEqual(self.app.store.chat_recent("TREFF", "2000-01-01T00:00:00Z", 10), [])
         type_lines(s, "Servus")                   # normal text still works
         self.assertIn("OE3GAS: Servus", t.take())
+
+
+class UploadNoticeAndQuoteTests(unittest.TestCase):
+    """CR30: the board learns about an upload. CR31: the comment reference is
+    the event number, and terminals read the quoted line."""
+
+    def setUp(self):
+        self.app = img_app()
+
+    def test_upload_event(self):
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF")
+        other, ot = client(self.app, "OE1ABC")
+        tt.take(), ot.take()
+        s, t = client(self.app)
+        tt.take(), ot.take(), t.take()
+        type_lines(s, f"//IMGPUT {h6(WEBP)} {len(WEBP)}")
+        # the uploader gets //IMGGO, everybody in the board the event
+        self.assertIn(f"//IMGGO {h6(WEBP)} 0", t.take())
+        self.assertIn(f"^OE3GAS {chatimg.size_code(len(WEBP))}", ot.take())
+        self.assertIn("*** OE3GAS is sending a picture (0.8 KB)", tt.take())
+        # not stored in the history
+        self.assertEqual(self.app.store.chat_recent("TREFF", "2000-01-01T00:00:00Z", 10), [])
+
+    def test_quote_is_resolved_for_terminals(self):
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF")
+        s, t = client(self.app)
+        tt.take()
+        type_lines(s, "Wer ist heute QRV?")
+        seq = t.take().split()[0].lstrip("#")           # the number of that event
+        tt.take()
+        type_lines(s, f"~^{seq} Ich bin QRV")
+        self.assertIn('OE3GAS: [re OE3GAS: "Wer ist heute QRV?"] Ich bin QRV', tt.take())
+        # clients get the raw reference
+        self.assertIn(f"OE3GAS: ~^{seq} Ich bin QRV", t.buf)
+        # an unknown number: the text still goes through
+        type_lines(s, "~^FE spaet dran")
+        self.assertIn("OE3GAS: [re #FE] spaet dran", tt.take())
+        # a picture inside the quoted line stays readable
+        t.take()
+        h = upload(s, t, WEBP)
+        tt.take()
+        type_lines(s, f"{ref(WEBP)} schau mal")
+        seq2 = t.take().split()[0].lstrip("#")
+        tt.take()
+        type_lines(s, f"~^{seq2} schoen!")
+        out = tt.take()
+        self.assertIn('[re OE3GAS: "[Image] schau mal"] schoen!', out)   # short in a quote
+        self.assertNotIn("~#", out)
+        # history: the numbers mean nothing any more
+        type_lines(term, "/H 9")
+        hist = tt.take()
+        self.assertIn("[re #", hist)
+        self.assertNotIn("~^", hist)

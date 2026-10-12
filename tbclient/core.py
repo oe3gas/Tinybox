@@ -51,6 +51,7 @@ class ClientCore:
         self.pending: list[dict] = []
         self.pending_reacts: dict[tuple[int, str], float] = {}   # own reactions not echoed yet
         self.console: deque[str] = deque(maxlen=200)
+        self.uploads: dict[str, dict] = {}        # call -> {size, at}: picture on its way (CR30)
         self.heard: dict[str, str] = {}           # call -> APRS symbol from a beacon
         self.heard_at: dict[str, float] = {}      # call -> last frame heard (any kind)
         self.mail: dict | None = None             # {"count": n, "at": unix} - C1 notice
@@ -394,6 +395,12 @@ class ClientCore:
             self.tinybox_direct_at = time.time()
         if {f.src, f.dest} != {self.cfg.mycall, self.cfg.tinybox_call}:
             self.channel_busy_at = time.monotonic()     # others use the frequency
+        # CR30: a picture someone else is sending - count what we hear of it,
+        # so the progress bar shows the real state and not an estimate
+        u = self.uploads.get(f.src)
+        if u is not None and f.is_i and f.dest == self.cfg.tinybox_call and f.info:
+            u["got"] = min(u["size"], u["got"] + len(f.info))
+            self._touch()
         if f.src != self.cfg.mycall and not f.src.startswith("TBCHAT"):
             self.heard_at[f.src] = time.time()
             if len(self.heard_at) > 200:          # forget the oldest
@@ -539,6 +546,7 @@ class ClientCore:
         self.members = {}
         self.quality = {}
         self.messages = []
+        self.uploads = {}
         self.seen = set()
         self.unwrap = proto.Unwrapper()
         self.pending_reacts = {}
@@ -561,6 +569,8 @@ class ClientCore:
         if ev.kind == "line":
             self._add({"id": pos, "seq": ev.seq, "kind": "line", "call": ev.call,
                        "text": ev.text, "time": now, "reactions": {}})
+            if chatimg.parse_ref(ev.text):          # the picture is here: no "uploading"
+                self.uploads.pop(ev.call, None)
             if ev.call == self.cfg.mycall:
                 for p in self.pending:
                     if p["text"] == ev.text:
@@ -585,6 +595,9 @@ class ClientCore:
                     break
             if ev.call == self.cfg.mycall:
                 self.pending_reacts.pop((ev.ref, ev.text), None)
+        elif ev.kind == "upload":                    # CR30: a picture is going up
+            if ev.call != self.cfg.mycall:
+                self.uploads[ev.call] = {"size": ev.ref, "at": now, "got": 0}
         elif ev.kind == "quality":                   # bars next to the avatars (14.4)
             self.quality = dict(ev.bars or {})
         elif ev.kind == "system":
@@ -623,6 +636,9 @@ class ClientCore:
         calls.update(m["call"] for m in self.messages if m.get("call"))
         now = time.time()
         self.pending = [p for p in self.pending if now - p["at"] < 120]
+        rate = max(1, self.cfg.img_rate)         # an upload that never finished: forget it
+        self.uploads = {c: u for c, u in self.uploads.items()
+                        if now - u["at"] < 2 * u["size"] / rate + 60}
         self._expire_reacts(now)
         return {
             "version": self.version, "client_version": VERSION,
@@ -648,6 +664,9 @@ class ClientCore:
             "sync": self.sync.status,
             "update": self.update,
             "history_mode": self.history_mode,
+            # CR30: pictures other stations are sending right now
+            "uploads": [{"call": c, "size": u["size"], "at": u["at"], "got": u["got"]}
+                        for c, u in self.uploads.items()],
             "images": self.images.status(self._image_refs()),
             "img": {"piece": self.cfg.img_piece, "pause": self.cfg.img_pause,
                     "rate": self.cfg.img_rate},
@@ -674,7 +693,7 @@ class ClientCore:
             return None
         if len(data) > self.board["img"]:
             return None
-        if quote and not re.match(r"^~\^[A-Z0-9-]{1,9} \d{4} $", quote):
+        if quote and not re.match(r"^~\^(?:[0-9A-Fa-f]{1,2}|[A-Z0-9-]{1,9} \d{4}) $", quote):
             return None
         caption = caption.replace("\r", " ").replace("\n", " ").strip()
         if caption.startswith("/"):

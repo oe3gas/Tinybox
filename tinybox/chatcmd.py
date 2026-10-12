@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from . import chatimg, clientnews, clientproto, texts
+from . import clientnews, clientproto, texts
 from .config import ChatBoard
 
 if TYPE_CHECKING:
@@ -125,7 +125,7 @@ def _history(s: Session, n: int) -> None:
         return
     s.out(texts.CHAT_HISTORY.format(keep=board.keep_label),
           *[texts.CHAT_HISTORY_ROW.format(time=_time(c.created), call=c.call,
-                                          text=chatimg.terminal_text(c.text))
+                                          text=hub.readable(board.name, c.text, live=False))
             for c in lines],
           texts.CHAT_HISTORY_END)
 

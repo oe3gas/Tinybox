@@ -36,7 +36,8 @@ Stand: 12.10.2026 (CR26–CR29 und CR12 umgesetzt)
 | 27 | Persönliche Post an mehrere Empfänger (`OE3TEC,OE1ABC`): Text einmal über Funk, TinyBox legt je Empfänger eine eigene Nachricht an | ✅ siehe unten |
 | 28 | Emoticons ↔ Emojis: `;-)` beim Tippen sofort als Emoji, Terminal-Eingabe `;-)` im Client als Emoji, Emojis mit ASCII-Form gehen als `:-)` statt `~0B` über Funk | ✅ siehe unten |
 | 29 | Terminal: Ausgaben über 10 Zeilen seitenweise mit „continue/abort“ (`L` und jeder andere Befehl), damit nicht hunderte Titel über die Luft laufen | ✅ siehe unten |
-| 29 | Terminal: Ausgaben über 10 Zeilen seitenweise mit „continue/abort“ (`L` und jeder andere Befehl), damit nicht hunderte Titel über die Luft laufen | ✅ siehe unten |
+| 30 | Bild-Upload eines Teilnehmers sichtbar machen: „OE1ABC uploading picture“ mit Fortschrittsbalken | ✅ siehe unten |
+| 31 | Kommentarbezug eindeutig machen (bisher Rufzeichen + Minute, mehrdeutig) | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -447,3 +448,25 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 **Problem:** `L` listet alle Nachrichten; mit wachsender Box laufen irgendwann hunderte Titel ungefragt über Funk. Gleiches gilt für `LB`, `H`, `J` und lange Texte bei `R`.
 
 **Lösung (nur TinyBox, `session.py`):** Jede Antwort auf einen Terminal-Befehl, die länger als 10 Zeilen ist, kommt in Seiten zu 10 Zeilen mit der Zeile `--More (10/37)-- Enter = continue, A = abort: `. Enter (oder jede andere Eingabe) holt die nächste Seite, `A` / `Q` / `/AB` verwirft den Rest (`*** rest skipped`). Gilt für alle Terminal-Befehle; nicht für Clients, den Chat, `DICT` und Befehle, die in einen anderen Zustand wechseln (`S`, `C`). Nach `B` kommt das „73, bye“ noch vor dem Trennen. `PAGE_LINES = 10` in `session.py`, Texte in `texts.py`. Tests: `test_tinybox.py` (`PagingTests`), `test_agw.py` angepasst. Als TBNEWS-Feature in Client-News 2026.10.12.8 (nur Textänderung, der Client selbst ist unverändert).
+
+## CR30 – Bild-Upload sichtbar machen (✅ 12.10.2026)
+
+**Problem:** Lädt jemand ein Bild hoch, ist der Kanal ein bis zwei Minuten belegt, ohne dass die anderen wissen warum.
+
+**Entscheidung:** Ein einziges Ereignis beim Start, kein laufender Fortschritt über Funk.
+
+- Die TinyBox sendet, sobald sie den Upload mit `//IMGGO` freigibt, das Chat-Ereignis `^<Call> <Größe>` (Größe wie in der Bildreferenz: 2 Hex in 64-Byte-Schritten), z. B. `#5A ^OE1ABC 50` – rund 14 Byte, einmal pro Bild. Nicht in der History gespeichert (wie das Qualitäts-Ereignis `%`).
+- **Client:** Zeile im Chat „OE1ABC uploading picture · 2.1 / 5.0 KB“ mit Fortschrittsbalken. Der Fortschritt ist **echt gemessen**: der Client hört den Kanal ohnehin mit und zählt die Nutzbytes der I-Frames, die von dieser Station zur TinyBox gehen – null zusätzliche Payload. Wer die Station nicht direkt hört (Digi, zu schwach), zählt nichts; dort läuft der Balken über die geschätzte Dauer. Wiederholte Frames würden doppelt zählen, darum ist bei 100 % Schluss. Mit der eintreffenden Bildzeile verschwindet die Anzeige; bleibt sie aus (abgebrochener Upload), blendet der Client sie nach der doppelten geschätzten Dauer aus.
+- **Terminal-Teilnehmer** lesen `*** OE1ABC is sending a picture (5.0 KB)` – auch dort weiß damit jeder, warum die Frequenz belegt ist.
+- Der Uploader selbst sieht weiterhin nur seine eigene Bubble mit „sending …“.
+
+## CR31 – Kommentarbezug eindeutig (✅ 12.10.2026)
+
+**Problem (Funktest 12.10.2026):** Der Kommentar bezog sich über Rufzeichen + Minute (`~^OE3TEC 1402`) auf einen Beitrag. Hat dieselbe Station in derselben Minute mehrmals geschrieben, nahm der Client den letzten – inhaltlich falsch.
+
+**Entscheidung:** Bezug über die **Folgenummer des Ereignisses**, die es ohnehin in jedem Frame gibt und die die Reaktionen schon so nutzen (`#52 OE3TEC *4F :+1`). Ein eigener Hash wäre größer und bräuchte neue Vergabe- und Abgleichlogik auf beiden Seiten.
+
+- **Über Funk:** `~^4F Ich bin QRV` statt `~^OE3TEC 1402 Ich bin QRV` – **5 statt 14 Byte**, eindeutig über die letzten 256 Ereignisse des Boards (genau das Fenster, in dem Kommentieren erlaubt ist).
+- **Client:** sendet nur noch das neue Format, liest beide (alte Zeilen stehen in der History). Kennt er den Bezug nicht (später eingecheckt), zeigt er „↩ message #4F“ – **kein Nachfordern über Funk**: echte Lücken holt die Lückenerkennung ohnehin selbst, und ein `//RESEND` für Ereignisse von vor dem Einchecken würde die Empfangsquote (14.3) verfälschen.
+- **Terminal-Teilnehmer:** Die TinyBox löst den Verweis auf und schreibt `[re OE3TEC: "Servus, Wetter passt"] Ich bin QRV` – vorher stand dort der rohe Verweis. Enthält der zitierte Beitrag ein Bild, steht im Auszug kurz `[Image]` (sonst bliebe vom Auszug nichts übrig). Im Verlauf (`/H`), wo das Ereignisfenster nicht mehr gilt, steht `[re #4F]`.
+- Kommentieren bleibt auf Beiträge beschränkt, die im laufenden Chat eintreffen (Entscheidung 12.10.2026) – History-Zeilen haben keine Folgenummer.

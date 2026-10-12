@@ -567,3 +567,70 @@ class ImageHoldTests(unittest.TestCase):
             t1.cancel()
             dw.server.close()
         asyncio.run(scenario())
+
+
+class CommentReferenceTests(unittest.TestCase):
+    """CR31: a comment refers to the event number, not to call + minute."""
+
+    def test_reference_is_unique(self):
+        import shutil
+        import subprocess
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        root = Path(__file__).resolve().parent.parent
+        out = subprocess.run([node, str(root / "tests" / "fixtures" / "comments.js"),
+                              str(root / "tbclient" / "web" / "app.js")],
+                             capture_output=True, text=True, encoding="utf-8", check=True)
+        r = json.loads(out.stdout)
+        self.assertEqual(r["parse_new"], {"len": 5, "seq": 0x4F})      # 5 bytes on air
+        self.assertEqual(r["parse_old"], {"len": 14, "call": "OE3TEC", "hhmm": "1402"})
+        self.assertIsNone(r["parse_none"])
+        self.assertEqual(r["strip"], "ja genau")
+        self.assertEqual(r["prefix"], "~^4F ")
+        self.assertEqual(r["prefix_none"], "")
+        # two messages of the same station in the same minute: the number hits
+        # the first one, the old call+minute form took the last (the bug)
+        self.assertEqual(r["hit"], "erste frage")
+        self.assertEqual(r["hit_second"], "zweite frage")
+        self.assertEqual(r["old_hit"], "zweite frage")
+
+
+class UploadNoticeTests(unittest.TestCase):
+    """CR30: the others see that a picture is going up, with real progress from
+    the frames heard on the channel."""
+
+    def test_event_and_progress(self):
+        from tbclient import proto
+        from tinybox import chatimg
+        ev = proto.parse_event("#5A ^OE1ABC 50")
+        self.assertEqual((ev.kind, ev.call, ev.ref), ("upload", "OE1ABC", 5120))
+        self.assertIsNone(proto.parse_event("#5B ^OE1ABC zz"))
+        with tempfile.TemporaryDirectory() as tmp:
+            core = ClientCore(client_cfg(tmp))
+            core.board = {"n": 1, "name": "TREFF", "keep": "7d", "img": 8192}
+            core.unwrap.reset(0x59)
+            core._event(ev)
+            self.assertEqual(core.uploads["OE1ABC"]["size"], 5120)
+            self.assertEqual(core.uploads["OE1ABC"]["got"], 0)
+            # I-frames of that station to the TinyBox: counted, capped at the size
+            f = radio.decode(raw_frame("OE3GAS-1", "OE1ABC", 0x00, b"x" * 200))
+            core._on_frame(f)
+            core._on_frame(f)
+            self.assertEqual(core.uploads["OE1ABC"]["got"], 400)
+            for _ in range(40):
+                core._on_frame(f)
+            self.assertEqual(core.uploads["OE1ABC"]["got"], 5120)       # never more
+            # frames of someone else, or not to the TinyBox: not counted
+            core.uploads["OE1ABC"]["got"] = 0
+            core._on_frame(radio.decode(raw_frame("OE3GAS-1", "OE3XYZ", 0x00, b"y" * 50)))
+            core._on_frame(radio.decode(raw_frame("OE3XYZ", "OE1ABC", 0x00, b"y" * 50)))
+            core._on_frame(radio.decode(raw_frame("OE3GAS-1", "OE1ABC", 0x01)))     # RR
+            self.assertEqual(core.uploads["OE1ABC"]["got"], 0)
+            self.assertEqual(core.snapshot()["uploads"],
+                             [{"call": "OE1ABC", "size": 5120, "at": core.uploads["OE1ABC"]["at"],
+                               "got": 0}])
+            # the picture arrives: the notice is gone
+            line = f"~#a1b2c3{chatimg.size_code(5120)}BEHV6nWB2yk8pyo0"
+            core._event(proto.Event(0x5B, "line", "OE1ABC", text=line))
+            self.assertNotIn("OE1ABC", core.uploads)

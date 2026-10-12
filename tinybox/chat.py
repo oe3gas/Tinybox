@@ -45,6 +45,10 @@ SEQ_MOD = 256
 MAX_UI_BOARD = 15          # TBCHAT-1 .. TBCHAT-15 (SSID)
 UI_DEST = "TBCHAT"
 REACTION_RE = re.compile(r"^[!-~]{1,8}$")    # an emoji code: :+1, <3, ~0A ...
+# CR31: a comment refers to the event it answers - "~^4F text"
+QUOTE_RE = re.compile(r"^~\^([0-9A-F]{1,2})(?: |$)")
+QUOTE_OLD_RE = re.compile(r"^~\^([A-Z0-9]{1,6}(?:-\d{1,2})?) (\d{4}) ?")
+QUOTE_EXCERPT = 40
 
 
 def _iso_hours_ago(hours: int) -> str:
@@ -165,6 +169,25 @@ class ChatHub:
 
     # --- talking --------------------------------------------------------
 
+    def readable(self, board: str, text: str, live: bool = True) -> str:
+        """A chat line as a terminal user should read it: the image reference
+        becomes "[Image ...]" (CR12), the comment reference the quoted line
+        (CR31). live=False (history): the event numbers mean nothing any more."""
+        m = QUOTE_RE.match(text)
+        if m:
+            rest = text[m.end():]
+            ref = int(m.group(1), 16)
+            quoted = self._line_of(board, ref) if live else ""
+            if quoted:
+                call, _, what = quoted.partition(": ")
+                what = chatimg.terminal_text(what, short=True)
+                if len(what) > QUOTE_EXCERPT:
+                    what = what[:QUOTE_EXCERPT] + "\u2026"
+                text = texts.CHAT_QUOTE.format(call=call, text=what) + rest
+            else:
+                text = texts.CHAT_QUOTE_GONE.format(ref=m.group(1)) + rest
+        return chatimg.terminal_text(text)
+
     def say(self, session: Session, text: str) -> None:
         board = self.cfg.chat.board(session.chat_board or "")
         if board is None:
@@ -172,10 +195,12 @@ class ChatHub:
         now = utc_now()
         if not board.live:
             self.store.chat_add(board.name, session.call, text, now)
-        # terminals read "[Image ...]" instead of an image reference (CR12)
+        # terminals read "[Image ...]" and the quoted line instead of the bare
+        # references (CR12, CR31)
         self._deliver(board.name, f"{session.call}: {text}",
                       texts.CHAT_LINE.format(call=session.call,
-                                             text=chatimg.terminal_text(text)), sender=session)
+                                             text=self.readable(board.name, text)),
+                      sender=session)
         self.bus.publish("chat.message", board=board.name, call=session.call,
                          text=text, created=now)
 
@@ -184,11 +209,21 @@ class ChatHub:
         board = session.chat_board
         if board is None or not REACTION_RE.match(emoji) or not 0 <= ref < SEQ_MOD:
             return False
-        target = chatimg.terminal_text(self._line_of(board, ref))
+        target = self.readable(board, self._line_of(board, ref))
         human = texts.CHAT_REACT.format(call=session.call, emoji=emoji,
                                         target=target[:40] if target else f"#{ref:X}")
         self._deliver(board, f"{session.call} *{ref:X} {emoji}", human, sender=session)
         return True
+
+    def upload_started(self, session: Session, size_code: str, size: int) -> None:
+        """CR30: a picture is going up - everybody in the board should know why
+        the channel is busy. One event, no running progress over the air."""
+        board = session.chat_board
+        if board is None:
+            return
+        self._deliver(board, f"^{session.call} {size_code}",
+                      texts.CHAT_UPLOAD.format(call=session.call, size=f"{size / 1024:.1f} KB"),
+                      sender=session)
 
     def symbol_changed(self, session: Session) -> None:
         """The client chose another APRS symbol: tell the board at once (CR7),

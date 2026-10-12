@@ -7,6 +7,8 @@ Chat event:  #<seq> <call>: <text>      line
              #<seq> <call> *<ref> <e>   reaction to event <ref>
              #<seq> !<text>             system text
              #<seq> %<call> <b> ...     link quality, b = 0..5 bars (0 = one red bar) or ?
+             #<seq> ^<call> <size>      a picture is going up (CR30), size in
+                                        64-byte steps (hex)
 """
 
 from __future__ import annotations
@@ -22,16 +24,17 @@ LEAVE_RE = re.compile(rf"^-({CALL})$")
 SYM_RE = re.compile(rf"^=({CALL})(?: (\S{{2}}))?$")
 REACT_RE = re.compile(rf"^({CALL}) \*([0-9A-F]{{1,2}}) (\S{{1,8}})$")
 QUALITY_ITEM_RE = re.compile(rf"^({CALL}) ([0-5?])$")
+UPLOAD_RE = re.compile(rf"^\^({CALL}) ([0-9a-f]{{1,2}})$")
 
 
 @dataclass
 class Event:
     seq: int
-    kind: str              # line | join | leave | symbol | react | system | quality
+    kind: str              # line | join | leave | symbol | react | system | quality | upload
     call: str = ""
     text: str = ""
     symbol: str = ""
-    ref: int = -1
+    ref: int = -1          # react: the event it answers; upload: size in bytes
     bars: dict | None = None   # quality: call -> 0..5, None = no result yet
 
 
@@ -44,6 +47,8 @@ def parse_event(line: str) -> Event | None:
         return Event(seq, "system", text=rest[1:])
     if rest.startswith("%"):
         return _quality(seq, rest[1:])
+    if (u := UPLOAD_RE.match(rest)):
+        return Event(seq, "upload", u.group(1), ref=int(u.group(2), 16) * 64)
     if (j := JOIN_RE.match(rest)):
         return Event(seq, "join", j.group(1), symbol=j.group(2) or "")
     if (lv := LEAVE_RE.match(rest)):
