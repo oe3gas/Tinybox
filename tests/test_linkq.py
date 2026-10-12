@@ -31,7 +31,8 @@ class ParseTests(unittest.TestCase):
 
     def test_no_link_or_garbage(self):
         self.assertIsNone(linkq.parse("v=1 none"))
-        self.assertIsNone(linkq.parse("v=2 i_new=1"))
+        self.assertIsNone(linkq.parse("v=9 i_new=1"))
+        self.assertEqual(linkq.parse("v=2 i_new=1 bytes_rx=50 tx_busy_ms=700 baud=1200")["baud"], 1200)
         self.assertIsNone(linkq.parse("v=1 i_new=x"))
         self.assertIsNone(linkq.parse(""))
 
