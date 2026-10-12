@@ -51,7 +51,8 @@ TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
 FILES = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js",
          "/emoji.json": "emoji.json", "/aprs/symbols-0.png": "aprs/aprs-symbols-24-0@2x.png",
          "/aprs/symbols-1.png": "aprs/aprs-symbols-24-1@2x.png",
-         "/aprs/names.json": "aprs/names.json", "/manifest.json": "manifest.json"}
+         "/aprs/names.json": "aprs/names.json", "/manifest.json": "manifest.json",
+         "/logo.svg": "logo.svg"}
 # CR11: the sticker set (fixed files in the client, never sent over the air)
 FILES.update({f"/stickers/{p.name}": f"stickers/{p.name}"
               for p in (STATIC / "stickers").glob("*") if p.suffix in (".webp", ".json")})

@@ -39,6 +39,7 @@ STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.css": ("app.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/logo.svg": ("logo.svg", "image/svg+xml"),
 }
 MAX_HEADER = 16 * 1024
 MAX_BODY = 128 * 1024

@@ -73,6 +73,7 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 /* --- top bar ---------------------------------------------------------- */
 .top { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
   padding-top: max(8px, env(safe-area-inset-top)); background: var(--top); color: var(--top-text); }
+.top-logo { width: 40px; height: 40px; flex-shrink: 0; display: block; }
 .top-text { flex: 1; min-width: 0; }
 .top-title { font-weight: 600; font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
 .arrow { opacity: .6; }
