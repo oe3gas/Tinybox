@@ -35,15 +35,43 @@ Header:  <id> <P|B> <N|Y> <fwd|-> <size> <from> <to> <at|-> <bid|-> <unix time> 
 mid= is a unique id made by the client: if the //SENT answer got lost and the
 client sends the same message again, the TinyBox answers with the old number
 instead of storing it twice.
+
+Delta sync (cap SYNC2, CR26, PLANUNG.md 12.9) - one request for everything,
+only what changed since the client's last sync (change counter seq, store.py):
+
+    //SYNC seq=<n> [k=<id>,..] [r=<id>,..] [max=<bytes>] [want=<bytes>]
+        -> //K <id> ok|<reason>          for k= (own mail deleted here)
+           //M <header>                  new or content changed since n
+           //S <id> <N|Y> <fwd|->        only status/flag changed since n
+           //D <id> <id> ...             deleted (or no longer visible) since n
+           //MSG <id> <n lines> + lines  texts of new mail, oldest first, up to want= bytes
+           //SYNCEND <more> seq=<m>      more = headers left (ask again with seq=<m>)
+        r= marks mail read (status Y), no answer line. seq=0 = everything.
+        //ERR seq: the TinyBox cannot serve this seq (database newer than the
+        client, or tombstones purged): the client starts over with seq=0.
+    //BSYNC seq=<n> h=<hash> <rubric>=<after> ... [max=<bytes>] [want=<bytes>]
+        -> //RL <rubric> ...             (only if the list changed: h= differs)
+           //RU <rubric> : <description> (only then)
+           //RU + <rubric> ...           (only then; where users may write)
+           //RN <rubric>=<count> ...     bulletins per rubric (always, one line)
+           //M <header>                  bulletins of the given rubrics with a higher
+                                         number, or content replaced since n
+           //D <id> ...                  deleted in these rubrics since n
+           //MSG ...                     texts up to want=
+           //BSYNCEND <more> seq=<m> h=<hash>
+    With cap Z (radio) an answer over ZSYNC_MIN bytes comes as one LZHUF block:
+        //ZSYNC <n bytes> + n bytes      containing the text lines above (all plain)
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import zlib
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from .config import base_call
 from .service import ServiceError
 from .store import Message
 
@@ -57,8 +85,11 @@ MAX_IDS = 100
 MAX_SEND_LINES = 2000
 MID_RE = re.compile(r"^[0-9A-Za-z-]{8,40}$")
 RUBRIC_RE = re.compile(r"^([A-Z0-9]{1,6})=(\d{1,9})$")
-COMMANDS = ("MLIST", "RUBRICS", "BLIST", "GET", "PART", "SEND", "KILL", "READ")
+COMMANDS = ("MLIST", "RUBRICS", "BLIST", "GET", "PART", "SEND", "KILL", "READ",
+            "SYNC", "BSYNC")
 MAX_PART = 8192
+ZSYNC_MIN = 200           # a delta answer this long goes as one LZHUF block (cap Z)
+HEADER_BYTES = 90         # rough size of one //M line, for paging by max=
 
 
 def _epoch(iso: str) -> int:
@@ -86,8 +117,11 @@ def handle(s: Session, cmd: str, parts: list[str]) -> None:
     if "SYNC" not in s.client.caps:
         s.out(f"//ERR {cmd} needs SYNC")
         return
+    if cmd in ("SYNC", "BSYNC") and "SYNC2" not in s.client.caps:
+        s.out(f"//ERR {cmd} needs SYNC2")
+        return
     {"MLIST": _mlist, "RUBRICS": _rubrics, "BLIST": _blist, "GET": _get, "PART": _part,
-     "SEND": _send, "KILL": _kill, "READ": _read}[cmd](s, parts)
+     "SEND": _send, "KILL": _kill, "READ": _read, "SYNC": _sync, "BSYNC": _bsync}[cmd](s, parts)
 
 
 def _paging(parts: list[str]) -> tuple[list[str], int, int | None] | None:
@@ -127,25 +161,38 @@ def _mlist(s: Session, parts: list[str]) -> None:
     _page(s, [m for m in _visible(s) if m.type == "P" and m.id > after], limit, "MLIST")
 
 
-def _rubrics(s: Session, parts: list[str]) -> None:
+def _rubric_counts(s: Session) -> dict[str, list[int]]:
+    """rubric -> [count, highest id] of the bulletins the caller may see, plus the
+    writable rubrics without bulletins (0 0)."""
     count: dict[str, list[int]] = {}
     for m in _visible(s):
         if m.type == "B":
             c = count.setdefault(m.to_call, [0, 0])
             c[0] += 1
             c[1] = max(c[1], m.id)
-    svc = s.service
-    writable = svc.writable_rubrics()          # empty: no [rubrics], every rubric is free
-    for name in writable:
+    for name in s.service.writable_rubrics():   # empty: no [rubrics], every rubric is free
         count.setdefault(name, [0, 0])
-    rows = [f"//RU {r} {n} {mx}" for r, (n, mx) in sorted(count.items())]
+    return count
+
+
+def _rubric_static(s: Session, names: list[str]) -> list[str]:
+    """Descriptions and writable rubrics: the part of the list that rarely changes."""
+    svc = s.service
+    writable = svc.writable_rubrics()
+    rows = []
     for name in writable:
         desc = " ".join(svc.rubric_description(name).split())
         if desc:
             rows.append(f"//RU {name} : {desc}")
     if writable:
         rows.append("//RU + " + " ".join(writable))
-    s.out(*rows, "//RUEND")
+    return rows
+
+
+def _rubrics(s: Session, parts: list[str]) -> None:
+    count = _rubric_counts(s)
+    rows = [f"//RU {r} {n} {mx}" for r, (n, mx) in sorted(count.items())]
+    s.out(*rows, *_rubric_static(s, sorted(count)), "//RUEND")
 
 
 def _blist(s: Session, parts: list[str]) -> None:
@@ -277,6 +324,223 @@ def _read(s: Session, parts: list[str]) -> None:
         except ServiceError:
             pass
     s.out("//REND")
+
+
+# --- delta sync (SYNC2) -------------------------------------------------------------
+
+def _sync_args(parts: list[str]) -> tuple[dict[str, str], list[str]] | None:
+    """key=value arguments (lower case keys) and the rest. None on a bad number."""
+    args, rest = {}, []
+    for p in parts:
+        key, sep, value = p.partition("=")
+        if sep and key in ("seq", "max", "want", "h", "k", "r"):
+            if key in ("seq", "max", "want") and not value.isdigit():
+                return None
+            args[key] = value
+        else:
+            rest.append(p)
+    return args, rest
+
+
+def _seq_ok(s: Session, seq: int) -> bool:
+    """False: the TinyBox cannot tell what changed since seq (client starts over)."""
+    store = s.service.store
+    if seq > store.sync_seq():                   # the database was set up anew
+        return False
+    return seq == 0 or seq >= store.gone_floor()
+
+
+class _Answer:
+    """Collects the lines of a delta answer; texts are pushed while want= allows."""
+
+    def __init__(self, s: Session, args: dict[str, str]) -> None:
+        self.s = s
+        self.rows: list[str] = []
+        self.texts: list[Message] = []
+        self.limit = int(args["max"]) if "max" in args else None
+        self.want = int(args.get("want", "0"))
+        self.z = "Z" in s.client.caps and hasattr(s.transport, "write_bytes")
+
+    def push_texts(self, msgs: list[Message]) -> None:
+        """Texts of new messages, oldest first, while they fit into want= bytes.
+        Mail the caller wrote himself is skipped (the client has the text)."""
+        left = self.want
+        for m in sorted(msgs, key=lambda m: m.id):
+            if m.size > left or m.size == 0 or m.from_call.upper() == self.s.call.upper():
+                continue
+            self.texts.append(m)
+            left -= m.size
+
+    def send(self, end: str, summary: str) -> None:
+        s = self.s
+        text_rows = []
+        for m in self.texts:
+            lines = m.body.replace("\r", "").split("\n")
+            text_rows += [f"//MSG {m.id} {len(lines)}", *lines]
+        rows = self.rows + text_rows + [end]
+        plain = "".join(r + "\r" for r in rows)
+        raw = plain.encode("utf-8")
+        if self.z and len(raw) > ZSYNC_MIN:
+            from .fwd import lzhuf
+            data = lzhuf.compress_b1(raw)
+            if len(data) < len(raw):
+                s.transport.write(f"//ZSYNC {len(data)}\r")
+                s.transport.write_bytes(data)
+                log.info("%s > %s: %d bytes, %d on air (Z)", s.call, summary, len(raw), len(data))
+                return
+        if self.z and self.texts:                    # single texts compressed as in //GET
+            rows = self.rows[:]
+            s.transport.write("".join(r + "\r" for r in rows))
+            for m in self.texts:
+                body = m.body.replace("\r", "")
+                kind, data = payload(body, True)
+                if kind == "Z":
+                    s.transport.write(f"//ZMSG {m.id} {len(data)}\r")
+                    s.transport.write_bytes(data)
+                else:
+                    lines = body.split("\n")
+                    s.transport.write("".join(x + "\r" for x in [f"//MSG {m.id} {len(lines)}",
+                                                                 *lines]))
+            s.transport.write(end + "\r")
+            log.info("%s > %s: %d bytes", s.call, summary, len(raw))
+            return
+        s.transport.write(plain)
+        log.info("%s > %s: %d bytes", s.call, summary, len(raw))
+
+
+def _page_by_bytes(rows: list[tuple[int, str, Message | None]], limit: int | None
+                   ) -> tuple[list[tuple[int, str, Message | None]], int]:
+    """rows: (seq, line, message or None) in seq order. Cuts after about `limit`
+    bytes (never in the middle of a seq). Returns (page, rows left)."""
+    if limit is None:
+        return rows, 0
+    size, page = 0, []
+    for i, row in enumerate(rows):
+        size += len(row[1]) + 1
+        if size > limit and page and row[0] != page[-1][0]:
+            return page, len(rows) - i
+        page.append(row)
+    return page, 0
+
+
+def _sync(s: Session, parts: list[str]) -> None:
+    parsed = _sync_args(parts)
+    if parsed is None or "seq" not in parsed[0]:
+        s.out("//ERR sync")
+        return
+    args, _ = parsed
+    seq = int(args["seq"])
+    if not _seq_ok(s, seq):
+        s.out("//ERR seq")
+        return
+    ans = _Answer(s, args)
+    svc, store = s.service, s.service.store
+    kills = _ids(args["k"].split(",")) if args.get("k") else []
+    reads = _ids(args["r"].split(",")) if args.get("r") else []
+    for msg_id in kills or []:
+        msg = store.get(msg_id)
+        if msg is None:
+            ans.rows.append(f"//K {msg_id} ok")
+        elif msg.type != "P":
+            ans.rows.append(f"//K {msg_id} not_allowed")
+        else:
+            try:
+                svc.delete(msg_id, s.call, False)
+                ans.rows.append(f"//K {msg_id} ok")
+            except ServiceError as exc:
+                ans.rows.append(f"//K {msg_id} {exc.code}")
+    for msg_id in reads or []:
+        try:
+            svc.read(msg_id, s.call, False)
+        except ServiceError:
+            pass
+    known = set(kills or []) | set(reads or [])
+    me = base_call(s.call)
+
+    def mine(to: str, frm: str) -> bool:
+        return base_call(to) == me or base_call(frm) == me
+
+    rows: list[tuple[int, str, Message | None]] = []
+    for m in store.changed_since(seq):
+        if m.type != "P" or not mine(m.to_call, m.from_call) or m.id in known:
+            continue
+        if not svc.can_see(m, s.call, False):
+            rows.append((m.seq, f"//D {m.id}", None))
+        elif m.cseq > seq:
+            rows.append((m.seq, header(m), m))
+        else:
+            rows.append((m.seq, f"//S {m.id} {m.status} {m.fwd or '-'}", None))
+    for msg_id, gseq, typ, to, frm in (store.gone_since(seq) if seq else []):   # 0: knows nothing
+        if typ == "P" and mine(to, frm) and msg_id not in known:
+            rows.append((gseq, f"//D {msg_id}", None))
+    rows.sort(key=lambda r: r[0])
+    page, more = _page_by_bytes(rows, ans.limit)
+    _emit(ans, page)
+    end_seq = page[-1][0] if more else store.sync_seq()
+    ans.send(f"//SYNCEND {more} seq={end_seq}",
+             f"//SYNC seq={seq}: {len(page)} change(s), {len(ans.texts)} text(s)")
+
+
+def _emit(ans: _Answer, page: list[tuple[int, str, Message | None]]) -> None:
+    """Header/status lines into the answer; //D ids joined into one line."""
+    gone = []
+    new = []
+    for _, line, m in page:
+        if line.startswith("//D "):
+            gone.append(line[4:])
+        else:
+            ans.rows.append(line)
+        if m is not None:
+            new.append(m)
+    if gone:
+        ans.rows.append("//D " + " ".join(gone))
+    ans.push_texts(new)
+
+
+def _bsync(s: Session, parts: list[str]) -> None:
+    parsed = _sync_args(parts)
+    if parsed is None or "seq" not in parsed[0]:
+        s.out("//ERR bsync")
+        return
+    args, rest = parsed
+    seq = int(args["seq"])
+    if not _seq_ok(s, seq):
+        s.out("//ERR seq")
+        return
+    after: dict[str, int] = {}
+    for p in rest:
+        m = RUBRIC_RE.match(p.upper())
+        if not m:
+            s.out("//ERR bsync")
+            return
+        after[m.group(1)] = int(m.group(2))
+    ans = _Answer(s, args)
+    store = s.service.store
+    count = _rubric_counts(s)
+    names = sorted(count)
+    static = _rubric_static(s, names)
+    ident = "\n".join(static + [" ".join(names)])
+    h = f"{zlib.crc32(ident.encode('utf-8')) & 0xFFFF:04x}"
+    if args.get("h") != h:
+        ans.rows.append("//RL " + " ".join(names))
+        ans.rows += static
+    ans.rows.append("//RN " + " ".join(f"{r}={c[0]}" for r, c in sorted(count.items())))
+    rows: list[tuple[int, str, Message | None]] = []
+    for m in _visible(s):
+        if m.type == "B" and m.to_call in after and (m.id > after[m.to_call] or m.cseq > seq):
+            rows.append((m.id, header(m), m))
+    rows.sort(key=lambda r: r[0])
+    page, more = _page_by_bytes(rows, ans.limit)
+    gone = [str(i) for i, _, typ, to, _ in (store.gone_since(seq) if seq else [])
+            if typ == "B" and to in after]
+    if gone:
+        ans.rows.append("//D " + " ".join(gone))
+    for _, line, _ in page:
+        ans.rows.append(line)
+    ans.push_texts([m for _, _, m in page if m is not None])
+    end_seq = seq if more else store.sync_seq()
+    ans.send(f"//BSYNCEND {more} seq={end_seq} h={h}",
+             f"//BSYNC seq={seq}: {len(page)} header(s), {len(ans.texts)} text(s)")
 
 
 def _write(s: Session, rows: list[str], summary: str) -> None:

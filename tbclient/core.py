@@ -327,7 +327,7 @@ class ClientCore:
             return
         self.handshake_done = True          # sent; //OK confirms the caps
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC" + (",Z" if self.link.kind == "agw" else "")
+        caps += ",SYNC,SYNC2" + (",Z" if self.link.kind == "agw" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 

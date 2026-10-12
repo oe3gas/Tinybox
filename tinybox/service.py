@@ -446,4 +446,5 @@ class MessageService:
         if ids:
             log.info("expired bulletins deleted: %s", ids)
             self.bus.publish("message.expired", ids=ids)
+        self.store.purge_gone()                 # tombstones of the delta sync (CR26)
         return len(ids)

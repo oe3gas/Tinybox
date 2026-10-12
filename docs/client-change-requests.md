@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 11.10.2026 (Abend, CR23 und CR24 umgesetzt und getestet)
+Stand: 12.10.2026 (CR26 Delta-Abgleich umgesetzt)
 
 ## Übersicht
 
@@ -32,6 +32,7 @@ Stand: 11.10.2026 (Abend, CR23 und CR24 umgesetzt und getestet)
 | 23 | BUG – Emoji-Picker: Schnellauswahl-Leiste verdeckt die Gesamtauswahl | ✅ siehe unten |
 | 24 | BUG – Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte | ✅ siehe unten |
 | 25 | Board antippen: Button einfärben, bis man im Board angekommen ist | ✅ siehe unten |
+| 26 | Delta-Abgleich: Mail-/Bulletin-Sync mit minimaler Payload (ein Wechsel, nur Änderungen, kleine Texte gleich mit, Z für Köpfe) | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -374,3 +375,13 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Wer zitiert wird, sieht die Antwort hervorgehoben wie bei @CALL (CR15).
 - **Terminal-Teilnehmer** sehen `~^OE3TEC 1402 Ich bin QRV`.
 - Kein Zitat im Cry-out-Modus. Client-Version 2026.10.11.8, nur Client (`app.js`, `app.css`, `index.html`); Fix History/Kommentarleiste: 2026.10.12.
+
+## CR26 – Delta-Abgleich mit minimaler Payload (✅ 12.10.2026)
+
+**Problem:** Der Mail-Sync holte immer alle Köpfe der eigenen Post von vorn (30 Mails ≈ 2,7 kB in 3 Wechseln, auch ohne Neues), der Bulletin-Sync jedes Mal die ganze Rubrikenliste. Eine neue kurze Mail = 4 Wechsel. Über Funk zählt jeder Wechsel (TXDelay, ACK, Pause) mehr als die Bytes.
+
+**Lösung** (Konzept und Protokoll: PLANUNG.md 12.9):
+- **TinyBox:** Änderungszähler `seq`/`cseq` je Nachricht und Tombstones gelöschter Nachrichten (SQLite-Trigger, Schema 7). Neue Befehle `//SYNC` (Löschen + Gelesen + Delta der Köpfe + kleine Texte in **einem** Wechsel) und `//BSYNC` (Rubrikenliste nur bei Änderung per Hash, neue/gelöschte Bulletins, kleine Texte). Cap `SYNC2`. Mit `Z` über Funk kommt die Antwort ab 200 Byte als ein LZHUF-Block (`//ZSYNC`). Alte Befehle bleiben für alte Clients.
+- **Client:** nutzt `SYNC2`, wenn die TinyBox es anbietet, sonst alter Ablauf. Merkt sich `seq` je Abgleich; in der TinyBox gelöschte Post verschwindet jetzt auch hier (`//D`). Vollabgleich bei `//ERR seq` (TinyBox-DB neu).
+- **Ergebnis:** „nichts Neues“ = 1 Wechsel, ~45 Byte statt ~2,7 kB; 1 neue Mail = 1 Wechsel statt 4.
+- Client-Version 2026.10.12.3. Tests: `tests/test_mailsync.py` (`DeltaSyncTests`).

@@ -268,7 +268,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertFalse(core.sync.start("bulletins"))       # one at a time
                 await until(lambda: not core.sync.running, 30)
                 self.assertEqual(core.sync.status["error"], "")
-                self.assertIn("*** client mode, caps: CHAT,SYNC,UI,Z", core.console)
+                self.assertIn("*** client mode, caps: CHAT,SYNC,SYNC2,UI,Z", core.console)
                 await until(lambda: core.state == "offline")
                 inbox = box.folder("inbox")
                 self.assertEqual([m["subject"] for m in inbox],
@@ -342,3 +342,220 @@ class EndToEndTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeltaSyncTests(unittest.TestCase):
+    """CR26: //SYNC and //BSYNC - only what changed, in one exchange."""
+
+    def setUp(self):
+        self.app = chat_app()
+        self.a = mail(self.app, "OE3TEC", "OE3GAS", "Hallo Gerhard", "Text 1\nZeile 2")
+        self.b = mail(self.app, "OE3GAS", "OE3TEC", "Antwort", "eigener Text")
+        self.c = mail(self.app, "OE3TEC", "OE1ABC", "Fremd")
+        self.d = mail(self.app, "OE3TEC", "ALL", "Bulletin 1", "kurz", type="B")
+        self.e = mail(self.app, "OE3TEC", "WX", "Wetter", LONG, type="B")
+
+    def ask(self, s, t, line):
+        type_lines(s, line)
+        return t.take().split("\r")[:-1]
+
+    def test_needs_cap(self):
+        s, t = client(self.app, caps="CHAT,SYNC")
+        self.assertEqual(self.ask(s, t, "//SYNC seq=0"), ["//ERR SYNC needs SYNC2"])
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        self.assertEqual(self.ask(s, t, "//SYNC"), ["//ERR sync"])
+        self.assertEqual(self.ask(s, t, "//SYNC seq=x"), ["//ERR sync"])
+
+    def test_sync_delta(self):
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        store = self.app.service.store
+        # everything, with the text of the short mail from somebody else (not my own)
+        out = self.ask(s, t, "//SYNC seq=0 want=100")
+        self.assertTrue(out[0].startswith(f"//M {self.a} P N "))
+        self.assertTrue(out[1].startswith(f"//M {self.b} P N "))
+        self.assertEqual(out[2:], [f"//MSG {self.a} 2", "Text 1", "Zeile 2",
+                                   f"//SYNCEND 0 seq={store.sync_seq()}"])
+        seq = store.sync_seq()
+        # nothing new: one short line
+        self.assertEqual(self.ask(s, t, f"//SYNC seq={seq}"), [f"//SYNCEND 0 seq={seq}"])
+        # read at the terminal, deleted at the terminal, new mail for somebody else
+        self.app.service.read(self.a, "OE3GAS", False)
+        self.app.service.delete(self.b, "OE3TEC", False)
+        mail(self.app, "OE3TEC", "OE1ABC", "Fremd 2")
+        out = self.ask(s, t, f"//SYNC seq={seq}")
+        self.assertEqual(out[:2], [f"//S {self.a} Y -", f"//D {self.b}"])
+        self.assertTrue(out[2].startswith("//SYNCEND 0 seq="))
+        seq = store.sync_seq()
+        # kill and read in the same request; nothing of it comes back
+        f = mail(self.app, "OE3TEC", "OE3GAS", "Neu", "neu")
+        out = self.ask(s, t, f"//SYNC seq={seq} k={f},{self.c},999 r={self.a}")
+        self.assertEqual(out[:3], [f"//K {f} ok", f"//K {self.c} not_found", "//K 999 ok"])
+        self.assertEqual(len(out), 4)
+        self.assertIsNone(store.get(f))
+        # the TinyBox is behind the client (database set up anew)
+        self.assertEqual(self.ask(s, t, "//SYNC seq=99999"), ["//ERR seq"])
+
+    def test_sync_paging(self):
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        for i in range(5):
+            mail(self.app, "OE3TEC", "OE3GAS", f"Nr {i}", f"Text {i}")
+        out = self.ask(s, t, "//SYNC seq=0 max=200")
+        self.assertTrue(out[-1].startswith("//SYNCEND "))
+        more, seq = out[-1].split()[1], int(out[-1].split("seq=")[1])
+        self.assertGreater(int(more), 0)
+        n = len(out) - 1
+        out = self.ask(s, t, f"//SYNC seq={seq} max=10000")
+        self.assertEqual(n + len(out) - 1, 7)                # all 7 headers, none twice
+        self.assertTrue(out[-1].endswith(f"seq={self.app.service.store.sync_seq()}"))
+
+    def test_bsync(self):
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        store = self.app.service.store
+        out = self.ask(s, t, "//BSYNC seq=0 h=0 WX=0 want=10")
+        self.assertEqual(out[:2], ["//RL ALL WX", "//RN ALL=1 WX=1"])
+        self.assertTrue(out[2].startswith(f"//M {self.e} B "))     # ALL not subscribed
+        self.assertEqual(len(out), 4)                               # long text: not pushed
+        h = out[3].split("h=")[1]
+        seq = store.sync_seq()
+        # list unchanged: only the counts
+        out = self.ask(s, t, f"//BSYNC seq={seq} h={h} WX={self.e}")
+        self.assertEqual(out, ["//RN ALL=1 WX=1", f"//BSYNCEND 0 seq={seq} h={h}"])
+        # subscribed ALL too: its bulletin with the text; a bulletin expired
+        self.app.service.delete(self.e, "OE3TEC", True)
+        out = self.ask(s, t, f"//BSYNC seq={seq} h={h} WX={self.e} ALL=0 want=100")
+        self.assertEqual(out[0], "//RL ALL")                        # WX has no bulletin left
+        self.assertEqual(out[1:3], ["//RN ALL=1", f"//D {self.e}"])
+        self.assertTrue(out[3].startswith(f"//M {self.d} B "))
+        self.assertEqual(out[4:6], [f"//MSG {self.d} 1", "kurz"])
+
+    def test_zsync_on_radio(self):
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2,Z", radio=True)
+        for i in range(6):
+            mail(self.app, "OE3TEC", "OE3GAS", f"Wetterbericht Weinviertel Nr {i}", f"Text {i}")
+        type_lines(s, "//SYNC seq=0 want=300")
+        head, _, rest = t.raw.partition(b"\r")
+        self.assertTrue(head.startswith(b"//ZSYNC "))
+        n = int(head.split()[1])
+        self.assertEqual(len(rest), n)
+        text = lzhuf.decompress_b1(rest).decode()
+        self.assertGreater(len(text), 1.4 * n)                     # headers compress well
+        lines = text.split("\r")
+        self.assertEqual(sum(1 for x in lines if x.startswith("//M ")), 8)
+        self.assertEqual(sum(1 for x in lines if x.startswith("//MSG ")), 7)   # not my own
+        self.assertTrue(lines[-2].startswith("//SYNCEND 0 seq="))
+        # a short answer stays plain text
+        t.raw = b""
+        type_lines(s, f"//SYNC seq={self.app.service.store.sync_seq()}")
+        self.assertTrue(t.raw.startswith(b"//SYNCEND 0 seq="))
+
+    def test_store_counter(self):
+        store = self.app.service.store
+        self.assertEqual([m.id for m in store.changed_since(0)][-1], self.e)
+        seq = store.sync_seq()
+        store.mark_read(self.a)
+        self.assertEqual([(m.id, m.cseq > seq) for m in store.changed_since(seq)],
+                         [(self.a, False)])
+        store.replace_content(self.d, to_call="ALL", from_call="OE3TEC", subject="neu",
+                              body="neu", created="2030-01-01T00:00:00Z", expires=None)
+        self.assertTrue(all(m.cseq > seq for m in store.changed_since(seq) if m.id == self.d))
+        store.delete(self.c)
+        self.assertEqual([g[0] for g in store.gone_since(seq)], [self.c])
+        for _ in range(3):
+            store.delete(mail(self.app, "OE3TEC", "OE3GAS", "weg"))
+        store.purge_gone(keep=2)
+        self.assertEqual(len(store.gone_since(0)), 2)
+        self.assertGreater(store.gone_floor(), seq)
+
+    def test_client_end_to_end(self):
+        """Client against the TinyBox over the fake radio: one exchange when nothing
+        is new, deletions in the TinyBox arrive here, a new database starts over."""
+        async def scenario():
+            dw = FakeDirewolf()
+            port = await dw.start()
+            app = chat_app()
+            app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, agw_port=port,
+                                                   reconnect_sec=1)
+            adapter = tb_agw.AgwAdapter(app)
+            app.agw = adapter
+            t1 = asyncio.create_task(adapter.run())
+            await asyncio.wait_for(adapter.connected.wait(), 5)
+            a = mail(app, "OE3TEC", "OE3GAS", "Eins", "Text eins")
+            b = mail(app, "OE3TEC", "OE3GAS", "Zwei", "Text zwei")
+            mail(app, "OE3TEC", "WX", "Wetter", "Sonne", type="B")
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, agw_port=port, sync_chunk=1024,
+                                             sync_pause=0.05))
+                box = core.mailbox
+                t2 = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.link.agw_up.wait(), 5)
+                box.subscribe("WX", True)
+                box.save_out(None, "P", "OE3TEC", "Vom Client", "Hallo Tec")
+
+                def requests():                    # the sync requests of the client
+                    return [x[2:] for x in core.console
+                            if x.startswith("> //") and not x.startswith(("> //CLIENT",
+                                                                           "> //BOARDS"))]
+
+                core.sync.start("mail")
+                await until(lambda: not core.sync.running, 30)
+                self.assertEqual(core.sync.status["error"], "")
+                reqs = requests()
+                self.assertTrue(any(r.startswith("//SYNC seq=0 ") for r in reqs))
+                self.assertFalse(any(r.startswith(("//MLIST", "//GET")) for r in reqs))
+                inbox = box.folder("inbox")
+                self.assertEqual([m["subject"] for m in inbox], ["Zwei", "Eins"])
+                self.assertEqual(box.message(a)["body"], "Text eins")     # pushed texts
+                self.assertEqual(box.folder("sent")[0]["subject"], "Vom Client")
+                sent_id = box.folder("sent")[0]["id"]
+                self.assertEqual(box.message(sent_id)["body"], "Hallo Tec")  # kept, not fetched
+                seq = app.service.store.sync_seq()
+                self.assertEqual(box.get("seq.mail"), seq)
+                # nothing new: exactly one request, nothing fetched
+                core.console.clear()
+                core.sync.start("mail")
+                await until(lambda: not core.sync.running, 30)
+                self.assertEqual(requests(), [f"//SYNC seq={seq} max=1024 want=754"])
+                # read here, deleted here; deleted and read in the TinyBox
+                box.open(a)
+                box.delete(b)
+                sent_id = box.folder("sent")[0]["id"]
+                app.service.delete(sent_id, "OE3TEC", False)
+                core.console.clear()
+                core.sync.start("mail")
+                await until(lambda: not core.sync.running, 30)
+                self.assertEqual(core.sync.status["error"], "")
+                self.assertEqual(len(requests()), 1)
+                self.assertIn(f" k={b} r={a} ", requests()[0])
+                self.assertEqual(app.service.store.get(a).status, "Y")
+                self.assertIsNone(app.service.store.get(b))
+                self.assertEqual(box.folder("sent"), [])                 # //D
+                self.assertEqual(box.todo("kill") + box.todo("read"), [])
+                # bulletins: list, header and text in one exchange; later only counts
+                core.console.clear()
+                core.sync.start("bulletins")
+                await until(lambda: not core.sync.running, 30)
+                self.assertEqual(core.sync.status["error"], "")
+                self.assertEqual(len(requests()), 1)
+                self.assertEqual([m["subject"] for m in box.folder("b:WX")], ["Wetter"])
+                self.assertEqual(box.message(box.folder("b:WX")[0]["id"])["body"], "Sonne")
+                names = {r["name"]: r for r in box.summary()["rubrics"]}
+                self.assertEqual((names["WX"]["server"], names["WX"]["local"]), (1, 1))
+                h = box.get("rubrics.h")
+                core.console.clear()
+                core.sync.start("bulletins")
+                await until(lambda: not core.sync.running, 30)
+                self.assertTrue(requests()[0].startswith(f"//BSYNC seq={box.get('seq.bulletins')} h={h} WX="))
+                self.assertEqual(names["WX"]["desc"], "")
+                # the TinyBox database is new: the client starts over by itself
+                box.put("seq.mail", 99999)
+                core.console.clear()
+                core.sync.start("mail")
+                await until(lambda: not core.sync.running, 30)
+                self.assertEqual(core.sync.status["error"], "")
+                self.assertEqual([r.split()[1] for r in requests()], ["seq=99999", "seq=0"])
+                self.assertEqual([m["subject"] for m in box.folder("inbox")], ["Eins"])
+                box.close()
+                t2.cancel()
+            t1.cancel()
+            dw.server.close()
+        asyncio.run(scenario())

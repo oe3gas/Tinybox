@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 6   # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 7   # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+                     # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -72,6 +73,48 @@ CREATE TABLE IF NOT EXISTS chat_lines (               -- only boards with histor
     created TEXT NOT NULL                             -- ISO 8601 UTC
 );
 CREATE INDEX IF NOT EXISTS chat_lines_board ON chat_lines (board, created);
+CREATE TABLE IF NOT EXISTS sync_seq (                 -- change counter of the messages (CR26)
+    k     INTEGER PRIMARY KEY CHECK (k = 1),
+    v     INTEGER NOT NULL,
+    floor INTEGER NOT NULL DEFAULT 0                  -- seq of the newest purged tombstone
+);
+CREATE TABLE IF NOT EXISTS sync_gone (                -- deleted messages: the client is told
+    id        INTEGER PRIMARY KEY,
+    seq       INTEGER NOT NULL,
+    type      TEXT NOT NULL,
+    to_call   TEXT NOT NULL,
+    from_call TEXT NOT NULL
+);
+"""
+
+# Schema 7: every message carries seq (last change of anything the client shows)
+# and cseq (last change of the content: new or replaced). The triggers keep them
+# and the tombstones up to date whatever code path changes a message, so the
+# delta sync (clientsync.py //SYNC) never misses a deletion from the terminal,
+# the sysop web, the forward module or the expiry.
+TRIGGERS = """
+CREATE TRIGGER IF NOT EXISTS sync_ins AFTER INSERT ON messages BEGIN
+    UPDATE sync_seq SET v = v + 1 WHERE k = 1;
+    UPDATE messages SET seq = (SELECT v FROM sync_seq WHERE k = 1),
+                        cseq = (SELECT v FROM sync_seq WHERE k = 1) WHERE id = NEW.id;
+    DELETE FROM sync_gone WHERE id = NEW.id;
+END;
+CREATE TRIGGER IF NOT EXISTS sync_upd AFTER UPDATE OF status, fwd, type, to_call, from_call,
+    at_addr ON messages BEGIN
+    UPDATE sync_seq SET v = v + 1 WHERE k = 1;
+    UPDATE messages SET seq = (SELECT v FROM sync_seq WHERE k = 1) WHERE id = NEW.id;
+END;
+CREATE TRIGGER IF NOT EXISTS sync_cupd AFTER UPDATE OF body, subject, created ON messages BEGIN
+    UPDATE sync_seq SET v = v + 1 WHERE k = 1;
+    UPDATE messages SET seq = (SELECT v FROM sync_seq WHERE k = 1),
+                        cseq = (SELECT v FROM sync_seq WHERE k = 1) WHERE id = NEW.id;
+END;
+CREATE TRIGGER IF NOT EXISTS sync_del AFTER DELETE ON messages BEGIN
+    UPDATE sync_seq SET v = v + 1 WHERE k = 1;
+    INSERT OR REPLACE INTO sync_gone (id, seq, type, to_call, from_call)
+        VALUES (OLD.id, (SELECT v FROM sync_seq WHERE k = 1), OLD.type, OLD.to_call,
+                OLD.from_call);
+END;
 """
 
 
@@ -102,6 +145,8 @@ class Message:
     fwd: str = ""                       # '' local, '$' to forward, 'F' forwarded, 'H' held
     note: str = ""                      # reason for 'H'
     bid_kind: str = ""                  # 'B' real BID, 'M' generated MID (personal mail)
+    seq: int = 0                        # change counter: last change of anything (CR26)
+    cseq: int = 0                       # change counter: last change of the content
 
     @property
     def rline_list(self) -> list[str]:
@@ -143,6 +188,15 @@ class Store:
             if col not in cols:
                 self._db.execute(f"ALTER TABLE messages ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         self._db.execute("CREATE UNIQUE INDEX IF NOT EXISTS messages_bid ON messages (bid)")
+        # 6 -> 7: change counter for the delta sync; old rows count as changed "at
+        # their number", the counter starts above the highest number
+        for col in ("seq", "cseq"):
+            if col not in cols:
+                self._db.execute(f"ALTER TABLE messages ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+        self._db.execute("UPDATE messages SET seq = id, cseq = id WHERE seq = 0")
+        self._db.execute("INSERT OR IGNORE INTO sync_seq (k, v) VALUES (1, "
+                         "COALESCE((SELECT MAX(id) FROM messages), 0))")
+        self._db.executescript(TRIGGERS)
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._db.commit()
 
@@ -335,6 +389,39 @@ class Store:
             raise ValueError(f"field not editable: {field}")
         with self._db:
             self._db.execute(f"UPDATE messages SET {field} = ? WHERE id = ?", (value, msg_id))
+
+    # --- delta sync of the client (CR26) ----------------------------------
+
+    def sync_seq(self) -> int:
+        """The change counter: everything up to here is known once a client has it."""
+        return self._db.execute("SELECT v FROM sync_seq WHERE k = 1").fetchone()[0]
+
+    def changed_since(self, seq: int) -> list[Message]:
+        """Messages changed after `seq`, in the order of the changes."""
+        rows = self._db.execute("SELECT * FROM messages WHERE seq > ? ORDER BY seq",
+                                (seq,)).fetchall()
+        return [Message(**dict(r)) for r in rows]
+
+    def gone_since(self, seq: int) -> list[tuple[int, int, str, str, str]]:
+        """(id, seq, type, to_call, from_call) of messages deleted after `seq`."""
+        return [tuple(r) for r in self._db.execute(
+            "SELECT id, seq, type, to_call, from_call FROM sync_gone WHERE seq > ? ORDER BY seq",
+            (seq,))]
+
+    def purge_gone(self, keep: int = 2000) -> None:
+        """Tombstones are small; keep the newest `keep`. A client whose seq is
+        below the newest purged one gets //ERR seq and starts over."""
+        with self._db:
+            row = self._db.execute("SELECT MAX(seq) FROM sync_gone WHERE id NOT IN "
+                                   "(SELECT id FROM sync_gone ORDER BY seq DESC LIMIT ?)",
+                                   (keep,)).fetchone()
+            if row[0]:
+                self._db.execute("UPDATE sync_seq SET floor = MAX(floor, ?) WHERE k = 1", (row[0],))
+                self._db.execute("DELETE FROM sync_gone WHERE seq <= ?", (row[0],))
+
+    def gone_floor(self) -> int:
+        """Clients must know at least this seq, else deletions would be missed."""
+        return self._db.execute("SELECT floor FROM sync_seq WHERE k = 1").fetchone()[0]
 
     def delete_bulletins_older_than(self, days: int) -> list[int]:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")

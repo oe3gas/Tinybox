@@ -592,10 +592,61 @@ Kopf: `<Nr.> <P|B> <N|Y> <Fwd|-> <Größe> <Von> <An> <@Adresse|-> <BID|-> <Unix
 
 - **Doppelt senden verhindert:** Jede Nachricht im Ausgang hat eine eindeutige Kennung (`mid=`). Geht `//SENT` verloren und der Client sendet sie noch einmal, antwortet die TinyBox mit der alten Nummer (`msgid = tbc-<Kennung>`).
 - `//SEND` geht auch in einem Chat-Board; die Sitzung bleibt danach im Board.
-- Was in der TinyBox gelöscht wurde (z. B. am Terminal mit `K`), bleibt im Client als Archiv erhalten. Ein Text, den die TinyBox nicht mehr hat (`//NOMSG`), wird im Client entfernt.
+- Was in der TinyBox gelöscht wurde (z. B. am Terminal mit `K`), blieb im Client als Archiv erhalten (bis 12.10.2026; mit dem Delta-Abgleich 12.9 verschwindet es auch im Client). Ein Text, den die TinyBox nicht mehr hat (`//NOMSG`), wird im Client entfernt.
 - Gesendete Nachrichten legt der Client sofort im Ordner „Sent“ ab, ohne sie noch einmal zu holen.
 
 **Oberfläche:** Ordner Inbox, Outbox, Sent; Bulletins je abonnierter Rubrik; „Rubrics…“ zum Abonnieren (Zahlen: in der TinyBox / im Client). Am Handy über ✉ oben: Ordner → Liste → Nachricht. Antworten zitiert die ersten 20 Zeilen. Beim Schreiben zeigt der Client Bytes und ungefähre Sendezeit bei 1200 Bd.
+
+### 12.9 Delta-Abgleich: so wenig wie möglich in die Luft (entschieden und umgesetzt 12.10.2026, CR26)
+
+**Befund:** Über Funk kostet jeder Wechsel Anfrage/Antwort mehr als die Bytes (TXDelay, Frame-Overhead, ACK, dazu `pause_sec` und Warten auf den freien Kanal). Der Abgleich nach 12.8 holte bei jedem Mail-Sync **alle** Köpfe der eigenen Post von vorn (30 Mails ≈ 2,7 kB in drei Seiten, auch wenn nichts neu ist) und bei jedem Bulletin-Sync die ganze Rubrikenliste samt Beschreibungen. Eine neue kurze Mail brauchte vier Wechsel.
+
+**Grundsatz:** Erst die Zahl der Wechsel senken, dann die Bytes je Wechsel. Lesbar bleibt alles (Textzeilen, am Terminal nachvollziehbar); ein Binärprotokoll bringt gegenüber LZHUF über dem Text kaum mehr und kostet die Debugbarkeit.
+
+**Stufe 1 – Delta statt Vollabgleich.** Die TinyBox führt einen Änderungszähler: jede Nachricht trägt `seq` (letzte Änderung: angelegt, Status N→Y, Forward-Flag, Inhalt) und `cseq` (letzte Inhaltsänderung: angelegt oder ersetzt). Gelöschte Nachrichten bleiben als Tombstone (`sync_gone`: Nr., `seq`, Typ, An, Von) erhalten, damit der Client erfährt, was weg ist. Die Spalten pflegen SQLite-Trigger – jeder Löschweg (Terminal `K`, Sysop-Web, Ablauf, Forward) ist damit abgedeckt. Der Client merkt sich die zuletzt gesehene `seq` je Abgleich. Ein Request für die Schritte 2–4 des Mail-Abgleichs:
+
+```
+//SYNC seq=<n> [k=<Nr.>,…] [r=<Nr.>,…] [max=<Bytes>] [want=<Bytes>]
+→ //K <Nr.> ok|<Grund>        nur mit k= (Löschungen bestätigt)
+  //M <Kopf>                  neu oder Inhalt geändert seit n (ganzer Kopf)
+  //S <Nr.> <N|Y> <Fwd|->     nur Status/Flag geändert seit n (~12 Byte statt ~90)
+  //D <Nr.> <Nr.> …           seit n gelöscht (oder nicht mehr sichtbar)
+  //MSG/<//ZMSG> …            Texte neuer Nachrichten, älteste zuerst, bis want= Bytes (Stufe 2)
+  //SYNCEND <noch übrig> seq=<m>
+```
+
+- „Nichts Neues“ = ein Wechsel, ~25 Byte hin, ~20 Byte zurück.
+- `//READ` braucht keine eigene Antwort mehr (r= im selben Request); `//KILL` nur noch die winzigen `//K`-Zeilen.
+- In der TinyBox gelöschte Post verschwindet jetzt auch im Client (`//D`) – bisher blieb sie als Archiv stehen. Lokal gelöschte, noch nicht bestätigte Post (todo kill) wird nicht zurückgeholt.
+- `seq=0` = Vollabgleich (neuer Client). Kennt die TinyBox die `seq` des Clients nicht (DB neu aufgesetzt, Zähler kleiner), antwortet sie `//ERR seq`; der Client fängt bei 0 an.
+- Mehr Köpfe als `max=` erlaubt: `<noch übrig>` > 0 und `seq=<m>` ist die höchste gelieferte `seq`, der Client fragt mit ihr weiter (Seiten wie bisher, nur bei Bedarf).
+
+Bulletins analog, aber je Rubrik „was habe ich“ statt `seq` für Neues (Abonnements ändern sich unabhängig vom Zähler):
+
+```
+//BSYNC seq=<n> h=<Hash> ALL=120 WX=33 [max=] [want=]
+→ //RU …                      nur wenn sich die Rubrikenliste geändert hat (Hash über Namen, Beschreibungen, Schreibrechte)
+  //RN ALL=12 WX=3 …          Anzahl je Rubrik (eine Zeile, für „in der TinyBox / hier“)
+  //M <Kopf>                  Bulletins der genannten Rubriken mit höherer Nr. oder seit n ersetztem Inhalt
+  //D <Nr.> …                 in diesen Rubriken seit n gelöscht (abgelaufen, Sysop)
+  //MSG/<//ZMSG> …            Texte bis want=
+  //BSYNCEND <noch übrig> seq=<m> h=<Hash>
+```
+
+**Stufe 2 – kleine Texte gleich mit.** Der häufigste Fall ist „1–2 neue kurze Mails“; dafür hängt die TinyBox die Texte der neuen Nachrichten (älteste zuerst) an die Antwort, bis `want=` Bytes erreicht sind. Den Rest holt der Client wie bisher mit `//GET`/`//PART`. Ergebnis: der typische Abgleich ist **ein einziger Wechsel**. `want` = `chunk_bytes` minus Platz für die Köpfe.
+
+**Stufe 3 – Bytes je Wechsel.** Mit Cap `Z` (Funk) und einer Antwort über 200 Byte schickt die TinyBox den ganzen Block zwischen Anfang und Endzeile als eine LZHUF-Einheit: `//ZSYNC <Bytes>` + Daten (darin alles Text, auch die Texte als `//MSG`). Köpfe wiederholen sich stark (Rufzeichen, Datum, `P N -`), Erfahrungswert 35–50 % Ersparnis. Darunter lohnt der LZHUF-Overhead nicht. Das Kopfformat bleibt unverändert (lesbar, ein Codepfad). Offen für später: `//SEND` mit komprimiertem Text (`//ZSEND`), lohnt erst ab ~300 Byte.
+
+**Erwartung (30 Mails im Postfach):**
+
+| Fall | vorher (12.8) | nachher |
+|---|---|---|
+| nichts Neues | 3 Wechsel, ~2,7 kB | 1 Wechsel, ~45 Byte |
+| 1 neue Mail (400 Byte) | 4 Wechsel, ~3,2 kB | 1 Wechsel, ~330 Byte (Z) |
+| 2 gelesen, 1 gelöscht gemeldet | +2 Wechsel | im selben Request |
+| Bulletin-Sync, nichts Neues | 1 Wechsel, 200–500 Byte | 1 Wechsel, ~60 Byte |
+
+**Kompatibilität:** neue Cap `SYNC2`. Alte Clients bekommen `SYNC` wie bisher (`//MLIST`, `//RUBRICS`, `//BLIST`, `//KILL`, `//READ` bleiben); ein neuer Client ohne `SYNC2` von der TinyBox fällt auf den alten Ablauf zurück. Schema der TinyBox-DB: Version 7 (`seq`, `cseq`, `sync_gone`, Trigger); bestehende Nachrichten bekommen `seq = cseq = Nr.`, der Zähler startet bei der höchsten Nr.
 
 ---
 

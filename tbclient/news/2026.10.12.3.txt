@@ -1,0 +1,4 @@
+- Delta-Sync (CR26): Mail- und Bulletin-Abgleich in einem Wechsel,
+  nur Aenderungen, kurze Texte gleich mit, Koepfe LZHUF-gepackt
+- In der TinyBox geloeschte Post verschwindet jetzt auch im Client
+- Braucht TinyBox mit SYNC2, sonst alter Ablauf

@@ -52,6 +52,9 @@ Mailbox
   dann offline lesen und schreiben.
 - Bulletins aus abonnierten Rubriken; der Abgleich schont den Kanal
   (komprimiert, in Paketen mit Pausen).
+- Delta-Abgleich: nur was sich seit dem letzten Mal geaendert hat,
+  in einem Wechsel; kurze Texte kommen gleich mit. In der TinyBox
+  geloeschte Post verschwindet auch hier.
 - Hinweis auf neue Post.
 
 Station

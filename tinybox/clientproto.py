@@ -37,7 +37,8 @@ Other client commands:
 caps: CHAT = chat lines in the format above, UI = the client hears the
 mailbox directly and takes chat events from the UI frames to TBCHAT-<n>
 instead of I-frames. UI is only granted on radio sessions.
-SYNC = offline mailbox commands, Z = message texts may come LZHUF-compressed
+SYNC = offline mailbox commands, SYNC2 = delta sync (//SYNC, //BSYNC, CR26),
+Z = message texts may come LZHUF-compressed
 (binary, radio sessions only).
 """
 
@@ -54,7 +55,7 @@ if TYPE_CHECKING:
     from .session import Session
 
 PROTO = "TB1"
-KNOWN_CAPS = ("CHAT", "UI", "SYNC", "Z")
+KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z")
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 

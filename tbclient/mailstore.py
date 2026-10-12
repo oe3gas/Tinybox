@@ -98,13 +98,16 @@ class MailStore:
 
     # --- messages from the TinyBox -----------------------------------------
 
-    def upsert_header(self, h: dict) -> bool:
+    def upsert_header(self, h: dict, content: bool = False) -> bool:
         """Header from //M. Returns True if the text still has to be fetched.
-        Mail deleted here (waiting for the TinyBox) is not taken back."""
+        Mail deleted here (waiting for the TinyBox) is not taken back.
+        content=True (delta sync): the TinyBox says the content is new - a text
+        already here is dropped if size or time differ (bulletin replaced); own
+        mail is kept (sent from here, the TinyBox has its own time and size)."""
         if self.db.execute("SELECT 1 FROM todo WHERE kind='kill' AND id=?",
                            (h["id"],)).fetchone():
             return False
-        row = self.db.execute("SELECT body, seen FROM messages WHERE id=?",
+        row = self.db.execute("SELECT body, seen, size, created FROM messages WHERE id=?",
                               (h["id"],)).fetchone()
         seen = 1 if h["status"] == "Y" and self._is_mine(h) else 0
         if row is None:
@@ -115,11 +118,33 @@ class MailStore:
             return True
         # read on the terminal -> read here too; read here -> stays read
         self.db.execute("UPDATE messages SET status=?, fwd=?, size=?, subject=?, to_call=?, "
-                        "at_addr=?, seen=MAX(seen, ?) WHERE id=?",
+                        "at_addr=?, created=?, seen=MAX(seen, ?) WHERE id=?",
                         (h["status"], h["fwd"], h["size"], h["subject"], h["to_call"],
-                         h["at_addr"], seen, h["id"]))
+                         h["at_addr"], h["created"], seen, h["id"]))
+        if (content and row["body"] is not None and base(h["from_call"]) != self.me
+                and (row["size"] != h["size"] or row["created"] != h["created"])):
+            self.db.execute("UPDATE messages SET body=NULL, seen=0 WHERE id=?", (h["id"],))
+            self._changed()
+            return True
         self._changed()
         return row["body"] is None
+
+    def set_status(self, msg_id: int, status: str, fwd: str) -> None:
+        """//S of the delta sync: only status and forward flag changed."""
+        m = self.message(msg_id)
+        if m is None:
+            return
+        seen = 1 if status == "Y" and self._is_mine(m) else 0
+        self.db.execute("UPDATE messages SET status=?, fwd=?, seen=MAX(seen, ?) WHERE id=?",
+                        (status, fwd, seen, msg_id))
+        self._changed()
+
+    def remove_many(self, ids: list[int]) -> None:
+        """//D of the delta sync: gone in the TinyBox, gone here."""
+        if ids:
+            self.db.executemany("DELETE FROM messages WHERE id=?", [(i,) for i in ids])
+            self.db.executemany("DELETE FROM todo WHERE id=?", [(i,) for i in ids])
+            self._changed()
 
     def _is_mine(self, h) -> bool:
         return h["type"] == "P" and base(h["to_call"]) == self.me
