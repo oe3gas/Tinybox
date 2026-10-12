@@ -29,14 +29,16 @@ from collections import deque
 from dataclasses import dataclass
 
 FIELDS_INT = ("state", "i_new", "i_retry", "bytes_new", "bytes_retry", "i_rx", "retry_rx",
-              "rej_rx", "rej_tx", "t1_exp", "rnr_rx", "rc", "unack")
+              "rej_rx", "rej_tx", "t1_exp", "rnr_rx", "rc", "unack",
+              "bytes_rx", "tx_busy_ms", "baud")      # v=2 (throughput, missing in v=1 = 0)
 FIELDS_FLOAT = ("srt", "t1v", "age")
+VERSIONS = ("1", "2")
 
 
 def parse(text: str) -> dict | None:
     """'v=1 ...' -> dict of numbers; None for 'v=1 none' or an unknown format."""
     parts = dict(p.split("=", 1) for p in text.split() if "=" in p)
-    if parts.get("v") != "1" or "i_new" not in parts:
+    if parts.get("v") not in VERSIONS or "i_new" not in parts:
         return None
     out: dict = {}
     try:
