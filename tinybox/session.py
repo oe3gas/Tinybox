@@ -39,6 +39,10 @@ class State(Enum):
     CLOSED = 4
     CHAT = 5
     COLLECT = 6     # client protocol: n raw lines for a callback (//SEND)
+    MORE = 7        # terminal: long output waits for Enter (continue) or A (abort), CR29
+
+
+PAGE_LINES = 10     # terminal output longer than this is shown page by page
 
 
 class Session:
@@ -70,6 +74,11 @@ class Session:
         self._collect_lines: list[str] = []
         self._collect_done = None
         self._collect_back = State.COMMAND
+        # terminal paging (CR29): lines of the running command, and what is left
+        self._page_collect = False
+        self._page_buf: list[str] = []
+        self._page_rest: list[str] = []
+        self._page_shown = 0
         # client protocol: raw bytes to collect (image upload, CR12 - see collect_raw())
         self.raw_need = 0
         self._raw_chunk = None
@@ -78,11 +87,59 @@ class Session:
     # --- output ---------------------------------------------------------
 
     def out(self, *lines: str) -> None:
+        if self._page_collect:                   # a terminal command: paged at its end
+            self._page_buf.extend(lines)
+            return
         text = "\r".join(lines) + "\r"
         if self.monitor:
             for line in lines:
                 log.info("%s > %s", self.call, line)
         self.transport.write(text)
+
+    # --- terminal paging (CR29) ------------------------------------------
+
+    def flush_output(self) -> None:
+        """Write what a command has produced so far, without paging (for a
+        command that then writes to the transport itself, e.g. DICT)."""
+        buf, self._page_buf = self._page_buf, []
+        self._page_collect = False
+        if buf:
+            self.out(*buf)
+
+    def _page_end(self) -> None:
+        """End of a terminal command: up to PAGE_LINES lines go out, the rest
+        waits for the user (state MORE). Not when the command changed the state
+        (chat, sending): then everything goes out at once."""
+        buf, self._page_buf = self._page_buf, []
+        self._page_collect = False
+        if len(buf) <= PAGE_LINES or self.state != State.COMMAND:
+            if buf:
+                self.out(*buf)
+            return
+        self._page_rest, self._page_shown = buf, 0
+        self._page_next()
+
+    def _page_next(self) -> None:
+        page, self._page_rest = self._page_rest[:PAGE_LINES], self._page_rest[PAGE_LINES:]
+        self._page_shown += len(page)
+        self.out(*page)
+        if self._page_rest:
+            self.state = State.MORE
+            more = texts.MORE_PROMPT.format(shown=self._page_shown,
+                                            total=self._page_shown + len(self._page_rest))
+            if self.monitor:
+                log.info("%s > %s", self.call, more.rstrip())
+            self.transport.write(more)
+        else:
+            self.state = State.COMMAND
+
+    def _on_more(self, line: str) -> None:
+        if line.strip().upper() in ("A", "Q", "/AB", "ABORT"):
+            self._page_rest = []
+            self.state = State.COMMAND
+            self.out(texts.MORE_ABORTED)
+            return
+        self._page_next()
 
     def prompt(self) -> None:
         if self.client is not None:     # a client program needs no prompt
@@ -151,6 +208,7 @@ class Session:
     def close(self) -> None:
         """Log off from the mailbox side (command B, timeout)."""
         if self.state != State.CLOSED:
+            self.flush_output()              # "73, bye" before the link goes down
             self.state = State.CLOSED
             self.transport.close()
 
@@ -176,7 +234,13 @@ class Session:
                 self._on_collect(line)
             elif self.state == State.COMMAND:
                 from . import commands  # local import avoids a cycle
-                commands.dispatch(self, line)
+                self._page_collect = self.client is None
+                try:
+                    commands.dispatch(self, line)
+                finally:
+                    self._page_end()
+            elif self.state == State.MORE:
+                self._on_more(line)
             elif self.state == State.SEND_SUBJECT:
                 self._on_subject(line)
             elif self.state == State.SEND_BODY:
@@ -191,6 +255,7 @@ class Session:
                 "%s: internal error handling %r (state %s)", self.call, line, self.state.name)
             if self.state != State.CLOSED:
                 self.service.chat.leave(self)
+                self._page_collect, self._page_buf, self._page_rest = False, [], []
                 self.state = State.COMMAND
                 self.out(texts.INTERNAL_ERROR)
         if self.state == State.COMMAND:

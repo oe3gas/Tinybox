@@ -198,6 +198,7 @@ def cmd_dict(s: Session, arg: str) -> None:
         return
     log.info("%s: DICT v%s (%s lines) sent", s.call, d.version, len(d.lines))
     s.out(texts.DICT_INTRO.format(version=d.version, lines=len(d.lines)))
+    s.flush_output()                  # the dictionary is machine-read: no paging (CR29)
     # write directly: 200+ lines would flood the monitor log otherwise
     s.transport.write("\r".join(d.framed()) + "\r")
     s.out(texts.DICT_DONE)

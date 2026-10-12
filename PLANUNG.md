@@ -134,6 +134,8 @@ Msg 13 saved.
 Fehlermeldungen: `Unknown command. Type H for help.` · `No such message.` · `Not allowed.`
 Alle Texte stehen zentral in `texts.py`.
 
+**Seitenweise Ausgabe (CR29, 12.10.2026):** Jede Antwort auf einen Terminal-Befehl, die länger als 10 Zeilen ist (`L`, `LB`, `H`, `J`, ein langer Text bei `R` …), kommt in Seiten zu 10 Zeilen: `--More (10/37)-- Enter = continue, A = abort: `. Enter (oder irgendetwas anderes) holt die nächste Seite, `A` (auch `Q`, `/AB`) verwirft den Rest (`*** rest skipped`). So gehen nie hunderte Titel ungefragt über Funk. Nicht betroffen: Clients (`//CLIENT`), der Chat, `DICT` (maschinell gelesen) und Befehle, die den Zustand wechseln (`S`, `C`). Technik: `Session.out()` sammelt während eines Befehls, `_page_end()` verteilt (Zustand `MORE`); `PAGE_LINES` in `session.py`.
+
 ---
 
 ## 4. Architektur

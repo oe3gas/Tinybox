@@ -1,0 +1,3 @@
+TinyBox am Terminal: lange Ausgaben (L, LB, H, lange Texte)
+kommen jetzt in Seiten zu 10 Zeilen. Enter = weiter,
+A = Rest ueberspringen. Clients und Chat sind nicht betroffen.

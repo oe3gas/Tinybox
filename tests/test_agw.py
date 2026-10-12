@@ -152,7 +152,9 @@ class AgwTests(unittest.TestCase):
             dw.data("OE5XYZ", "L\r")
             await asyncio.sleep(0.3)
             queued = len(adapter.conns["OE5XYZ"].queue)
-            dw.data("OE5XYZ", "A\r")
+            dw.data("OE5XYZ", "A\r")            # pager (CR29): rest skipped
+            await asyncio.sleep(0.1)
+            dw.data("OE5XYZ", "A\r")            # command A: queued output dropped
             await asyncio.sleep(0.1)
             dw.outstanding = 0
             dw.data("OE5XYZ", "B\r")
@@ -162,7 +164,7 @@ class AgwTests(unittest.TestCase):
 
         dw, queued = asyncio.run(scenario())
         out = dw.output_for("OE5XYZ")
-        self.assertGreater(queued, 5)
+        self.assertGreater(queued, 2)                   # one page (CR29) in several frames
         self.assertIn("Output aborted.", out)
         self.assertNotIn("Bulletin number 1\r", out)  # oldest row was never sent
         self.assertIn("73, bye", out)

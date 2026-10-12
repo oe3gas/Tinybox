@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.10.2026 (CR26, CR27, CR28 und CR12 umgesetzt)
+Stand: 12.10.2026 (CR26–CR29 und CR12 umgesetzt)
 
 ## Übersicht
 
@@ -35,6 +35,8 @@ Stand: 12.10.2026 (CR26, CR27, CR28 und CR12 umgesetzt)
 | 26 | Delta-Abgleich: Mail-/Bulletin-Sync mit minimaler Payload (ein Wechsel, nur Änderungen, kleine Texte gleich mit, Z für Köpfe) | ✅ siehe unten |
 | 27 | Persönliche Post an mehrere Empfänger (`OE3TEC,OE1ABC`): Text einmal über Funk, TinyBox legt je Empfänger eine eigene Nachricht an | ✅ siehe unten |
 | 28 | Emoticons ↔ Emojis: `;-)` beim Tippen sofort als Emoji, Terminal-Eingabe `;-)` im Client als Emoji, Emojis mit ASCII-Form gehen als `:-)` statt `~0B` über Funk | ✅ siehe unten |
+| 29 | Terminal: Ausgaben über 10 Zeilen seitenweise mit „continue/abort“ (`L` und jeder andere Befehl), damit nicht hunderte Titel über die Luft laufen | ✅ siehe unten |
+| 29 | Terminal: Ausgaben über 10 Zeilen seitenweise mit „continue/abort“ (`L` und jeder andere Befehl), damit nicht hunderte Titel über die Luft laufen | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -427,3 +429,9 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 4. **Terminal:** nichts zu tun – die TinyBox reicht Text durch; wer `;-)` tippt, erscheint im Client als 😉. Reaktionen (`~XY` als Reaktionscode) bleiben, wie sie sind.
 
 **Umgesetzt 12.10.2026 (nur Client):** `emoji.json` Version 3 – 16 Emoticons `{wire, aliases, emoji, also}`: `:-)` `;-)` `:-D` `:-(` `:'(` `:-P` `:-O` `:-/` `:-|` `:-*` `8-)` `>:-(` `xD` `<3` `:+1` `:-1`, jeweils mit nasenloser Form; 😊 😀 ☺️ gehen als `:-)`, 😃 😁 😆 als `:-D`, 😎 als `8-)`, 😢 als `:'(`, 😡 als `>:-(`, 😂 als `xD` (die alten Codes `~0A` `~0D` `~14` `~15` werden weiter verstanden). `app.js`: Live-Ersetzung beim Tippen (`liveEmoticon`, nach Leerzeichen oder Satzzeichen, Cursor bleibt), Erkennung auch nach Satzzeichen (`Hallo!:-)`), nicht im Wort (`QTH:Pinkafeld`, `http://`); Picker mit neuer erster Gruppe „Smileys (ASCII, cheapest)“, die anderen Gruppen ohne diese Doppelten. Client-Version 2026.10.12.4. Tests: `test_tbclient.py` (`EmoticonTests`, laufen mit node, sonst übersprungen).
+
+## CR29 – Terminal: lange Ausgaben seitenweise (✅ 12.10.2026)
+
+**Problem:** `L` listet alle Nachrichten; mit wachsender Box laufen irgendwann hunderte Titel ungefragt über Funk. Gleiches gilt für `LB`, `H`, `J` und lange Texte bei `R`.
+
+**Lösung (nur TinyBox, `session.py`):** Jede Antwort auf einen Terminal-Befehl, die länger als 10 Zeilen ist, kommt in Seiten zu 10 Zeilen mit der Zeile `--More (10/37)-- Enter = continue, A = abort: `. Enter (oder jede andere Eingabe) holt die nächste Seite, `A` / `Q` / `/AB` verwirft den Rest (`*** rest skipped`). Gilt für alle Terminal-Befehle; nicht für Clients, den Chat, `DICT` und Befehle, die in einen anderen Zustand wechseln (`S`, `C`). Nach `B` kommt das „73, bye“ noch vor dem Trennen. `PAGE_LINES = 10` in `session.py`, Texte in `texts.py`. Tests: `test_tinybox.py` (`PagingTests`), `test_agw.py` angepasst. Als TBNEWS-Feature in Client-News 2026.10.12.8 (nur Textänderung, der Client selbst ist unverändert).

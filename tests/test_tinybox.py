@@ -258,3 +258,54 @@ class TelnetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PagingTests(unittest.TestCase):
+    """CR29: terminal output longer than PAGE_LINES waits for the user."""
+
+    def setUp(self):
+        self.app = make_app()
+        for i in range(23):
+            self.app.service.create(from_call="OE3TEC", to_call="OE1ABC", type="P",
+                                    subject=f"Nr {i}", body="x", origin="telnet")
+
+    def test_list_in_pages(self):
+        s, t = login(self.app, "OE1ABC")
+        t.take()
+        type_lines(s, "L")
+        out = t.take()
+        self.assertEqual(out.count("\r"), 10)
+        self.assertTrue(out.endswith("--More (10/24)-- Enter = continue, A = abort: "))
+        self.assertIn("Nr 22", out)
+        self.assertNotIn("Nr 12", out)
+        type_lines(s, "")                                    # next page
+        out = t.take()
+        self.assertIn("Nr 12", out)
+        self.assertTrue(out.endswith("--More (20/24)-- Enter = continue, A = abort: "))
+        type_lines(s, "")                                    # last page, then the prompt
+        out = t.take()
+        self.assertIn("Nr 0", out)
+        self.assertTrue(out.endswith("> "))
+        self.assertNotIn("More", out)
+
+    def test_abort_and_short_output(self):
+        s, t = login(self.app, "OE1ABC")
+        t.take()
+        type_lines(s, "L", "A")
+        out = t.take()
+        self.assertIn("*** rest skipped", out)
+        self.assertTrue(out.endswith("> "))
+        self.assertNotIn("Nr 5", out)
+        type_lines(s, "J")                                   # short: no paging
+        self.assertNotIn("More", t.take())
+        type_lines(s, "B")                                   # bye still arrives
+        self.assertIn("73", t.take())
+
+    def test_not_for_clients(self):
+        s, t = login(self.app, "OE1ABC")
+        type_lines(s, "//CLIENT TB1 caps=CHAT")
+        t.take()
+        type_lines(s, "L")
+        out = t.take()
+        self.assertIn("Nr 0", out)
+        self.assertNotIn("More", out)
