@@ -429,13 +429,16 @@ function ago(sec) {
 }
 
 /* Link quality (PLANUNG.md 14.4): 5 bars, grey = no result yet. */
-const QTEXT = { 1: "poor link", 2: "weak link", 3: "fair link", 4: "good link", 5: "very good link" };
+const QTEXT = { 0: "bad link, more than half lost", 1: "poor link", 2: "weak link", 3: "fair link",
+                4: "good link", 5: "very good link" };
 function qualityBars(call) {
   if (!S.quality || !(call in S.quality)) return null;
-  const n = S.quality[call];
-  const box = el("span", "qbars" + (n ? ` q${n}` : " qnone"));
-  box.title = n ? `${QTEXT[n]} (${n}/5)` : "link quality: not enough data yet";
-  for (let i = 1; i <= 5; i++) box.append(el("i", n && i <= n ? "on" : ""));
+  const n = S.quality[call];                    // 0..5, null = not enough data yet
+  const known = n !== null && n !== undefined;
+  const box = el("span", "qbars" + (known ? ` q${n}` : " qnone"));
+  box.title = known ? `${QTEXT[n]} (${n}/5)` : "link quality: not enough data yet";
+  // 0 = a single red bar
+  for (let i = 1; i <= 5; i++) box.append(el("i", known && (i <= n || (n === 0 && i === 1)) ? "on" : ""));
   return box;
 }
 

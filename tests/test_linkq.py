@@ -58,13 +58,14 @@ class EvaluateTests(unittest.TestCase):
 
     def test_bars_follow_the_worse_direction(self):
         q = linkq.LinkQuality()
-        # out: 3 of 40 repeated = 7.5 % -> 3 bars; in: 1 of 40 = 2.5 % -> 4 bars
-        q.add(counters(i_new=37, i_retry=3, i_rx=40, rej_tx=1, age=60), now=1000)
+        # out: 6 of 40 repeated = 15 % -> 3 bars; in: 1 of 40 = 2.5 % -> 5 bars
+        q.add(counters(i_new=34, i_retry=6, i_rx=40, rej_tx=1, age=60), now=1000)
         r = q.evaluate(now=1000)
-        self.assertAlmostEqual(r.out.loss, 7.5)
+        self.assertAlmostEqual(r.out.loss, 15.0)
         self.assertAlmostEqual(r.inn.loss, 2.5)
         self.assertEqual(r.bars, 3)
         self.assertEqual(linkq.bar_text(3), "###..")
+        self.assertEqual(linkq.bar_text(0), "X....")
 
     def test_t1_costs_one_bar_each(self):
         q = linkq.LinkQuality()
@@ -72,10 +73,11 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(q.evaluate(now=1000).bars, 3)
         q2 = linkq.LinkQuality()
         q2.add(counters(i_new=30, t1_exp=9, age=60), now=1000)
-        self.assertEqual(q2.evaluate(now=1000).bars, 1)      # never below 1
+        self.assertEqual(q2.evaluate(now=1000).bars, 0)      # never below the red bar
 
     def test_thresholds(self):
-        for retry, bars in ((0, 5), (3, 4), (6, 3), (15, 2), (25, 1)):
+        # 12.10.2026: 5 bars up to 5 %, 4 up to 10, 3 up to 20, 2 up to 35, 1 up to 50, then red (0)
+        for retry, bars in ((0, 5), (5, 5), (6, 4), (10, 4), (15, 3), (20, 3), (30, 2), (40, 1), (51, 0)):
             q = linkq.LinkQuality()
             q.add(counters(i_new=100 - retry, i_retry=retry, age=60), now=1000)
             self.assertEqual(q.evaluate(now=1000).bars, bars, retry)
@@ -84,7 +86,7 @@ class EvaluateTests(unittest.TestCase):
         """Bad start, then 60 clean frames: the window (50) no longer sees the losses."""
         q = linkq.LinkQuality()
         q.add(counters(i_new=20, i_retry=10, age=60), now=1000)
-        self.assertEqual(q.evaluate(now=1000).bars, 1)
+        self.assertEqual(q.evaluate(now=1000).bars, 2)         # 33 % lost
         q.add(counters(i_new=80, i_retry=10, age=120), now=1060)
         r = q.evaluate(now=1060)
         self.assertEqual((r.out.frames, r.out.lost, r.bars), (60, 0, 5))
@@ -133,7 +135,7 @@ class StatCommandTests(unittest.TestCase):
         s.handle_line("STAT")
         out = t.take()
         self.assertIn("last 50 frames", out)
-        self.assertIn("OE1ABC     ###..", out)
+        self.assertIn("OE1ABC     ####.", out)          # 8 % -> 4 bars
         self.assertIn("8%", out)
         self.assertIn("2.1k/64", out)
         self.assertIn("1.4s", out)
@@ -283,7 +285,7 @@ class ChatQualityTests(unittest.TestCase):
         r = linkq.result_for(self.app.service, "OE3TEC", self.a)
         self.assertEqual((r.rx.frames, r.rx.lost), (len(seqs), 3))
         self.assertAlmostEqual(r.rx_quote, 100 - 300 / len(seqs))
-        self.assertEqual(r.bars, 3)                         # 3 of 31 = 9.7 % -> 3 bars
+        self.assertEqual(r.bars, 4)                         # 3 of 31 = 9.7 % -> 4 bars
 
     def test_quality_event_on_change_only(self):
         for i in range(25):

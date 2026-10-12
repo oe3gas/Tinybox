@@ -146,7 +146,7 @@ STAT_ROW = ("{call:<10} {bars:<5}  {out:>4}  {inn:>4}  {rxq:>4}  {retry:>5} {rej
 STAT_HEADER = STAT_ROW.format(call="Call", bars="Bars", out="Out", inn="In", rxq="RXq",
                               retry="Retry", rej_rx="REJrx", rej_tx="REJtx", t1="T1",
                               net="Net/Rep", srt="SRT")
-STAT_LEGEND = ["Bars ##### = best, ----- = not enough frames yet. Out = loss to the station,",
+STAT_LEGEND = ["Bars ##### = best, X.... = over half lost, ----- = not enough frames yet. Out = loss to the station,",
                "In = loss from the station, RXq = chat frames a TinyBox client received."]
 STAT_NONE = "No link quality data yet (radio connections and TinyBox clients only)."
 STAT_NOBODY = "No radio connections with link quality data."

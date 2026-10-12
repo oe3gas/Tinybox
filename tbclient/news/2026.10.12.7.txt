@@ -1,0 +1,2 @@
+- Verbindungsbalken: 5 bis 5% Verlust, 4 bis 10, 3 bis 20, 2 bis 35,
+  1 bis 50, darueber ein roter Balken.

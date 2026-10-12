@@ -12,8 +12,10 @@ with differences: per direction the last 50 frames, at most 30 minutes.
     in   (station -> TinyBox):  (rej_tx + retry_rx) / i_rx
 
 A direction counts only with at least 20 frames in its window. The worse
-direction gives the bars (5 = best), each T1 timeout in the window costs one
-more bar. No direction with enough frames -> no result yet (grey bars).
+direction gives the bars: 5 up to 5 % loss, 4 up to 10 %, 3 up to 20 %, 2 up
+to 35 %, 1 up to 50 %, and 0 = one red bar above that (12.10.2026). Each T1
+timeout in the window costs one more bar. No direction with enough frames ->
+no result yet (grey bars).
 
 TinyBox clients in UI mode get the chat as UI frames, which nobody acks. For
 them RxWindow counts the UI events sent and the ones the client asked for again
@@ -52,7 +54,7 @@ class QualityCfg:
     window_frames: int = 50
     window_sec: float = 30 * 60
     min_frames: int = 20
-    steps: tuple[float, ...] = (2.0, 5.0, 10.0, 20.0)   # loss % for 5 / 4 / 3 / 2 bars
+    steps: tuple[float, ...] = (5.0, 10.0, 20.0, 35.0, 50.0)   # loss % up to which 5..1 bars
 
 
 @dataclass
@@ -71,7 +73,7 @@ class Direction:
 
 @dataclass
 class Result:
-    bars: int | None         # 1..5, None = no result yet (grey)
+    bars: int | None         # 0..5 (0 = one red bar), None = no result yet (grey)
     out: Direction
     inn: Direction
     t1: int                  # T1 timeouts in the window
@@ -162,12 +164,12 @@ class LinkQuality:
         bars = None
         if losses:
             worst = max(losses)
-            bars = 1
-            for n, limit in zip((5, 4, 3, 2), self.cfg.steps):
-                if worst < limit:
+            bars = 0                                   # above the last step: one red bar
+            for n, limit in zip((5, 4, 3, 2, 1), self.cfg.steps):
+                if worst <= limit:
                     bars = n
                     break
-            bars = max(1, bars - t1)
+            bars = max(0, bars - t1)
         return Result(bars=bars, out=out, inn=inn, t1=t1,
                       rej_rx=d("rej_rx", bo), rej_tx=d("rej_tx", bi), retry_rx=d("retry_rx", bi),
                       i_retry=d("i_retry", bo), bytes_new=d("bytes_new", bo),
@@ -227,14 +229,17 @@ def result_for(service, call: str, session=None, now: float | None = None) -> Re
 
 
 def bar_code(r: Result | None) -> str:
-    """For the chat event %: '1'..'5', '?' = no result yet."""
+    """For the chat event %: '0'..'5' (0 = one red bar), '?' = no result yet."""
     return "?" if r is None or r.bars is None else str(r.bars)
 
 
 def bar_text(bars: int | None) -> str:
-    """Text form for terminals: '#####' best, '#....' worst, '-----' no result yet."""
+    """Text form for terminals: '#####' best, '#....' poor, 'X....' the red bar
+    (more than half lost), '-----' no result yet."""
     if bars is None:
         return "-----"
+    if bars == 0:
+        return "X...."
     return "#" * bars + "." * (5 - bars)
 
 

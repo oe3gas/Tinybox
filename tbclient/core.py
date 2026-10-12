@@ -46,7 +46,7 @@ class ClientCore:
         self._boards_tmp: list[dict] | None = None
         self.board: dict | None = None
         self.members: dict[str, str] = {}         # call -> symbol sent with the join
-        self.quality: dict[str, int | None] = {}  # call -> bars 1..5 (None = no result yet)
+        self.quality: dict[str, int | None] = {}  # call -> bars 0..5 (None = no result yet)
         self.messages: list[dict] = []
         self.pending: list[dict] = []
         self.pending_reacts: dict[tuple[int, str], float] = {}   # own reactions not echoed yet

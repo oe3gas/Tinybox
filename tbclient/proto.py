@@ -6,7 +6,7 @@ Chat event:  #<seq> <call>: <text>      line
              #<seq> =<call> [<sym>]     new APRS symbol
              #<seq> <call> *<ref> <e>   reaction to event <ref>
              #<seq> !<text>             system text
-             #<seq> %<call> <b> ...     link quality, b = 1..5 bars or ? (PLANUNG.md 14.4)
+             #<seq> %<call> <b> ...     link quality, b = 0..5 bars (0 = one red bar) or ?
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ JOIN_RE = re.compile(rf"^\+({CALL})(?: (\S{{2}}))?$")
 LEAVE_RE = re.compile(rf"^-({CALL})$")
 SYM_RE = re.compile(rf"^=({CALL})(?: (\S{{2}}))?$")
 REACT_RE = re.compile(rf"^({CALL}) \*([0-9A-F]{{1,2}}) (\S{{1,8}})$")
-QUALITY_ITEM_RE = re.compile(rf"^({CALL}) ([1-5?])$")
+QUALITY_ITEM_RE = re.compile(rf"^({CALL}) ([0-5?])$")
 
 
 @dataclass
@@ -32,7 +32,7 @@ class Event:
     text: str = ""
     symbol: str = ""
     ref: int = -1
-    bars: dict | None = None   # quality: call -> 1..5, None = no result yet
+    bars: dict | None = None   # quality: call -> 0..5, None = no result yet
 
 
 def parse_event(line: str) -> Event | None:

@@ -27,7 +27,9 @@ Zuletzt dazugekommen
   Rubriken zum Abonnieren zeigt die Beschreibungen. Die Liste kommt mit
   dem naechsten Bulletin-Abgleich.
 - Verbindungsqualitaet: neben jeder Station im Board zeigen 1 bis 5 Balken,
-  wie gut ihre Funkverbindung zur TinyBox ist (grau = noch zu wenig Daten).
+  wie gut ihre Funkverbindung zur TinyBox ist (5 bis 5 % Verlust, 4 bis 10,
+  3 bis 20, 2 bis 35, 1 bis 50, darueber ein roter Balken; grau = noch zu
+  wenig Daten).
   Bricht eine Verbindung ab, steht im Chat "Connection to ... lost".
   Mit dem Befehl STAT (STAT ALL) gibt es die Zahlen auch als Text.
 - Versionskontrolle: der Client meldet, wenn es eine neuere Version gibt,

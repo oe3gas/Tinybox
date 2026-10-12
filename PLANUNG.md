@@ -805,18 +805,19 @@ Pro Richtung eine Verlustquote:
 - **Fenster:** die letzten **50 Frames pro Richtung, höchstens aber die letzten 30 Minuten** – was zuerst greift (TinyBox bildet Differenzen zwischen den Abfragen). Zeigt den aktuellen Zustand, nicht den Durchschnitt seit Verbindungsaufbau. Die Zeitgrenze kam nach dem ersten Funktest dazu: in 40 Minuten BBS-/Chat-Betrieb fielen nur 21 bzw. 13 Frames an, 50 Frames hätten also weit über eine Stunde zurückgereicht.
 - **Mindestmenge:** eine Richtung zählt erst ab **20 Frames**. Hat keine Richtung 20 Frames → noch kein Ergebnis.
 - **Die schlechtere Richtung bestimmt die Balken.**
-- **Schwellen** (Startwerte, in `tinybox.conf` einstellbar):
+- **Schwellen** (geändert 12.10.2026, in `tinybox.conf` einstellbar):
 
 | Verlust | Balken |
 |---|---|
-| < 2 % | 5 |
-| < 5 % | 4 |
-| < 10 % | 3 |
-| < 20 % | 2 |
-| darüber | 1 |
+| ≤ 5 % | 5 |
+| ≤ 10 % | 4 |
+| ≤ 20 % | 3 |
+| ≤ 35 % | 2 |
+| ≤ 50 % | 1 |
+| darüber | 1 roter Balken (Code `0`, Terminal `X....`) |
 | zu wenig Daten | 5 ausgegraute Balken |
 
-- Jeder T1-Ablauf im Fenster kostet zusätzlich einen Balken (minimal 1).
+- Jeder T1-Ablauf im Fenster kostet zusätzlich einen Balken (minimal der rote Balken).
 - `bytes_new`/`bytes_retry` fließen nicht in die Balken ein, nur in `stat`.
 
 ### 14.3 Empfangsquote der Clients (ohne zusätzliche Frames)
@@ -861,7 +862,7 @@ OE1ABC   2    14%   4%    -      -     2     1   -           86%
 | 5 | Chat-Ereignis „Verbindung verloren“ aus `RETRYOUT` | ✅ |
 
 - TinyBox fragt alle `quality_poll_sec` Sekunden (Standard 30) alle Funkverbindungen ab. Antwortet Direwolf nicht (normaler Direwolf ohne Erweiterung), fragt TinyBox bis zum nächsten AGW-Connect nicht mehr und schreibt das einmal ins Log.
-- Einstellungen in `[direwolf]`: `quality_poll_sec`, `quality_window_frames` (50), `quality_window_min` (30), `quality_min_frames` (20), `quality_steps` (2, 5, 10, 20).
+- Einstellungen in `[direwolf]`: `quality_poll_sec`, `quality_window_frames` (50), `quality_window_min` (30), `quality_min_frames` (20), `quality_steps` (5, 10, 20, 35, 50).
 - `STAT` nutzt den letzten Messwert (höchstens `quality_poll_sec` alt). Ausgabe englisch wie die übrige Bedienung; Balken als Text: `#####` = bestens, `#....` = schlecht, `-----` = noch kein Ergebnis.
 - Getestet: Unit-Tests (`tests/test_linkq.py`) und Ende-zu-Ende mit zwei Direwolf-Instanzen (Fork) über Audio-Schleife: TinyBox findet die Erweiterung, `STAT` zeigt die Werte der laufenden Verbindung.
 - **Empfangsquote (2):** TinyBox merkt sich pro UI-Client im Board die per UI gesendeten Ereignisse (`linkq.RxWindow`, gleiches Fenster 50/30 min) und markiert die per `//RESEND a-b` nachgeforderten. Neu `//LOST a-b`: der Client meldet Lücken über 32, ohne Nachsenden. Die Quote zählt als Richtung „Out“ (die schlechtere von I-Frames und UI), in `STAT` als Spalte `RXq`. Auch ohne Fork-Direwolf gibt es so Balken für UI-Clients.

@@ -125,7 +125,7 @@ class DirewolfCfg:
     quality_window_frames: int = 50
     quality_window_min: int = 30
     quality_min_frames: int = 20
-    quality_steps: tuple[float, ...] = (2.0, 5.0, 10.0, 20.0)
+    quality_steps: tuple[float, ...] = (5.0, 10.0, 20.0, 35.0, 50.0)
 
 
 @dataclass
@@ -340,13 +340,14 @@ def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
 
 
 def _steps(value: str) -> tuple[float, ...]:
-    """quality_steps: four rising loss limits in % for 5 / 4 / 3 / 2 bars."""
+    """quality_steps: five rising loss limits in % up to which 5 / 4 / 3 / 2 / 1
+    bars are shown; above the last one a single red bar."""
     try:
         steps = tuple(float(x) for x in value.replace(";", ",").split(","))
     except ValueError:
         steps = ()
-    if len(steps) != 4 or list(steps) != sorted(steps) or steps[0] <= 0:
-        raise ConfigError("[direwolf] quality_steps: four rising numbers, e.g. 2, 5, 10, 20")
+    if len(steps) != 5 or list(steps) != sorted(steps) or steps[0] <= 0:
+        raise ConfigError("[direwolf] quality_steps: five rising numbers, e.g. 5, 10, 20, 35, 50")
     return steps
 
 
@@ -428,7 +429,7 @@ def load(path: str | Path) -> Config:
         quality_window_frames=_get(cp, "direwolf", "quality_window_frames", 50, int),
         quality_window_min=_get(cp, "direwolf", "quality_window_min", 30, int),
         quality_min_frames=_get(cp, "direwolf", "quality_min_frames", 20, int),
-        quality_steps=_steps(_get(cp, "direwolf", "quality_steps", "2, 5, 10, 20")),
+        quality_steps=_steps(_get(cp, "direwolf", "quality_steps", "5, 10, 20, 35, 50")),
     )
     _check_port("direwolf", "agw_port", direwolf.agw_port)
     _check_range("direwolf", "paclen", direwolf.paclen, 32, 256)

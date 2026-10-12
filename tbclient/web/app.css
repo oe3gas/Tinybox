@@ -2,7 +2,7 @@
 :root {
   --bg: #eef1f4; --surface: #ffffff; --text: #1b1f24; --muted: #66707a; --line: #d9dee3;
   --top: #1d2b3a; --top-text: #ffffff; --own: #d6ecff; --own-text: #0b3a63;
-  --accent: #1f6fd1; --ok: #2e9b4f; --warn: #d08a12; --bad: #c43c3c;
+  --accent: #1f6fd1; --ok: #2e9b4f; --warn: #d08a12; --poor: #e06a1a; --bad: #c43c3c;
   --sys: #7b8590; --mention: #fff3c4; --mention-line: #e8b84a;
 }
 @media (prefers-color-scheme: dark) {
@@ -62,7 +62,8 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .qbars i:nth-child(5) { height: 14px; }
 .qbars.q5 i.on, .qbars.q4 i.on { background: var(--ok); }
 .qbars.q3 i.on { background: var(--warn); }
-.qbars.q2 i.on, .qbars.q1 i.on { background: var(--bad); }
+.qbars.q2 i.on, .qbars.q1 i.on { background: var(--poor); }
+.qbars.q0 i.on { background: var(--bad); }
 .people-head { display: flex; justify-content: space-between; align-items: center; }
 .people-head .nav-h { margin-top: 4px; }
 .pad { padding: 0 6px; }
