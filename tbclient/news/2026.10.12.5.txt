@@ -1,0 +1,1 @@
+- Post an mehrere Empfaenger: jede Kopie beginnt mit "To: CALL, CALL"

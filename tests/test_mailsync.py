@@ -575,7 +575,7 @@ class MultiRecipientTests(unittest.TestCase):
         self.assertIn("Msg 1, 2 saved.", out)                       # duplicate folded
         msgs = self.app.service.store.list_messages()
         self.assertEqual(sorted((m.to_call, m.body) for m in msgs),
-                         [("OE1ABC", "Text"), ("OE3TEC", "Text")])
+                         [("OE1ABC", "To: OE3TEC, OE1ABC\nText"), ("OE3TEC", "To: OE3TEC, OE1ABC\nText")])
         self.assertNotEqual(msgs[0].bid, msgs[1].bid)                # own MID each
         type_lines(s, "S OE3TEC,XX")
         self.assertIn("invalid", t.take().lower())                   # nothing stored
@@ -591,12 +591,14 @@ class MultiRecipientTests(unittest.TestCase):
         self.assertEqual(t.take(), "//SENT 1 2\r")
         type_lines(s, "//SEND P OE3TEC,OE1ABC 1 mid=abcdefgh12", "Betreff", "Zeile")
         self.assertEqual(t.take(), "//SENT 1 2\r")                   # same mid: not twice
+        self.assertEqual(self.app.service.store.get(2).body, "To: OE3TEC, OE1ABC\nZeile")
         type_lines(s, "//SEND P OE3TEC,XX 0 mid=abcdefgh13", "Betreff")
         self.assertTrue(t.take().startswith("//ERR send invalid_call"))
         self.assertEqual(len(self.app.service.store.list_messages()), 2)
         type_lines(s, "//SEND P OE3TEC 0 mid=abcdefgh14", "Einzeln")
         self.assertEqual(t.take(), "//SENT 3\r")
         self.assertEqual(self.app.service.store.get(3).msgid, "tbc-abcdefgh14")   # as before
+        self.assertEqual(self.app.service.store.get(3).body, "")                  # no To: line
 
     def test_client_store(self):
         with tempfile.TemporaryDirectory() as tmp:

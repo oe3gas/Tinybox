@@ -288,13 +288,14 @@ def _send(s: Session, parts: list[str]) -> None:
         ids = []
         try:
             tos = s.service.check_send_list(s.call, m.group("to"), kind, False, m.group("bid"))
+            body = s.service.multi_to_line(tos) + "\n".join(lines[1:])
             for to in tos:
                 # the same mid sent again answers with the old numbers (see above);
                 # a single recipient keeps the old msgid form
                 msgid = (f"tbc-{mid}" if len(tos) == 1 else f"tbc-{mid}-{to}") if mid else None
                 ids.append(s.service.create(
                     from_call=s.call, to_call=to, type=kind, subject=lines[0],
-                    body="\n".join(lines[1:]), origin=s.origin, at_addr=m.group("at") or "",
+                    body=body, origin=s.origin, at_addr=m.group("at") or "",
                     bid=m.group("bid"), msgid=msgid))
         except ServiceError as exc:
             if not ids:

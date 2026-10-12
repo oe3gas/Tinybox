@@ -400,7 +400,7 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Client: im Ordner „Sent" erscheint je Empfänger ein Eintrag (jede Kopie hat ihre Nummer, kann einzeln gelöscht werden); der Ausgang zeigt die Sendung bis zum `//SENT` als einen Eintrag. Der Delta-Abgleich braucht nichts Neues.
 - Alte Clients: schicken nie ein Komma, nichts ändert sich.
 
-**Umgesetzt 12.10.2026:** `MessageService.check_send_list()` (Liste prüfen, Doppelte falten, max. 10; Bulletins und `$BID` nur ein Ziel), Terminal `S OE3TEC,OE1ABC` → `Msg 12, 13 saved.`, `//SEND` → `//SENT 12 13` (msgid `tbc-<mid>-<Call>`, ein Empfänger wie bisher `tbc-<mid>`), Client legt je Nummer einen „Sent"-Eintrag an, Composer nimmt `OE3ABC,OE3XYZ[@…]`. Client-Version 2026.10.12.4. Tests: `test_mailsync.py` (`MultiRecipientTests`).
+**Umgesetzt 12.10.2026:** `MessageService.check_send_list()` (Liste prüfen, Doppelte falten, max. 10; Bulletins und `$BID` nur ein Ziel), Terminal `S OE3TEC,OE1ABC` → `Msg 12, 13 saved.`, `//SEND` → `//SENT 12 13` (msgid `tbc-<mid>-<Call>`, ein Empfänger wie bisher `tbc-<mid>`), Client legt je Nummer einen „Sent"-Eintrag an, Composer nimmt `OE3ABC,OE3XYZ[@…]`. Jede Kopie beginnt mit der Zeile `To: OE3TEC, OE1ABC`, damit jeder Leser sieht, wer sie noch bekommen hat (Ergänzung 12.10.2026 abends; auch im Sent-Ordner des Clients). Client-Version 2026.10.12.4, To-Zeile 2026.10.12.5. Tests: `test_mailsync.py` (`MultiRecipientTests`).
 
 ## CR28 – Emoticons und Emojis in beide Richtungen (✅ 12.10.2026)
 

@@ -628,7 +628,11 @@ class Syncer:
             if line.startswith("//SENT "):
                 ids = [int(x) for x in line.split()[1:] if x.isdigit()]
                 calls, _, at = to.partition("@")
-                # CR27: one number per recipient, in the order sent
+                # CR27: one number per recipient, in the order sent; the TinyBox
+                # puts "To: A, B" on top of every copy, so does the Sent folder
+                if len(ids) > 1:
+                    item = dict(item, body=f"To: {calls.upper().replace(',', ', ')}\n"
+                                           + item["body"])
                 for msg_id, call in zip(ids, calls.split(",")):
                     self.store.add_sent(msg_id, item, self.core.cfg.mycall, call.upper(),
                                         at.upper())

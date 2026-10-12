@@ -258,11 +258,12 @@ class Session:
         if finished:
             self.state = State.COMMAND
             ids = []
+            body = self.service.multi_to_line(self._to) + "\n".join(self._body)
             try:
                 for to in self._to:
                     ids.append(self.service.create(
                         from_call=self.call, to_call=to, type=self._type,
-                        subject=self._subject, body="\n".join(self._body),
+                        subject=self._subject, body=body,
                         origin=self.origin, sysop=self.sysop,
                         at_addr=self._at, bid=self._bid,
                     ))

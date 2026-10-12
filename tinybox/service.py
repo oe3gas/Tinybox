@@ -193,6 +193,12 @@ class MessageService:
                 out.append(call)
         return out
 
+    @staticmethod
+    def multi_to_line(to_calls: list[str]) -> str:
+        """CR27: with several recipients every copy starts with 'To: A, B' so each
+        reader sees who else got it ('' for a single recipient)."""
+        return f"To: {', '.join(to_calls)}\n" if len(to_calls) > 1 else ""
+
     def check_address(self, type: str, at_addr: str, bid: str | None = None,
                       origin: str = "telnet") -> tuple[str, str | None]:
         """Normalize the @ address and an optional BID given by the user.
