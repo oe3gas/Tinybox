@@ -626,9 +626,12 @@ class Syncer:
                 continue
             line = entry[1]
             if line.startswith("//SENT "):
-                msg_id = int(line.split()[1])
-                call, _, at = to.partition("@")
-                self.store.add_sent(msg_id, item, self.core.cfg.mycall, call.upper(), at.upper())
+                ids = [int(x) for x in line.split()[1:] if x.isdigit()]
+                calls, _, at = to.partition("@")
+                # CR27: one number per recipient, in the order sent
+                for msg_id, call in zip(ids, calls.split(",")):
+                    self.store.add_sent(msg_id, item, self.core.cfg.mycall, call.upper(),
+                                        at.upper())
                 return
             if line.startswith("//ERR"):
                 self.store.out_error(item["oid"], line[2:].replace("ERR send ", ""))

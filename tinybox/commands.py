@@ -160,13 +160,14 @@ def _send(s: Session, arg: str, type: str) -> None:
         s.out(texts.USAGE_S)
         return
     try:
-        to_call = s.service.check_send(s.call, m.group("to"), type, s.sysop)
+        to_calls = s.service.check_send_list(s.call, m.group("to"), type, s.sysop,
+                                             m.group("bid"))
         at_addr, bid = s.service.check_address(type, m.group("at") or "", m.group("bid"),
                                                s.origin)
     except ServiceError as exc:
         s.error(exc)
         return
-    s.begin_send(to_call, type, at_addr, bid)
+    s.begin_send(to_calls, type, at_addr, bid)
 
 
 def cmd_send(s: Session, arg: str) -> None:

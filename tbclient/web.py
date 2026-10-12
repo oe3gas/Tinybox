@@ -66,7 +66,8 @@ HEADERS = {
 }
 REASONS = {200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found",
            405: "Method Not Allowed", 413: "Payload Too Large", 415: "Unsupported Media Type"}
-CALL_AT_RE = re.compile(r"^[A-Z0-9]{1,6}(-\d{1,2})?(@[A-Z0-9#.-]{1,40})?$")
+CALL_AT_RE = re.compile(r"^[A-Z0-9]{1,6}(-\d{1,2})?(,[A-Z0-9]{1,6}(-\d{1,2})?){0,9}"
+                        r"(@[A-Z0-9#.-]{1,40})?$")      # CR27: up to 10 recipients
 RUBRIC_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 MAX_BODY = 131072        # a message for the outbox can be long
 POLL_SEC = 25

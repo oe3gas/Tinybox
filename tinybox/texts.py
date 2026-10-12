@@ -70,7 +70,7 @@ BAD_RUBRIC = "Rubric {rubric} is not open for bulletins here. Rubrics: {rubrics}
 
 USAGE_R = "Usage: R n"
 USAGE_K = "Usage: K n"
-USAGE_S = "Usage: S call [@ mailbox] [$BID]  or  SB topic [@ area] [$BID]"
+USAGE_S = "Usage: S call[,call...] [@ mailbox] [$BID]  or  SB topic [@ area] [$BID]"
 USAGE_E = "Usage: E n field value  (field = TO, FROM, TYPE, STATUS, SUBJ, AT)"
 
 NO_MESSAGES = "No messages."

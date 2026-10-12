@@ -24,9 +24,12 @@ only the message texts may come compressed (cap Z, radio only).
         -> //P <id> <Z|T> <offset> <total> <n> + n bytes     (or //NOMSG <id>)
            Z = piece of the LZHUF data, T = piece of the UTF-8 text. The client
            asks piece by piece with pauses, so a long text never blocks the channel.
-    //SEND <P|B> <to>[@<at>] <n> [mid=<id>] [bid=<bid>]
+    //SEND <P|B> <to>[,<to>...][@<at>] <n> [mid=<id>] [bid=<bid>]
         + subject line + n text lines (sent without waiting)
-        -> //SENT <id>  or  //ERR send <reason>
+        -> //SENT <id> [<id> ...]  or  //ERR send <reason>
+        CR27: several recipients = one message each (same text, own number and
+        MID); the text goes over the air once. Nothing is stored if one of the
+        recipients is invalid.
     //KILL <id> ...             delete own mail  -> //K <id> ok|<reason> ... //KEND
     //READ <id> ...             read in the client -> status Y   -> //REND
 
@@ -282,15 +285,22 @@ def _send(s: Session, parts: list[str]) -> None:
         if m is None or (mid and not MID_RE.match(mid)):
             s.out("//ERR send invalid_value")
             return
+        ids = []
         try:
-            msg_id = s.service.create(
-                from_call=s.call, to_call=m.group("to"), type=kind, subject=lines[0],
-                body="\n".join(lines[1:]), origin=s.origin, at_addr=m.group("at") or "",
-                bid=m.group("bid"), msgid=f"tbc-{mid}" if mid else None)
+            tos = s.service.check_send_list(s.call, m.group("to"), kind, False, m.group("bid"))
+            for to in tos:
+                # the same mid sent again answers with the old numbers (see above);
+                # a single recipient keeps the old msgid form
+                msgid = (f"tbc-{mid}" if len(tos) == 1 else f"tbc-{mid}-{to}") if mid else None
+                ids.append(s.service.create(
+                    from_call=s.call, to_call=to, type=kind, subject=lines[0],
+                    body="\n".join(lines[1:]), origin=s.origin, at_addr=m.group("at") or "",
+                    bid=m.group("bid"), msgid=msgid))
         except ServiceError as exc:
-            s.out(f"//ERR send {exc.code} {exc}".rstrip())
-            return
-        s.out(f"//SENT {msg_id}")
+            if not ids:
+                s.out(f"//ERR send {exc.code} {exc}".rstrip())
+                return
+        s.out("//SENT " + " ".join(map(str, ids)))
 
     s.collect(n + 1, done)
 

@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.10.2026 (CR26 umgesetzt, CR27 und CR28 erfasst)
+Stand: 12.10.2026 (CR26, CR27 und CR28 umgesetzt)
 
 ## Übersicht
 
@@ -33,8 +33,8 @@ Stand: 12.10.2026 (CR26 umgesetzt, CR27 und CR28 erfasst)
 | 24 | BUG – Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte | ✅ siehe unten |
 | 25 | Board antippen: Button einfärben, bis man im Board angekommen ist | ✅ siehe unten |
 | 26 | Delta-Abgleich: Mail-/Bulletin-Sync mit minimaler Payload (ein Wechsel, nur Änderungen, kleine Texte gleich mit, Z für Köpfe) | ✅ siehe unten |
-| 27 | Persönliche Post an mehrere Empfänger (`OE3TEC,OE1ABC`): Text einmal über Funk, TinyBox legt je Empfänger eine eigene Nachricht an | entschieden 12.10.2026, noch nicht umgesetzt – siehe unten |
-| 28 | Emoticons ↔ Emojis: `;-)` beim Tippen sofort als Emoji, Terminal-Eingabe `;-)` im Client als Emoji, Emojis mit ASCII-Form gehen als `:-)` statt `~0B` über Funk | erfasst 12.10.2026, noch nicht umgesetzt – siehe unten |
+| 27 | Persönliche Post an mehrere Empfänger (`OE3TEC,OE1ABC`): Text einmal über Funk, TinyBox legt je Empfänger eine eigene Nachricht an | ✅ siehe unten |
+| 28 | Emoticons ↔ Emojis: `;-)` beim Tippen sofort als Emoji, Terminal-Eingabe `;-)` im Client als Emoji, Emojis mit ASCII-Form gehen als `:-)` statt `~0B` über Funk | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -388,7 +388,7 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - **Ergebnis:** „nichts Neues“ = 1 Wechsel, ~45 Byte statt ~2,7 kB; 1 neue Mail = 1 Wechsel statt 4.
 - Client-Version 2026.10.12.3. Tests: `tests/test_mailsync.py` (`DeltaSyncTests`).
 
-## CR27 – Persönliche Post an mehrere Empfänger (entschieden 12.10.2026, noch nicht umgesetzt)
+## CR27 – Persönliche Post an mehrere Empfänger (✅ 12.10.2026)
 
 **Entscheidung:** nur Variante „mehrere Rufzeichen in einer Mail". Eine Verteilerliste (eine Nachricht, viele Leser, Lesestatus je Leser) gibt es nicht – dafür sind die Rubriken da (Bulletins).
 
@@ -400,9 +400,9 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Client: im Ordner „Sent" erscheint je Empfänger ein Eintrag (jede Kopie hat ihre Nummer, kann einzeln gelöscht werden); der Ausgang zeigt die Sendung bis zum `//SENT` als einen Eintrag. Der Delta-Abgleich braucht nichts Neues.
 - Alte Clients: schicken nie ein Komma, nichts ändert sich.
 
-**Aufwand:** klein – `SEND_RE`/`check_send` für die Liste, Schleife um `service.create` in `commands.py` und `clientsync._send`, `//SENT` mit mehreren Nummern im Client (`add_sent` je Nummer), Composer-Hinweis „mehrere durch Komma". Tests in `test_mailsync.py` und `test_tinybox.py`.
+**Umgesetzt 12.10.2026:** `MessageService.check_send_list()` (Liste prüfen, Doppelte falten, max. 10; Bulletins und `$BID` nur ein Ziel), Terminal `S OE3TEC,OE1ABC` → `Msg 12, 13 saved.`, `//SEND` → `//SENT 12 13` (msgid `tbc-<mid>-<Call>`, ein Empfänger wie bisher `tbc-<mid>`), Client legt je Nummer einen „Sent"-Eintrag an, Composer nimmt `OE3ABC,OE3XYZ[@…]`. Client-Version 2026.10.12.4. Tests: `test_mailsync.py` (`MultiRecipientTests`).
 
-## CR28 – Emoticons und Emojis in beide Richtungen (erfasst 12.10.2026, noch nicht umgesetzt)
+## CR28 – Emoticons und Emojis in beide Richtungen (✅ 12.10.2026)
 
 **Beobachtet (Funktest 12.10.2026):** Vom Terminal kam `das funktioniert ;-)` – der Client zeigte `;-)` als Text, weil nur die nasenlosen Formen (`;)`) bekannt sind. Vom Client ging `sehr nett!~0B` – 🙂 aus dem Picker hat keine Emoticon-Form, also der Code; dazu klebte er am `!`. Am Terminal liest sich das als `~0B`.
 
@@ -414,4 +414,4 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 3. **Anzeige im Client:** Emoticons aus jeder Quelle (Terminal, alter Client, History `//H`) werden zum **kanonischen Emoji** der Tabelle (`:-)` und `:)` → 🙂; `:-D` → 😄 …), auch direkt nach Satzzeichen (`Hallo!:-)`), nicht aber mitten im Wort (`QTH:Pinkafeld`, `http://`).
 4. **Terminal:** nichts zu tun – die TinyBox reicht Text durch; wer `;-)` tippt, erscheint im Client als 😉. Reaktionen (`~XY` als Reaktionscode) bleiben, wie sie sind.
 
-**Umsetzung:** nur Client. `emoji.json`: `emoticons` wird zu Einträgen `{wire: ":-)", aliases: [":)", ...], emoji: "🙂", also: ["😊", "😀"]}` (Version 3; alte Einträge bleiben gültig). `app.js`: `wireToText`/`textToWire` auf die neue Tabelle, Live-Ersetzung im Eingabefeld (`#input`) bei Leerzeichen/Satzzeichen/Enter mit Erhalt der Cursorposition, Picker zeigt die Emoticon-Emojis in einer Gruppe „ASCII“ (gehen am günstigsten über Funk). Tests in `test_tbclient.py` (Konvertierung beider Richtungen, Wortgrenzen). Client-Version + News.
+**Umgesetzt 12.10.2026 (nur Client):** `emoji.json` Version 3 – 16 Emoticons `{wire, aliases, emoji, also}`: `:-)` `;-)` `:-D` `:-(` `:'(` `:-P` `:-O` `:-/` `:-|` `:-*` `8-)` `>:-(` `xD` `<3` `:+1` `:-1`, jeweils mit nasenloser Form; 😊 😀 ☺️ gehen als `:-)`, 😃 😁 😆 als `:-D`, 😎 als `8-)`, 😢 als `:'(`, 😡 als `>:-(`, 😂 als `xD` (die alten Codes `~0A` `~0D` `~14` `~15` werden weiter verstanden). `app.js`: Live-Ersetzung beim Tippen (`liveEmoticon`, nach Leerzeichen oder Satzzeichen, Cursor bleibt), Erkennung auch nach Satzzeichen (`Hallo!:-)`), nicht im Wort (`QTH:Pinkafeld`, `http://`); Picker mit neuer erster Gruppe „Smileys (ASCII, cheapest)“, die anderen Gruppen ohne diese Doppelten. Client-Version 2026.10.12.4. Tests: `test_tbclient.py` (`EmoticonTests`, laufen mit node, sonst übersprungen).

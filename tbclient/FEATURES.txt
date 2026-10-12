@@ -27,6 +27,9 @@ Zuletzt dazugekommen
   Knall-Symbol neben den Emojis).
 - Neue Emojis: Kotzen, Haufen, Fragezeichen, Rufzeichen, acht Pfeile.
   Die Emoji-Auswahl ist nach Gruppen sortiert.
+- Emoticons: ;-) oder :-D werden beim Tippen sofort zum Emoji, auch
+  wenn sie vom Terminal kommen. Emojis mit ASCII-Form gehen als :-)
+  ueber Funk, damit Terminal-User sie lesen koennen.
 - Ein neu gewaehltes APRS-Symbol sehen die anderen im Board sofort
   (vorher erst nach dem naechsten Betreten).
 - History nur auf Wunsch: beim Betreten eines Boards kommen nur die
@@ -56,6 +59,8 @@ Mailbox
   in einem Wechsel; kurze Texte kommen gleich mit. In der TinyBox
   geloeschte Post verschwindet auch hier.
 - Hinweis auf neue Post.
+- Post an mehrere Empfaenger: OE3ABC,OE3XYZ im Feld "To" (je Empfaenger
+  eine Nachricht in der TinyBox, Text geht einmal ueber Funk).
 
 Station
 - Teilnehmer im Board und gehoerte Stationen.

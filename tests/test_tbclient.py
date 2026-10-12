@@ -388,3 +388,43 @@ class EndToEndTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EmoticonTests(unittest.TestCase):
+    """CR28: emoticons <-> emojis in app.js, run with node (skipped without it)."""
+
+    def run_js(self, cases):
+        import shutil
+        import subprocess
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        root = Path(__file__).resolve().parent.parent
+        out = subprocess.run([node, str(root / "tests" / "fixtures" / "emoticons.js"),
+                              str(root / "tbclient" / "web" / "app.js"),
+                              str(root / "tbclient" / "web" / "emoji.json"), json.dumps(cases)],
+                             capture_output=True, text=True, encoding="utf-8", check=True)
+        return json.loads(out.stdout)
+
+    def test_both_directions(self):
+        r = self.run_js([["in", "das funktioniert ;-)"], ["in", "Hallo!:-) und :) oder :-D"],
+                         ["in", "QTH:Pinkafeld http://x.at/ :/"], ["in", "sehr nett!~0B"],
+                         ["in", "xD ~~ ~0C"],
+                         ["out", "sehr nett!\U0001F642"], ["out", "\U0001F60A \U0001F604 \U0001F60E \U0001F914 \U0001F622"],
+                         ["out", "Hallo \U0001F44D"],
+                         ["live", "Hallo ;-) "], ["live", "nett!:-),"], ["live", "QTH:P "], ["live", "http://"],
+                         ["groups", ""]])
+        self.assertEqual(r["in:das funktioniert ;-)"], "das funktioniert \U0001F609")       # nose
+        self.assertEqual(r["in:Hallo!:-) und :) oder :-D"], "Hallo!\U0001F642 und \U0001F642 oder \U0001F604")
+        self.assertEqual(r["in:QTH:Pinkafeld http://x.at/ :/"], "QTH:Pinkafeld http://x.at/ \U0001F615")
+        self.assertEqual(r["in:sehr nett!~0B"], "sehr nett!\U0001F642")                     # old client
+        self.assertEqual(r["in:xD ~~ ~0C"], "\U0001F602 ~ \U0001F914")
+        self.assertEqual(r["out:sehr nett!\U0001F642"], "sehr nett! :-)")                    # space added
+        self.assertEqual(r["out:\U0001F60A \U0001F604 \U0001F60E \U0001F914 \U0001F622"], ":-) :-D 8-) ~0C :'(")
+        self.assertEqual(r["out:Hallo \U0001F44D"], "Hallo :+1")
+        self.assertEqual(r["live:Hallo ;-) "], "Hallo \U0001F609 |9")                       # cursor after
+        self.assertEqual(r["live:nett!:-),"], "nett!\U0001F642,|8")
+        self.assertEqual(r["live:QTH:P "], "QTH:P |6")                                       # not a word
+        self.assertEqual(r["live:http://"], "http://|7")
+        self.assertTrue(r["groups"][0].startswith("Smileys (ASCII, cheapest)=\U0001F642"))
+        self.assertNotIn("\U0001F642", r["groups"][1])                                       # not twice

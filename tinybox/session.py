@@ -212,9 +212,11 @@ class Session:
 
     # --- composing a message -------------------------------------------
 
-    def begin_send(self, to_call: str, type: str, at_addr: str = "",
+    def begin_send(self, to_call: str | list[str], type: str, at_addr: str = "",
                    bid: str | None = None) -> None:
-        self._to, self._type = to_call, type
+        # CR27: a list = one message per recipient, same text
+        self._to = [to_call] if isinstance(to_call, str) else list(to_call)
+        self._type = type
         self._at, self._bid = at_addr, bid
         self._subject, self._body, self._body_bytes = "", [], 0
         self.state = State.SEND_SUBJECT
@@ -255,17 +257,20 @@ class Session:
 
         if finished:
             self.state = State.COMMAND
+            ids = []
             try:
-                msg_id = self.service.create(
-                    from_call=self.call, to_call=self._to, type=self._type,
-                    subject=self._subject, body="\n".join(self._body),
-                    origin=self.origin, sysop=self.sysop,
-                    at_addr=self._at, bid=self._bid,
-                )
+                for to in self._to:
+                    ids.append(self.service.create(
+                        from_call=self.call, to_call=to, type=self._type,
+                        subject=self._subject, body="\n".join(self._body),
+                        origin=self.origin, sysop=self.sysop,
+                        at_addr=self._at, bid=self._bid,
+                    ))
             except ServiceError as exc:
                 self.error(exc)
-                return
-            self.out(texts.SAVED.format(id=msg_id))
+                if not ids:
+                    return
+            self.out(texts.SAVED.format(id=", ".join(map(str, ids))))
 
 
 class SessionRegistry:

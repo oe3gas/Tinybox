@@ -523,7 +523,7 @@ UI an TBCHAT-1:   #4F OE3GAS: Servus, Wetter passt :+1 ~1K
 
 **Emojis – nie als Unicode über Funk** (👍 = 4 Byte, mit Hautton 8, Familien-Sequenzen bis 18 Byte):
 
-- **Stufe 1, klassische Emoticons (2–3 Byte):** `:)` `:(` `;)` `:D` `:P` `:O` `<3` `:+1` `:-1` … Der Client zeigt 😊 🙁 😉 😄 😛 😮 ❤️ 👍 👎. Terminal-User verstehen sie ohne Client.
+- **Stufe 1, klassische Emoticons (2–4 Byte):** `:-)` `;-)` `:-D` `:-(` `:-P` `:-O` `<3` `:+1` `:-1` … (16 Stück, mit und ohne Nase; Tabelle in `emoji.json`). Der Client zeigt 🙂 😉 😄 🙁 😛 😮 ❤️ 👍 👎 … Terminal-User verstehen sie ohne Client. Seit CR28 (12.10.2026): Getippte Emoticons werden sofort zum Emoji, und jedes Emoji mit ASCII-Form geht als Emoticon mit Nase über Funk (😊 😀 → `:-)`, 😎 → `8-)`), nie als `~XY`.
 - **Stufe 2, Code-Tabelle (3 Byte):** Escape-Zeichen + 2 Zeichen Base36, z. B. `~1K` = 📻; 1296 Plätze; `~~` = echte Tilde. Die Tabelle wird wie das brocast-Dictionary versioniert mit dem Client ausgeliefert. Grundstock funkerspezifisch (📻 📡 🔋 ⚡ ☕ 🍺 🌧 ☀️ 👋 …).
 - Der Emoji-Picker bietet **nur** Emojis aus Stufe 1 und 2 an; jedes Emoji kostet damit höchstens 3 Byte. Ein eingefügtes unbekanntes Emoji wird nicht gesendet, der Client zeigt einen Hinweis.
 - **Reaktionen** (👍 auf einen Beitrag, ab v1): eigener Typ mit Folgenummer + Emoji-Code, ca. 5 Byte Nutzdaten.
@@ -584,7 +584,7 @@ Alles wird sofort lokal gespeichert (`data/tbclient/mailbox.db`, SQLite). Bricht
 | C → T | `//BLIST <Rubrik>=<ab Nr.> … [max=<n>]` | Bulletins dieser Rubriken mit höherer Nummer → `//M …` … `//MEND <n> <noch übrig>` |
 | C → T | `//PART <Nr.> <ab Byte> <max. Bytes>` | Stück eines langen Texts (nur mit `Z`) → `//P <Nr.> <Z\|T> <ab> <gesamt> <n>` + n Bytes (Z = Stück der LZHUF-Daten, T = Stück des UTF-8-Texts) |
 | C → T | `//GET <Nr.> …` (max. 20) | `//MSG <Nr.> <Zeilen>` + Zeilen, oder `//ZMSG <Nr.> <Bytes>` + Binärdaten, oder `//NOMSG <Nr.>`; Ende `//GEND`. Liest nicht (Status bleibt N) |
-| C → T | `//SEND <P\|B> <An>[@<Adresse>] <Zeilen> mid=<Kennung>` + Betreff + Zeilen | → `//SENT <Nr.>` oder `//ERR send <Grund>` |
+| C → T | `//SEND <P\|B> <An>[,<An>…][@<Adresse>] <Zeilen> mid=<Kennung>` + Betreff + Zeilen | → `//SENT <Nr.> [<Nr.> …]` oder `//ERR send <Grund>`; mehrere Empfänger (CR27): je eine Nachricht, Text einmal über Funk, höchstens 10 |
 | C → T | `//KILL <Nr.> …` | → `//K <Nr.> ok\|<Grund>` … `//KEND`; nur Privatpost |
 | C → T | `//READ <Nr.> …` | Status Y wie beim Lesen am Terminal → `//REND` |
 

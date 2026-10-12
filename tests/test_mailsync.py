@@ -559,3 +559,56 @@ class DeltaSyncTests(unittest.TestCase):
             t1.cancel()
             dw.server.close()
         asyncio.run(scenario())
+
+
+class MultiRecipientTests(unittest.TestCase):
+    """CR27: personal mail to several recipients - one message each, text once."""
+
+    def setUp(self):
+        self.app = chat_app()
+
+    def test_terminal(self):
+        s, t = login(self.app, "OE3GAS")
+        t.take()
+        type_lines(s, "S OE3TEC,OE1ABC,OE3TEC", "Hallo", "Text", "/EX")
+        out = t.take()
+        self.assertIn("Msg 1, 2 saved.", out)                       # duplicate folded
+        msgs = self.app.service.store.list_messages()
+        self.assertEqual(sorted((m.to_call, m.body) for m in msgs),
+                         [("OE1ABC", "Text"), ("OE3TEC", "Text")])
+        self.assertNotEqual(msgs[0].bid, msgs[1].bid)                # own MID each
+        type_lines(s, "S OE3TEC,XX")
+        self.assertIn("invalid", t.take().lower())                   # nothing stored
+        self.assertEqual(len(self.app.service.store.list_messages()), 2)
+        type_lines(s, "SB ALL,WX")
+        self.assertIn("one destination", t.take())
+        type_lines(s, "S OE3TEC,OE1ABC $ABC123")
+        self.assertIn("one destination", t.take())
+
+    def test_client_send(self):
+        s, t = client(self.app)
+        type_lines(s, "//SEND P OE3TEC,OE1ABC 1 mid=abcdefgh12", "Betreff", "Zeile")
+        self.assertEqual(t.take(), "//SENT 1 2\r")
+        type_lines(s, "//SEND P OE3TEC,OE1ABC 1 mid=abcdefgh12", "Betreff", "Zeile")
+        self.assertEqual(t.take(), "//SENT 1 2\r")                   # same mid: not twice
+        type_lines(s, "//SEND P OE3TEC,XX 0 mid=abcdefgh13", "Betreff")
+        self.assertTrue(t.take().startswith("//ERR send invalid_call"))
+        self.assertEqual(len(self.app.service.store.list_messages()), 2)
+        type_lines(s, "//SEND P OE3TEC 0 mid=abcdefgh14", "Einzeln")
+        self.assertEqual(t.take(), "//SENT 3\r")
+        self.assertEqual(self.app.service.store.get(3).msgid, "tbc-abcdefgh14")   # as before
+
+    def test_client_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            box = MailStore(Path(tmp) / "m.db", "OE3GAS")
+            oid = box.save_out(None, "P", "OE3TEC,OE1ABC@OE3XYZ", "Hallo", "Text")
+            item = box.outbox()[0]
+            self.assertEqual(item["oid"], oid)
+            calls, _, at = item["to_call"].partition("@")
+            for msg_id, call in zip([7, 8], calls.split(",")):
+                box.add_sent(msg_id, item, "OE3GAS", call, at)
+            sent = box.folder("sent")
+            self.assertEqual(sorted((m["id"], m["to_call"], m["at_addr"]) for m in sent),
+                             [(7, "OE3TEC", "OE3XYZ"), (8, "OE1ABC", "OE3XYZ")])
+            self.assertEqual(box.folder("outbox"), [])
+            box.close()

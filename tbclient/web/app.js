@@ -1,7 +1,9 @@
 /* TinyBox client - web GUI.
  * Everything that comes from the air is untrusted: only textContent, never innerHTML.
  * Emojis never go over the air as Unicode (PLANUNG.md 12.6):
- *   stage 1  classic emoticons  :) :( ;) :D :P :O <3 :+1 :-1
+ *   stage 1  classic emoticons  :-) ;-) :-D :-( ... (table in emoji.json, CR28):
+ *            typed ones turn into the emoji at once, emojis with an ASCII form
+ *            always go on air as that form (readable at a terminal)
  *   stage 2  ~XY  (two base-36 characters, table in emoji.json), "~~" = a real tilde
  */
 "use strict";
@@ -40,19 +42,57 @@ async function api(path, data) {
 }
 
 // ---------------------------------------------------------------- emojis
-let emoToWire = [];           // [emoji without VS, wire code], longest first
-let wireRe = null;
-const EMOTICON_EMOJI = {};
+let emoToWire = [];           // [emoji without VS, wire code, is emoticon], longest first
+let wireRe = null;            // what arrives: codes and emoticons
+let liveRe = null;            // what is being typed: an emoticon just completed
+let EMOTICONS = [];           // {wire, aliases, emoji, also} (emoji.json v3, CR28)
+const EMOTICON_EMOJI = {};    // every known form -> the emoji shown for it
+const BOUNDARY = "\\s.,!?;:()\\[\\]\"'";   // what may stand next to an emoticon
 
 function initEmoji() {
-  const pairs = [];
-  for (const [code, e] of EMO.emoticons) { EMOTICON_EMOJI[code] = e; pairs.push([noVS(e), code, true]); }
-  for (const [k, e] of Object.entries(EMO.codes)) pairs.push([noVS(e), "~" + k, false]);
+  // v3 entries, or the old [form, emoji] pairs of an older emoji.json
+  EMOTICONS = (EMO.emoticons || []).map((e) => Array.isArray(e)
+    ? { wire: e[0], aliases: [], emoji: e[1], also: [] } : e);
+  const pairs = [], ascii = new Set();
+  for (const e of EMOTICONS) {
+    for (const form of [e.wire, ...(e.aliases || [])]) EMOTICON_EMOJI[form] = e.emoji;
+    for (const x of [e.emoji, ...(e.also || [])]) {
+      pairs.push([noVS(x), e.wire, true]);
+      ascii.add(noVS(x));
+    }
+  }
+  // an emoji with an ASCII form never goes as a code (the code still decodes)
+  for (const [k, e] of Object.entries(EMO.codes)) if (!ascii.has(noVS(e))) pairs.push([noVS(e), "~" + k, false]);
   pairs.sort((a, b) => b[0].length - a[0].length);
   emoToWire = pairs;
-  const esc = EMO.emoticons.map(([c]) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  // emoticons only as separate words, so "QTH:Pinkafeld" stays text
-  wireRe = new RegExp("~~|~([0-9A-Za-z]{2})|(^|\\s)(" + esc.join("|") + ")(?=$|\\s|[.,!?])", "g");
+  const forms = Object.keys(EMOTICON_EMOJI).sort((a, b) => b.length - a.length)
+    .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  // emoticons only as separate words (also right after punctuation: "Hallo!:-)"),
+  // so "QTH:Pinkafeld" and "http://" stay text
+  wireRe = new RegExp("~~|~([0-9A-Za-z]{2})|(^|[" + BOUNDARY + "])(" + forms + ")(?=$|[" + BOUNDARY + "])", "g");
+  liveRe = new RegExp("(^|[" + BOUNDARY + "])(" + forms + ")([\\s.,!?;:])$");
+}
+
+/* Just typed an emoticon and a space or punctuation after it: show the emoji
+ * at once (CR28). Only the part before the cursor is looked at. */
+function liveEmoticon(i) {
+  if (!liveRe) return;
+  const a = i.selectionStart;
+  if (a == null || i.selectionEnd !== a) return;
+  const m = i.value.slice(0, a).match(liveRe);
+  if (!m) return;
+  const emoji = EMOTICON_EMOJI[m[2]];
+  if (!emoji) return;
+  const start = a - m[2].length - m[3].length;
+  i.value = i.value.slice(0, start) + emoji + i.value.slice(start + m[2].length);
+  i.selectionStart = i.selectionEnd = start + emoji.length + m[3].length;
+}
+
+/* The emojis that have an ASCII form (cheapest and readable at a terminal). */
+function asciiEmojis() {
+  const out = [];
+  for (const e of EMOTICONS) for (const x of [e.emoji, ...(e.also || [])]) if (!out.includes(x)) out.push(x);
+  return out;
 }
 
 function wireToText(wire) {
@@ -81,12 +121,18 @@ function textToWire(text) {
 /* What the picker offers, in groups (emoji.json "picker"). Codes in "hidden"
  * are still shown when they arrive, but not offered any more (CR2). */
 function emojiGroups() {
-  if (Array.isArray(EMO.picker) && EMO.picker.length) return EMO.picker;
+  const ascii = asciiEmojis();
+  const first = ascii.length ? [{ name: "Smileys (ASCII, cheapest)", items: ascii }] : [];
+  if (Array.isArray(EMO.picker) && EMO.picker.length) {
+    const seen = new Set(ascii.map(noVS));
+    return [...first, ...EMO.picker.map((g) => ({ name: g.name, items: g.items.filter((e) => !seen.has(noVS(e))) }))
+      .filter((g) => g.items.length)];
+  }
   // old table without groups: everything in code order
   const hidden = new Set(EMO.hidden || []);
   const codes = Object.entries(EMO.codes).filter(([k]) => !hidden.has(k))
     .sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([, e]) => e);
-  return [{ name: "", items: [...EMO.emoticons.map(([, e]) => e), ...codes] }];
+  return [...first, { name: "", items: codes }];
 }
 
 // ---------------------------------------------------------------- rich text
@@ -1126,7 +1172,7 @@ function setType(t) {
     $("cp-to").value = "";
   }
   $("cp-to").placeholder = draft.pick ? "@ area, e.g. WW (optional)"
-    : t === "P" ? "OE3ABC or OE3ABC@OE3XYZ" : "ALL, WX ... or ALL@WW";
+    : t === "P" ? "OE3ABC, OE3ABC@OE3XYZ or OE3ABC,OE3XYZ" : "ALL, WX ... or ALL@WW";
   composeInfo();
 }
 
@@ -1316,7 +1362,7 @@ async function start() {
   };
   $("qb-close").onclick = () => setQuote(null);
   $("input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
-  $("input").addEventListener("input", updateHint);
+  $("input").addEventListener("input", (e) => { if (e.inputType !== "deleteContentBackward") liveEmoticon(e.target); updateHint(); });
   document.addEventListener("click", (e) => {
     if (!$("react-bar").contains(e.target)) closeReactBar();
   });

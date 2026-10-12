@@ -172,6 +172,27 @@ class MessageService:
             raise ServiceError("not_allowed", "third party traffic is disabled")
         return to_call
 
+    MAX_RECIPIENTS = 10
+
+    def check_send_list(self, from_call: str, to_field: str, type: str, sysop: bool,
+                        bid: str | None = None) -> list[str]:
+        """CR27: 'OE3TEC,OE1ABC' -> the normalized recipients, each checked like a
+        single one, duplicates folded, at most MAX_RECIPIENTS. Bulletins and a
+        user-given BID take exactly one destination (a BID is unique)."""
+        parts = [p for p in to_field.split(",") if p.strip()]
+        if not parts:
+            raise ServiceError("invalid_call", to_field)
+        if len(parts) > 1 and (type != "P" or bid):
+            raise ServiceError("invalid_value", "one destination only")
+        if len(parts) > self.MAX_RECIPIENTS:
+            raise ServiceError("invalid_value", f"max {self.MAX_RECIPIENTS} recipients")
+        out: list[str] = []
+        for p in parts:
+            call = self.check_send(from_call, p, type, sysop)
+            if call not in out:
+                out.append(call)
+        return out
+
     def check_address(self, type: str, at_addr: str, bid: str | None = None,
                       origin: str = "telnet") -> tuple[str, str | None]:
         """Normalize the @ address and an optional BID given by the user.

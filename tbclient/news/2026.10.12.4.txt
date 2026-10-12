@@ -1,0 +1,3 @@
+- Post an mehrere Empfaenger: OE3ABC,OE3XYZ im Feld To (CR27)
+- Emoticons: ;-) :-D beim Tippen sofort als Emoji, auch vom Terminal;
+  Emojis mit ASCII-Form gehen als :-) ueber Funk, nicht als Code (CR28)
