@@ -1,0 +1,3 @@
+- Bilder im Chat: Knopf neben den Emojis, Bild wird klein gemacht
+  (max. 8 KB), Dialog zeigt Groesse und Dauer. Andere sehen eine
+  unscharfe Vorschau und laden das Bild erst beim Antippen.

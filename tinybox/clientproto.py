@@ -33,13 +33,15 @@ Other client commands:
     //MOTD                (inside a board) -> //MOTD <crc> <text> | //MOTD -  (CR3;
                           //IN tells motd=<crc>, the client asks only if it changed)
     //MLIST, //GET, //SEND ...   offline mailbox, see clientsync.py
+    //IMGPUT, //IMG       small images in the chat (CR12), see chatimg.py;
+                          //IN tells img (8 KB) or img=<max, hex> where allowed
 
 caps: CHAT = chat lines in the format above, UI = the client hears the
 mailbox directly and takes chat events from the UI frames to TBCHAT-<n>
 instead of I-frames. UI is only granted on radio sessions.
 SYNC = offline mailbox commands, SYNC2 = delta sync (//SYNC, //BSYNC, CR26),
-Z = message texts may come LZHUF-compressed
-(binary, radio sessions only).
+Z = message texts may come LZHUF-compressed, IMG = chat images
+(both binary, radio sessions only).
 """
 
 from __future__ import annotations
@@ -55,7 +57,8 @@ if TYPE_CHECKING:
     from .session import Session
 
 PROTO = "TB1"
-KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z")
+KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG")
+IMG_COMMANDS = ("IMGPUT", "IMG")
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 
@@ -105,6 +108,12 @@ def handle(s: Session, line: str) -> None:
         _motd(s)
     elif cmd in clientsync.COMMANDS:
         clientsync.handle(s, cmd, parts[1:])
+    elif cmd in IMG_COMMANDS:
+        if "IMG" not in s.client.caps:
+            s.out(f"//ERR {cmd} needs IMG")
+        else:
+            img = s.service.chat.images
+            (img.put if cmd == "IMGPUT" else img.get)(s, parts[1:])
     else:
         s.out(f"//ERR unknown {cmd}")
 
@@ -120,6 +129,9 @@ def _client(s: Session, parts: list[str]) -> None:
         caps.discard("UI")        # telnet, or no radio link: chat lines come as I-frames
     if s.origin != "radio" or not hasattr(s.transport, "write_bytes"):
         caps.discard("Z")         # compressed texts are binary: radio (AGW) only
+        caps.discard("IMG")       # images too (and the raw bytes of an upload)
+    if s.cfg.chat.image_max <= 0:
+        caps.discard("IMG")       # the sysop switched images off
     symbol = args.get("sym", "")
     s.client = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "",
                           args.get("v", "")[:20])

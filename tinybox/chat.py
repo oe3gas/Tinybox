@@ -31,7 +31,7 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable
 
-from . import linkq, texts
+from . import chatimg, linkq, texts
 from .config import ChatBoard, Config
 from .events import EventBus
 from .store import ChatLine, Store, utc_now
@@ -64,6 +64,7 @@ class ChatHub:
         self.ui_send: Callable[[str, str], None] | None = None
         self._q_text: dict[str, str] = {}       # board -> last % event (link quality)
         self._q_at: dict[str, float] = {}       # board -> when it was sent
+        self.images = chatimg.ChatImages(store, cfg)     # small images (CR12)
 
     # --- boards ---------------------------------------------------------
 
@@ -171,8 +172,10 @@ class ChatHub:
         now = utc_now()
         if not board.live:
             self.store.chat_add(board.name, session.call, text, now)
+        # terminals read "[Image ...]" instead of an image reference (CR12)
         self._deliver(board.name, f"{session.call}: {text}",
-                      texts.CHAT_LINE.format(call=session.call, text=text), sender=session)
+                      texts.CHAT_LINE.format(call=session.call,
+                                             text=chatimg.terminal_text(text)), sender=session)
         self.bus.publish("chat.message", board=board.name, call=session.call,
                          text=text, created=now)
 
@@ -181,7 +184,7 @@ class ChatHub:
         board = session.chat_board
         if board is None or not REACTION_RE.match(emoji) or not 0 <= ref < SEQ_MOD:
             return False
-        target = self._line_of(board, ref)
+        target = chatimg.terminal_text(self._line_of(board, ref))
         human = texts.CHAT_REACT.format(call=session.call, emoji=emoji,
                                         target=target[:40] if target else f"#{ref:X}")
         self._deliver(board, f"{session.call} *{ref:X} {emoji}", human, sender=session)
@@ -277,4 +280,7 @@ class ChatHub:
         n = self.store.chat_purge(keep)
         if n:
             log.info("chat: %s old line(s) deleted", n)
+        m = self.images.purge()
+        if m:
+            log.info("chat: %s image(s) without a line deleted", m)
         return n

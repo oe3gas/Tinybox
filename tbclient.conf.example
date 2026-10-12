@@ -27,5 +27,14 @@ port         = 7744
 chunk_bytes  = 1024
 pause_sec    = 5
 
+[images]
+# Pictures in the chat (CR12) go up in one block; the client hands them to
+# Direwolf piece by piece with a pause, so chat lines and other stations get
+# through. bytes_per_sec is only for the time estimate shown before sending
+# (1200 Bd with AX.25 overhead and acks is about 60 bytes/s net).
+piece_bytes   = 256
+pause_sec     = 2
+bytes_per_sec = 60
+
 [storage]
-data_dir     = data/tbclient   # settings (APRS symbol); relative to this file
+data_dir     = data/tbclient   # settings, mailbox, pictures; relative to this file

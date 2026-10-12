@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from . import clientnews, clientproto, texts
+from . import chatimg, clientnews, clientproto, texts
 from .config import ChatBoard
 
 if TYPE_CHECKING:
@@ -85,6 +85,9 @@ def _enter_client(s: Session, board: ChatBoard) -> None:
     hist += f" now={int(datetime.now(timezone.utc).timestamp())}"   # the client's clock may be off
     if board.motd:                # CR3: only a check value, the text on request (//MOTD)
         hist += f" motd={board.motd_crc}"
+    limit = hub.cfg.chat.image_limit(board)        # CR12: images allowed here?
+    if "IMG" in s.client.caps and limit:
+        hist += " img" if limit == 8192 else f" img={limit:x}"
     lines = [f"//IN {hub.number(board.name)} {board.name} {board.keep_label} "
              f"{hub.last_seq(board.name)}{hist}"]
     if clientnews.version_key(s.client.version) < clientnews.version_key(HIST_CLIENT):
@@ -110,7 +113,8 @@ def _history(s: Session, n: int) -> None:
         s.out(texts.CHAT_HISTORY_NONE.format(keep=board.keep_label))
         return
     s.out(texts.CHAT_HISTORY.format(keep=board.keep_label),
-          *[texts.CHAT_HISTORY_ROW.format(time=_time(c.created), call=c.call, text=c.text)
+          *[texts.CHAT_HISTORY_ROW.format(time=_time(c.created), call=c.call,
+                                          text=chatimg.terminal_text(c.text))
             for c in lines],
           texts.CHAT_HISTORY_END)
 
@@ -211,4 +215,9 @@ def handle(s: Session, line: str) -> None:
     if len(text) > hub.cfg.chat.max_line:
         text = text[:hub.cfg.chat.max_line]
         s.out(texts.CHAT_CUT.format(max=hub.cfg.chat.max_line))
+    if s.client is not None:          # CR12: an image reference must name an upload
+        reason = hub.images.check_line(s, text)
+        if reason:
+            s.out(f"//ERR img {reason}")
+            return
     hub.say(s, text)

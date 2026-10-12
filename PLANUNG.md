@@ -465,6 +465,7 @@ Info:   lesbarer Text, Folgenummer hexadezimal (1–2 Zeichen)
 | Verlassen | `#<nr> -<Call>` | `#51 -OE3GAS` |
 | Reaktion | `#<nr> <Call> *<Bezug-nr> <Emoji>` | `#52 OE3TEC *4F :+1` |
 | System | `#<nr> !<Text>` | `#53 !Board schließt um 22:00` |
+| Beitrag mit Bild | `#<nr> <Call>: ~#<Hash 6 hex><Größe 2 hex><BlurHash> [Text]` | `#54 OE3GAS: ~#a1b2c350BjElSA\|nsR,x$0n~ Blick vom Berg` (CR12, 12.10) |
 
 - Keine Steuerbytes: Mithörer mit Terminalprogramm oder Direwolf lesen den Chat ohne Client mit.
 - Keine Version im Frame; Client und TinyBox tauschen sie beim `//CLIENT`-Handshake aus (12.2).
@@ -512,7 +513,8 @@ Der Chat im Client sieht aus wie ein heutiger Messenger: Avatare, Sprechblasen, 
 | Zeitstempel | nein | Empfangszeit; beim Verlauf aus der BBS liefert die TinyBox die Zeit (connected) |
 | Sprechblasen links/rechts | nein | Eigene Beiträge rechts, fremde links |
 | „Tippt gerade …“, Gelesen-Häkchen | **bewusst nicht** | Wären je ein Frame pro Teilnehmer |
-| Bilder, Sticker, GIFs | nein | Nicht vorgesehen |
+| Sticker | nur ein Kurzname | `[STK]CQ`, die Bilder liegen im Client (CR11) |
+| Bilder | nur ein Verweis, 26–32 Byte | `~#<Hash><Größe><BlurHash>`; das Bild (max. 8 KB) geht einmal zur TinyBox, wer es sehen will, holt es per I-Frame (CR12, 12.10) |
 | Folgenummer | ja, 1–2 Zeichen | Lückenerkennung, `//RESEND`, Bezug für Reaktionen |
 
 **Nutzdaten als lesbarer Text** (Frame-Schema in 12.4): Terminal-User und Mithörer verstehen den Chat weiterhin. CBOR würde nur 3–5 Byte pro Frame sparen, Kompression bringt unter ~80 Byte nichts.
@@ -649,6 +651,28 @@ Bulletins analog, aber je Rubrik „was habe ich“ statt `seq` für Neues (Abon
 **Kompatibilität:** neue Cap `SYNC2`. Alte Clients bekommen `SYNC` wie bisher (`//MLIST`, `//RUBRICS`, `//BLIST`, `//KILL`, `//READ` bleiben); ein neuer Client ohne `SYNC2` von der TinyBox fällt auf den alten Ablauf zurück. Schema der TinyBox-DB: Version 7 (`seq`, `cseq`, `sync_gone`, Trigger); bestehende Nachrichten bekommen `seq = cseq = Nr.`, der Zähler startet bei der höchsten Nr.
 
 ---
+
+### 12.10 Kleine Bilder im Chat (entschieden und umgesetzt 12.10.2026, CR12)
+
+Über Funk geht so wenig wie möglich – jedes Feld wurde einzeln auf Bytes geprüft:
+
+| Was | Über Funk | Bytes |
+|---|---|---|
+| Verweis in der Chat-Zeile | `~#` + Hash (6 Hex von SHA-256) + Größe (2 Hex, 64-Byte-Schritte) + BlurHash – ohne Trennzeichen | 26–32 |
+| Bildmaße | **nicht.** Die Form steckt im BlurHash: sein erstes Zeichen nennt die Komponenten (3×2 = quer, 2×3 = hoch, 3×3 = quadratisch), daraus formt der Client den Platzhalter; die Pixel kommen mit dem Bild | 0 |
+| BlurHash | 16 Zeichen (3×2, 2×3) bzw. 22 (3×3), statt der üblichen 28 (4×3) | 16–22 |
+| Bildunterschrift | optional, nach einem Leerzeichen, Emojis wie im Chat | – |
+| Upload | `//IMGPUT <hash> <bytes>` → `//IMGGO <hash> <have>` → die Bytes **am Stück** → `//IMGOK` – kein Stückeln, kein Ack (AX.25 ist gesichert) | ≈ 55 |
+| Download | `//IMG <hash> [<offset>]` → `//I <hash> <offset> <total>` + Bytes am Stück | ≈ 35 |
+| Beim Betreten | `//IN … img` (bzw. `img=<hex>` bei anderem Limit) nur in Boards mit Bildern | 4 |
+
+- **Bild selbst:** der Browser macht WebP (JPEG als Rückfall), längste Seite höchstens 320 px, dann Qualität und notfalls Auflösung weiter runter, bis es unter das Limit passt (`[chat] image_max`, Standard 8 KB). Kein fester Rahmen, Form und Seitenverhältnis bleiben. TinyBox dekodiert nichts: Größe, Hash und Dateikennung (WebP/JPEG) werden geprüft, ein Exemplar je Hash.
+- **Vor dem Senden** zeigt ein Dialog Pixelgröße, Bytes, Upload- und Ladedauer (aus `[images] bytes_per_sec` des Clients) – OK oder Abbruch. Der Client gibt die Bytes stückweise mit Pause an Direwolf (`piece_bytes`, `pause_sec`) und wartet, bis das Stück davor in der Luft war (AGW `Y`), damit Chat-Zeilen und andere Stationen dazwischen durchkommen.
+- **Empfänger** sehen den BlurHash-Platzhalter mit „5.0 KB · ~1 min · tap to load“ und holen das Bild erst beim Antippen, mit Fortschrittsbalken; ein abgebrochener Download setzt beim Offset fort, ein abgebrochener Upload ebenso (`//IMGGO <have>`). Geladene Bilder liegen als Dateien im Client (`data/tbclient/images/`).
+- **Terminal-Teilnehmer** lesen `[Image 5.0 KB - TinyBox client only]`, auch im Verlauf und als Reaktionsziel.
+- **Nicht** in Live-Boards; pro Board abschaltbar mit `noimg` nach der Aufbewahrung (`TECH = 30d noimg …`); `image_max = 0` schaltet Bilder ganz ab (dann gibt es die Fähigkeit `IMG` nicht). Bilder nur über Funk (AGW), wie die Z-Kompression.
+- **Aufbewahrung:** ein Bild wird gelöscht, wenn keine gespeicherte Chat-Zeile es mehr nennt (Aufbewahrung des Boards), nie in der ersten Stunde nach dem Upload. Ein halb hochgeladenes Bild bleibt eine Stunde im Speicher.
+- Mail-Anhänge: später extra (dann prüfen, was LinBPQ/FBB heute statt 7PLUS können).
 
 ## 13. Forwarding-Modul (optional)
 

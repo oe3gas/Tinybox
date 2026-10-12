@@ -11,8 +11,11 @@ import time
 from collections import deque
 from pathlib import Path
 
+from tinybox import chatimg               # the image reference in a chat line (CR12)
+
 from . import VERSION, proto
 from .config import Config
+from .images import Images, ImageStore
 from .links import AgwLink, TelnetLink
 from .mailstore import MailStore
 from .radio import RawFrame, aprs_symbol
@@ -71,6 +74,9 @@ class ClientCore:
         # offline mailbox (C3)
         self.mailbox = MailStore(cfg.data_dir / "mailbox.db", cfg.mycall)
         self.sync = Syncer(self, self.mailbox)
+        # small images in the chat (CR12)
+        self.images = Images(self, ImageStore(cfg.data_dir / "images"))
+        self.images.store.purge()
 
     # --- settings --------------------------------------------------------
 
@@ -206,6 +212,14 @@ class ClientCore:
         else:
             self._ask_history(int(mode))
 
+    @staticmethod
+    def _img_limit(in_line: str) -> int:
+        """//IN ... img | img=<hex>: images allowed here, max bytes (0 = none, CR12)."""
+        m = re.search(r"(?:^| )img(?:=([0-9a-fA-F]{1,5}))?(?= |$)", in_line)
+        if not m:
+            return 0
+        return int(m.group(1), 16) if m.group(1) else 8192
+
     def _motd_on_join(self, in_line: str) -> None:
         """//IN ... motd=<crc> (CR3): the text is fetched only when it is new."""
         m = re.search(r"\bmotd=([0-9a-f]{4})\b", in_line)
@@ -304,6 +318,7 @@ class ClientCore:
             self._clear_board()
             self.pending.clear()
             self.sync.link_lost()
+            self.images.link_lost()
             self.sysmsg = None                   # a shutdown warning is over now
             if self._hs_task:
                 self._hs_task.cancel()
@@ -327,12 +342,15 @@ class ClientCore:
             return
         self.handshake_done = True          # sent; //OK confirms the caps
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2" + (",Z" if self.link.kind == "agw" else "")
+        caps += ",SYNC,SYNC2" + (",Z,IMG" if self.link.kind == "agw" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
     def _on_line(self, line: str) -> None:
         if self.sync.take(line):                 # mailbox sync answers and texts
+            return
+        if self.images.take(line):               # image transfer answers and bytes
+            self.console.append(line.rstrip())
             return
         line = line.rstrip()
         if not line:
@@ -408,7 +426,8 @@ class ClientCore:
             parts = rest.split()
             if len(parts) >= 4:
                 self._clear_board()
-                self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2]}
+                self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2],
+                              "img": self._img_limit(rest)}
                 self._history_on_join(rest)
                 self._motd_on_join(rest)
                 last = None if parts[3] == "-" else int(parts[3], 16)
@@ -608,7 +627,43 @@ class ClientCore:
             "sync": self.sync.status,
             "update": self.update,
             "history_mode": self.history_mode,
+            "images": self.images.status(self._image_refs()),
+            "img": {"piece": self.cfg.img_piece, "pause": self.cfg.img_pause,
+                    "rate": self.cfg.img_rate},
         }
+
+    def _image_refs(self) -> set[str]:
+        """Hashes of the images referred to in the chat shown right now."""
+        refs = set()
+        for m in self.messages:
+            if m.get("kind") == "line" and "~#" in (m.get("text") or ""):
+                r = chatimg.parse_ref(m["text"])
+                if r:
+                    refs.add(r[0])
+        if self.images.upload:
+            refs.add(self.images.upload["hash"])
+        return refs
+
+    # --- images (CR12) ---------------------------------------------------------------
+
+    def send_image(self, data: bytes, blurhash: str, caption: str, quote: str) -> str | None:
+        """From the GUI: the shrunk picture, its blurhash, the caption (wire
+        text) and the quote prefix. Starts the upload; the chat line follows."""
+        if not self.board or not self.board.get("img") or "IMG" not in self.caps:
+            return None
+        if len(data) > self.board["img"]:
+            return None
+        if quote and not re.match(r"^~\^[A-Z0-9-]{1,9} \d{4} $", quote):
+            return None
+        caption = caption.replace("\r", " ").replace("\n", " ").strip()
+        if caption.startswith("/"):
+            caption = " " + caption
+        return self.images.send(data, blurhash, caption[:150], quote)
+
+    def fetch_image(self, hash: str) -> bool:
+        if self.state != "online" or "IMG" not in self.caps:
+            return False
+        return self.images.fetch(hash)
 
     async def run(self) -> None:
         if self.cfg.auto_connect:

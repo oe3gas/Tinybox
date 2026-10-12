@@ -134,9 +134,19 @@ class AgwConnection:
             if not self.session.closed:         # forward link: bytes, it splits lines itself
                 self.session.feed_bytes(data)
             return
-        for b in data:
+        i = 0
+        while i < len(data):
             if self.session is None or self.session.closed:
                 return
+            need = getattr(self.session, "raw_need", 0)
+            if need > 0:                       # binary data announced by the line before
+                take = data[i:i + need]        # (image upload, CR12): no line splitting
+                i += len(take)
+                self._last_cr = self._after_z = False
+                self.session.feed_raw(bytes(take))
+                continue
+            b = data[i]
+            i += 1
             if b in (10, 13):
                 if b == 10 and self._last_cr:  # CR LF -> one line end
                     self._last_cr = False

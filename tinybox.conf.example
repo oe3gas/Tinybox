@@ -84,12 +84,15 @@ mail_notify   = yes            # TinyBox clients: a UI frame to TBMAIL ("OE3ABC 
 enabled       = yes            # command C: chat boards for logged-in users
 history_lines = 20             # max lines per history request (/H n, client)
 max_line      = 200            # max characters per chat line
+image_max     = 8k             # small pictures in the chat (TinyBox client, CR12):
+                               # max bytes per picture (1k ... 15k), 0 = no pictures
 
 [chat_boards]
 # Fixed boards, set by the sysop. One line per board:
-#   NAME = keep  description
+#   NAME = keep [noimg] description
 # NAME: 1-8 letters/digits. keep: live (nothing stored) or how long the
 # history is kept, e.g. 12h or 7d (max 365d). Order = order in the list.
+# noimg: no pictures in this board (live boards never have any).
 TREFF = 7d    General meeting point
 DX    = 24h   DX spots and news
 TECH  = 30d   Technical questions

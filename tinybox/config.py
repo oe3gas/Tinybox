@@ -226,6 +226,12 @@ class ChatBoard:
     keep_hours: int        # 0 = live only, nothing is stored
     description: str = ""
     motd: str = ""         # [chat_motd] (CR3): shown when entering the board
+    noimg: bool = False    # "noimg" after the keep time: no images here (CR12)
+
+    @property
+    def images(self) -> bool:
+        """Images in this board? Never in a live board (nothing is stored there)."""
+        return not self.live and not self.noimg
 
     @property
     def motd_crc(self) -> str:
@@ -255,11 +261,27 @@ class ChatCfg:
     enabled: bool = False
     history_lines: int = 20     # max lines per history request (/H n, //HIST)
     max_line: int = 200         # max characters per chat line
+    image_max: int = 8192       # max bytes of a chat image (CR12), 0 = no images at all
     boards: list[ChatBoard] = field(default_factory=list)
+
+    def image_limit(self, board: ChatBoard) -> int:
+        """Max image bytes in this board, 0 = images not allowed there."""
+        return self.image_max if self.image_max > 0 and board.images else 0
 
     def board(self, name: str) -> ChatBoard | None:
         name = name.strip().upper()
         return next((b for b in self.boards if b.name == name), None)
+
+
+def parse_size(sec: str, key: str, value: str) -> int:
+    """'8k' -> 8192, '4096' -> 4096, '0' / 'no' / 'off' -> 0 (CR12 image_max)."""
+    v = str(value).strip().lower()
+    if v in ("0", "no", "off", "none", ""):
+        return 0
+    m = re.match(r"^(\d+)\s*(k|kb)?$", v)
+    if not m:
+        raise ConfigError(f"[{sec}] {key}: '{value}' must be a number of bytes, e.g. 8k or 8192")
+    return int(m.group(1)) * (1024 if m.group(2) else 1)
 
 
 def parse_keep(value: str) -> int:
@@ -640,9 +662,12 @@ def _load_chat(cp: configparser.ConfigParser) -> ChatCfg:
     """
     chat = ChatCfg(enabled=_get(cp, "chat", "enabled", False, bool),
                    history_lines=_get(cp, "chat", "history_lines", 20, int),
-                   max_line=_get(cp, "chat", "max_line", 200, int))
+                   max_line=_get(cp, "chat", "max_line", 200, int),
+                   image_max=parse_size("chat", "image_max", _get(cp, "chat", "image_max", "8k")))
     _check_range("chat", "history_lines", chat.history_lines, 0, 200)
     _check_range("chat", "max_line", chat.max_line, 40, 1000)
+    if chat.image_max:
+        _check_range("chat", "image_max", chat.image_max, 1024, 16320)
     if cp.has_section("chat_boards"):
         for key, value in cp.items("chat_boards", raw=True):
             if key in cp.defaults():
@@ -657,7 +682,12 @@ def _load_chat(cp: configparser.ConfigParser) -> ChatCfg:
                 keep = parse_keep(parts[0])
             except ValueError as exc:
                 raise ConfigError(f"[chat_boards] {name}: {exc}") from None
-            chat.boards.append(ChatBoard(name, keep, parts[1].strip() if len(parts) > 1 else ""))
+            desc = parts[1].strip() if len(parts) > 1 else ""
+            noimg = False                      # CR12: "noimg" right after the keep time
+            if desc.split(None, 1)[:1] and desc.split(None, 1)[0].lower() == "noimg":
+                noimg = True
+                desc = desc[5:].strip()
+            chat.boards.append(ChatBoard(name, keep, desc, noimg=noimg))
     if chat.enabled and not chat.boards:
         raise ConfigError("[chat] enabled = yes, but [chat_boards] defines no boards")
     if cp.has_section("chat_motd"):            # CR3: message of the day per board

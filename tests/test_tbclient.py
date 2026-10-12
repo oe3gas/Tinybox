@@ -300,7 +300,7 @@ class EndToEndTests(unittest.TestCase):
                 await asyncio.wait_for(core.link.agw_up.wait(), 5)
                 await core.connect()
                 await until(lambda: core.boards, 10)
-                self.assertEqual(core.caps, {"CHAT", "UI", "SYNC", "SYNC2", "Z"})
+                self.assertEqual(core.caps, {"CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG"})
                 self.assertTrue(core.join(1))
                 await until(lambda: core.board and "OE3GAS" in core.members)
                 self.assertEqual(core.members, {"OE3XYZ": "", "OE3GAS": "/-"})
@@ -428,3 +428,93 @@ class EmoticonTests(unittest.TestCase):
         self.assertEqual(r["live:http://"], "http://|7")
         self.assertTrue(r["groups"][0].startswith("Smileys (ASCII, cheapest)=\U0001F642"))
         self.assertNotIn("\U0001F642", r["groups"][1])                                       # not twice
+
+
+class ImageTests(unittest.TestCase):
+    """CR12: a picture goes up in one block, the chat line carries only the
+    reference, a tap fetches it back."""
+
+    def test_upload_and_fetch_over_radio(self):
+        async def scenario():
+            from tinybox import chatimg
+            dw = FakeDirewolf()
+            port = await dw.start()
+            app = chat_app()
+            app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, agw_port=port,
+                                                   reconnect_sec=1)
+            adapter = tb_agw.AgwAdapter(app)
+            app.agw = adapter
+            t1 = asyncio.create_task(adapter.run())
+            await asyncio.wait_for(adapter.connected.wait(), 5)
+            term, tt = login(app, "OE3XYZ")
+            type_lines(term, "C TREFF")
+            webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + bytes(range(256)) * 5     # 1292 bytes
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, agw_port=port, img_piece=500, img_pause=0.05))
+                t2 = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.link.agw_up.wait(), 5)
+                await core.connect()
+                await until(lambda: core.boards, 10)
+                self.assertIn("IMG", core.caps)
+                self.assertIsNone(core.send_image(webp, "BEHV6nWB2yk8pyo0", "", ""))  # no board
+                core.join(1)
+                await until(lambda: core.board and core.board.get("img") == 8192)
+                h = core.send_image(webp, "BEHV6nWB2yk8pyo0", "vom Berg :-)", "")
+                self.assertEqual(h, chatimg.image_hash(webp))
+                await until(lambda: core.images.upload["state"] == "done", 15)
+                line = f"~#{h}{chatimg.size_code(len(webp))}BEHV6nWB2yk8pyo0 vom Berg :-)"
+                await until(lambda: any(m.get("text") == line for m in core.messages), 10)
+                self.assertIn("OE3GAS: [Image 1.3 KB - TinyBox client only] vom Berg :-)", tt.buf)
+                self.assertEqual(app.store.image_get(h), webp)
+                snap = core.snapshot()
+                self.assertEqual(snap["images"]["have"], [h])
+                self.assertEqual(snap["board"]["img"], 8192)
+                # forget the local copy, fetch it from the TinyBox
+                core.images.store.path(h).unlink()
+                self.assertTrue(core.fetch_image(h))
+                await until(lambda: core.images.store.has(h), 15)
+                self.assertEqual(core.images.store.get(h), webp)
+                self.assertEqual(core.snapshot()["images"]["loading"], {})
+                # an image the TinyBox does not have
+                self.assertTrue(core.fetch_image("000000"))
+                await until(lambda: core.images.loading.get("000000", {}).get("error"), 10)
+                core.disconnect()
+                await until(lambda: core.state == "offline")
+                t2.cancel()
+            t1.cancel()
+            dw.server.close()
+        asyncio.run(scenario())
+
+
+class ImageJsTests(unittest.TestCase):
+    """CR12: blurhash and the reference parser in app.js (node, skipped without it)."""
+
+    def test_blurhash_and_reference(self):
+        import shutil
+        import subprocess
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        root = Path(__file__).resolve().parent.parent
+        out = subprocess.run([node, str(root / "tests" / "fixtures" / "images.js"),
+                              str(root / "tbclient" / "web" / "app.js")],
+                             capture_output=True, text=True, encoding="utf-8", check=True)
+        r = json.loads(out.stdout)
+        from tinybox import chatimg
+        self.assertEqual(len(r["bh"]), 16)                       # 3x2 components
+        self.assertEqual(r["shape"], {"nx": 3, "ny": 2})
+        self.assertEqual((r["len33"], r["len43"]), (22, 28))
+        self.assertEqual(chatimg.blurhash_len(r["bh"][0]), 16)   # the TinyBox agrees
+        left, right, bottom = r["left"], r["right"], r["bottom"]
+        self.assertGreater(left[0], left[2] + 100)               # red on the left
+        self.assertGreater(right[2], right[0] + 100)             # blue on the right
+        self.assertLess(bottom[0], left[0] - 30)                 # darker at the bottom
+        self.assertEqual(r["ref"], {"hash": "a1b2c3", "size": 5120, "bh": r["bh"],
+                                    "caption": "vom Berg"})
+        self.assertEqual(r["ref_nocap"]["caption"], "")
+        self.assertEqual(r["ref_bad"], [None, None, None])
+        # the same line parsed by the TinyBox
+        line = "~#a1b2c350" + r["bh"] + " vom Berg"
+        self.assertEqual(chatimg.parse_ref(line)[:3], ("a1b2c3", 5120, r["bh"]))
+        self.assertEqual(chatimg.terminal_text(line),
+                         "[Image 5.0 KB - TinyBox client only] vom Berg")

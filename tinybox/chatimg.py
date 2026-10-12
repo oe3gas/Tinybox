@@ -1,0 +1,224 @@
+"""Small images in the chat (CR12, docs/client-change-requests.md).
+
+Over the air the chat line carries only a reference; the image itself is a
+blob the TinyBox stores under its hash. Whoever wants to see it fetches it
+over the connection (I-frames). The TinyBox never decodes an image: it checks
+size, hash and the file signature (WebP or JPEG) and keeps one copy per hash.
+
+Reference in a chat line (after an optional quote prefix ~^CALL HHMM), no
+separators - every field has a fixed or self-describing length:
+
+    ~#a1b2c350LEHV6nWB2yk8pyo0ad [caption]
+      ^^^^^^                      hash: first 6 hex digits of SHA-256 of the data
+            ^^                    size: 2 hex digits, in steps of 64 bytes (50 = 5120)
+              ^^^^^^^^^^^^^^^^    blurhash (base83); its first character tells
+                                  the component counts and so its length
+                                  (3x2 = 16, 3x3 = 22 characters), and the
+                                  client shapes the placeholder from them
+Terminal users read "[Image 5.0 KB - TinyBox client only]" instead.
+
+Client commands (cap IMG: radio sessions only). AX.25 is reliable, so the data
+goes in one block each way - no pieces, no acknowledgements:
+
+    //IMGPUT <hash> <bytes>   start/resume an upload (in a board with images)
+        -> //IMGGO <hash> <have>   now send the bytes from <have> on, raw,
+                                   right after the CR of this answer
+           //IMGOK <hash>          already here (same picture sent before)
+           //ERR img <reason>      no_images | too_large <max> | syntax
+       (after the bytes)
+        -> //IMGOK <hash>          complete, hash and type checked, stored
+           //ERR img bad_hash | bad_type
+    //IMG <hash> [<offset>]   a stored image (any board, or none)
+        -> //I <hash> <offset> <total> + (total - offset) raw bytes
+           //NOIMG <hash>
+
+A half uploaded image stays in memory for one hour; //IMGPUT answers with the
+bytes already there, the client goes on from that offset. Images are deleted
+when no stored chat line refers to them any more (the board's keep time), but
+never within the first hour after the upload.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import re
+import time
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import Config
+    from .session import Session
+    from .store import Store
+
+log = logging.getLogger(__name__)
+
+HASH_RE = re.compile(r"^[0-9a-f]{6}$")
+SIZE_UNIT = 64
+MAX_SIZE = 255 * SIZE_UNIT          # what two hex digits can say
+PARTIAL_TTL = 3600                  # s a half uploaded image is kept
+UNREF_GRACE_H = 1                   # h a stored image survives without a chat line
+B83 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~"
+# the fixed part of a reference: at the start or after a space (quote prefix)
+REF_START = re.compile(r"(?:^|(?<= ))~#([0-9a-f]{6})([0-9a-f]{2})")
+
+
+def image_hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:6]
+
+
+def size_code(size: int) -> str:
+    """Bytes -> the two hex digits of the reference (rounded up to 64)."""
+    return f"{min(255, -(-size // SIZE_UNIT)):02x}"
+
+
+def image_type(data: bytes) -> str | None:
+    """'webp' | 'jpeg' | None (anything else is refused)."""
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    return None
+
+
+def kb(size: int) -> str:
+    return f"{size / 1024:.1f} KB"
+
+
+def blurhash_len(first: str) -> int:
+    """Length of a blurhash from its first character (component counts)."""
+    i = B83.find(first)
+    if i < 0:
+        return 0
+    nx, ny = i % 9 + 1, i // 9 + 1
+    return 4 + 2 * nx * ny
+
+
+def parse_ref(text: str) -> tuple[str, int, str, int, int] | None:
+    """(hash, bytes, blurhash, start, end) of the reference in a chat line."""
+    m = REF_START.search(text)
+    if m is None:
+        return None
+    rest = text[m.end():]
+    n = blurhash_len(rest[:1])
+    bh = rest[:n]
+    if not n or len(bh) < n or any(c not in B83 for c in bh):
+        return None
+    if len(rest) > n and rest[n] != " ":
+        return None
+    return m.group(1), int(m.group(2), 16) * SIZE_UNIT, bh, m.start(), m.end() + n
+
+
+def terminal_text(text: str) -> str:
+    """What a terminal user reads instead of the reference."""
+    r = parse_ref(text)
+    if r is None:
+        return text
+    _, size, _, a, z = r
+    return f"{text[:a]}[Image {kb(size)} - TinyBox client only]{text[z:]}"
+
+
+class ChatImages:
+    def __init__(self, store: Store, cfg: Config) -> None:
+        self.store = store
+        self.cfg = cfg
+        # hash -> [size, bytearray, last activity]: uploads under way
+        self._partial: dict[str, list] = {}
+
+    # --- what a board allows -----------------------------------------------
+
+    def limit(self, s: Session) -> int:
+        """Max image bytes in the session's board (0 = none)."""
+        board = self.cfg.chat.board(s.chat_board or "")
+        return self.cfg.chat.image_limit(board) if board else 0
+
+    def check_line(self, s: Session, text: str) -> str | None:
+        """A client's chat line: an image reference must be allowed here and
+        name an uploaded image. Returns the error reason, or None."""
+        r = parse_ref(text)
+        if r is None:
+            return None
+        if not self.limit(s):
+            return "no_images"
+        if self.store.image_size(r[0]) is None:
+            return "unknown"
+        return None
+
+    # --- upload -----------------------------------------------------------------
+
+    def put(self, s: Session, parts: list[str]) -> None:
+        """//IMGPUT <hash> <bytes> -> //IMGGO <hash> <have>, then the bytes come."""
+        if len(parts) != 2 or not HASH_RE.match(parts[0]) or not parts[1].isdigit():
+            s.out("//ERR img syntax")
+            return
+        h, size = parts[0], int(parts[1])
+        limit = self.limit(s)
+        if not limit:
+            s.out("//ERR img no_images")
+            return
+        if size > limit or size < 1:
+            s.out(f"//ERR img too_large {limit}")
+            return
+        if self.store.image_size(h) is not None:
+            s.out(f"//IMGOK {h}")
+            return
+        p = self._partial.get(h)
+        if p is None or p[0] != size:
+            p = self._partial[h] = [size, bytearray(), time.monotonic()]
+        p[2] = time.monotonic()
+        s.out(f"//IMGGO {h} {len(p[1])}")
+        s.collect_raw(size - len(p[1]), lambda chunk: self._chunk(h, chunk),
+                      lambda: self._done(s, h))
+
+    def _chunk(self, h: str, chunk: bytes) -> None:
+        p = self._partial.get(h)
+        if p is not None:
+            p[1] += chunk
+            p[2] = time.monotonic()
+
+    def _done(self, s: Session, h: str) -> None:
+        p = self._partial.pop(h, None)
+        if p is None:
+            s.out("//ERR img not_started")
+            return
+        data = bytes(p[1])
+        if image_hash(data) != h:
+            s.out("//ERR img bad_hash")
+            return
+        if image_type(data) is None:
+            s.out("//ERR img bad_type")
+            return
+        self.store.image_put(h, data)
+        log.info("%s uploaded image %s (%d bytes, %s)", s.call, h, len(data), image_type(data))
+        s.out(f"//IMGOK {h}")
+
+    # --- download ---------------------------------------------------------------
+
+    def get(self, s: Session, parts: list[str]) -> None:
+        """//IMG <hash> [<offset>] -> //I <hash> <offset> <total> + bytes, or //NOIMG."""
+        if (not 1 <= len(parts) <= 2 or not HASH_RE.match(parts[0])
+                or (len(parts) == 2 and not parts[1].isdigit())):
+            s.out("//ERR img syntax")
+            return
+        h = parts[0]
+        offset = int(parts[1]) if len(parts) == 2 else 0
+        data = self.store.image_get(h)
+        if data is None:
+            s.out(f"//NOIMG {h}")
+            return
+        piece = data[offset:]
+        s.transport.write(f"//I {h} {offset} {len(data)}\r")
+        s.transport.write_bytes(piece)
+        log.info("%s > //IMG %s: %d bytes from %d of %d", s.call, h, len(piece), offset,
+                 len(data))
+
+    # --- housekeeping ---------------------------------------------------------------
+
+    def purge(self) -> int:
+        now = time.monotonic()
+        for h in [h for h, p in self._partial.items() if now - p[2] > PARTIAL_TTL]:
+            del self._partial[h]
+        before = (datetime.now(timezone.utc) - timedelta(hours=UNREF_GRACE_H)
+                  ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return self.store.image_purge(before)

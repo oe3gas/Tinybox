@@ -78,6 +78,8 @@
     <button id="btn-emoji" class="icon-btn" aria-label="Emoji">☺</button>
     <button id="btn-stk" class="icon-btn" aria-label="Sticker" title="Sticker">🏷️</button>
     <button id="btn-cry" class="icon-btn cry-btn" aria-label="Cry out" title="Cry out! (max. 32 characters, huge)">💥</button>
+    <button id="btn-img" class="icon-btn" aria-label="Picture" title="Picture">🖼</button>
+    <input id="imgfile" type="file" accept="image/*" class="hidden">
     <input id="input" type="text" autocomplete="off" maxlength="200" placeholder="Message" enterkeyhint="send">
     <button id="btn-send" class="send" aria-label="Send">➤</button>
   </footer>
@@ -131,6 +133,15 @@
   </div>
 </div>
 
+<div id="imgdlg" class="sheet hidden" role="dialog" aria-label="Send a picture">
+  <div class="sheet-body imgdlg">
+    <h2>Send a picture</h2>
+    <p id="imgdlg-text" class="muted"></p>
+    <input id="imgdlg-caption" type="text" maxlength="150" placeholder="Caption (optional)" autocomplete="off">
+    <p class="muted small">Over the air goes the small picture once, to the TinyBox. Others see a blurred preview and load the picture only when they tap it.</p>
+    <div class="row"><button id="imgdlg-ok" class="primary" disabled>Send</button><button id="imgdlg-cancel">Cancel</button></div>
+  </div>
+</div>
 <div id="sheet" class="sheet hidden" role="dialog" aria-label="Settings">
   <div class="sheet-body">
     <div class="sheet-head"><h2>Settings</h2><button id="btn-close" class="icon-btn" aria-label="Close">✕</button></div>

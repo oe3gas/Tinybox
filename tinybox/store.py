@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 7   # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 8   # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
+                     # 8: chat_images (small images in the chat, CR12)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -73,6 +74,11 @@ CREATE TABLE IF NOT EXISTS chat_lines (               -- only boards with histor
     created TEXT NOT NULL                             -- ISO 8601 UTC
 );
 CREATE INDEX IF NOT EXISTS chat_lines_board ON chat_lines (board, created);
+CREATE TABLE IF NOT EXISTS chat_images (              -- small chat images (CR12), one per hash
+    hash    TEXT PRIMARY KEY,                         -- 6 hex digits of SHA-256 (the client's id)
+    data    BLOB NOT NULL,                            -- WebP or JPEG, never decoded here
+    created TEXT NOT NULL                             -- ISO 8601 UTC (upload time)
+);
 CREATE TABLE IF NOT EXISTS sync_seq (                 -- change counter of the messages (CR26)
     k     INTEGER PRIMARY KEY CHECK (k = 1),
     v     INTEGER NOT NULL,
@@ -500,6 +506,31 @@ class Store:
             n += self._db.execute(f"DELETE FROM chat_lines WHERE board NOT IN ({marks})",
                                   list(keep)).rowcount
         return n
+
+    # --- chat images (CR12) ---------------------------------------------
+
+    def image_put(self, hash: str, data: bytes) -> None:
+        with self._db:
+            self._db.execute("INSERT OR IGNORE INTO chat_images (hash, data, created)"
+                             " VALUES (?, ?, ?)", (hash, data, utc_now()))
+
+    def image_get(self, hash: str) -> bytes | None:
+        row = self._db.execute("SELECT data FROM chat_images WHERE hash = ?", (hash,)).fetchone()
+        return bytes(row["data"]) if row else None
+
+    def image_size(self, hash: str) -> int | None:
+        row = self._db.execute("SELECT length(data) AS n FROM chat_images WHERE hash = ?",
+                               (hash,)).fetchone()
+        return row["n"] if row else None
+
+    def image_purge(self, before_iso: str) -> int:
+        """Delete images uploaded before `before_iso` that no stored chat line
+        refers to any more (the line carries '~#<hash>')."""
+        with self._db:
+            return self._db.execute(
+                "DELETE FROM chat_images WHERE created < ? AND NOT EXISTS"
+                " (SELECT 1 FROM chat_lines WHERE instr(text, '~#' || chat_images.hash) > 0)",
+                (before_iso,)).rowcount
 
     # --- JLOG / users ---------------------------------------------------
 

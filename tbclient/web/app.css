@@ -150,6 +150,23 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .picker-grid.stk-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 4px; }
 .stk-btn img { width: 76px; height: auto; display: block; }
 /* CR14: quotes */
+/* CR12: pictures - the image, or the blurred placeholder with the load state */
+.bubble.img { padding: 4px; }
+.bubble.img .imgbox { position: relative; width: min(240px, 70vw); border-radius: 12px; overflow: hidden;
+  background: var(--line); cursor: pointer; }
+.bubble.img .imgbox img { display: block; width: 100%; height: auto; }
+.bubble.img .imgbox .blur { display: block; width: 100%; height: auto; image-rendering: auto; filter: blur(1px); }
+.imgov { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 8px; text-align: center; color: #fff; font-size: 13px; font-weight: 600;
+  background: rgba(0,0,0,.35); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.imgov .small { font-weight: 400; opacity: .9; }
+.imgov .bar { width: 70%; height: 6px; border-radius: 3px; background: rgba(255,255,255,.35); overflow: hidden; }
+.imgov .fill { height: 100%; background: #fff; transition: width .4s; }
+.imgbox.busy { cursor: default; }
+.imgbox.err .imgov { background: rgba(120,0,0,.55); }
+.imgov button.sm { color: var(--text); margin-top: 4px; }
+.bubble.img .cap { padding: 5px 7px 2px; overflow-wrap: anywhere; }
+.imgdlg input { width: 100%; margin: 10px 0; }
 .quote { border-left: 3px solid var(--accent); background: rgba(127,127,127,.12); border-radius: 6px;
   padding: 3px 8px; margin: 0 0 4px; font-size: 12px; cursor: pointer; max-width: 100%; }
 .quote .q-who { font-weight: 600; color: var(--accent); }

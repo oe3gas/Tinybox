@@ -187,8 +187,8 @@ class Syncer:
     # --- control -----------------------------------------------------------------
 
     def start(self, scope: str = "mail") -> bool:
-        if self.running or scope not in ("mail", "bulletins"):
-            return False
+        if self.running or scope not in ("mail", "bulletins") or self.core.images.busy:
+            return False                  # one binary transfer at a time (CR12)
         self.task = asyncio.ensure_future(self._run(scope))
         return True
 

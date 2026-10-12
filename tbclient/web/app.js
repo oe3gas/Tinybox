@@ -264,6 +264,9 @@ function render() {
   if (!cryMode && !quoteTo) $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
   $("btn-cry").disabled = !inBoard;
   $("btn-stk").disabled = !inBoard || !Object.keys(STK).length;
+  $("btn-img").disabled = !(inBoard && S.board.img);
+  $("btn-img").title = inBoard && S.board.img ? `Send a picture (max. ${kbText(S.board.img)})`
+    : inBoard ? "No pictures in this board" : "Picture";
   renderMail();
   renderSys();
   renderUpdate();
@@ -504,6 +507,8 @@ function renderMessages() {
                      prevCall === S.mycall));
     prevCall = S.mycall;
   }
+  const up = S.images && S.images.upload;         // CR12: the picture on its way up
+  if (up && up.state !== "done") ol.append(uploadBubble(up));
   if (atEnd) box.scrollTop = box.scrollHeight;
 }
 
@@ -571,6 +576,8 @@ function excerpt(wire, n = 60) {
   const rest = wire.replace(QUOTE_RE, "");
   const sm = rest.match(STK_RE);
   if (sm && STK[sm[1]]) return "🏷️ " + STK[sm[1]].title;
+  const ir = imageRef(rest);
+  if (ir) return "🖼 image" + (ir.caption ? " · " + wireToText(ir.caption) : "");
   const t = wireToText(rest.replace(/^~!/, ""));
   return [...t].length > n ? [...t].slice(0, n).join("") + "…" : t;
 }
@@ -621,14 +628,20 @@ function bubble(m, cont) {
   const col = el("div", "col");
   if (!own && !cont) col.append(el("div", "who", m.call));
   const qm = (m.text || "").match(QUOTE_RE);
-  const text = wireToText(qm ? m.text.slice(qm[0].length) : m.text);
+  const body = qm ? m.text.slice(qm[0].length) : (m.text || "");
+  const ir = imageRef(body);                      // CR12: a picture with a caption
+  const text = wireToText(ir ? ir.caption : body);
   const quotesMe = qm && !own && baseCall(qm[1]) === baseCall(S.mycall);
   const b = el("div", "bubble" + (m.pending ? " pending" : "") + (m.history ? " history" : "")
-               + (selected === m.id ? " selected" : "") + (isSingleEmoji(text) && !qm ? " jumbo" : "")
+               + (selected === m.id ? " selected" : "") + (isSingleEmoji(text) && !qm && !ir ? " jumbo" : "")
+               + (ir ? " img" : "")
                + (!own && (mentionsMe(text) || quotesMe) ? " mention" : ""));
   if (qm) b.append(quoteBlock(qm[1], qm[2], m.pending ? null : quotedMessage(qm[1], qm[2], m)));
-  const sm = (qm ? m.text.slice(qm[0].length) : m.text || "").match(STK_RE);
-  if (sm && STK[sm[1]]) {                        // CR11: sticker instead of text
+  const sm = body.match(STK_RE);
+  if (ir) {
+    b.append(imageBlock(ir, own));
+    if (text) { const cap = el("div", "cap"); richText(cap, text); b.append(cap); }
+  } else if (sm && STK[sm[1]]) {                 // CR11: sticker instead of text
     b.classList.add("stk");
     const img = el("img");
     img.src = "/stickers/" + STK[sm[1]].file;
@@ -835,6 +848,288 @@ function renderSymbols() {
   }
 }
 
+
+// ---------------------------------------------------------------- blurhash
+/* Blurred colour preview of an image in 16-22 characters (CR12). Our own
+ * implementation of the public BlurHash algorithm (base83, DC + AC cosine
+ * components). Encode in the browser before sending, decode to draw the
+ * placeholder. The component counts (first character) also give the shape. */
+const B83 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~";
+const enc83 = (v, n) => { let s = ""; for (let i = 1; i <= n; i++) s += B83[Math.floor(v / 83 ** (n - i)) % 83]; return s; };
+const dec83 = (s) => { let v = 0; for (const c of s) v = v * 83 + B83.indexOf(c); return v; };
+const toLin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+const toSRGB = (v) => { v = Math.max(0, Math.min(1, v)); return Math.round((v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055) * 255); };
+const signPow = (v, e) => Math.sign(v) * Math.abs(v) ** e;
+
+/* pixels: RGBA bytes of a w x h image; nx, ny: components (1..9). */
+function blurhashEncode(pixels, w, h, nx, ny) {
+  const f = [];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const norm = i === 0 && j === 0 ? 1 : 2;
+    let r = 0, g = 0, b = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const basis = norm * Math.cos((Math.PI * i * x) / w) * Math.cos((Math.PI * j * y) / h);
+      const o = 4 * (x + y * w);
+      r += basis * toLin(pixels[o]); g += basis * toLin(pixels[o + 1]); b += basis * toLin(pixels[o + 2]);
+    }
+    f.push([r / (w * h), g / (w * h), b / (w * h)]);
+  }
+  const dc = f[0], ac = f.slice(1);
+  let hash = enc83((nx - 1) + (ny - 1) * 9, 1);
+  let maxVal = 1;
+  if (ac.length) {
+    const m = Math.max(...ac.map((c) => Math.max(...c.map(Math.abs))));
+    const q = Math.floor(Math.max(0, Math.min(82, Math.floor(m * 166 - 0.5))));
+    maxVal = (q + 1) / 166;
+    hash += enc83(q, 1);
+  } else hash += enc83(0, 1);
+  hash += enc83((toSRGB(dc[0]) << 16) + (toSRGB(dc[1]) << 8) + toSRGB(dc[2]), 4);
+  for (const c of ac) {
+    const q = c.map((v) => Math.floor(Math.max(0, Math.min(18, Math.floor(signPow(v / maxVal, 0.5) * 9 + 9.5)))));
+    hash += enc83(q[0] * 19 * 19 + q[1] * 19 + q[2], 2);
+  }
+  return hash;
+}
+
+/* {nx, ny} of a hash, or null if it is not a valid one. */
+function blurhashShape(hash) {
+  if (!hash || [...hash].some((c) => !B83.includes(c))) return null;
+  const flag = dec83(hash[0]), nx = (flag % 9) + 1, ny = Math.floor(flag / 9) + 1;
+  return hash.length === 4 + 2 * nx * ny ? { nx, ny } : null;
+}
+/* Length of a hash from its first character (0 = not a blurhash). */
+function blurhashLen(first) {
+  const i = first ? B83.indexOf(first) : -1;
+  return i < 0 ? 0 : 4 + 2 * ((i % 9) + 1) * (Math.floor(i / 9) + 1);
+}
+
+/* -> RGBA bytes, w x h pixels. */
+function blurhashDecode(hash, w, h, punch = 1) {
+  const sh = blurhashShape(hash);
+  if (!sh) return null;
+  const maxVal = ((dec83(hash[1]) + 1) / 166) * punch;
+  const colors = [];
+  for (let i = 0; i < sh.nx * sh.ny; i++) {
+    if (i === 0) {
+      const v = dec83(hash.slice(2, 6));
+      colors.push([toLin(v >> 16), toLin((v >> 8) & 255), toLin(v & 255)]);
+    } else {
+      const v = dec83(hash.slice(4 + i * 2, 6 + i * 2));
+      colors.push([Math.floor(v / 361), Math.floor(v / 19) % 19, v % 19].map((q) => signPow((q - 9) / 9, 2) * maxVal));
+    }
+  }
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let r = 0, g = 0, b = 0;
+    for (let j = 0; j < sh.ny; j++) for (let i = 0; i < sh.nx; i++) {
+      const basis = Math.cos((Math.PI * x * i) / w) * Math.cos((Math.PI * y * j) / h);
+      const c = colors[i + j * sh.nx];
+      r += c[0] * basis; g += c[1] * basis; b += c[2] * basis;
+    }
+    const o = 4 * (x + y * w);
+    out[o] = toSRGB(r); out[o + 1] = toSRGB(g); out[o + 2] = toSRGB(b); out[o + 3] = 255;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- images (CR12)
+/* Over the air only "~#<hash 6 hex><size 2 hex><blurhash>" (26-32 bytes, no
+ * separators) and, after a space, the caption. The size is in steps of 64
+ * bytes. The picture itself is fetched from the TinyBox on a tap (/api/image/get)
+ * and then served by the client as /img/<hash>. */
+const IMG_RE = /^~#([0-9a-f]{6})([0-9a-f]{2})/;
+const IMG_LONG = 320;                   // long side of a sent picture, at most
+const IMG_SHRINK_MAX = 8192;            // fallback if the board says nothing
+
+/* Parse the reference at the start of a (quote-free) wire text:
+ * {hash, size, bh, caption} or null. */
+function imageRef(wire) {
+  const m = (wire || "").match(IMG_RE);
+  if (!m) return null;
+  const rest = wire.slice(m[0].length), n = blurhashLen(rest[0] || "");
+  if (!n || rest.length < n) return null;
+  const bh = rest.slice(0, n);
+  if (!blurhashShape(bh)) return null;
+  if (rest.length > n && rest[n] !== " ") return null;
+  return { hash: m[1], size: parseInt(m[2], 16) * 64, bh, caption: rest.slice(n + 1) };
+}
+
+const kbText = (n) => `${(n / 1024).toFixed(1)} KB`;
+function secText(s) {
+  if (s < 50) return `~${Math.max(5, Math.round(s / 5) * 5)} s`;
+  const m = Math.round(s / 60);
+  return `~${Math.max(1, m)} min`;
+}
+/* Time over the air: net rate of the link, plus the pauses between the pieces when sending. */
+function imgTime(size, sending) {
+  const c = (S && S.img) || { piece: 256, pause: 2, rate: 60 };
+  return size / c.rate + (sending ? Math.ceil(size / c.piece) * c.pause : 0);
+}
+
+/* Draw a blurhash into a canvas the shape of its components (3x2 = landscape). */
+function blurCanvas(bh, cls) {
+  const sh = blurhashShape(bh);
+  const c = el("canvas", cls);
+  const w = 32, h = Math.max(4, Math.round((32 * sh.ny) / sh.nx));
+  c.width = w; c.height = h;
+  const px = blurhashDecode(bh, w, h);
+  if (px) c.getContext("2d").putImageData(new ImageData(px, w, h), 0, 0);
+  c.style.aspectRatio = `${sh.nx} / ${sh.ny}`;
+  return c;
+}
+
+/* The image part of a bubble: the picture if it is here, else the blurred
+ * placeholder with size, load time and the state of a running download. */
+function imageBlock(ref, own) {
+  const box = el("div", "imgbox");
+  const I = S.images || { have: [], loading: {} };
+  if (I.have.includes(ref.hash)) {
+    const img = el("img");
+    img.src = "/img/" + ref.hash; img.alt = "image";
+    img.onclick = (ev) => { ev.stopPropagation(); window.open(img.src, "_blank", "noopener"); };
+    box.append(img);
+    return box;
+  }
+  box.append(blurCanvas(ref.bh, "blur"));
+  const ov = el("div", "imgov");
+  const ld = I.loading[ref.hash];
+  if (ld && ld.error) {
+    ov.append(el("div", "", `⚠ ${ld.error}`), el("div", "small", "tap to try again"));
+    box.classList.add("err");
+  } else if (ld) {
+    const bar = el("div", "bar"), fill = el("div", "fill");
+    const total = ld.total || ref.size;
+    fill.style.width = Math.min(100, Math.round((100 * ld.done) / total)) + "%";
+    bar.append(fill);
+    ov.append(el("div", "", `${kbText(ld.done)} / ${kbText(total)}`), bar);
+    box.classList.add("busy");
+  } else {
+    ov.append(el("div", "", `🖼 ${kbText(ref.size)} · ${secText(imgTime(ref.size, false))}`),
+              el("div", "small", "tap to load"));
+  }
+  box.append(ov);
+  if (!ld || ld.error) {
+    box.onclick = (ev) => { ev.stopPropagation(); api("image/get", { hash: ref.hash }); };
+  } else box.onclick = (ev) => ev.stopPropagation();
+  return box;
+}
+
+/* The own upload under way (or failed): a bubble of its own until the chat
+ * line with the reference comes back from the TinyBox. */
+function uploadBubble(up) {
+  const li = el("li", "msg own");
+  const col = el("div", "col");
+  const b = el("div", "bubble img pending");
+  const ref = imageRef(up.line.replace(QUOTE_RE, ""));
+  const box = el("div", "imgbox");
+  if (ref && (S.images.have || []).includes(ref.hash)) {
+    const img = el("img"); img.src = "/img/" + ref.hash; img.alt = "image"; box.append(img);
+  } else if (ref) box.append(blurCanvas(ref.bh, "blur"));
+  const ov = el("div", "imgov");
+  if (up.state === "error") {
+    ov.append(el("div", "", `⚠ not sent: ${up.error}`));
+    const x = el("button", "sm", "OK");
+    x.onclick = (ev) => { ev.stopPropagation(); api("image/dismiss"); };
+    ov.append(x);
+    box.classList.add("err");
+  } else {
+    const bar = el("div", "bar"), fill = el("div", "fill");
+    fill.style.width = Math.min(100, Math.round((100 * up.sent) / up.size)) + "%";
+    bar.append(fill);
+    ov.append(el("div", "", up.state === "waiting" ? "waiting…" : `${kbText(up.sent)} / ${kbText(up.size)}`), bar);
+    box.classList.add("busy");
+  }
+  box.append(ov);
+  b.append(box);
+  if (ref && ref.caption) { const cap = el("div", "cap"); richText(cap, wireToText(ref.caption)); b.append(cap); }
+  col.append(b, el("div", "meta", up.state === "error" ? "failed" : "sending…"));
+  li.append(col);
+  return li;
+}
+
+/* Shrink a chosen file: WebP (JPEG where the browser cannot make WebP), long
+ * side at most IMG_LONG px, quality then size down until it fits maxBytes.
+ * -> {blob, w, h, bh} or null. */
+async function shrinkImage(file, maxBytes) {
+  let src;
+  try { src = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+  catch (e) {
+    src = await new Promise((ok, no) => {
+      const im = new Image();
+      im.onload = () => ok(im); im.onerror = no;
+      im.src = URL.createObjectURL(file);
+    });
+  }
+  const W = src.width || src.naturalWidth, H = src.height || src.naturalHeight;
+  if (!W || !H) return null;
+  const canvas = document.createElement("canvas");
+  const toBlob = (type, q) => new Promise((ok) => canvas.toBlob(ok, type, q));
+  let scale = Math.min(1, IMG_LONG / Math.max(W, H));
+  let best = null;
+  for (let round = 0; round < 8; round++) {
+    const w = Math.max(8, Math.round(W * scale)), h = Math.max(8, Math.round(H * scale));
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(src, 0, 0, w, h);
+    let type = "image/webp";
+    for (const q of [0.8, 0.65, 0.5, 0.4, 0.3, 0.2]) {
+      let blob = await toBlob(type, q);
+      if (!blob || blob.type !== type) { type = "image/jpeg"; blob = await toBlob(type, q); }
+      if (!blob) return null;
+      if (!best || blob.size < best.blob.size) best = { blob, w, h };
+      if (blob.size <= maxBytes) { best = { blob, w, h }; round = 99; break; }
+    }
+    scale *= 0.75;
+    if (w <= 64 && h <= 64) break;
+  }
+  if (!best || best.blob.size > maxBytes) return null;
+  // the blurhash from a tiny copy; the component counts follow the shape
+  const ratio = best.w / best.h;
+  const [nx, ny] = ratio >= 1.25 ? [3, 2] : ratio <= 0.8 ? [2, 3] : [3, 3];
+  const tw = 24, th = Math.max(4, Math.round(24 / ratio));
+  canvas.width = tw; canvas.height = th;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(src, 0, 0, tw, th);
+  const bh = blurhashEncode(ctx.getImageData(0, 0, tw, th).data, tw, th, nx, ny);
+  return { ...best, bh };
+}
+
+let imgPick = null;                      // {blob, bh} waiting for OK in the dialog
+async function chooseImage(file) {
+  if (!file || !S || !S.board || !S.board.img) return;
+  const maxBytes = S.board.img || IMG_SHRINK_MAX;
+  $("imgdlg-text").textContent = "Shrinking the picture…";
+  $("imgdlg-ok").disabled = true;
+  $("imgdlg-caption").value = $("input").value;
+  $("imgdlg").classList.remove("hidden");
+  let r = null;
+  try { r = await shrinkImage(file, maxBytes); } catch (e) { r = null; }
+  if (!r) {
+    $("imgdlg-text").textContent = `Sorry, this picture cannot be made small enough (max. ${kbText(maxBytes)}).`;
+    imgPick = null;
+    return;
+  }
+  imgPick = r;
+  $("imgdlg-text").textContent =
+    `The picture is reduced to ${r.w}×${r.h} px, about ${kbText(r.blob.size)}. ` +
+    `Upload ${secText(imgTime(r.blob.size, true))}, loading for others ${secText(imgTime(r.blob.size, false))} ` +
+    `(at ${S.img.rate} bytes/s). The chat line itself carries only ${26 + r.bh.length - 16} bytes.`;
+  $("imgdlg-ok").disabled = false;
+}
+function closeImageDialog() { $("imgdlg").classList.add("hidden"); imgPick = null; $("imgfile").value = ""; }
+async function sendImage() {
+  if (!imgPick) return;
+  const { wire, bad } = textToWire($("imgdlg-caption").value);
+  if (bad.length) { $("imgdlg-text").textContent = `Not sendable over radio: ${bad.join(" ")}`; return; }
+  const buf = new Uint8Array(await imgPick.blob.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i += 4096) bin += String.fromCharCode(...buf.subarray(i, i + 4096));
+  const body = { data: btoa(bin), blurhash: imgPick.bh, caption: wire, quote: quotePrefix() };
+  closeImageDialog();
+  $("input").value = ""; updateHint();
+  if (quoteTo) setQuote(null);
+  const r = await postJson("image", body);
+  if (!r.ok) { $("hint").className = "hint"; $("hint").textContent = "The picture was not accepted."; $("hint").classList.remove("hidden"); }
+}
 
 // ---------------------------------------------------------------- mailbox (C3)
 /* Everything here is local in the client; only "Sync" goes on air.
@@ -1361,6 +1656,12 @@ async function start() {
     else openStickers();
   };
   $("qb-close").onclick = () => setQuote(null);
+  $("btn-img").onclick = () => $("imgfile").click();
+  $("imgfile").onchange = () => chooseImage($("imgfile").files[0]);
+  $("imgdlg-ok").onclick = sendImage;
+  $("imgdlg-cancel").onclick = closeImageDialog;
+  $("imgdlg").onclick = (e) => { if (e.target === $("imgdlg")) closeImageDialog(); };
+  $("imgdlg-caption").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendImage(); } });
   $("input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
   $("input").addEventListener("input", (e) => { if (e.inputType !== "deleteContentBackward") liveEmoticon(e.target); updateHint(); });
   document.addEventListener("click", (e) => {

@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.10.2026 (CR26, CR27 und CR28 umgesetzt)
+Stand: 12.10.2026 (CR26, CR27, CR28 und CR12 umgesetzt)
 
 ## Übersicht
 
@@ -18,7 +18,7 @@ Stand: 12.10.2026 (CR26, CR27 und CR28 umgesetzt)
 | 9 | Zeilenumbruch mit Shift+Enter | offen – braucht Zeilenumbruch-Kodierung über Funk (Protokoll ist zeilenbasiert) |
 | 10 | Mehrzeilige Texte einfügen | offen – wie CR9 |
 | 11 | Sticker und Animationen | Sticker ✅ (Animationen offen) – siehe unten |
-| 12 | Konzept: kleine Bilder anhängen – Umsetzung, Maximalgröße, Binärübertragung (7PLUS?) | Konzept steht (nur Chat), Umsetzung offen – siehe unten |
+| 12 | Kleine Bilder im Chat (Verkleinern im Browser, BlurHash-Vorschau, Laden beim Antippen) | ✅ siehe unten |
 | 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | ✅ siehe unten |
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | ✅ siehe unten |
 | 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
@@ -118,7 +118,7 @@ Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (
 
 - Offen: Auswahl bestätigen; Verfügbarkeit 7–10 in der Noto-Liste prüfen; Technik für eigene Animationen (animiertes SVG/CSS vs. Lottie).
 
-## CR12 – Kleine Bilder im Chat (Konzept 11.10.2026, Umsetzung offen)
+## CR12 – Kleine Bilder im Chat (Konzept 11.10.2026, ✅ 12.10.2026)
 
 ### Entscheidungen (Gerhard, 11.10.2026)
 
@@ -151,6 +151,18 @@ Von Gerhard geliefert, einzeln freigestellt. Dateien: `tbclient/web/stickers/` (
 - **Maximalgröße:** Standard 8 KB, in `tinybox.conf` `[chat]` `image_max = 8k`.
 - **Abschaltbar durch den Sysop** pro Board in der `tinybox.conf` (Vorschlag: Zusatz in `[chat_boards]`, z. B. `TECH = 30d  Technical questions  noimg`, oder eigener Schlüssel – bei der Umsetzung festlegen). Der Client zeigt den Bild-Knopf nur in Boards, die Bilder erlauben (kommt mit der Board-Liste).
 - **Ladefortschritt** im Chat anzeigen: beim Hochladen in der eigenen Bubble, beim Laden über dem BlurHash (Balken + „2,3 / 5,1 KB“). Möglich, weil in Stücken übertragen wird.
+
+### Umsetzung (✅ 12.10.2026) – Payload nochmals durchgesehen (Gerhard, 12.10.2026)
+
+Vor dem Codieren wurde jedes Feld, das über die Luft geht, auf Bytes geprüft. Abweichungen vom Ablauf-Vorschlag oben:
+
+- **Verweis:** `~#` + Hash **6 Hex** + Größe **2 Hex in 64-Byte-Schritten** + BlurHash, **ohne Trennzeichen** (Hash und Größe sind fix lang, der BlurHash beschreibt seine Länge selbst) → **26–32 Byte** statt ~48. Beispiel: `~#a1b2c350BjElSA|nsR,x$0n~ Blick vom Berg`.
+- **Bildmaße gehen nicht über Funk.** Kein fester Rahmen: Form und Seitenverhältnis bleiben, der Client formt den Platzhalter aus den BlurHash-Komponenten (3×2 quer, 2×3 hoch, 3×3 quadratisch), die Pixel kommen mit dem Bild. Der Browser verkleinert auf höchstens 320 px lange Seite und senkt dann Qualität/Auflösung, bis es unter das Limit passt.
+- **BlurHash 16–22 Zeichen** (3×2 / 2×3 / 3×3) statt 28.
+- **Kein Stückeln, kein Ack:** AX.25 ist gesichert. Upload `//IMGPUT <hash> <bytes>` → `//IMGGO <hash> <have>` → Bytes am Stück → `//IMGOK`; Download `//IMG <hash> [<offset>]` → `//I <hash> <offset> <total>` + Bytes am Stück. Overhead je ≈ 35–55 Byte statt 8–18 %. Der Client gibt die Bytes stückweise mit Pause an Direwolf (`tbclient.conf [images]`) und wartet, bis das Stück davor gesendet ist (AGW `Y`) – kostet keine Luft. Fortschritt: beim Hochladen aus den übergebenen Stücken, beim Laden aus den eintreffenden Bytes.
+- **Erlaubnis** kommt beim Betreten (`//IN … img`, 4 Byte), nicht in der Board-Liste (`//B` ließe sich nicht erweitern, ohne alte Clients zu brechen). Abschalten pro Board: `noimg` direkt nach der Aufbewahrung (`TECH = 30d noimg Technical questions`).
+- Terminal-Teilnehmer lesen `[Image 5.0 KB - TinyBox client only]` (auch `/H`-Verlauf und Reaktionsziel). Bilder nur über Funk (AGW) wie Cap Z; Cap `IMG`.
+- Dateien: `tinybox/chatimg.py` (Protokoll, Referenz, Prüfung, Purge), `tbclient/images.py` (Transfer, Ablage `data/tbclient/images/`), BlurHash-Encoder/-Decoder in `app.js`. Protokoll ausführlich in `PLANUNG.md` 12.10.
 
 ## CR13 – History nur auf Wunsch (erledigt 11.10.2026)
 

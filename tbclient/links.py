@@ -41,25 +41,35 @@ class LineSplitter:
         self.need = 0                     # binary mode: bytes still expected
         self.bin = bytearray()
         self.on_bin: Callable[[bytes], None] | None = None
+        self.on_progress: Callable[[int], None] | None = None
 
-    def expect(self, n: int, on_bin: Callable[[bytes], None]) -> None:
-        """The next n bytes are binary (compressed message text), not lines.
-        Called from on_line, so it applies right after the announcing line."""
+    def expect(self, n: int, on_bin: Callable[[bytes], None],
+               on_progress: Callable[[int], None] | None = None) -> None:
+        """The next n bytes are binary (compressed message text, an image), not
+        lines. Called from on_line, so it applies right after the announcing
+        line. on_progress(bytes so far) after every piece that comes in."""
         if n <= 0:
             on_bin(b"")
             return
-        self.need, self.bin, self.on_bin = n, bytearray(), on_bin
+        self.need, self.bin, self.on_bin, self.on_progress = n, bytearray(), on_bin, on_progress
 
     def feed(self, data: bytes) -> None:
-        for b in data:
+        i = 0
+        while i < len(data):
             if self.need:
-                self.bin.append(b)
-                self.need -= 1
+                take = data[i:i + self.need]
+                i += len(take)
+                self.bin += take
+                self.need -= len(take)
+                if self.on_progress is not None:
+                    self.on_progress(len(self.bin))
                 if not self.need:
                     self.last_cr = False
-                    cb, self.on_bin = self.on_bin, None
+                    cb, self.on_bin, self.on_progress = self.on_bin, None, None
                     cb(bytes(self.bin))
                 continue
+            b = data[i]
+            i += 1
             if b in (10, 13):
                 if b == 10 and self.last_cr:
                     self.last_cr = False
@@ -103,6 +113,8 @@ class AgwLink(BaseLink):
         self._writer: asyncio.StreamWriter | None = None
         self.agw_up = asyncio.Event()
         self.connecting = False
+        self._outstanding = 0
+        self._y_reply = asyncio.Event()
 
     def _send(self, kind: str, call_from: str = "", call_to: str = "",
               data: bytes = b"", pid: int = 0) -> None:
@@ -168,6 +180,9 @@ class AgwLink(BaseLink):
             self._set("online")
         elif kind == "D" and tb in (cfrom, cto):
             self.splitter.feed(data)
+        elif kind == "Y" and tb in (cfrom, cto) and len(data) >= 4:
+            self._outstanding = struct.unpack("<I", data[:4])[0]
+            self._y_reply.set()
         elif kind == "d" and tb in (cfrom, cto):
             was = self.online or self.connecting
             self.connecting = False
@@ -183,10 +198,23 @@ class AgwLink(BaseLink):
         self._send("C", self.cfg.mycall, self.cfg.tinybox_call, pid=PID_NO_L3)
 
     def send_line(self, text: str) -> None:
-        data = (text + "\r").encode("utf-8")
+        self.send_bytes((text + "\r").encode("utf-8"))
+
+    def send_bytes(self, data: bytes) -> None:
+        """Raw bytes (a line, or image data after //IMGGO)."""
         for i in range(0, len(data), PACLEN):
             self._send("D", self.cfg.mycall, self.cfg.tinybox_call, data[i:i + PACLEN],
                        PID_NO_L3)
+
+    async def outstanding(self) -> int:
+        """Frames of our connection still waiting in Direwolf (AGW 'Y')."""
+        self._y_reply.clear()
+        self._send("Y", self.cfg.mycall, self.cfg.tinybox_call)
+        try:
+            await asyncio.wait_for(self._y_reply.wait(), 5)
+        except asyncio.TimeoutError:
+            return 0
+        return self._outstanding
 
     def disconnect(self) -> None:
         self._send("d", self.cfg.mycall, self.cfg.tinybox_call)
@@ -246,6 +274,13 @@ class TelnetLink(BaseLink):
             self._sent.append(text)
             del self._sent[:-20]
             self._writer.write((text + "\r\n").encode("utf-8"))
+
+    def send_bytes(self, data: bytes) -> None:      # never used: no IMG cap on telnet
+        if self._writer is not None:
+            self._writer.write(data)
+
+    async def outstanding(self) -> int:
+        return 0
 
     def disconnect(self) -> None:
         if self._writer is not None:

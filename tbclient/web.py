@@ -28,11 +28,20 @@ Mailbox (C3), all local - only "sync" goes on air:
   POST /api/mail/subscribe {"rubric": "ALL", "on": true}
   POST /api/mail/sync {"scope": "mail"|"bulletins"} | /api/mail/cancel
   POST /api/mail/news   subscribe TBNEWS + fetch bulletins ("Read about new features")
+
+Images in the chat (CR12):
+  POST /api/image      {"data": <base64 WebP/JPEG>, "blurhash": "...", "caption": "...",
+                        "quote": "~^CALL HHMM " | ""}  -> {"ok": true, "hash": "a1b2c3"}
+                       upload, then the chat line goes out
+  POST /api/image/get  {"hash": "a1b2c3"}     fetch an image someone posted
+  POST /api/image/dismiss                     take the finished/failed upload off the GUI
+  GET  /img/<hash>                            the image file (WebP or JPEG)
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import re
@@ -163,6 +172,18 @@ class WebServer:
                 ok = core.load_history(int(data.get("n", 10)))
             elif path == "/api/histmode":
                 ok = core.set_history_mode(str(data.get("mode", "")))
+            elif path == "/api/image":
+                try:
+                    raw = base64.b64decode(str(data.get("data", "")), validate=True)
+                except (ValueError, TypeError):
+                    return 400, {"error": "bad data"}, None
+                h = core.send_image(raw, str(data.get("blurhash", "")),
+                                    str(data.get("caption", "")), str(data.get("quote", "")))
+                return (200, {"ok": True, "hash": h}, None) if h else (400, {"ok": False}, None)
+            elif path == "/api/image/get":
+                ok = core.fetch_image(str(data.get("hash", "")))
+            elif path == "/api/image/dismiss":
+                core.images.dismiss_upload()
             elif path.startswith("/api/mail/"):
                 return self._mail(path[10:], data)
             else:
@@ -170,6 +191,11 @@ class WebServer:
             return (200 if ok else 400), {"ok": ok}, None
         if method != "GET":
             return 405, {"error": "method"}, None
+        if path.startswith("/img/"):                 # CR12: a fetched or sent image
+            data = core.images.store.get(path[5:])
+            if data is None:
+                return 404, {"error": "not found"}, None
+            return 200, data, "image/webp" if data[:4] == b"RIFF" else "image/jpeg"
         name = FILES.get(path)
         if name is None or not (STATIC / name).is_file():
             return 404, {"error": "not found"}, None

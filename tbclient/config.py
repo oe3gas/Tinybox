@@ -31,6 +31,9 @@ class Config:
     data_dir: Path = Path("data/tbclient")
     sync_chunk: int = 1024            # bytes per request of a mailbox sync (radio)
     sync_pause: float = 5.0           # seconds between two requests (radio)
+    img_piece: int = 256              # bytes handed to Direwolf at once when sending an image
+    img_pause: float = 2.0            # seconds between two pieces
+    img_rate: int = 60                # net bytes/s of the link, for the time estimate
 
 
 def _strip(value: str) -> str:
@@ -69,6 +72,15 @@ def load(path: str | Path) -> Config:
         raise ConfigError("[sync] chunk_bytes must be 128 ... 8192")
     if not 0 <= cfg.sync_pause <= 120:
         raise ConfigError("[sync] pause_sec must be 0 ... 120")
+    cfg.img_piece = int(get("images", "piece_bytes", str(cfg.img_piece)))
+    cfg.img_pause = float(get("images", "pause_sec", str(cfg.img_pause)))
+    cfg.img_rate = int(get("images", "bytes_per_sec", str(cfg.img_rate)))
+    if not 64 <= cfg.img_piece <= 2048:
+        raise ConfigError("[images] piece_bytes must be 64 ... 2048")
+    if not 0 <= cfg.img_pause <= 60:
+        raise ConfigError("[images] pause_sec must be 0 ... 60")
+    if not 10 <= cfg.img_rate <= 100000:
+        raise ConfigError("[images] bytes_per_sec must be 10 ... 100000")
 
     for name, call in (("[station] mycall", cfg.mycall), ("[tinybox] call", cfg.tinybox_call)):
         if not CALL_RE.match(call):
