@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.10.2026 (CR26 Delta-Abgleich umgesetzt)
+Stand: 12.10.2026 (CR26 umgesetzt, CR27 entschieden)
 
 ## Übersicht
 
@@ -33,6 +33,7 @@ Stand: 12.10.2026 (CR26 Delta-Abgleich umgesetzt)
 | 24 | BUG – Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte | ✅ siehe unten |
 | 25 | Board antippen: Button einfärben, bis man im Board angekommen ist | ✅ siehe unten |
 | 26 | Delta-Abgleich: Mail-/Bulletin-Sync mit minimaler Payload (ein Wechsel, nur Änderungen, kleine Texte gleich mit, Z für Köpfe) | ✅ siehe unten |
+| 27 | Persönliche Post an mehrere Empfänger (`OE3TEC,OE1ABC`): Text einmal über Funk, TinyBox legt je Empfänger eine eigene Nachricht an | entschieden 12.10.2026, noch nicht umgesetzt – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -385,3 +386,17 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - **Client:** nutzt `SYNC2`, wenn die TinyBox es anbietet, sonst alter Ablauf. Merkt sich `seq` je Abgleich; in der TinyBox gelöschte Post verschwindet jetzt auch hier (`//D`). Vollabgleich bei `//ERR seq` (TinyBox-DB neu).
 - **Ergebnis:** „nichts Neues“ = 1 Wechsel, ~45 Byte statt ~2,7 kB; 1 neue Mail = 1 Wechsel statt 4.
 - Client-Version 2026.10.12.3. Tests: `tests/test_mailsync.py` (`DeltaSyncTests`).
+
+## CR27 – Persönliche Post an mehrere Empfänger (entschieden 12.10.2026, noch nicht umgesetzt)
+
+**Entscheidung:** nur Variante „mehrere Rufzeichen in einer Mail". Eine Verteilerliste (eine Nachricht, viele Leser, Lesestatus je Leser) gibt es nicht – dafür sind die Rubriken da (Bulletins).
+
+**Verhalten:**
+- Empfängerfeld mit Komma: `OE3TEC,OE1ABC[@ADRESSE]`. Terminal `SP OE3TEC,OE1ABC`, Client-Composer (Feld „To"), `//SEND P OE3TEC,OE1ABC <n> mid=…`. Eine `@`-Adresse gilt für alle; braucht ein Empfänger eine andere, zwei Mails schreiben. Höchstens 10 Empfänger, doppelte werden zusammengefasst, jeder wie bisher geprüft (`check_send`).
+- Die TinyBox legt **je Empfänger eine eigene Nachricht** an: gleicher Text und Betreff, eigene Nummer, eigener Status, eigene MID (fürs Forwarding, jede Kopie geht ihren eigenen Weg). Ist einer der Empfänger ungültig, wird gar nichts gespeichert (`//ERR send …` bzw. Fehlertext am Terminal) – keine halben Sendungen.
+- Über Funk geht der Text **einmal**: der Client schickt eine `//SEND`-Zeile mit der Empfängerliste; Antwort `//SENT <Nr.> <Nr.> …` (eine Zeile, alle Nummern). `mid=` bleibt eine Kennung für die ganze Sendung: kommt sie noch einmal, antwortet die TinyBox mit den vorhandenen Nummern (Zuordnung Kennung → Nummern über `msgid = tbc-<Kennung>-<Empfänger>`).
+- Terminal-Antwort: `Message 12, 13 saved` (wie bisher, nur mit allen Nummern).
+- Client: im Ordner „Sent" erscheint je Empfänger ein Eintrag (jede Kopie hat ihre Nummer, kann einzeln gelöscht werden); der Ausgang zeigt die Sendung bis zum `//SENT` als einen Eintrag. Der Delta-Abgleich braucht nichts Neues.
+- Alte Clients: schicken nie ein Komma, nichts ändert sich.
+
+**Aufwand:** klein – `SEND_RE`/`check_send` für die Liste, Schleife um `service.create` in `commands.py` und `clientsync._send`, `//SENT` mit mehreren Nummern im Client (`add_sent` je Nummer), Composer-Hinweis „mehrere durch Komma". Tests in `test_mailsync.py` und `test_tinybox.py`.
