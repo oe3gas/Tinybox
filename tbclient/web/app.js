@@ -1031,9 +1031,13 @@ function uploadBubble(up) {
   const ov = el("div", "imgov");
   if (up.state === "error") {
     ov.append(el("div", "", `⚠ not sent: ${up.error}`));
-    const x = el("button", "sm", "OK");
+    const row = el("div", "row");
+    const again = el("button", "sm", "Try again");
+    again.onclick = (ev) => { ev.stopPropagation(); api("image/retry"); };
+    const x = el("button", "sm", "Discard");
     x.onclick = (ev) => { ev.stopPropagation(); api("image/dismiss"); };
-    ov.append(x);
+    row.append(again, x);
+    ov.append(row);
     box.classList.add("err");
   } else {
     const bar = el("div", "bar"), fill = el("div", "fill");

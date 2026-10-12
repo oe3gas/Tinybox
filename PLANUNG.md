@@ -674,6 +674,7 @@ Bulletins analog, aber je Rubrik „was habe ich“ statt `seq` für Neues (Abon
 - **Terminal-Teilnehmer** lesen `[Image 5.0 KB - TinyBox client only]`, auch im Verlauf und als Reaktionsziel.
 - **Nicht** in Live-Boards; pro Board abschaltbar mit `noimg` nach der Aufbewahrung (`TECH = 30d noimg …`); `image_max = 0` schaltet Bilder ganz ab (dann gibt es die Fähigkeit `IMG` nicht). Bilder nur über Funk (AGW), wie die Z-Kompression.
 - **Aufbewahrung:** ein Bild wird gelöscht, wenn keine gespeicherte Chat-Zeile es mehr nennt (Aufbewahrung des Boards), nie in der ersten Stunde nach dem Upload. Ein halb hochgeladenes Bild bleibt eine Stunde im Speicher.
+- **Der Rohblock darf nicht unterbrochen werden** (Fehler beim ersten Funktest, 12.10.2026): Die TinyBox nimmt nach `//IMGPUT` alles als Bilddaten. Rutscht eine Zeile dazwischen (getippter Text, Reaktion, vor allem das automatische `//RESEND`), zählt sie als Bilddaten mit, der Zähler ist zu früh bei null und die letzten echten Bildbytes landen als Chat-Zeile im Board. Darum hält der Client von `//IMGPUT` bis zum letzten Byte jede andere Zeile zurück (`ClientCore.hold_lines`) und sendet sie danach. Zusätzlich: Zeitlimit für den Rohmodus in der TinyBox (120 s ohne Byte → `//ERR img timeout <bytes>`, Empfangenes bleibt für die Fortsetzung) und Chat-Zeilen mit Steuerzeichen werden verworfen, damit Binärmüll nie an alle geht.
 - Mail-Anhänge: später extra (dann prüfen, was LinBPQ/FBB heute statt 7PLUS können).
 
 ## 13. Forwarding-Modul (optional)

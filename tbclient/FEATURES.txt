@@ -16,7 +16,10 @@ Zuletzt dazugekommen
   Groesse, Upload- und Ladedauer. In der Chat-Zeile gehen nur 26 bis 32
   Byte ueber Funk (Kennung + unscharfe Farbvorschau). Die anderen sehen
   die Vorschau mit Groesse und Ladezeit und holen das Bild erst beim
-  Antippen, mit Fortschrittsbalken. Terminal-Teilnehmer lesen
+  Antippen, mit Fortschrittsbalken. Waehrend ein Bild hochgeht, warten
+  getippte Zeilen und gehen danach hinaus (sonst kaemen sie mitten in den
+  Bildstrom); schlaegt der Upload fehl, gibt es "Try again".
+  Terminal-Teilnehmer lesen
   "[Image 5.0 KB - TinyBox client only]". Nicht in Live-Boards, vom
   Sysop pro Board abschaltbar (noimg).
 - Board betreten: das angetippte Board bleibt farbig markiert, bis man

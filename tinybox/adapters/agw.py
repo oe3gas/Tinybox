@@ -29,7 +29,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 
-from .. import linkq, texts
+from .. import chatimg, linkq, texts
 from ..app import App
 from ..config import is_valid_call, normalize_call
 from ..session import MAX_LINE, Session
@@ -468,6 +468,9 @@ class AgwAdapter:
             await asyncio.sleep(10)
             now = time.monotonic()
             for conn in list(self.conns.values()):
+                # binary data announced but no longer coming: back to lines (CR12)
+                if conn.session is not None and hasattr(conn.session, "raw_timeout"):
+                    conn.session.raw_timeout(chatimg.RAW_TIMEOUT, now)
                 if (conn.session and not conn.session.closed
                         and not conn.session.idle_exempt  # reading along in a chat
                         and now - conn.last_activity > limit):

@@ -71,6 +71,8 @@ class ClientCore:
         # our own join can overtake the //IN line. Keep such events until //IN.
         self._joining: int | None = None
         self._early: list[proto.Event] = []
+        # lines held back while image bytes go out as one raw block (CR12)
+        self._hold: list[str] | None = None
         # offline mailbox (C3)
         self.mailbox = MailStore(cfg.data_dir / "mailbox.db", cfg.mycall)
         self.sync = Syncer(self, self.mailbox)
@@ -302,8 +304,25 @@ class ClientCore:
         return True
 
     def _send(self, line: str) -> None:
+        if self._hold is not None:          # an image is going out: wait (CR12)
+            self._hold.append(line)
+            self.console.append("| " + line)
+            return
         self.console.append("> " + line)
         self.link.send_line(line)
+
+    def hold_lines(self, on: bool) -> None:
+        """While the bytes of an image go to the TinyBox, nothing else may go on
+        the link: a line in between would be counted as image data there, the
+        picture would be damaged and its last bytes would land in the chat.
+        Held lines (typed text, reactions, //RESEND ...) go out afterwards."""
+        if on:
+            if self._hold is None:
+                self._hold = []
+            return
+        held, self._hold = self._hold or [], None
+        for line in held:
+            self._send(line)
 
     # --- link callbacks ---------------------------------------------------------
 
@@ -319,6 +338,8 @@ class ClientCore:
             self.pending.clear()
             self.sync.link_lost()
             self.images.link_lost()
+            if self._hold is not None:       # held lines are gone with the link
+                self._hold = []
             self.sysmsg = None                   # a shutdown warning is over now
             if self._hs_task:
                 self._hs_task.cancel()

@@ -7,6 +7,7 @@ gives the session a Transport to write to and to close the connection.
 from __future__ import annotations
 
 import logging
+import time
 from enum import Enum
 from typing import Protocol
 
@@ -81,8 +82,10 @@ class Session:
         self._page_shown = 0
         # client protocol: raw bytes to collect (image upload, CR12 - see collect_raw())
         self.raw_need = 0
+        self.raw_since = 0.0        # when the last raw byte came in (timeout)
         self._raw_chunk = None
         self._raw_done = None
+        self._raw_cancel = None
 
     # --- output ---------------------------------------------------------
 
@@ -281,33 +284,56 @@ class Session:
 
     # --- client protocol: the next n bytes as they are (binary) ----------
 
-    def collect_raw(self, n: int, chunk, done) -> None:
+    def collect_raw(self, n: int, chunk, done, cancel=None) -> None:
         """The next n input bytes are binary data, not lines: every piece goes
         to chunk(bytes) as it arrives (so nothing is lost when the link breaks),
-        done() is called after the last one. The adapter looks at raw_need
-        before it splits lines (AGW only)."""
+        done() is called after the last one. cancel() is called when the data
+        stops coming (raw_timeout). The adapter looks at raw_need before it
+        splits lines (AGW only)."""
         if n <= 0:
             done()
             return
         self.raw_need, self._raw_chunk, self._raw_done = n, chunk, done
+        self._raw_cancel = cancel
+        self.raw_since = time.monotonic()
+
+    def _raw_end(self):
+        self.raw_need = 0
+        done, cancel = self._raw_done, self._raw_cancel
+        self._raw_chunk = self._raw_done = self._raw_cancel = None
+        return done, cancel
 
     def feed_raw(self, data: bytes) -> None:
         """At most raw_need bytes from the adapter."""
         self.raw_need -= len(data)
+        self.raw_since = time.monotonic()
         try:
             self._raw_chunk(data)
             if self.raw_need <= 0:
-                self.raw_need = 0
-                done = self._raw_done
-                self._raw_chunk = self._raw_done = None
+                done, _ = self._raw_end()
                 done()
         except Exception:
-            self.raw_need = 0
-            self._raw_chunk = self._raw_done = None
+            self._raw_end()
             logging.getLogger("tinybox").exception(
                 "%s: internal error handling %d raw bytes", self.call, len(data))
             if self.state != State.CLOSED:
                 self.out(texts.INTERNAL_ERROR)
+
+    def raw_timeout(self, limit: float, now: float | None = None) -> bool:
+        """True if binary data was announced but stopped coming: back to lines.
+        What came so far is kept, the client goes on where it stopped."""
+        if self.raw_need <= 0:
+            return False
+        now = time.monotonic() if now is None else now
+        if now - self.raw_since < limit:
+            return False
+        missing = self.raw_need
+        _, cancel = self._raw_end()
+        logging.getLogger("tinybox").info(
+            "%s: %d bytes of binary data never arrived, back to lines", self.call, missing)
+        if cancel is not None and self.state != State.CLOSED:
+            cancel()
+        return True
 
     # --- composing a message -------------------------------------------
 

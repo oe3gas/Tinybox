@@ -26,6 +26,17 @@ if TYPE_CHECKING:
     from .session import Session
 
 CTRL_Z = "\x1a"
+# A chat line is text. Control characters mean binary data ended up here (e.g.
+# the rest of an image upload after a line slipped into the byte stream, CR12):
+# such a line is dropped, never sent on to everybody in the board.
+CTRL_CHARS = ({chr(c) for c in range(0x20)} | {chr(0x7F)}) - {"\t", CTRL_Z}
+C1_CHARS = {chr(c) for c in range(0x80, 0xA0)}
+
+
+def looks_binary(text: str) -> bool:
+    if any(c in CTRL_CHARS for c in text):
+        return True
+    return len(text) > 4 and sum(c in C1_CHARS for c in text) > len(text) // 5
 
 
 def _time(iso: str) -> str:
@@ -164,12 +175,18 @@ def _quit(s: Session) -> None:
 def handle(s: Session, line: str) -> None:
     """One input line while in a board."""
     hub = s.service.chat
+    if looks_binary(line):
+        import logging
+        logging.getLogger(__name__).warning(
+            "%s: chat line with control characters dropped (%d bytes)", s.call,
+            len(line.encode("utf-8", "replace")))
+        return
     if s.chat_board is None or hub.cfg.chat.board(s.chat_board) is None:
         _quit(s)
         return
     if CTRL_Z in line:
         text = line.split(CTRL_Z, 1)[0].strip()
-        if text:
+        if text and not looks_binary(text):
             hub.say(s, text[:hub.cfg.chat.max_line])
         _quit(s)
         return

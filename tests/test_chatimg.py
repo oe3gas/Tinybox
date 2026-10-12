@@ -302,3 +302,48 @@ class AgwRawTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RawStreamTests(unittest.TestCase):
+    """What went wrong on the air on 12.10.2026: a line slipped into the byte
+    stream, so the last image bytes were read as a chat line. The TinyBox side
+    now has a time limit for the raw mode and drops binary chat lines."""
+
+    def setUp(self):
+        self.app = img_app()
+
+    def test_timeout_keeps_what_came_and_resumes(self):
+        s, t = client(self.app)
+        h = h6(WEBP)
+        type_lines(s, f"//IMGPUT {h} {len(WEBP)}")
+        self.assertEqual(t.take(), f"//IMGGO {h} 0\r")
+        s.feed_raw(WEBP[:300])
+        self.assertGreater(s.raw_need, 0)
+        self.assertFalse(s.raw_timeout(120, now=s.raw_since + 10))     # still fresh
+        self.assertTrue(s.raw_timeout(120, now=s.raw_since + 121))
+        self.assertEqual(s.raw_need, 0)
+        self.assertEqual(t.take(), "//ERR img timeout 300\r")
+        type_lines(s, "/W")                       # lines work again at once
+        self.assertIn("here", t.take())
+        type_lines(s, f"//IMGPUT {h} {len(WEBP)}")   # go on where it stopped
+        self.assertEqual(t.take(), f"//IMGGO {h} 300\r")
+        s.feed_raw(WEBP[300:])
+        self.assertEqual(t.take(), f"//IMGOK {h}\r")
+        self.assertEqual(self.app.store.image_get(h), WEBP)
+
+    def test_binary_chat_line_is_dropped(self):
+        from tinybox import chatcmd
+        self.assertFalse(chatcmd.looks_binary("Servus :+1"))
+        self.assertFalse(chatcmd.looks_binary("Gruß – schön!"))   # CP1252 dash
+        self.assertTrue(chatcmd.looks_binary("wü\x00\x9c\x81ah"))
+        self.assertTrue(chatcmd.looks_binary("ÕÙvi\x11õê"))
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF")
+        s, t = client(self.app)
+        tt.take(), t.take()
+        type_lines(s, "ÕÙvi\x11õê}¹ÊÐn")      # rest of an image
+        self.assertEqual(t.take(), "")            # nothing on the air, nothing stored
+        self.assertEqual(tt.take(), "")
+        self.assertEqual(self.app.store.chat_recent("TREFF", "2000-01-01T00:00:00Z", 10), [])
+        type_lines(s, "Servus")                   # normal text still works
+        self.assertIn("OE3GAS: Servus", t.take())

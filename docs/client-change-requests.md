@@ -166,6 +166,18 @@ Vor dem Codieren wurde jedes Feld, das über die Luft geht, auf Bytes geprüft. 
 - Terminal-Teilnehmer lesen `[Image 5.0 KB - TinyBox client only]` (auch `/H`-Verlauf und Reaktionsziel). Bilder nur über Funk (AGW) wie Cap Z; Cap `IMG`.
 - Dateien: `tinybox/chatimg.py` (Protokoll, Referenz, Prüfung, Purge), `tbclient/images.py` (Transfer, Ablage `data/tbclient/images/`), BlurHash-Encoder/-Decoder in `app.js`. Protokoll ausführlich in `PLANUNG.md` 12.10.
 
+### Fehler beim ersten Funktest und Behebung (✅ 12.10.2026, Client 2026.10.12.9)
+
+Beim ersten Bild über Funk kamen die letzten Bytes nicht an: der Upload meldete „damaged on the way", und der Rest des Bildes stand als Zeichenmüll im Chat (und ging als Chat-Beitrag an alle).
+
+**Ursache:** Der Client gibt die Bildbytes absichtlich in Häppchen mit Pausen an Direwolf. In diesen Pausen konnte jede andere Zeile dazwischenrutschen – getippter Text, eine Reaktion, vor allem das automatische `//RESEND`/`//LOST` der Lückenerkennung. Die TinyBox nimmt nach `//IMGPUT` aber **alles** als Bilddaten, zählte die Zeile mit, war zu früh „fertig" – und las die letzten echten Bildbytes als Chat-Zeile. Der Hash stimmte folglich nicht.
+
+**Behoben in drei Schritten:**
+- **Client:** Sendesperre von `//IMGPUT` bis zum letzten Byte (`ClientCore.hold_lines`). Zurückgehaltene Zeilen gehen danach in der getippten Reihenfolge hinaus; bricht die Verbindung ab, werden sie verworfen. Ein laufender Mailbox-Abgleich blockiert den Upload weiterhin (und umgekehrt), nach 10 Minuten Wartezeit mit Fehlermeldung statt Senden.
+- **TinyBox:** Zeitlimit für den Rohmodus (`chatimg.RAW_TIMEOUT`, 120 s ohne Byte, geprüft im Idle-Watchdog des AGW-Adapters). Die Sitzung liest wieder Zeilen, meldet `//ERR img timeout <bytes>`, und das bereits Empfangene bleibt erhalten – das nächste `//IMGPUT` setzt dort fort.
+- **TinyBox:** Chat-Zeilen mit Steuerzeichen (C0 außer Tab/Ctrl-Z, oder über 20 % C1-Zeichen) werden verworfen und nur geloggt. So geht im Fehlerfall nie wieder Binärmüll über Funk an alle Teilnehmer.
+- **Client:** Nach einem fehlgeschlagenen Upload gibt es „Try again" (das verkleinerte Bild liegt noch im Client) neben „Discard".
+
 ## CR13 – History nur auf Wunsch (erledigt 11.10.2026)
 
 - **Aufbewahrung** wie bisher pro Board in `tinybox.conf` `[chat_boards]` (Beispiel: TREFF 7d, DX 24h, TECH 30d, RUNDE live). `history_lines` (Standard 20) ist jetzt die **Höchstzahl pro Abruf**.

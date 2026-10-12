@@ -518,3 +518,52 @@ class ImageJsTests(unittest.TestCase):
         self.assertEqual(chatimg.parse_ref(line)[:3], ("a1b2c3", 5120, r["bh"]))
         self.assertEqual(chatimg.terminal_text(line),
                          "[Image 5.0 KB - TinyBox client only] vom Berg")
+
+
+class ImageHoldTests(unittest.TestCase):
+    """The bug of 12.10.2026: a line sent while the image bytes were going out
+    landed in the byte stream, so the TinyBox counted it as image data and read
+    the last real bytes as a chat line. Nothing else may go on the link now."""
+
+    def test_lines_wait_while_the_bytes_go_out(self):
+        async def scenario():
+            from tinybox import chatimg
+            dw = FakeDirewolf()
+            port = await dw.start()
+            app = chat_app()
+            app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, agw_port=port,
+                                                   reconnect_sec=1)
+            adapter = tb_agw.AgwAdapter(app)
+            app.agw = adapter
+            t1 = asyncio.create_task(adapter.run())
+            await asyncio.wait_for(adapter.connected.wait(), 5)
+            webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + bytes(range(256)) * 5
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, agw_port=port, img_piece=200, img_pause=0.3))
+                t2 = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.link.agw_up.wait(), 5)
+                await core.connect()
+                await until(lambda: core.boards, 10)
+                core.join(1)
+                await until(lambda: core.board and core.board.get("img"))
+                h = core.send_image(webp, "BEHV6nWB2yk8pyo0", "", "")
+                # the moment the bytes are on their way: type and let the gap
+                # detection fire - both must wait
+                await until(lambda: core.images.upload["state"] == "sending"
+                            and 0 < core.images.upload["sent"] < len(webp), 10)
+                self.assertTrue(core.say("mitten drin"))
+                core._send("//RESEND 1-2")
+                self.assertEqual(core._hold, ["mitten drin", "//RESEND 1-2"])
+                await until(lambda: core.images.upload["state"] == "done", 20)
+                self.assertIsNone(core._hold)
+                self.assertEqual(app.store.image_get(h), webp)      # picture is whole
+                # the held line went out afterwards and came back from the board
+                await until(lambda: any(m.get("text") == "mitten drin" for m in core.messages), 10)
+                line = f"~#{h}{chatimg.size_code(len(webp))}BEHV6nWB2yk8pyo0"
+                await until(lambda: any(m.get("text") == line for m in core.messages), 10)
+                core.disconnect()
+                await until(lambda: core.state == "offline")
+                t2.cancel()
+            t1.cancel()
+            dw.server.close()
+        asyncio.run(scenario())

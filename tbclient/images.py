@@ -7,9 +7,12 @@ them over the air and knows what is here. Protocol: tinybox/chatimg.py.
 Upload    //IMGPUT <hash> <bytes> -> //IMGGO <hash> <have>, then the bytes
           from <have> on. They are handed to Direwolf in pieces with a pause
           in between (tbclient.conf [images]), and never more than one piece
-          waits in Direwolf's queue - so chat lines still get through and
-          other stations get the frequency. Then //IMGOK, and the chat line
-          with the reference goes out.
+          waits in Direwolf's queue - so other stations get the frequency.
+          Then //IMGOK, and the chat line with the reference goes out.
+          From //IMGPUT until the last byte the client sends NOTHING else on
+          the link (core.hold_lines): the TinyBox counts every byte it gets as
+          image data, so a chat line in between would damage the picture and
+          its last bytes would be read as a chat line (bug 12.10.2026).
 Download  //IMG <hash> [<offset>] -> //I <hash> <offset> <total> + the bytes.
           A broken download goes on at the offset next time.
 
@@ -109,6 +112,19 @@ class Images:
         self._kick()
         return h
 
+    def retry(self) -> bool:
+        """"Try again" after a failed upload: the picture is still here."""
+        up = self.upload
+        if not up or up["state"] != "error":
+            return False
+        data = self.store.get(up["hash"])
+        if data is None:
+            return False
+        up.update(state="waiting", sent=0, error="")
+        self._jobs.append({"kind": "up", "hash": up["hash"], "data": data, "line": up["line"]})
+        self._kick()
+        return True
+
     def fetch(self, hash: str) -> bool:
         """Tap on a placeholder: get the image from the TinyBox."""
         if not chatimg.HASH_RE.match(hash) or self.store.has(hash):
@@ -200,8 +216,11 @@ class Images:
             self.loading[job["hash"]] = {**self.loading.get(job["hash"], {}), "error": why}
 
     async def _wait_free(self) -> None:
+        """A mailbox sync uses the same link: wait, never send into it."""
         start = time.monotonic()
-        while self.core.sync.running and time.monotonic() - start < WAIT_SYNC_SEC:
+        while self.core.sync.running:
+            if time.monotonic() - start > WAIT_SYNC_SEC:
+                raise ConnectionError("the mailbox sync is still running")
             await asyncio.sleep(0.5)
 
     async def _answer(self):
@@ -233,7 +252,10 @@ class Images:
             self._fail(job, why)
             return
         try:
+            # the TinyBox takes everything after //IMGPUT as image data: hold
+            # back every other line until the last byte is out
             self.core._send(f"//IMGPUT {h} {len(data)}")
+            self.core.hold_lines(True)
             while True:
                 item = await self._answer()
                 if item[0] != "line":
@@ -249,6 +271,8 @@ class Images:
         except ConnectionError as exc:
             self._fail(job, str(exc))
             return
+        finally:
+            self.core.hold_lines(False)
         if up:
             up.update(state="done", sent=len(data))
         self.core.say(job["line"])          # the chat line, now that the picture is up

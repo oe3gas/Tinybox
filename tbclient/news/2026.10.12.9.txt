@@ -1,0 +1,5 @@
+- Bilder: Fehler behoben, bei dem die letzten Bytes eines Bildes im Chat
+  landeten. Waehrend ein Bild hochgeht, warten getippte Zeilen und gehen
+  danach hinaus.
+- Fehlgeschlagener Upload: Knopf "Try again" (Bild muss nicht neu gewaehlt
+  werden).

@@ -33,7 +33,9 @@ goes in one block each way - no pieces, no acknowledgements:
            //NOIMG <hash>
 
 A half uploaded image stays in memory for one hour; //IMGPUT answers with the
-bytes already there, the client goes on from that offset. Images are deleted
+bytes already there, the client goes on from that offset. If the bytes stop
+coming (RAW_TIMEOUT), the session goes back to reading lines and answers
+//ERR img timeout - what arrived is kept for the next //IMGPUT. Images are deleted
 when no stored chat line refers to them any more (the board's keep time), but
 never within the first hour after the upload.
 """
@@ -58,6 +60,7 @@ HASH_RE = re.compile(r"^[0-9a-f]{6}$")
 SIZE_UNIT = 64
 MAX_SIZE = 255 * SIZE_UNIT          # what two hex digits can say
 PARTIAL_TTL = 3600                  # s a half uploaded image is kept
+RAW_TIMEOUT = 120                   # s without a byte: the upload is over for now
 UNREF_GRACE_H = 1                   # h a stored image survives without a chat line
 B83 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~"
 # the fixed part of a reference: at the start or after a space (quote prefix)
@@ -168,14 +171,23 @@ class ChatImages:
             p = self._partial[h] = [size, bytearray(), time.monotonic()]
         p[2] = time.monotonic()
         s.out(f"//IMGGO {h} {len(p[1])}")
+        # everything that comes now is image data - the client holds back its
+        # other lines until the last byte is out (CR12, 12.10.2026)
         s.collect_raw(size - len(p[1]), lambda chunk: self._chunk(h, chunk),
-                      lambda: self._done(s, h))
+                      lambda: self._done(s, h), lambda: self._cancel(s, h))
 
     def _chunk(self, h: str, chunk: bytes) -> None:
         p = self._partial.get(h)
         if p is not None:
             p[1] += chunk
             p[2] = time.monotonic()
+
+    def _cancel(self, s: Session, h: str) -> None:
+        """The bytes stopped coming: keep what is here, tell the client."""
+        p = self._partial.get(h)
+        log.info("%s: upload of %s stopped at %d bytes", s.call, h,
+                 len(p[1]) if p else 0)
+        s.out(f"//ERR img timeout {len(p[1]) if p else 0}")
 
     def _done(self, s: Session, h: str) -> None:
         p = self._partial.pop(h, None)

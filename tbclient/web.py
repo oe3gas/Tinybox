@@ -34,6 +34,7 @@ Images in the chat (CR12):
                         "quote": "~^CALL HHMM " | ""}  -> {"ok": true, "hash": "a1b2c3"}
                        upload, then the chat line goes out
   POST /api/image/get  {"hash": "a1b2c3"}     fetch an image someone posted
+  POST /api/image/retry                       send a failed upload again
   POST /api/image/dismiss                     take the finished/failed upload off the GUI
   GET  /img/<hash>                            the image file (WebP or JPEG)
 """
@@ -182,6 +183,8 @@ class WebServer:
                 return (200, {"ok": True, "hash": h}, None) if h else (400, {"ok": False}, None)
             elif path == "/api/image/get":
                 ok = core.fetch_image(str(data.get("hash", "")))
+            elif path == "/api/image/retry":
+                ok = core.images.retry()
             elif path == "/api/image/dismiss":
                 core.images.dismiss_upload()
             elif path.startswith("/api/mail/"):
