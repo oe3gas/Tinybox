@@ -1,11 +1,8 @@
 Neu: Post an mehrere Empfaenger (CR27)
-- Im Feld "To" mehrere Rufzeichen mit Komma: OE3TEC,OE1ABC
-  (bis zu 10, eine @-Adresse gilt fuer alle)
-- Jeder bekommt seine eigene Nachricht, der Text geht nur
-  einmal ueber Funk; im Ordner Sent ein Eintrag je Empfaenger
+- Im Feld To mit Komma: OE3TEC,OE1ABC (bis 10). Jeder bekommt
+  seine Nachricht, der Text geht einmal ueber Funk.
 Neu: Emoticons werden Emojis (CR28)
-- ;-) :-) :-D :-( :-P 8-) <3 ... beim Tippen sofort als Emoji
-- Was vom Terminal als ;-) kommt, erscheint auch als Emoji
-- Emojis mit ASCII-Form gehen als :-) ueber Funk, damit
-  Terminal-User sie lesen koennen (vorher ein Code wie ~0B)
-- Emoji-Auswahl: neue Gruppe "Smileys (ASCII)" ganz oben
+- ;-) :-D :-( 8-) <3 ... beim Tippen sofort als Emoji, auch
+  wenn sie vom Terminal kommen
+- Emojis mit ASCII-Form gehen als :-) ueber Funk statt als
+  Code ~0B, damit Terminal-User sie lesen koennen
