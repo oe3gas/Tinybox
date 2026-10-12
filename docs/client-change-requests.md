@@ -367,9 +367,10 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 
 ## CR14 – Zitieren (✅ 11.10.2026, Variante B)
 
-- **Bedienung:** Beitrag antippen → in der Leiste ganz links **↩** → über dem Eingabefeld steht „↩ OE3TEC Wer ist heute…“ (✕ = kein Zitat) → Text schreiben, senden. Auch Beiträge aus der History lassen sich zitieren (dort nur ↩, keine Reaktionen).
+- **Bedienung:** Beitrag antippen → in der Leiste ganz links **↩** → über dem Eingabefeld steht „You are adding a comment on **OE3TEC:** Wer ist heute…“ (✕ = kein Kommentar), das Eingabefeld zeigt „Your comment on OE3TEC's message“ → Text schreiben, senden.
+- **Nur im laufenden Chat** (Fix 12.10.2026): Kommentieren und Reagieren geht nur bei Beiträgen, die eingetroffen sind, während man im Board ist. Beiträge aus der History (gestrichelter Rand) sind nur lesbar – kein ↩, keine Reaktionen, kein nachträgliches Kommentieren.
 - **Über Funk nur ein Verweis** vor dem Text: `~^OE3TEC 1402 Ich bin QRV` – Rufzeichen und Minute (UTC, Uhr der TinyBox) des zitierten Beitrags, ca. 13 Byte.
 - **Anzeige:** Der Client sucht den Beitrag im eigenen Chat (±1 Minute, bei mehreren der letzte) und zeigt über der Antwort einen Zitatblock „↩ OE3TEC 14:02“ mit Auszug; Antippen springt zum Original. Ohne Original (später gekommen, History nicht geladen) nur „↩ OE3TEC 14:02“.
 - Wer zitiert wird, sieht die Antwort hervorgehoben wie bei @CALL (CR15).
 - **Terminal-Teilnehmer** sehen `~^OE3TEC 1402 Ich bin QRV`.
-- Kein Zitat im Cry-out-Modus. Client-Version 2026.10.11.8, nur Client (`app.js`, `app.css`, `index.html`).
+- Kein Zitat im Cry-out-Modus. Client-Version 2026.10.11.8, nur Client (`app.js`, `app.css`, `index.html`); Fix History/Kommentarleiste: 2026.10.12.

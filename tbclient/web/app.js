@@ -215,7 +215,7 @@ function render() {
   const inBoard = !!S.board;
   if (!inBoard && quoteTo) setQuote(null);
   $("input").disabled = !inBoard; $("btn-send").disabled = !inBoard;
-  if (!cryMode) $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
+  if (!cryMode && !quoteTo) $("input").placeholder = inBoard ? `Message to ${S.board.name}` : "Join a board first";
   $("btn-cry").disabled = !inBoard;
   $("btn-stk").disabled = !inBoard || !Object.keys(STK).length;
   renderMail();
@@ -501,6 +501,9 @@ function cryBubble(m, own) {
  * only "↩ OE3TEC 14:02". The same call twice in one minute: the latest one. */
 const QUOTE_RE = /^~\^([A-Z0-9]{1,6}(?:-\d{1,2})?) (\d{4}) ?/;
 let quoteTo = null;                      // message to quote with the next send
+// A message from the history (loaded afterwards, or from before we joined) is
+// read-only: no comment, no reaction – only what happens in the live chat.
+const isHistory = (m) => !!m.history || m.seq < 0;
 const srvMinute = (m) => {               // HHMM in UTC by the TinyBox clock
   const d = new Date(((m.srv_time || (m.time + (S.clock_off || 0)))) * 1000);
   return String(d.getUTCHours()).padStart(2, "0") + String(d.getUTCMinutes()).padStart(2, "0");
@@ -554,8 +557,12 @@ function setQuote(m) {
   box.classList.toggle("hidden", !m);
   if (!cryMode) $("input").maxLength = 200 - (m ? quotePrefix().length : 0);
   if (m) {
-    $("qb-text").replaceChildren(el("b", "", m.call + " "), excerpt(m.text, 50));
+    $("qb-text").replaceChildren("You are adding a comment on ", el("b", "", m.call + ": "),
+                                 excerpt(m.text, 50));
+    $("input").placeholder = `Your comment on ${m.call}'s message`;
     $("input").focus();
+  } else if (S.board && !cryMode) {
+    $("input").placeholder = `Message to ${S.board.name}`;
   }
   updateHint();
 }
@@ -584,7 +591,9 @@ function bubble(m, cont) {
   } else {
     richText(b, text);
   }
-  if (!m.pending) {
+  // Comments and reactions only on messages that arrived while we were in the
+  // board – nothing from the history, nothing after the fact.
+  if (!m.pending && !isHistory(m)) {
     b.onclick = (ev) => { ev.stopPropagation(); openReactBar(m, b); };
   }
   col.append(b);
@@ -621,19 +630,11 @@ function openReactBar(m, anchor) {
   selected = m.id;
   const bar = $("react-bar");
   bar.replaceChildren();
+  if (isHistory(m)) return;                     // history: no comment, no reactions
   const q = el("button", "q-btn", "↩");
-  q.title = "Quote / reply";
+  q.title = "Comment / reply";
   q.onclick = (ev) => { ev.stopPropagation(); closeReactBar(); setQuote(m); };
   bar.append(q);
-  if (m.history || m.seq < 0) {                 // history: quote only, no reactions
-    bar.classList.remove("hidden");
-    const r = anchor.getBoundingClientRect(), c = $("chat").getBoundingClientRect();
-    bar.style.top = Math.max(8, r.top - 48) + "px";
-    bar.style.left = Math.max(c.left + 8, Math.min(c.right - bar.offsetWidth - 8, r.left)) + "px";
-    anchor.classList.add("selected");
-    selected = m.id;
-    return;
-  }
   for (const e of QUICK) {
     const btn = el("button", "", e);
     btn.onclick = () => { sendReaction(m, e); };

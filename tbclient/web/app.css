@@ -114,7 +114,7 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .msg.own .bubble { background: var(--own); color: var(--own-text); border-color: transparent;
   border-radius: 16px 16px 4px 16px; }
 .bubble.pending { opacity: .55; }
-.bubble.history { border-style: dashed; }
+.bubble.history { border-style: dashed; cursor: default; }   /* read-only: no comment, no reaction */
 .bubble.selected { outline: 2px solid var(--accent); }
 /* one emoji alone: big, without bubble (CR1) */
 .bubble.jumbo { font-size: 44px; line-height: 1.1; padding: 0 2px; background: transparent !important;
@@ -153,10 +153,11 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
   padding: 3px 8px; margin: 0 0 4px; font-size: 12px; cursor: pointer; max-width: 100%; }
 .quote .q-who { font-weight: 600; color: var(--accent); }
 .quote .q-text { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quote-bar { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 14px; font-size: 13px;
-  border-top: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.quote-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 12px; font-size: 13px;
+  border-top: 1px solid var(--line); border-left: 4px solid var(--accent);
+  background: rgba(127,127,127,.12); color: var(--text); }
 .quote-bar > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quote-bar b { color: var(--text); }
+.quote-bar b { color: var(--accent); }
 .react-bar .q-btn { font-size: 18px; border-right: 1px solid var(--line); border-radius: 0; }
 li.msg.flash .bubble { outline: 2px solid var(--accent); transition: outline-color .3s; }
 .motd { margin: 6px 4px 10px; padding: 8px 12px; border-radius: 10px; font-size: 13px;
