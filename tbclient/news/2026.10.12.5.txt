@@ -1,1 +1,2 @@
-- Post an mehrere Empfaenger: jede Kopie beginnt mit "To: CALL, CALL"
+- Post an mehrere Empfaenger: jede Kopie beginnt mit
+  "To: OE3TEC, OE1ABC", so sieht jeder, wer sie noch bekam
