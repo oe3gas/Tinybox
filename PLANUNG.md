@@ -748,6 +748,25 @@ Abfrage über eine **AGW-Erweiterung**: neuer Frame-Typ `Q` (in Direwolf bisher 
 
 Der **Abbruchgrund** braucht keinen Fork: Direwolf meldet ihn schon im AGW-Frame `d` als Text (`*** DISCONNECTED RETRYOUT With …` statt `*** DISCONNECTED From Station …`). TinyBox wertet das heute noch nicht aus.
 
+**Der Patch im Fork** (Stand `bfed142`, 2 Commits auf `master` = `eda1383`, Direwolf 1.8.2; 340 Zeilen in 9 Dateien, jede Stelle mit `TinyBox` kommentiert, Überblick `git diff master tinybox`):
+
+| Datei | Änderung |
+|---|---|
+| `src/ax25_link.c` | `struct tb_stats_s` im Zustandsblock `ax25_dlsm_t` (Feld `tb`); Zähler an den Stellen aus der Tabelle oben: `i_new` beim Senden aus der Warteschlange, `i_retry` bei Wiederholung nach REJ/SREJ/T1, `rej_tx` beim Senden von REJ/SREJ, `retry_rx` wenn N(S) hinter V(R) liegt, `t1_exp` in `t1_expiry()`, `rnr_rx`; neue Funktion `dl_link_stats_request()` baut die Antwortzeile (`v=1 …`, ohne Verbindung `v=1 none`) – darf jeder AGW-Client abfragen, nicht nur der Besitzer der Verbindung |
+| `src/ax25_link.h` | Prototyp `dl_link_stats_request` |
+| `src/dlq.c`, `src/dlq.h` | neuer Warteschlangen-Typ `DLQ_LINK_STATS` mit Einreihfunktion, wie `DLQ_OUTSTANDING_FRAMES_REQUEST` für `Y` |
+| `src/recv.c` | Verteiler: `DLQ_LINK_STATS` → `dl_link_stats_request` |
+| `src/server.c` | `case 'Q'` beim Empfang vom AGW-Client (reiht ein), `server_link_stats_reply()` schickt Frame `Q` mit der Textzeile zurück; Beschriftung für das Debug-Log |
+| `src/server.h` | Prototyp `server_link_stats_reply` |
+| `TINYBOX.md` | Format, Schlüssel, Bau, Tests |
+| `tinybox-tools/agw_q.py` | Diagnose: fragt `Q` für eine Verbindung ab und zeigt die Zeile |
+
+Nichts davon ändert Protokollverhalten; ohne `Q`-Anfrage läuft der Fork wie das Original. (`TINYBOX.md` im Fork sagt noch „Funktest unter Windows 11 steht aus“ – der ist seit 11.10.2026 erledigt, Satz dort nachziehen.)
+
+**Verteilung des Windows-Programms (`direwolf.exe`):** Das Tinybox-Repo enthält den Fork nicht, ein `git pull` dort bringt also keine neue `direwolf.exe`. Der Fork ist ein eigenes Repo mit Quelltext; die `.exe` ist ein Bauergebnis und liegt in keinem Repo. Gebraucht wird sie nur dort, wo die TinyBox läuft (PC2) – der Client braucht keinen Fork, seine Balken kommen von der TinyBox. Vorgehen:
+1. Auf PC2 `git pull` in `C:\direwolf-tinybox` (Zweig `tinybox`), dann mit MSYS2/MinGW + CMake bauen und die `.exe` in den Direwolf-Ordner kopieren, Direwolf neu starten.
+2. Soll die `.exe` ohne Bauen auf einen zweiten Rechner: als **GitHub-Release** im Fork-Repo anhängen (Tag = Direwolf-Version + Datum, z. B. `1.8.2-tb1`); privates Repo, Download mit `gh release download` oder im Browser nach Login. Entschieden 12.10.2026: kein Binary ins Tinybox-Repo (ein paar MB je Stand, wächst für immer), keine automatische Verteilung – ein Rechner, seltene Änderungen.
+
 ### 14.2 Messung in der TinyBox
 
 TinyBox fragt die Zähler per `Q` ab und rechnet selbst; Bewertung, Fenster und Formatierung liegen in der TinyBox, nicht im Fork.
