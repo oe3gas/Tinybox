@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.10.2026 (CR32 neu, Vorschlag zur Entscheidung)
+Stand: 13.10.2026 (CR32 entschieden, Umsetzung offen)
 
 ## Übersicht
 
@@ -38,7 +38,7 @@ Stand: 13.10.2026 (CR32 neu, Vorschlag zur Entscheidung)
 | 29 | Terminal: Ausgaben über 10 Zeilen seitenweise mit „continue/abort“ (`L` und jeder andere Befehl), damit nicht hunderte Titel über die Luft laufen | ✅ siehe unten |
 | 30 | Bild-Upload eines Teilnehmers sichtbar machen: „OE1ABC uploading picture“ mit Fortschrittsbalken | ✅ siehe unten |
 | 31 | Kommentarbezug eindeutig machen (bisher Rufzeichen + Minute, mehrdeutig) | ✅ siehe unten |
-| 32 | Logfile zum Debuggen mit Claude: feste Datei, feste Spalten, Session-Nummer, Startblock, `LOG`-Befehl | offen – Vorschlag siehe unten, wartet auf Entscheidung |
+| 32 | Logfile zum Debuggen mit Claude: eine Datei pro Tag, feste Spalten, Session-Nummer, Startblock, `LOG`-Befehl | entschieden 13.10.2026, Umsetzung offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -472,7 +472,12 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - **Terminal-Teilnehmer:** Die TinyBox löst den Verweis auf und schreibt `[re OE3TEC: "Servus, Wetter passt"] Ich bin QRV` – vorher stand dort der rohe Verweis. Enthält der zitierte Beitrag ein Bild, steht im Auszug kurz `[Image]` (sonst bliebe vom Auszug nichts übrig). Im Verlauf (`/H`), wo das Ereignisfenster nicht mehr gilt, steht `[re #4F]`.
 - Kommentieren bleibt auf Beiträge beschränkt, die im laufenden Chat eintreffen (Entscheidung 12.10.2026) – History-Zeilen haben keine Folgenummer.
 
-## CR32 – Logfile zum Debuggen mit Claude (Vorschlag 13.10.2026, offen)
+## CR32 – Logfile zum Debuggen mit Claude (entschieden 13.10.2026, Umsetzung offen)
+
+**Umfang entschieden 13.10.2026:** alle Punkte 32.1 bis 32.11, auch die beiden
+zunächst als „nice to have“ zurückgestellten – Laufzeiten (32.8) und
+Übergabepaket (32.10). Reines TinyBox-Thema, der Client bleibt unberührt, also
+keine neue Client-Version und keine News-Datei.
 
 **Problem:** Beim Debuggen mit Claude ist das Log heute nur eingeschränkt brauchbar.
 Jeder Start legt eine neue Datei `Tinybox_log_<Datum>_<Zeit>.log` an – nach einigen
@@ -485,11 +490,46 @@ sich nur global schalten, was die Datei mit Monitor-Verkehr zuschüttet.
 **Ziel:** Eine Datei, aus der sich der Ablauf ohne Rückfragen rekonstruieren lässt –
 auch von Claude, der den Rechner nicht sieht.
 
-### 32.1 Datei und Format
+### 32.1 Eine Datei pro Tag (entschieden 13.10.2026)
 
-- **Feste Datei** `tinybox.log` im `log_dir`. Beim Start rollt die alte Datei auf
-  `tinybox.log.1` … `tinybox.log.5` (zusätzlich Rollen bei 5 MB). Damit ist
-  „schau ins Log“ eindeutig; die Zeitstempel-Dateien verschwinden.
+**Nicht je Neustart** (so ist es heute) und keine feste Einzeldatei mit Rotation,
+sondern **eine Datei pro Kalendertag**: `tinybox-2026-10-13.log` im `log_dir`.
+
+- Grund gegen „je Neustart“: nach `git pull` + `RESTART` liegt die Ursache
+  (Startblock, geänderte Konfiguration) in einer anderen Datei als die Wirkung,
+  und im Dauerbetrieb entstehen an einem Abend mehrere Dateien.
+- Grund für den Tag: Probleme werden zeitlich beschrieben („gestern Abend beim
+  Funktest“). `tinybox-2026-10-12.log` ist damit direkt adressierbar, ohne Raten
+  zwischen `.1`, `.2`, `.3`.
+- **Neustarts bleiben sichtbar**, als Block innerhalb des Tages:
+
+  ```
+  2026-10-13 19:42:01.004 I core  #0 - ----- TinyBox 2026.10.12 (a1b2c3d) start -----
+  ...
+  2026-10-13 21:15:33.210 I core  #0 - ----- stop: RESTART, 1h33m, 7 sessions, 0 errors -----
+  2026-10-13 21:15:41.882 I core  #0 - ----- TinyBox 2026.10.12 (f4e5d6c) start -----
+  ```
+
+  Damit ist sofort zu sehen, ob zwischen zwei Beobachtungen ein Neustart lag.
+
+**Umsetzung:** nicht mit `TimedRotatingFileHandler` – der benennt die laufende
+Datei beim Rollover um, und Windows kann eine offene Datei nicht umbenennen; im
+Dauerbetrieb über Mitternacht gibt das Fehler, die man dann gerade im Log nicht
+findet. Stattdessen ein kleiner eigener Handler:
+
+- Dateiname aus dem Datum, immer im **Append**-Modus geöffnet. Kein Umbenennen,
+  keine Sperrprobleme; mehrere Starts an einem Tag hängen hinten an.
+- Vor dem Schreiben ein Datumsvergleich; hat der Tag gewechselt, wird geschlossen
+  und die neue Datei geöffnet. Kostet einen Integer-Vergleich pro Zeile.
+- `keep_days = 14` in `[logging]`: beim Start und beim Tageswechsel werden ältere
+  Dateien gelöscht. Logs liegen ohnehin nie im Repo.
+- Notbremse gegen Größe: über 20 MB an einem Tag (DEBUG auf `agw` bei viel
+  Verkehr) geht es auf `tinybox-2026-10-13.2.log` weiter.
+- Der Pfad steht im Startblock und im `LOG`-Befehl, damit er nicht gesucht
+  werden muss.
+
+### 32.1a Format
+
 - **Feste Spalten**, eine Zeile = ein Ereignis:
 
   ```
