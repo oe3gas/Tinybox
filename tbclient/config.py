@@ -31,9 +31,8 @@ class Config:
     data_dir: Path = Path("data/tbclient")
     sync_chunk: int = 1024            # bytes per request of a mailbox sync (radio)
     sync_pause: float = 5.0           # seconds between two requests (radio)
-    img_piece: int = 256              # bytes handed to Direwolf at once when sending an image
-    img_pause: float = 2.0            # seconds between two pieces
-    img_rate: int = 60                # net bytes/s of the link, for the time estimate
+    img_rate: int = 100               # net bytes/s of the link, for the time estimate
+    img_target: int = 4096            # the picture is shrunk to about this many bytes ("normal")
 
 
 def _strip(value: str) -> str:
@@ -72,15 +71,14 @@ def load(path: str | Path) -> Config:
         raise ConfigError("[sync] chunk_bytes must be 128 ... 8192")
     if not 0 <= cfg.sync_pause <= 120:
         raise ConfigError("[sync] pause_sec must be 0 ... 120")
-    cfg.img_piece = int(get("images", "piece_bytes", str(cfg.img_piece)))
-    cfg.img_pause = float(get("images", "pause_sec", str(cfg.img_pause)))
+    # piece_bytes / pause_sec of older versions are ignored: the picture goes to
+    # Direwolf in one go, the AX.25 window (MAXFRAME/EMAXFRAME) paces it
     cfg.img_rate = int(get("images", "bytes_per_sec", str(cfg.img_rate)))
-    if not 64 <= cfg.img_piece <= 2048:
-        raise ConfigError("[images] piece_bytes must be 64 ... 2048")
-    if not 0 <= cfg.img_pause <= 60:
-        raise ConfigError("[images] pause_sec must be 0 ... 60")
+    cfg.img_target = int(get("images", "target_bytes", str(cfg.img_target)))
     if not 10 <= cfg.img_rate <= 100000:
         raise ConfigError("[images] bytes_per_sec must be 10 ... 100000")
+    if not 1024 <= cfg.img_target <= 16320:
+        raise ConfigError("[images] target_bytes must be 1024 ... 16320")
 
     for name, call in (("[station] mycall", cfg.mycall), ("[tinybox] call", cfg.tinybox_call)):
         if not CALL_RE.match(call):

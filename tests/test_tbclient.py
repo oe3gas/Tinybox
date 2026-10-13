@@ -450,7 +450,7 @@ class ImageTests(unittest.TestCase):
             type_lines(term, "C TREFF")
             webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + bytes(range(256)) * 5     # 1292 bytes
             with tempfile.TemporaryDirectory() as tmp:
-                core = ClientCore(client_cfg(tmp, agw_port=port, img_piece=500, img_pause=0.05))
+                core = ClientCore(client_cfg(tmp, agw_port=port))
                 t2 = asyncio.create_task(core.run())
                 await asyncio.wait_for(core.link.agw_up.wait(), 5)
                 await core.connect()
@@ -523,49 +523,66 @@ class ImageJsTests(unittest.TestCase):
 class ImageHoldTests(unittest.TestCase):
     """The bug of 12.10.2026: a line sent while the image bytes were going out
     landed in the byte stream, so the TinyBox counted it as image data and read
-    the last real bytes as a chat line. Nothing else may go on the link now."""
+    the last real bytes as a chat line. Since 13.10.2026 the bytes go to
+    Direwolf in one go, the chat line right behind them; from //IMGPUT until
+    then nothing else may go on the link, afterwards Direwolf keeps the order."""
 
-    def test_lines_wait_while_the_bytes_go_out(self):
+    def test_lines_wait_until_the_bytes_are_handed_over(self):
         async def scenario():
             from tinybox import chatimg
-            dw = FakeDirewolf()
-            port = await dw.start()
-            app = chat_app()
-            app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, agw_port=port,
-                                                   reconnect_sec=1)
-            adapter = tb_agw.AgwAdapter(app)
-            app.agw = adapter
-            t1 = asyncio.create_task(adapter.run())
-            await asyncio.wait_for(adapter.connected.wait(), 5)
-            webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + bytes(range(256)) * 5
             with tempfile.TemporaryDirectory() as tmp:
-                core = ClientCore(client_cfg(tmp, agw_port=port, img_piece=200, img_pause=0.3))
-                t2 = asyncio.create_task(core.run())
-                await asyncio.wait_for(core.link.agw_up.wait(), 5)
-                await core.connect()
-                await until(lambda: core.boards, 10)
-                core.join(1)
-                await until(lambda: core.board and core.board.get("img"))
-                h = core.send_image(webp, "BEHV6nWB2yk8pyo0", "", "")
-                # the moment the bytes are on their way: type and let the gap
-                # detection fire - both must wait
-                await until(lambda: core.images.upload["state"] == "sending"
-                            and 0 < core.images.upload["sent"] < len(webp), 10)
+                core = ClientCore(client_cfg(tmp))
+                sent: list = []
+                core.link.send_line = lambda t: sent.append(t)
+                core.link.send_bytes = lambda b: sent.append(b)
+
+                async def outstanding():
+                    return 0
+                core.link.outstanding = outstanding
+                core.state = "online"
+                core.caps = {"IMG"}
+                core.board = {"n": 1, "name": "Treff", "keep": "7d", "img": 8192}
+                webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + bytes(range(256)) * 5
+                h = core.send_image(webp, "BEHV6nWB2yk8pyo0", "vom Berg", "")
+                await until(lambda: sent and sent[0] == f"//IMGPUT {h} {len(webp)}")
+                # between //IMGPUT and //IMGGO: typed text and the gap detection
+                # must wait - the TinyBox would take them as image data
                 self.assertTrue(core.say("mitten drin"))
                 core._send("//RESEND 1-2")
                 self.assertEqual(core._hold, ["mitten drin", "//RESEND 1-2"])
-                await until(lambda: core.images.upload["state"] == "done", 20)
+                self.assertEqual(len(sent), 1)
+                core._on_line(f"//IMGGO {h} 0")
+                await until(lambda: len(sent) >= 4)
+                # the bytes in one go, then the held lines (typed first) and the
+                # chat line with the reference - all behind the bytes
+                line = f"~#{h}{chatimg.size_code(len(webp))}BEHV6nWB2yk8pyo0 vom Berg"
+                self.assertEqual(sent[1:], [webp, "mitten drin", "//RESEND 1-2", line])
                 self.assertIsNone(core._hold)
-                self.assertEqual(app.store.image_get(h), webp)      # picture is whole
-                # the held line went out afterwards and came back from the board
-                await until(lambda: any(m.get("text") == "mitten drin" for m in core.messages), 10)
-                line = f"~#{h}{chatimg.size_code(len(webp))}BEHV6nWB2yk8pyo0"
-                await until(lambda: any(m.get("text") == line for m in core.messages), 10)
-                core.disconnect()
-                await until(lambda: core.state == "offline")
-                t2.cancel()
-            t1.cancel()
-            dw.server.close()
+                self.assertEqual(core.images.upload["state"], "sending")
+                core._on_line(f"//IMGOK {h}")
+                await until(lambda: core.images.upload["state"] == "done")
+                self.assertEqual(core.images.upload["sent"], len(webp))
+        asyncio.run(scenario())
+
+    def test_upload_resumes_at_the_offset(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp))
+                sent: list = []
+                core.link.send_line = lambda t: sent.append(t)
+                core.link.send_bytes = lambda b: sent.append(b)
+                core.state = "online"
+                core.caps = {"IMG"}
+                core.board = {"n": 1, "name": "Treff", "keep": "7d", "img": 8192}
+                webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + bytes(range(256)) * 5
+                h = core.send_image(webp, "BEHV6nWB2yk8pyo0", "", "")
+                await until(lambda: len(sent) == 1)
+                core._on_line(f"//IMGGO {h} 1000")                # the TinyBox has 1000 bytes
+                await until(lambda: len(sent) >= 3)
+                self.assertEqual(sent[1], webp[1000:])
+                core._on_line("//ERR img bad_hash")
+                await until(lambda: core.images.upload["state"] == "error")
+                self.assertEqual(core.images.upload["error"], "damaged on the way, try again")
         asyncio.run(scenario())
 
 

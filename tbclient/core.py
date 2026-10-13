@@ -724,8 +724,7 @@ class ClientCore:
             "uploads": [{"call": c, "size": u["size"], "at": u["at"], "got": u["got"]}
                         for c, u in self.uploads.items()],
             "images": self.images.status(self._image_refs()),
-            "img": {"piece": self.cfg.img_piece, "pause": self.cfg.img_pause,
-                    "rate": self.cfg.img_rate},
+            "img": {"rate": self.cfg.img_rate, "target": self.cfg.img_target},
         }
 
     def _image_refs(self) -> set[str]:

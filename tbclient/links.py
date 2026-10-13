@@ -26,7 +26,12 @@ log = logging.getLogger(__name__)
 
 HEADER = struct.Struct("<B3xcxBx10s10sII")
 PID_NO_L3 = 0xF0
-PACLEN = 128
+# Bytes per AGW "D" frame = bytes per I-frame on air. Direwolf makes one or
+# more I-frames out of every "D" frame and never joins two, so this is what
+# decides the frame size, not direwolf.conf (whose PACLEN only splits further).
+# 256 = AX.25 and Direwolf default; 128 halved the data per frame and so
+# doubled the frames (and the overhead) of every picture.
+PACLEN = 256
 MAX_DATA = 65536
 IAC = 255
 
@@ -89,6 +94,8 @@ class LineSplitter:
 
 
 class BaseLink:
+    paclen = PACLEN                 # bytes per frame handed over (progress estimate)
+
     def __init__(self, cfg: Config, on_state, on_line, on_frame) -> None:
         self.cfg = cfg
         self.on_state = on_state

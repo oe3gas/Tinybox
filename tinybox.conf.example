@@ -18,8 +18,10 @@ agw_host        = 127.0.0.1    # Direwolf runs on the same PC
 agw_port        = 8000         # AGWPORT in direwolf.conf
 agw_radio_port  = 0            # Direwolf channel (0 = first radio)
 reconnect_sec   = 5
-paclen          = 128          # max bytes per packet sent
-max_outstanding = 4            # max unacknowledged packets in Direwolf
+paclen          = 256          # bytes per packet sent (= PACLEN in direwolf.conf; 256 is
+                               # the AX.25 default, 128 doubled the frames of every picture)
+max_outstanding = 6            # packets handed to Direwolf ahead of the acknowledgements;
+                               # set EMAXFRAME 6 in direwolf.conf, see PLANUNG.md 12.10a
 # Link quality - needs the TinyBox Direwolf fork (AGW 'Q'), PLANUNG.md section 14
 quality_poll_sec      = 30     # ask Direwolf every n seconds (0 = off)
 quality_window_frames = 50     # window per direction: last n frames ...

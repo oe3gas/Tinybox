@@ -18,8 +18,9 @@ Zuletzt dazugekommen
 - Kommentare treffen jetzt immer den richtigen Beitrag: ueber Funk geht die
   Nummer des Beitrags (5 Byte statt 14) statt Rufzeichen und Minute.
 - Bilder im Chat: ein Knopf neben den Emojis, das Bild wird im Browser
-  klein gemacht (WebP, laengste Seite 320 px, unter dem Limit der TinyBox,
-  Standard 8 KB) und geht einmal zur TinyBox. Vorher zeigt ein Dialog
+  klein gemacht (WebP, Wahl klein/normal/gross = 2 KB/4 KB/Limit der
+  TinyBox, Standard 8 KB) und geht einmal zur TinyBox, am Stueck mit
+  256-Byte-Frames (ca. 115 Byte/s). Vorher zeigt ein Dialog
   Groesse, Upload- und Ladedauer. In der Chat-Zeile gehen nur 26 bis 32
   Byte ueber Funk (Kennung + unscharfe Farbvorschau). Die anderen sehen
   die Vorschau mit Groesse und Ladezeit und holen das Bild erst beim

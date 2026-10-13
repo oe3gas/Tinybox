@@ -5,14 +5,23 @@ TinyBox limit) and computes the blurhash; this module keeps the bytes, moves
 them over the air and knows what is here. Protocol: tinybox/chatimg.py.
 
 Upload    //IMGPUT <hash> <bytes> -> //IMGGO <hash> <have>, then the bytes
-          from <have> on. They are handed to Direwolf in pieces with a pause
-          in between (tbclient.conf [images]), and never more than one piece
-          waits in Direwolf's queue - so other stations get the frequency.
-          Then //IMGOK, and the chat line with the reference goes out.
-          From //IMGPUT until the last byte the client sends NOTHING else on
-          the link (core.hold_lines): the TinyBox counts every byte it gets as
-          image data, so a chat line in between would damage the picture and
-          its last bytes would be read as a chat line (bug 12.10.2026).
+          from <have> on - all of them at once to Direwolf, and right behind
+          them the chat line with the reference. AX.25 does the pacing: the
+          window (MAXFRAME / EMAXFRAME in direwolf.conf) says how many frames
+          go out before an acknowledgement, and between two transmissions the
+          other stations get the frequency (DCD, PERSIST, SLOTTIME). The
+          progress shown is what Direwolf has acknowledged (AGW 'Y').
+          Then //IMGOK - or //ERR, and the chat line is refused by the TinyBox
+          (unknown image), nothing is shown.
+          Before 13.10.2026 the client sent 256 bytes, paused 2 s and waited
+          for the acknowledgement of every piece: about 45 bytes/s, 3 minutes
+          for 8 kB; now the link runs as fast as the window allows.
+          From //IMGPUT until the bytes are handed over the client sends
+          NOTHING else on the link (core.hold_lines): the TinyBox counts every
+          byte after //IMGGO as image data, so a line in between would damage
+          the picture and its last bytes would be read as a chat line (bug
+          12.10.2026). Direwolf keeps the order, so lines handed over after
+          the bytes are safe.
 Download  //IMG <hash> [<offset>] -> //I <hash> <offset> <total> + the bytes.
           A broken download goes on at the offset next time.
 
@@ -36,7 +45,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-IDLE_SEC = 120            # no answer for this long: the transfer gives up
+IDLE_SEC = 120            # no answer and no progress for this long: the transfer gives up
+POLL_SEC = 2              # while the bytes go out: ask Direwolf this often what is still waiting
 WAIT_SYNC_SEC = 600       # a transfer waits this long for a running sync
 KEEP_DAYS = 60            # local image files older than this are deleted at start
 
@@ -223,16 +233,27 @@ class Images:
                 raise ConnectionError("the mailbox sync is still running")
             await asyncio.sleep(0.5)
 
-    async def _answer(self):
-        if self.core.state != "online":
-            raise ConnectionError("not connected")
-        try:
-            item = await asyncio.wait_for(self.queue.get(), IDLE_SEC)
-        except asyncio.TimeoutError:
-            raise ConnectionError("no answer from the TinyBox") from None
-        if item[0] == "lost":
-            raise ConnectionError("connection lost")
-        return item
+    async def _answer(self, progress=None):
+        """The next answer of the TinyBox. With `progress` (an upload under
+        way) Direwolf is asked every POLL_SEC how much is still waiting; as
+        long as that number falls, the transfer is alive and IDLE_SEC starts
+        over - a slow link with retries must not look like a dead one."""
+        deadline = time.monotonic() + IDLE_SEC
+        while True:
+            if self.core.state != "online":
+                raise ConnectionError("not connected")
+            try:
+                item = await asyncio.wait_for(self.queue.get(),
+                                              POLL_SEC if progress else IDLE_SEC)
+            except asyncio.TimeoutError:
+                if progress and await progress():
+                    deadline = time.monotonic() + IDLE_SEC
+                if time.monotonic() >= deadline:
+                    raise ConnectionError("no answer from the TinyBox") from None
+                continue
+            if item[0] == "lost":
+                raise ConnectionError("connection lost")
+            return item
 
     def _check(self) -> str | None:
         """Why a transfer cannot start right now (None = go)."""
@@ -251,20 +272,21 @@ class Images:
         if why:
             self._fail(job, why)
             return
+        progress = None
         try:
-            # the TinyBox takes everything after //IMGPUT as image data: hold
-            # back every other line until the last byte is out
+            # the TinyBox takes everything after //IMGGO as image data: hold
+            # back every other line until the bytes are handed over
             self.core._send(f"//IMGPUT {h} {len(data)}")
             self.core.hold_lines(True)
             while True:
-                item = await self._answer()
+                item = await self._answer(progress)
                 if item[0] != "line":
                     continue
                 p = item[1].split()
                 if p[0] == "//IMGOK" and p[1:2] == [h]:
                     break
                 if p[0] == "//IMGGO" and p[1:2] == [h] and len(p) == 3 and p[2].isdigit():
-                    await self._send_bytes(data, int(p[2]), up)
+                    progress = self._send_all(data, int(p[2]), job["line"], up)
                     continue
                 if p[0] == "//ERR":
                     raise ConnectionError(_reason(item[1]))
@@ -275,31 +297,35 @@ class Images:
             self.core.hold_lines(False)
         if up:
             up.update(state="done", sent=len(data))
-        self.core.say(job["line"])          # the chat line, now that the picture is up
         self.core._touch()
 
-    async def _send_bytes(self, data: bytes, offset: int, up: dict | None) -> None:
-        cfg = self.core.cfg
+    def _send_all(self, data: bytes, offset: int, line: str, up: dict | None):
+        """Hand the bytes from `offset` on to Direwolf in one go, the chat line
+        right behind them (Direwolf keeps the order; the TinyBox reads the
+        line after the last image byte). Returns the progress poll."""
         link = self.core.link
+        total = len(data)
+        link.send_bytes(data[offset:])
+        self.core.say(line)                 # held, like anything typed meanwhile ...
+        self.core.hold_lines(False)         # ... and out now, in order, behind the bytes
         if up:
             up.update(state="sending", sent=offset)
-        while offset < len(data):
-            piece = data[offset:offset + cfg.img_piece]
-            link.send_bytes(piece)
-            offset += len(piece)
-            if up:
-                up["sent"] = offset
+        self.core._touch()
+        last = [offset]
+
+        async def progress() -> bool:
+            """Ask Direwolf what is still waiting; True if something went out."""
+            if self.core.state != "online":
+                raise ConnectionError("connection lost")
+            waiting = await link.outstanding()
+            sent = max(last[0], min(total, total - waiting * link.paclen))
+            moved = sent > last[0]
+            last[0] = sent
+            if up and moved:
+                up["sent"] = sent
                 self.core._touch()
-            if offset >= len(data):
-                break
-            await asyncio.sleep(cfg.img_pause)
-            # the piece before must be on air before the next one goes to Direwolf
-            for _ in range(60):
-                if self.core.state != "online":
-                    raise ConnectionError("connection lost")
-                if await link.outstanding() <= 1:
-                    break
-                await asyncio.sleep(1)
+            return moved
+        return progress
 
     async def _download(self, job: dict) -> None:
         h = job["hash"]

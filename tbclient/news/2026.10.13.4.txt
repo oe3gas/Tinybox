@@ -1,0 +1,6 @@
+- Bilder gehen bis zu 3x schneller: 256-Byte-Frames, das Bild am
+  Stueck an Direwolf, Chat-Zeile gleich dahinter. 4 KB in ca. 35 s.
+- Bild-Dialog: Groesse klein/normal/gross (2 KB/4 KB/Limit), Wahl
+  bleibt im Browser.
+- direwolf.conf: PACLEN 256, MAXFRAME 4, EMAXFRAME 6 setzen (sonst
+  geht ein Bild als eine 60-s-Sendung raus).

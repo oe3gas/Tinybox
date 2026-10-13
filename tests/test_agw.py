@@ -142,6 +142,10 @@ class AgwTests(unittest.TestCase):
     def test_abort_drops_queued_output(self):
         async def scenario():
             app = make_app()
+            # small frames and window, so one page (CR29) does not fit into
+            # Direwolf at once and something stays queued (CR34 raised both)
+            app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, paclen=128,
+                                                   max_outstanding=4)
             for i in range(30):
                 app.service.create(from_call="OE1ABC", to_call="ALL", type="B",
                                    subject=f"Bulletin number {i + 1}", body="x", origin="radio")

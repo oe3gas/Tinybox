@@ -677,3 +677,14 @@ mitkommen, wenn die Datei in einen Chat gelegt wird.
 - **Client:** Teilnehmer in der Liste antippen öffnet die Detailansicht: große Balken, drei Richtungskacheln (outgoing, incoming, rx quote) mit Frames, Verlusten und Formel, Schwellenleiter mit Rechnung inkl. T1-Abzug, Zähler (REJ rx, T1, Netto/Wdh, SRT), Alter der Daten. Rechnung im Client nach denselben Regeln wie `linkq.py`, Schwellen aus `q=`.
 - Client-Version 2026.10.13.2. Tests: `test_clientproto.py` (`test_member_numbers`), `test_linkq.py` (`test_qstat_line_for_num_clients`, `ClientQualityTests`), `test_tbclient.py`.
 
+## CR34 – Bildübertragung schneller (✅ 13.10.2026)
+
+**Problem:** Ein Bild (8 kB) brauchte ≈ 3 Minuten. Der Client gab die Bytes in 256-Byte-Stücken mit 2 s Pause an Direwolf und wartete je Stück auf die Bestätigung; dazu 128-Byte-Frames fest im Client (`links.py`) und in der TinyBox (`paclen`). Das AX.25-Fenster war nie gefüllt, jede Sendung ein eigener Durchlauf (TXDelay, ACK, Pause): ≈ 45 B/s. Analyse und Rechnung: PLANUNG.md 12.10a.
+
+**Lösung:**
+- Frames 256 Byte (Client fest, TinyBox `paclen = 256`, `max_outstanding = 6`).
+- Upload am Stück an Direwolf; die Chat-Zeile mit dem Verweis geht gleich hinter den Bytes raus (ein Wechsel weniger). Fortschrittsbalken aus AGW `Y`; Stillstand erst nach 120 s ohne Bewegung ein Fehler.
+- `direwolf.conf` beide PCs: `PACLEN 256`, `MAXFRAME 4`, `EMAXFRAME 6` (sonst ginge mit v2.2 das ganze Bild als eine 60-s-Sendung raus).
+- Dialog: Größenwahl **klein / normal / groß** (2 / 4 kB / Board-Limit, 192 / 256 / 320 px), Wahl bleibt im Browser; `[images] target_bytes` (4096) und `bytes_per_sec` (100) im Client, `piece_bytes`/`pause_sec` entfallen.
+- Erwartung: ≈ 115 B/s, 4-kB-Bild in ≈ 35 s, 8 kB in ≈ 70 s. Nach den ersten Funkmessungen `bytes_per_sec` nachziehen.
+- Client-Version 2026.10.13.4. Tests: `test_tbclient.py` (`ImageTests`, `ImageHoldTests`).

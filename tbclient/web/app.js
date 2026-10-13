@@ -1076,8 +1076,18 @@ function blurhashDecode(hash, w, h, punch = 1) {
  * bytes. The picture itself is fetched from the TinyBox on a tap (/api/image/get)
  * and then served by the client as /img/<hash>. */
 const IMG_RE = /^~#([0-9a-f]{6})([0-9a-f]{2})/;
-const IMG_LONG = 320;                   // long side of a sent picture, at most
 const IMG_SHRINK_MAX = 8192;            // fallback if the board says nothing
+/* Three sizes to choose from (CR34): the target in bytes decides the time on
+ * air, the long side in px keeps the picture sharp enough for that size.
+ * "normal" is [images] target_bytes of the client (4 kB), "small" half of it,
+ * "large" the board's limit; the choice is remembered in the browser. */
+const IMG_SIZES = { small: { px: 192, of: 0.5 }, normal: { px: 256, of: 1 }, large: { px: 320, of: 0 } };
+function imgTarget(size) {
+  const limit = (S && S.board && S.board.img) || IMG_SHRINK_MAX;
+  const normal = Math.min(limit, (S && S.img && S.img.target) || 4096);
+  const f = IMG_SIZES[size] || IMG_SIZES.normal;
+  return f.of ? Math.round(normal * f.of) : limit;
+}
 
 /* Parse the reference at the start of a (quote-free) wire text:
  * {hash, size, bh, caption} or null. */
@@ -1098,10 +1108,12 @@ function secText(s) {
   const m = Math.round(s / 60);
   return `~${Math.max(1, m)} min`;
 }
-/* Time over the air: net rate of the link, plus the pauses between the pieces when sending. */
+/* Time over the air: net rate of the link (the picture goes in one go, the
+ * AX.25 window paces it) plus the turnarounds: //IMGPUT - //IMGGO, the last
+ * acknowledgement and //IMGOK when sending, request and answer when loading. */
 function imgTime(size, sending) {
-  const c = (S && S.img) || { piece: 256, pause: 2, rate: 60 };
-  return size / c.rate + (sending ? Math.ceil(size / c.piece) * c.pause : 0);
+  const c = (S && S.img) || { rate: 100 };
+  return size / c.rate + (sending ? 8 : 5);
 }
 
 /* Draw a blurhash into a canvas the shape of its components (3x2 = landscape). */
@@ -1211,9 +1223,9 @@ function uploadBubble(up) {
 }
 
 /* Shrink a chosen file: WebP (JPEG where the browser cannot make WebP), long
- * side at most IMG_LONG px, quality then size down until it fits maxBytes.
+ * side at most longPx, quality then size down until it fits maxBytes.
  * -> {blob, w, h, bh} or null. */
-async function shrinkImage(file, maxBytes) {
+async function shrinkImage(file, maxBytes, longPx = 320) {
   let src;
   try { src = await createImageBitmap(file, { imageOrientation: "from-image" }); }
   catch (e) {
@@ -1227,7 +1239,7 @@ async function shrinkImage(file, maxBytes) {
   if (!W || !H) return null;
   const canvas = document.createElement("canvas");
   const toBlob = (type, q) => new Promise((ok) => canvas.toBlob(ok, type, q));
-  let scale = Math.min(1, IMG_LONG / Math.max(W, H));
+  let scale = Math.min(1, longPx / Math.max(W, H));
   let best = null;
   for (let round = 0; round < 8; round++) {
     const w = Math.max(8, Math.round(W * scale)), h = Math.max(8, Math.round(H * scale));
@@ -1257,18 +1269,44 @@ async function shrinkImage(file, maxBytes) {
 }
 
 let imgPick = null;                      // {blob, bh} waiting for OK in the dialog
+let imgFile = null;                      // the chosen file, shrunk again on a size change
+let imgSize = "normal";
+try { imgSize = localStorage.getItem("tb.imgsize") || "normal"; } catch (e) { /* no storage */ }
+if (!IMG_SIZES[imgSize]) imgSize = "normal";
+
+function imgSizeButtons() {
+  for (const b of document.querySelectorAll("#imgdlg-size button")) {
+    const size = b.dataset.size;
+    b.classList.toggle("on", size === imgSize);
+    b.title = `about ${kbText(imgTarget(size))}, ${secText(imgTime(imgTarget(size), true))}`;
+  }
+}
+async function pickImageSize(size) {
+  if (!IMG_SIZES[size] || size === imgSize) return;
+  imgSize = size;
+  try { localStorage.setItem("tb.imgsize", size); } catch (e) { /* no storage */ }
+  imgSizeButtons();
+  if (imgFile) await shrinkForDialog();
+}
 async function chooseImage(file) {
   if (!file || !S || !S.board || !S.board.img) return;
-  const maxBytes = S.board.img || IMG_SHRINK_MAX;
-  $("imgdlg-text").textContent = "Shrinking the picture…";
-  $("imgdlg-ok").disabled = true;
+  imgFile = file;
   $("imgdlg-caption").value = $("input").value;
   $("imgdlg").classList.remove("hidden");
+  imgSizeButtons();
+  await shrinkForDialog();
+}
+async function shrinkForDialog() {
+  const file = imgFile, limit = S.board.img || IMG_SHRINK_MAX;
+  const target = imgTarget(imgSize), px = IMG_SIZES[imgSize].px;
+  $("imgdlg-text").textContent = "Shrinking the picture…";
+  $("imgdlg-ok").disabled = true;
+  imgPick = null;
   let r = null;
-  try { r = await shrinkImage(file, maxBytes); } catch (e) { r = null; }
-  if (!r) {
-    $("imgdlg-text").textContent = `Sorry, this picture cannot be made small enough (max. ${kbText(maxBytes)}).`;
-    imgPick = null;
+  try { r = await shrinkImage(file, target, px); } catch (e) { r = null; }
+  if (file !== imgFile) return;           // dialog closed or another file chosen meanwhile
+  if (!r || r.blob.size > limit) {
+    $("imgdlg-text").textContent = `Sorry, this picture cannot be made small enough (max. ${kbText(limit)}).`;
     return;
   }
   imgPick = r;
@@ -1278,7 +1316,7 @@ async function chooseImage(file) {
     `(at ${S.img.rate} bytes/s). The chat line itself carries only ${26 + r.bh.length - 16} bytes.`;
   $("imgdlg-ok").disabled = false;
 }
-function closeImageDialog() { $("imgdlg").classList.add("hidden"); imgPick = null; $("imgfile").value = ""; }
+function closeImageDialog() { $("imgdlg").classList.add("hidden"); imgPick = imgFile = null; $("imgfile").value = ""; }
 async function sendImage() {
   if (!imgPick) return;
   const { wire, bad } = textToWire($("imgdlg-caption").value);
@@ -1826,6 +1864,7 @@ async function start() {
   $("imgfile").onchange = () => chooseImage($("imgfile").files[0]);
   $("imgdlg-ok").onclick = sendImage;
   $("imgdlg-cancel").onclick = closeImageDialog;
+  for (const b of document.querySelectorAll("#imgdlg-size button")) b.onclick = () => pickImageSize(b.dataset.size);
   $("imgdlg").onclick = (e) => { if (e.target === $("imgdlg")) closeImageDialog(); };
   $("imgdlg-caption").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendImage(); } });
   $("input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });

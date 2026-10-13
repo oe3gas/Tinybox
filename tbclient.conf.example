@@ -28,13 +28,14 @@ chunk_bytes  = 1024
 pause_sec    = 5
 
 [images]
-# Pictures in the chat (CR12) go up in one block; the client hands them to
-# Direwolf piece by piece with a pause, so chat lines and other stations get
-# through. bytes_per_sec is only for the time estimate shown before sending
-# (1200 Bd with AX.25 overhead and acks is about 60 bytes/s net).
-piece_bytes   = 256
-pause_sec     = 2
-bytes_per_sec = 60
+# Pictures in the chat (CR12) go to Direwolf in one go; the AX.25 window in
+# direwolf.conf (PACLEN 256, MAXFRAME 4, EMAXFRAME 6 - see PLANUNG.md 12.10a)
+# paces them and leaves gaps for other stations. target_bytes is the size the
+# picture is shrunk to ("normal" in the dialog; "small" = half, "large" = the
+# board's limit). bytes_per_sec is only for the time estimate shown before
+# sending (1200 Bd with 256-byte frames and a window of 6 is about 100-120).
+target_bytes  = 4096
+bytes_per_sec = 100
 
 [storage]
 data_dir     = data/tbclient   # settings, mailbox, pictures; relative to this file

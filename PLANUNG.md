@@ -716,13 +716,32 @@ lesen; rein kosmetisch, kein Handlungsbedarf.
 | Beim Betreten | `//IN … img` (bzw. `img=<hex>` bei anderem Limit) nur in Boards mit Bildern | 4 |
 
 - **Bild selbst:** der Browser macht WebP (JPEG als Rückfall), längste Seite höchstens 320 px, dann Qualität und notfalls Auflösung weiter runter, bis es unter das Limit passt (`[chat] image_max`, Standard 8 KB). Kein fester Rahmen, Form und Seitenverhältnis bleiben. TinyBox dekodiert nichts: Größe, Hash und Dateikennung (WebP/JPEG) werden geprüft, ein Exemplar je Hash.
-- **Vor dem Senden** zeigt ein Dialog Pixelgröße, Bytes, Upload- und Ladedauer (aus `[images] bytes_per_sec` des Clients) – OK oder Abbruch. Der Client gibt die Bytes stückweise mit Pause an Direwolf (`piece_bytes`, `pause_sec`) und wartet, bis das Stück davor in der Luft war (AGW `Y`), damit Chat-Zeilen und andere Stationen dazwischen durchkommen.
+- **Vor dem Senden** zeigt ein Dialog Pixelgröße, Bytes, Upload- und Ladedauer (aus `[images] bytes_per_sec` des Clients) und die Größenwahl klein/normal/groß – OK oder Abbruch. Der Client gibt die Bytes am Stück an Direwolf, das AX.25-Fenster taktet sie (12.10a; bis 13.10. stückweise mit Pause, `piece_bytes`/`pause_sec`).
 - **Empfänger** sehen den BlurHash-Platzhalter mit „5.0 KB · ~1 min · tap to load“ und holen das Bild erst beim Antippen, mit Fortschrittsbalken; ein abgebrochener Download setzt beim Offset fort, ein abgebrochener Upload ebenso (`//IMGGO <have>`). Geladene Bilder liegen als Dateien im Client (`data/tbclient/images/`).
 - **Terminal-Teilnehmer** lesen `[Image 5.0 KB - TinyBox client only]`, auch im Verlauf und als Reaktionsziel.
 - **Nicht** in Live-Boards; pro Board abschaltbar mit `noimg` nach der Aufbewahrung (`TECH = 30d noimg …`); `image_max = 0` schaltet Bilder ganz ab (dann gibt es die Fähigkeit `IMG` nicht). Bilder nur über Funk (AGW), wie die Z-Kompression.
 - **Aufbewahrung:** ein Bild wird gelöscht, wenn keine gespeicherte Chat-Zeile es mehr nennt (Aufbewahrung des Boards), nie in der ersten Stunde nach dem Upload. Ein halb hochgeladenes Bild bleibt eine Stunde im Speicher.
-- **Der Rohblock darf nicht unterbrochen werden** (Fehler beim ersten Funktest, 12.10.2026): Die TinyBox nimmt nach `//IMGPUT` alles als Bilddaten. Rutscht eine Zeile dazwischen (getippter Text, Reaktion, vor allem das automatische `//RESEND`), zählt sie als Bilddaten mit, der Zähler ist zu früh bei null und die letzten echten Bildbytes landen als Chat-Zeile im Board. Darum hält der Client von `//IMGPUT` bis zum letzten Byte jede andere Zeile zurück (`ClientCore.hold_lines`) und sendet sie danach. Zusätzlich: Zeitlimit für den Rohmodus in der TinyBox (120 s ohne Byte → `//ERR img timeout <bytes>`, Empfangenes bleibt für die Fortsetzung) und Chat-Zeilen mit Steuerzeichen werden verworfen, damit Binärmüll nie an alle geht.
+- **Der Rohblock darf nicht unterbrochen werden** (Fehler beim ersten Funktest, 12.10.2026): Die TinyBox nimmt nach `//IMGPUT` alles als Bilddaten. Rutscht eine Zeile dazwischen (getippter Text, Reaktion, vor allem das automatische `//RESEND`), zählt sie als Bilddaten mit, der Zähler ist zu früh bei null und die letzten echten Bildbytes landen als Chat-Zeile im Board. Darum hält der Client von `//IMGPUT` bis zur Übergabe der Bytes an Direwolf jede andere Zeile zurück (`ClientCore.hold_lines`) und sendet sie danach – Direwolf hält die Reihenfolge, was nach den Bytes übergeben wird, kommt nach den Bytes an. Zusätzlich: Zeitlimit für den Rohmodus in der TinyBox (120 s ohne Byte → `//ERR img timeout <bytes>`, Empfangenes bleibt für die Fortsetzung) und Chat-Zeilen mit Steuerzeichen werden verworfen, damit Binärmüll nie an alle geht.
 - Mail-Anhänge: später extra (dann prüfen, was LinBPQ/FBB heute statt 7PLUS können).
+
+### 12.10a Bildübertragung beschleunigt (entschieden und umgesetzt 13.10.2026, CR34)
+
+**Befund:** Ein 8-kB-Bild brauchte rund 3 Minuten (≈ 45 B/s netto). Nicht Direwolf war der Engpass – dessen Vorgaben sind PACLEN 256, MAXFRAME 4 (v2.0), EMAXFRAME 32 (v2.2) –, sondern unser Code:
+
+- Der Client schnitt jeden AGW-`D`-Frame fest auf 128 Byte (`links.py`). Direwolf macht aus jedem `D`-Frame eigene I-Frames und fasst nie zwei zusammen; PACLEN in der `direwolf.conf` teilt nur weiter. Also gingen 128er Frames, doppelt so viele wie nötig, jeder mit ≈ 20 Byte Kopf.
+- Die TinyBox machte dasselbe (`paclen = 128`) und gab mit `max_outstanding = 4` nur 512 Byte je Sendung frei (Download).
+- Der Upload schickte 256 Byte, schlief 2 s und wartete, bis das Stück bestätigt war (AGW `Y`): das Fenster war nie gefüllt, jede Sendung ein eigener Durchlauf mit TXDelay, ACK-Wechsel und Pause.
+
+**Rechnung (1200 Bd, TXDelay 300 ms):** 256 B in 2 Frames + ACK + Pause ≈ 5,7 s → 45 B/s. Mit 6 Frames à 256 B je Sendung: ≈ 12 s Sendung + ≈ 0,7 s ACK → ≈ 115 B/s; 8 kB in ≈ 70 s, 4 kB in ≈ 35 s.
+
+**Entschieden:**
+- Client: `PACLEN = 256`; die Bytes gehen **am Stück** an Direwolf, die Chat-Zeile mit dem Verweis gleich dahinter (ein Wechsel gespart; die TinyBox liest sie nach dem letzten Bildbyte und prüft erst dann den Verweis). Fortschritt aus AGW `Y` (was Direwolf noch nicht bestätigt hat); solange die Zahl fällt, lebt die Übertragung, das 120-s-Limit läuft erst bei Stillstand. `piece_bytes`/`pause_sec` entfallen, alte Einträge in `tbclient.conf` werden ignoriert.
+- TinyBox: `paclen = 256`, `max_outstanding = 6` (Beispiel-Konfiguration; auf PC2 in `tinybox.conf` nachziehen).
+- **`direwolf.conf` auf beiden PCs** (PC-spezifisch, nicht im Repo): `PACLEN 256`, `MAXFRAME 4`, **`EMAXFRAME 6`**. Beide Enden sind Direwolf und handeln per XID AX.25 v2.2 aus, es gilt also EMAXFRAME – mit der Vorgabe 32 ginge ein 8-kB-Bild als **eine** Sendung von ≈ 60 s raus. 6 Frames ≈ 1,5 kB ≈ 12 s je Sendung, dann ACK und eine Lücke für andere (DCD, PERSIST, SLOTTIME) – schnell genug und kanalfreundlich. Bei gestörtem Link (`i_retry` im Q-Status hoch) eher PACLEN 200; v2.2/SREJ wiederholt nur den verlorenen Frame.
+- Bildgröße: Ziel statt Limit. Der Dialog bietet **klein / normal / groß** (½ · `[images] target_bytes` (4 kB) · Board-Limit) mit 192 / 256 / 320 px längster Seite; vorher landete fast jedes Foto knapp unter 8 kB. Die Wahl merkt sich der Browser.
+- Feintuning später, wirkt nur je Sendung: `TXDELAY 20–25`, `TXTAIL 5`, `DWAIT 0`. Der große Hebel bliebe 9600 Bd (flache Datenbuchse an beiden Geräten) – eigenes Projekt.
+
+Messen: TinyBox-Log (`[logging] log_dir`) – Zeit von `//IMGPUT` (Monitor) bis `uploaded image … bytes`; Client-Dialog zeigt die Schätzung mit `bytes_per_sec` (Standard jetzt 100), nach den ersten Messungen anpassen.
 
 ## 13. Forwarding-Modul (optional)
 
