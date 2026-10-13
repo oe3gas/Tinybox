@@ -470,8 +470,11 @@ Info:   lesbarer Text, Folgenummer hexadezimal (1–2 Zeichen)
 | Typ | Info-Feld | Beispiel |
 |---|---|---|
 | Beitrag | `#<nr> <Call>: <Text>` | `#4F OE3GAS: Servus, Wetter passt :+1` |
-| Betreten | `#<nr> +<Call> [<APRS-Symbol>]` | `#50 +OE3GAS /-` |
-| Verlassen | `#<nr> -<Call>` | `#51 -OE3GAS` |
+| Betreten | `#<nr> +<Tn> <Call> [<APRS-Symbol>]` | `#50 +2 OE3GAS /-` – Tn = Teilnehmernummer im Board (CR33; alte Clients: `+OE3GAS /-`) |
+| Verlassen | `#<nr> -<Tn>` | `#51 -2` (alte Clients: `-OE3GAS`) |
+| Symbol | `#<nr> =<Tn> [<APRS-Symbol>]` | `#53 =2 /k` (alte Clients: `=OE3GAS /k`) |
+| Qualität | `#<nr> %<Tn> <Balken> …` | `#54 %1 5 2 4 3 ?` (alte Clients: `%OE3GAS 5 …`) |
+| Statistik | `%Q <Tn> <14 Werte>;…` | ohne Folgenummer, nur NUM-Clients, siehe 14.6 |
 | Reaktion | `#<nr> <Call> *<Bezug-nr> <Emoji>` | `#52 OE3TEC *4F :+1` |
 | System | `#<nr> !<Text>` | `#53 !Board schließt um 22:00` |
 | Bild-Upload läuft | `#<nr> ^<Call> <Größe>` | `#54 ^OE1ABC 50` – einmal beim Start, Fortschrittsbalken im Client (CR30) |
@@ -497,7 +500,7 @@ Info:   lesbarer Text, Folgenummer hexadezimal (1–2 Zeichen)
 | C → T | `C <n>` bzw. `/J <n>` | Board betreten bzw. wechseln |
 | T → C | `//IN <n> <Board> <keep> <letzte Nr.>` | Board betreten |
 | T → C | `//H <Unixzeit> <Call>: <Text>` | Verlaufszeile |
-| T → C | `//WHO <Call>[=<Symbol>] …` | wer schon da ist |
+| T → C | `//WHO <Call>[=<Symbol>] …` | wer schon da ist; mit Cap `NUM`: `//WHO <Tn> <Call>[=<Symbol>] …` (CR33) |
 | C → T | `/R <Nr.> <Emoji-Code>` | Reaktion (geht auch vom Terminal) |
 | C → T | `//RESEND <a>-<b>` | fehlende Ereignisse nachfordern |
 | C → T / T → C | `/Q` / `//OUT <Board>` | Board verlassen |
@@ -908,6 +911,7 @@ OE1ABC   2    14%   4%    -      -     2     1   -           86%
 | 4 | Befehl `STAT` / `STAT ALL` | ✅ |
 | 5 | Chat-Ereignis „Verbindung verloren“ aus `RETRYOUT` | ✅ |
 | 6 | Web-GUI: Balken in der Userliste, Detailansicht je User (13.10.2026) | ✅ |
+| 7 | Teilnehmernummern, `%Q`-Statusframe, Detailansicht im Client (CR33, 13.10.2026) | ✅ |
 
 - TinyBox fragt alle `quality_poll_sec` Sekunden (Standard 30) alle Funkverbindungen ab. Antwortet Direwolf nicht (normaler Direwolf ohne Erweiterung), fragt TinyBox bis zum nächsten AGW-Connect nicht mehr und schreibt das einmal ins Log.
 - Einstellungen in `[direwolf]`: `quality_poll_sec`, `quality_window_frames` (50), `quality_window_min` (30), `quality_min_frames` (20), `quality_steps` (5, 10, 20, 35, 50).
@@ -918,6 +922,14 @@ OE1ABC   2    14%   4%    -      -     2     1   -           86%
 - **Abbruch (5):** meldet Direwolf `*** DISCONNECTED RETRYOUT`, gehen ans Board `-CALL` und danach die Systemzeile `!Connection to CALL lost` (auch ältere Clients zeigen sie an); Terminals lesen „left … (connection lost)“.
 - Abfrage nach jeder Chat-Zeile: nicht umgesetzt, der 30-s-Takt reicht (die Balken dürfen sich ohnehin nur 1× pro Minute ändern).
 - Client-Version 2026.10.11.4 (CR18: ältere Clients bekommen den Hinweis auf die neue Version).
+
+### 14.6 Teilnehmernummern und Statusframe `%Q` (CR33, 13.10.2026)
+
+- **Teilnehmernummern:** kleinste freie Nummer 1…n je Board beim Betreten, frei nach dem Verlassen. Cap `NUM` im Handshake; dann `//WHO <Tn> <Call>[=<Sym>]`, Ereignisse `+<Tn> <Call> [<Sym>]`, `-<Tn>`, `=<Tn> [<Sym>]`, `%<Tn> <Balken> …`. Spart je Station ≈ 7 Byte im `%`-Ereignis und macht den `%Q`-Frame möglich. `//OK` nennt `q=<Fenster-Frames>/<Minuten>/<Mindest-Frames>/<Schwellen>`.
+- **Alte Clients (ohne `NUM`)** bekommen unverändert die Rufzeichenform: UI-Frame in Nummernform, dazu die alte Zeile als I-Frame mit derselben Folgenummer; `//RESEND` ebenso.
+- **`%Q`-Zeile:** `%Q <Tn> <Balken|?> <out Frames> <out Wdh> <in Frames> <REJ tx> <Wdh rx> <REJ rx> <T1> <Netto/100> <Wdh/100> <RX gesendet> <RX verpasst> <SRT·10>;…` für alle Teilnehmer mit Daten (Fensterwerte aus `linkq.Result`). Ohne Folgenummer: wird nie nachgefordert, zählt nicht für die Empfangsquote, steht nicht in der History. Nur bei Änderung, höchstens alle 2 Minuten je Board (`QSTAT_MIN_SEC`), nach dem `%`-Ereignis derselben Abfragerunde. Einmal als UI-Frame an TBCHAT-n, per I-Frame an NUM-Clients ohne UI.
+- **Payload:** 5 Stationen ≈ 165 Byte ≈ 1,5 s bei 1200 Bd inkl. TXDelay; im 2-Minuten-Takt < 1,5 % Kanal. Binär (≈ 85 Byte) verworfen: nur ≈ 0,3 s Gewinn, im Monitor unlesbar, Binärfilter (CR12).
+- **Client:** Teilnehmer antippen → Detailansicht (Richtungen, Schwellenleiter, Zähler) nach denselben Regeln wie `linkq.py`; Balkenzahl kommt mit, die Leiter rechnet der Client aus `q=`.
 - **Web-GUI (6, 13.10.2026):** Ansicht „Users“ zeigt pro Station die 5 Balken (grau = noch zu wenig Frames, ein roter Balken = über 50 % Verlust) mit der Richtung, die die Balken bestimmt hat („outgoing“ = TinyBox → Station, „incoming“ = Station → TinyBox, „rx quote“ = UI-Frames eines Clients), dazu Connect-Zeit (hh:mm UTC), Zustand und den TBClient+ samt Version. Klick auf die Zeile öffnet `#/user/CALL`: Richtungen mit Frames, Verlustzählern und Formel, Schwellenleiste mit Rechnung (inkl. T1-Abzug) und alle Direwolf-Zähler (Fenster-Differenz und Rohwert). API: `GET /api/sessions` liefert zusätzlich `client` und `quality`, neu `GET /api/sessions/CALL/linkq`. Beide Ansichten sind live: Feed-Ereignisse (neu `link.quality` nach jeder Abfragerunde) plus Abfrage alle 5 s.
 
 ---

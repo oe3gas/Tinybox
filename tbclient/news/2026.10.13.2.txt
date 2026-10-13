@@ -1,0 +1,5 @@
+- Teilnehmer antippen: Details zur Verbindungsqualitaet (Richtungen,
+  Verluste, Balkenrechnung, Zaehler) - wie in der Sysop-Oberflaeche.
+- Chat-Ereignisse mit Teilnehmernummern statt Rufzeichen: kuerzere
+  Frames. Die TinyBox schickt die Zahlen hinter den Balken bei Aenderung,
+  hoechstens alle 2 Minuten, als einen UI-Frame fuer alle.

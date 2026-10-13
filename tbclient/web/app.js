@@ -442,7 +442,7 @@ function qualityBars(call) {
   return box;
 }
 
-function personRow(call, sym, note) {
+function personRow(call, sym, note, member) {
   const li = el("li");
   const txt = el("div", "ptxt");
   txt.append(el("div", "c", call));
@@ -450,7 +450,121 @@ function personRow(call, sym, note) {
   li.append(avatar(call, sym, true), txt);
   const q = qualityBars(call);
   if (q) li.append(q);
+  if (member) {                          // CR33: tap = the numbers behind the bars
+    li.classList.add("tap");
+    li.onclick = () => openLink(call);
+  }
   return li;
+}
+
+/* --- link quality detail (CR33): what the TinyBox measured for one station ----- */
+let linkCall = null;                     // station shown in #linkdlg, null = closed
+
+function openLink(call) {
+  linkCall = call;
+  renderLink();
+  $("linkdlg").classList.remove("hidden");
+}
+function closeLink() { linkCall = null; $("linkdlg").classList.add("hidden"); }
+
+const QSTEPS_DEFAULT = [5, 10, 20, 35, 50];
+function pct(lost, frames) { return frames ? Math.round(1000 * lost / frames) / 10 : null; }
+function fmtPct(p) { return p === null || p === undefined ? "–" : p + " %"; }
+
+function renderLink() {
+  if (!linkCall || !S) return;
+  const body = $("linkdlg-body");
+  $("linkdlg-title").textContent = linkCall;
+  body.replaceChildren();
+  const q = S.linkq && S.linkq[linkCall];
+  const bars = S.quality ? S.quality[linkCall] : undefined;
+  const cfg = S.qcfg || {};
+  const steps = cfg.steps && cfg.steps.length === 5 ? cfg.steps : QSTEPS_DEFAULT;
+  const minFrames = cfg.min_frames || 20;
+
+  // headline: big bars + verdict
+  const head = el("div", "lq-head");
+  const big = qualityBars(linkCall);
+  if (big) { big.classList.add("big"); head.append(big); }
+  const verdict = el("div", "lq-verdict");
+  if (bars === null) verdict.append(el("div", "", "not enough frames yet"));
+  else if (bars === undefined) verdict.append(el("div", "", "no link data"));
+  else verdict.append(el("div", "lq-num", `${bars} / 5`), el("div", "muted small", QTEXT[bars]));
+  head.append(verdict);
+  body.append(head);
+
+  if (!q) {
+    body.append(el("p", "muted", S.ui
+      ? "The TinyBox sends the numbers behind the bars every few minutes (when they change). Nothing received for this station yet."
+      : "Details come only on radio connections to a TinyBox with member numbers (CR33)."));
+    return;
+  }
+  // directions, as the TinyBox computes them (linkq.py): the worst one makes the bars
+  const dirs = [
+    { name: "outgoing", label: `TinyBox → ${linkCall}`, frames: q.out_frames, lost: q.out_retry,
+      rows: [["frames", q.out_frames], ["repeated", q.out_retry]],
+      formula: `${q.out_retry} / ${q.out_frames}` },
+    { name: "incoming", label: `${linkCall} → TinyBox`, frames: q.in_frames, lost: q.rej_tx + q.retry_rx,
+      rows: [["frames", q.in_frames], ["REJ sent", q.rej_tx], ["repeats received", q.retry_rx]],
+      formula: `(${q.rej_tx} + ${q.retry_rx}) / ${q.in_frames}` },
+  ];
+  if (q.rx_sent) dirs.push({ name: "rx quote", label: "chat frames heard", frames: q.rx_sent, lost: q.rx_missed,
+    rows: [["events sent", q.rx_sent], ["missed", q.rx_missed]], formula: `${q.rx_missed} / ${q.rx_sent}` });
+  for (const d of dirs) { d.enough = d.frames >= minFrames; d.loss = d.enough ? pct(d.lost, d.frames) : null; }
+  const known = dirs.filter((d) => d.loss !== null);
+  const worst = known.length ? known.reduce((a, b) => (b.loss > a.loss ? b : a)) : null;
+
+  const grid = el("div", "lq-dirs");
+  for (const d of dirs) {
+    const box = el("div", "lq-dir" + (d === worst ? " worst" : "") + (d.enough ? "" : " na"));
+    const t = el("div", "t");
+    t.append(el("span", "", d.name), el("span", "pct", d.enough ? fmtPct(d.loss) : "–"));
+    box.append(t, el("div", "muted small", d.label));
+    const f = el("div", "f");
+    for (const [k, v] of d.rows) f.append(el("span", "", k), el("b", "", String(v)));
+    box.append(f, el("div", "formula", d.enough ? `${d.formula} = ${fmtPct(d.loss)}`
+                                                  : `needs ${minFrames} frames, has ${d.frames}`));
+    grid.append(box);
+  }
+  body.append(el("h3", "", "Directions"), grid);
+  body.append(el("p", "muted small",
+    `Window: last ${cfg.frames || 50} frames per direction, max. ${cfg.minutes || 30} min. ` +
+    `A direction counts from ${minFrames} frames.`));
+
+  // the step ladder
+  let before = null;
+  if (worst) { before = 0; for (let k = 0; k < 5; k++) if (worst.loss <= steps[k]) { before = 5 - k; break; } }
+  const ladder = el("div", "lq-steps");
+  [5, 4, 3, 2, 1].forEach((n, k) => {
+    const st = el("div", "lq-step" + (before === n ? " cur" : ""));
+    st.append(el("div", "b", String(n)), el("div", "l", `≤ ${steps[k]} %`));
+    ladder.append(st);
+  });
+  const red = el("div", "lq-step red" + (before === 0 ? " cur" : ""));
+  red.append(el("div", "b", "X"), el("div", "l", `> ${steps[4]} %`));
+  ladder.append(red);
+  body.append(el("h3", "", "Bars"), ladder);
+  if (worst) {
+    const calc = el("div", "lq-calc");
+    calc.append(`worst: ${worst.name} ${fmtPct(worst.loss)} → ${before ? before + " bars" : "X (red)"}`, el("br"),
+                `T1 timeouts: ${q.t1} → max(0, ${before} − ${q.t1}) = ${Math.max(0, before - q.t1)} bars`);
+    body.append(calc);
+  }
+
+  // counters
+  const kb = (n) => n >= 1000 ? (n / 1000).toFixed(1) + " kB" : n + " B";
+  const tbl = el("table", "lq-raw");
+  const rows = [["REJ received", q.rej_rx, "the station missed our frame"],
+                ["T1 timeouts", q.t1, "no answer at all, −1 bar each"],
+                ["payload net / repeated", `${kb(q.bytes_new)} / ${kb(q.bytes_retry)}`, "sent to the station"],
+                ["round trip (SRT)", q.srt ? q.srt.toFixed(1) + " s" : "–", "smoothed"]];
+  for (const [k, v, d] of rows) {
+    const tr = el("tr");
+    tr.append(el("td", "", k), el("td", "v", String(v)), el("td", "muted small", d));
+    tbl.append(tr);
+  }
+  body.append(el("h3", "", "Counters (window)"), tbl);
+  body.append(el("p", "muted small", `Received ${ago(Math.floor(Date.now() / 1000) - q.at)}.`));
 }
 
 function renderPeople() {
@@ -459,7 +573,7 @@ function renderPeople() {
   if (S.board) {
     for (const c of S.members) {
       const name = SYMNAMES[symOf(c)];
-      mem.append(personRow(c, symOf(c), c === S.mycall ? "you" : (name || "")));
+      mem.append(personRow(c, symOf(c), c === S.mycall ? "you" : (name || ""), true));
     }
   } else {
     mem.append(el("li", "muted small", "Not in a board"));
@@ -1637,6 +1751,7 @@ async function poll() {
       since = S.version;
       render();
       if (!$("sheet").classList.contains("hidden")) renderSymbols();
+      if (linkCall) renderLink();
     } catch (e) {
       $("status-text").textContent = "client not reachable";
       $("status-dot").className = "dot";
@@ -1683,6 +1798,8 @@ async function start() {
   $("nav-monitor").onclick = () => openSheet("console");
   $("status-text").onclick = () => $("app").classList.toggle("show-people");
   $("people-close").onclick = () => $("app").classList.remove("show-people");
+  $("linkdlg-close").onclick = closeLink;
+  $("linkdlg").onclick = (e) => { if (e.target === $("linkdlg")) closeLink(); };
   $("mb-close").onclick = () => {
     mailDismissed = S && S.mail ? S.mail.at : 0;
     try { localStorage.setItem("tbc-mail-dismissed", String(mailDismissed)); } catch (e) { /* ok */ }

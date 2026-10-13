@@ -17,7 +17,8 @@ the client gets machine-readable lines instead of the human text:
 
     //IN <n> <board> <keep> <last seq>     entered board number n
     //H <unix time> <call>: <text>         history line (boards with history)
-    //WHO <call>[=<sym>] ...               who else is in the board
+    //WHO <call>[=<sym>] ...               who else is in the board (with NUM:
+                                           //WHO <n> <call>[=<sym>] ... - member numbers)
     //OUT <board>                          left the board
     #<seq> ...                             chat events, format see chat.py
 
@@ -41,7 +42,9 @@ mailbox directly and takes chat events from the UI frames to TBCHAT-<n>
 instead of I-frames. UI is only granted on radio sessions.
 SYNC = offline mailbox commands, SYNC2 = delta sync (//SYNC, //BSYNC, CR26),
 Z = message texts may come LZHUF-compressed, IMG = chat images
-(both binary, radio sessions only).
+(both binary, radio sessions only). NUM = member numbers instead of calls in
+the chat events (+n call, -n, =n, %n b) and the %Q statistics line (CR33);
+//OK then tells q=<frames>/<minutes>/<min frames>/<bar steps>.
 """
 
 from __future__ import annotations
@@ -57,7 +60,7 @@ if TYPE_CHECKING:
     from .session import Session
 
 PROTO = "TB1"
-KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG")
+KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
@@ -142,6 +145,8 @@ def _client(s: Session, parts: list[str]) -> None:
         extra = f" cur={cur}"
         if s.service.client_news_id:
             extra += f" news={s.service.client_news_id}"
+    if "NUM" in caps:                 # CR33: how the TinyBox turns the counters into bars
+        extra += " " + s.service.chat.quality_config()
     # the human prompt is still on the line: start the answer on a fresh line
     s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}{extra}")
 
@@ -209,6 +214,7 @@ def _resend(s: Session, parts: list[str], replay: bool = True) -> None:
     if s.ui_rx is not None:                 # missed UI frames: receive quote (14.3)
         s.ui_rx.missed(first, last)
     if replay:
-        lines = s.service.chat.replay(s.chat_board, first, last)
+        lines = s.service.chat.replay(s.chat_board, first, last,
+                                      legacy="NUM" not in s.client.caps)
         if lines:
             s.out(*lines)

@@ -46,7 +46,10 @@ class ClientCore:
         self._boards_tmp: list[dict] | None = None
         self.board: dict | None = None
         self.members: dict[str, str] = {}         # call -> symbol sent with the join
+        self.numbers: dict[int, str] = {}         # member number -> call (CR33)
         self.quality: dict[str, int | None] = {}  # call -> bars 0..5 (None = no result yet)
+        self.linkq: dict[str, dict] = {}          # call -> numbers behind the bars (%Q, CR33)
+        self.qcfg: dict = {}                      # how the TinyBox makes bars (q= in //OK)
         self.messages: list[dict] = []
         self.pending: list[dict] = []
         self.pending_reacts: dict[tuple[int, str], float] = {}   # own reactions not echoed yet
@@ -364,7 +367,7 @@ class ClientCore:
             return
         self.handshake_done = True          # sent; //OK confirms the caps
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2" + (",Z,IMG" if self.link.kind == "agw" else "")
+        caps += ",SYNC,SYNC2,NUM" + (",Z,IMG" if self.link.kind == "agw" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -381,6 +384,8 @@ class ClientCore:
             self._control(line)
         elif line.startswith("#") and (ev := proto.parse_event(line)) is not None:
             self._event(ev)
+        elif line.startswith("%Q ") and self.board:
+            self._qstat(line)
         else:
             self.console.append(line)
             m = re.match(r"^You have (\d+) new message", line)
@@ -416,7 +421,12 @@ class ClientCore:
             return
         if f.src != self.cfg.tinybox_call or "UI" not in self.caps:
             return
-        ev = proto.parse_event(f.info.decode("utf-8", "replace"))
+        text = f.info.decode("utf-8", "replace")
+        if text.startswith("%Q "):                   # statistics line, no sequence number
+            if self.board and f.dest == f"TBCHAT-{self.board['n']}":
+                self._qstat(text)
+            return
+        ev = proto.parse_event(text)
         if ev is None:
             return
         if self._joining is not None and f.dest == f"TBCHAT-{self._joining}":
@@ -433,6 +443,11 @@ class ClientCore:
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
             self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
+            q = re.search(r"q=(\d+)/(\d+)/(\d+)/([\d.,]+)", rest)      # CR33
+            if q:
+                self.qcfg = {"frames": int(q.group(1)), "minutes": int(q.group(2)),
+                             "min_frames": int(q.group(3)),
+                             "steps": [float(x) for x in q.group(4).split(",") if x]}
             self._update_info(rest)
             self._send("//BOARDS")
         elif cmd == "B":
@@ -493,10 +508,17 @@ class ClientCore:
                 self._save_settings()
                 self.board["motd"] = text if crc != "-" else ""
                 self._touch()
-        elif cmd == "WHO":
+        elif cmd == "WHO":                 # 'n call[=sym] ...' (NUM) or 'call[=sym] ...'
+            num = 0
             for item in rest.split():
+                if item.isdigit():
+                    num = int(item)
+                    continue
                 call, _, sym = item.partition("=")
                 self.members[call] = sym
+                if num:
+                    self._set_number(num, call)
+                    num = 0
         elif cmd == "OUT":
             self._clear_board()
             self.settings.pop("board", None)
@@ -544,7 +566,9 @@ class ClientCore:
         self._hist_buf, self._hist_lo, self._hist_hi = None, 0, 0
         self.board = None
         self.members = {}
+        self.numbers = {}
         self.quality = {}
+        self.linkq = {}
         self.messages = []
         self.uploads = {}
         self.seen = set()
@@ -578,14 +602,22 @@ class ClientCore:
                         break
         elif ev.kind == "join":
             self.members[ev.call] = ev.symbol
+            if ev.num:
+                self._set_number(ev.num, ev.call)
             self._add({"id": pos, "seq": ev.seq, "kind": "join", "call": ev.call, "time": now})
         elif ev.kind == "symbol":                    # nothing to show, only the avatars
-            if ev.call in self.members:
-                self.members[ev.call] = ev.symbol
+            call = ev.call or self.numbers.get(ev.num, "")
+            if call in self.members:
+                self.members[call] = ev.symbol
         elif ev.kind == "leave":
-            self.members.pop(ev.call, None)
-            self.quality.pop(ev.call, None)
-            self._add({"id": pos, "seq": ev.seq, "kind": "leave", "call": ev.call, "time": now})
+            call = ev.call or self.numbers.pop(ev.num, "")
+            if not call:
+                return                               # number unknown: nothing to remove
+            self.numbers = {n: c for n, c in self.numbers.items() if c != call}
+            self.members.pop(call, None)
+            self.quality.pop(call, None)
+            self.linkq.pop(call, None)
+            self._add({"id": pos, "seq": ev.seq, "kind": "leave", "call": call, "time": now})
         elif ev.kind == "react":
             for m in reversed(self.messages):
                 if m.get("seq") == ev.ref and m["kind"] == "line":
@@ -599,10 +631,33 @@ class ClientCore:
             if ev.call != self.cfg.mycall:
                 self.uploads[ev.call] = {"size": ev.ref, "at": now, "got": 0}
         elif ev.kind == "quality":                   # bars next to the avatars (14.4)
-            self.quality = dict(ev.bars or {})
+            self.quality = {}
+            for who, b in (ev.bars or {}).items():
+                call = self.numbers.get(who, "") if isinstance(who, int) else who
+                if call:
+                    self.quality[call] = b
         elif ev.kind == "system":
             self._add({"id": pos, "seq": ev.seq, "kind": "system", "text": ev.text,
                        "time": now})
+
+    def _set_number(self, num: int, call: str) -> None:
+        """Member numbers are reused: a new holder pushes the old one out."""
+        self.numbers = {n: c for n, c in self.numbers.items() if c != call and n != num}
+        self.numbers[num] = call
+
+    def _qstat(self, line: str) -> None:
+        """%Q: the numbers behind the bars of every member with data (CR33)."""
+        stats = proto.parse_qstat(line)
+        if stats is None:
+            return
+        self.linkq = {}
+        for num, rec in stats.items():
+            call = self.numbers.get(num)
+            if call:
+                rec = dict(rec, call=call, at=int(time.time()))
+                self.linkq[call] = rec
+                self.quality[call] = rec["bars"]       # the bars come with it
+        self._touch()
 
     def _add(self, msg: dict) -> None:
         self.messages.append(msg)
@@ -649,6 +704,7 @@ class ClientCore:
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),
             "quality": self.quality,
+            "linkq": self.linkq, "qcfg": self.qcfg,      # CR33: detail view per station
             "mail": self.mail,
             "sysmsg": self.sysmsg,
             "heard": [{"call": c, "symbol": self.heard.get(c, ""), "ago": int(now - t)}

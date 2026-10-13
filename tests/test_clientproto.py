@@ -69,7 +69,8 @@ class ClientProtoTests(unittest.TestCase):
         # a client without v= (older than CR13) still gets the history at once
         self.assertTrue(out[1].startswith("//H ") and out[1].endswith(" OE3XYZ: vorher"))
         self.assertEqual(out[2], "//WHO OE3XYZ")
-        self.assertEqual(self.ui[-1], ("TBCHAT-1", "#2 +OE3GAS /-"))
+        self.assertEqual(self.ui[-1], ("TBCHAT-1", "#2 +2 OE3GAS /-"))   # UI: member numbers (CR33)
+        self.assertEqual(out[3], "#2 +OE3GAS /-")              # no NUM cap: old form as I-frame
         self.assertIn("*** OE3GAS joined TREFF", tt.take())
         self.assertEqual(c.state, State.CHAT)
         # terminal user speaks: one UI frame, the UI client gets no I-frame
@@ -128,20 +129,50 @@ class ClientProtoTests(unittest.TestCase):
         type_lines(other, "//CLIENT TB1 caps=CHAT", "C 1")
         tt.take(); ct.take(); ot.take()
         type_lines(c, "//SYM /k")
-        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "=OE3GAS /k")
+        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "=2 /k")
         self.assertTrue(ot.take().endswith("=OE3GAS /k\r"))
+        self.assertTrue(ct.take().endswith("=OE3GAS /k\r"))    # old UI client: I-frame copy
         self.assertEqual(tt.take(), "")                    # nothing for terminal users
         self.assertEqual(c.client.symbol, "/k")
         n = len(self.ui)
         type_lines(c, "//SYM /k")                          # unchanged: no event
         self.assertEqual(len(self.ui), n)
         type_lines(c, "//SYM -")                           # none
-        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "=OE3GAS")
+        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "=2")
         type_lines(c, "//SYM xx")
         self.assertIn("//ERR sym", ct.take())
         # outside a board: only remembered, the next join carries it
         type_lines(c, "/Q", "//SYM />", "C 1")
-        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "+OE3GAS />")
+        self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "+2 OE3GAS />")   # 2 was free again
+
+    def test_member_numbers(self):
+        """CR33: NUM clients get member numbers in //WHO and the events, //OK tells
+        the bar settings; numbers are the lowest free ones and come back."""
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF")                       # member 1
+        c, ct = radio_login(self.app, "OE3GAS")
+        type_lines(c, "//CLIENT TB1 v=2026.10.13.2 caps=CHAT,UI,NUM sym=/-")
+        ok = ct.take()
+        self.assertIn("caps=CHAT,NUM,UI", ok)
+        self.assertIn(" q=50/30/20/5,10,20,35,50", ok)
+        type_lines(c, "C 1")
+        out = ct.take().split("\r")
+        self.assertEqual(out[1], "//WHO 1 OE3XYZ")
+        self.assertEqual(self.ui[-1][1], "#1 +2 OE3GAS /-")
+        self.assertEqual(out[2:], [""])                   # UI client with NUM: no I-frame copy
+        old, ot = login(self.app, "OE3TEC")               # client without NUM, no UI
+        type_lines(old, "//CLIENT TB1 caps=CHAT", "C 1")
+        self.assertEqual(self.ui[-1][1], "#2 +3 OE3TEC")
+        self.assertTrue(ot.take().endswith("//WHO OE3XYZ OE3GAS=/-\r#2 +OE3TEC\r"))
+        type_lines(term, "/Q")                            # member 1 leaves
+        self.assertEqual(self.ui[-1][1], "#3 -1")
+        self.assertTrue(ot.take().endswith("#3 -OE3XYZ\r"))
+        type_lines(term, "C TREFF")                       # gets 1 again
+        self.assertEqual(self.ui[-1][1], "#4 +1 OE3XYZ")
+        self.assertEqual(self.app.service.chat.member_no("TREFF", "OE3TEC"), 3)
+        tt.take(); ct.take(); ot.take()
+        type_lines(old, "//RESEND 3-4")                   # old client: old form
+        self.assertEqual(ot.take(), "#3 -OE3XYZ\r#4 +OE3XYZ\r")
 
     def test_non_ui_client_gets_iframes_incl_own(self):
         c, ct = login(self.app, "OE3GAS")
@@ -157,8 +188,10 @@ class ClientProtoTests(unittest.TestCase):
         hub._seq["TREFF"] = 0xFE
         c, ct = radio_login(self.app, "OE3GAS")
         type_lines(c, "//CLIENT TB1 caps=CHAT,UI", "C 1", "a")
-        self.assertEqual([x[1] for x in self.ui], ["#FF +OE3GAS", "#0 OE3GAS: a"])
-        self.assertEqual(hub.replay("TREFF", 0xFF, 0x0), ["#FF +OE3GAS", "#0 OE3GAS: a"])
+        self.assertEqual([x[1] for x in self.ui], ["#FF +1 OE3GAS", "#0 OE3GAS: a"])
+        self.assertEqual(hub.replay("TREFF", 0xFF, 0x0), ["#FF +1 OE3GAS", "#0 OE3GAS: a"])
+        self.assertEqual(hub.replay("TREFF", 0xFF, 0x0, legacy=True),
+                         ["#FF +OE3GAS", "#0 OE3GAS: a"])
         hub.boards[0:0] = [type(hub.boards[0])(f"B{i}", 1) for i in range(15)]
         self.ui.clear()
         type_lines(c, "b")          # TREFF is board 16 now

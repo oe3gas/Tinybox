@@ -103,11 +103,7 @@ def _enter_client(s: Session, board: ChatBoard) -> None:
              f"{hub.last_seq(board.name)}{hist}"]
     if clientnews.version_key(s.client.version) < clientnews.version_key(HIST_CLIENT):
         lines += history_rows(hub.history(board))       # older client: as before
-    others = []
-    for m in hub.members(board.name):
-        sym = m.client.symbol if m.client else ""
-        others.append(m.call + (f"={sym}" if sym else ""))
-    lines.append("//WHO " + " ".join(others) if others else "//WHO")
+    lines.append(hub.who_line(board.name, s))      # CR33: with member numbers (NUM)
     s.state = State.CHAT
     s.out(*lines)
     hub.join(s, board)            # the join event follows the //WHO line

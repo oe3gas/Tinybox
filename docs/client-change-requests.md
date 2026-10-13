@@ -663,3 +663,17 @@ Leseregeln:
 
 Dieselben drei Zeilen stehen als Kommentarkopf in jeder Logdatei, damit sie
 mitkommen, wenn die Datei in einen Chat gelegt wird.
+
+## CR33 – Teilnehmernummern und Verbindungsdetails im Client (✅ 13.10.2026)
+
+**Anlass:** Die Sysop-Web-GUI zeigt seit 13.10. je User die Zahlen hinter den Balken (Richtungen, Verluste, Schwellenleiter, Zähler). Dasselbe soll der TBClient+ zeigen – ohne nennenswert mehr Funkverkehr.
+
+**Payload-Abschätzung (13.10.2026, 5 Stationen, 1200 Bd):** volle Auskunft mit Rufzeichen und Klartext ≈ 230 Byte; mit Teilnehmernummern, kompaktem Klartext (Bytes in 100er-Schritten, SRT in 0,1 s) ≈ 165 Byte ≈ 1,5 s inkl. TXDelay; Binär brächte nur ≈ 0,3 s mehr, wäre aber im Monitor unlesbar und müsste am Binärfilter (CR12) vorbei. Entschieden: Nummern + kompakter Klartext, nur bei Änderung, höchstens alle 2 Minuten (< 1,5 % Kanal).
+
+**Lösung** (Protokoll: PLANUNG.md 12.4 und 14.6):
+- **Teilnehmernummern:** Jede Station bekommt beim Betreten eines Boards die kleinste freie Nummer 1…n; sie bleibt, solange die Station im Board ist, und wird danach wieder frei. Neue Cap `NUM` beim `//CLIENT`-Handshake. Für NUM-Clients: `//WHO 1 OE3GAS=/- 3 OE3TEC-1`, Ereignisse `+2 OE3TEC-1 /-`, `-2`, `=2 /k`, `%2 4 3 ?`. `//OK` nennt zusätzlich `q=50/30/20/5,10,20,35,50` (Fenster, Minuten, Mindest-Frames, Balkenschwellen).
+- **Alte Clients ohne `NUM`:** bekommen weiterhin die Rufzeichenform – der UI-Frame trägt die Nummernform, alte UI-Clients erhalten die alte Zeile zusätzlich als I-Frame (gleiche Folgenummer, der Client dedupliziert). `//RESEND` liefert ihnen ebenfalls die alte Form.
+- **Statusframe `%Q`:** `%Q <n> <Balken> <out Frames> <out Wdh> <in Frames> <REJ tx> <Wdh rx> <REJ rx> <T1> <Netto/100> <Wdh/100> <RX gesendet> <RX verpasst> <SRT·10>;…` – alle Teilnehmer mit Daten, Fensterwerte wie in der Sysop-GUI. **Ohne Folgenummer**, wird nie nachgefordert (der nächste bringt frischere Werte), zählt nicht für die Empfangsquote. Nur an NUM-Clients: einmal als UI-Frame, per I-Frame an Clients ohne UI.
+- **Client:** Teilnehmer in der Liste antippen öffnet die Detailansicht: große Balken, drei Richtungskacheln (outgoing, incoming, rx quote) mit Frames, Verlusten und Formel, Schwellenleiter mit Rechnung inkl. T1-Abzug, Zähler (REJ rx, T1, Netto/Wdh, SRT), Alter der Daten. Rechnung im Client nach denselben Regeln wie `linkq.py`, Schwellen aus `q=`.
+- Client-Version 2026.10.13.2. Tests: `test_clientproto.py` (`test_member_numbers`), `test_linkq.py` (`test_qstat_line_for_num_clients`, `ClientQualityTests`), `test_tbclient.py`.
+

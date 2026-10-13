@@ -85,6 +85,8 @@ Mailbox
 
 Station
 - Teilnehmer im Board und gehoerte Stationen.
+- Verbindungsqualitaet als Balken; Teilnehmer antippen zeigt die Zahlen
+  dahinter (Richtungen, Verluste, Balkenrechnung, Zaehler).
 - Monitor der Verbindung.
 
 Update holen

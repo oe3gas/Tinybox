@@ -251,13 +251,13 @@ if __name__ == "__main__":
 
 # --- chat: receive quote, % event, lost link (PLANUNG.md 14.3-14.5) ----------------
 
-def _radio_client(app, call, ui=True):
+def _radio_client(app, call, ui=True, num=False):
     from tinybox.session import Session
     from tests.test_tinybox import FakeTransport
     t = FakeTransport()
     s = Session(call, app.service, app.cfg, t, origin="radio")
     s.start()
-    s.handle_line(f"//CLIENT TB1 v=2026.10.11 caps=CHAT{',UI' if ui else ''}")
+    s.handle_line(f"//CLIENT TB1 v=2026.10.11 caps=CHAT{',UI' if ui else ''}{',NUM' if num else ''}")
     t.take()
     return s, t
 
@@ -295,7 +295,8 @@ class ChatQualityTests(unittest.TestCase):
         self.hub.quality_tick(self.app.service, now=1000)
         texts = [t for _, t in self.ui]
         self.assertEqual(len(texts), 1)
-        self.assertRegex(texts[0], r"^#[0-9A-F]+ %OE3TEC 5 OE1ABC 5$")
+        self.assertRegex(texts[0], r"^#[0-9A-F]+ %1 5 2 5$")        # member numbers (CR33)
+        self.assertTrue(self.ta.take().endswith("%OE3TEC 5 OE1ABC 5\r"))  # old client: I-frame
         self.hub.quality_tick(self.app.service, now=1030)           # nothing changed
         self.assertEqual(len(self.ui), 1)
         self.a.handle_line("//LOST 0-9")                              # OE3TEC missed 10
@@ -303,7 +304,7 @@ class ChatQualityTests(unittest.TestCase):
         self.assertEqual(len(self.ui), 1)
         self.hub.quality_tick(self.app.service, now=1070)
         self.assertEqual(len(self.ui), 2)
-        self.assertIn("%OE3TEC 1 OE1ABC 5", self.ui[-1][1])
+        self.assertIn("%1 1 2 5", self.ui[-1][1])
         # not in the stored history
         self.assertNotIn("%", " ".join(c.text for c in self.app.store.chat_recent(
             "TREFF", "2000-01-01T00:00:00Z", 100)))
@@ -312,7 +313,37 @@ class ChatQualityTests(unittest.TestCase):
         self.ui.clear()
         self.b.end(lost=True)
         texts = [t.split(" ", 1)[1] for _, t in self.ui]       # UI frames to TBCHAT-1
-        self.assertEqual(texts, ["-OE1ABC", "!Connection to OE1ABC lost"])
+        self.assertEqual(texts, ["-2", "!Connection to OE1ABC lost"])
+
+    def test_qstat_line_for_num_clients(self):
+        """CR33: the %Q line with the numbers behind the bars - no sequence number,
+        only to NUM clients, at most every two minutes, only when changed."""
+        c, tc = _radio_client(self.app, "OE3GAS", num=True)       # member 3
+        c.handle_line("C 1")
+        for i in range(25):
+            self.b.handle_line(f"x{i}")
+        self.ui.clear(); tc.take()
+        self.hub.quality_tick(self.app.service, now=1000)
+        texts = [t for _, t in self.ui]
+        self.assertEqual(len(texts), 2)
+        self.assertRegex(texts[0], r"^#[0-9A-F]+ %1 5 2 5 3 5$")
+        # rx_sent counts every UI event the client should have heard (joins too)
+        self.assertEqual(texts[1], "%Q 1 5 0 0 0 0 0 0 0 0 0 28 0 0;2 5 0 0 0 0 0 0 0 0 0 27 0 0;"
+                                   "3 5 0 0 0 0 0 0 0 0 0 26 0 0")
+        self.assertEqual(tc.take(), "")                   # UI client: no I-frame copy
+        self.assertEqual(self.ta.take().count("%Q"), 0)   # old client: nothing
+        self.hub.quality_tick(self.app.service, now=1030)
+        self.assertEqual(len(self.ui), 2)                 # unchanged
+        self.a.handle_line("//LOST 0-9")
+        self.hub.quality_tick(self.app.service, now=1070)
+        self.assertEqual(len(self.ui), 3)                 # % after a minute, %Q not yet
+        self.hub.quality_tick(self.app.service, now=1130)
+        self.assertEqual(len(self.ui), 4)
+        self.assertRegex(self.ui[-1][1], r"^%Q 1 [12] 0 0 0 0 0 0 0 0 0 \d+ 10 0;")
+        # the client side
+        from tbclient import proto
+        stats = proto.parse_qstat(self.ui[-1][1])
+        self.assertEqual(stats[1]["rx_missed"], 10)
 
     def test_stat_shows_receive_quote(self):
         for i in range(25):
@@ -330,6 +361,11 @@ class ClientQualityTests(unittest.TestCase):
         from tbclient import proto
         ev = proto.parse_event("#54 %OE3TEC 4 OE1ABC ?")
         self.assertEqual((ev.kind, ev.bars), ("quality", {"OE3TEC": 4, "OE1ABC": None}))
+        ev = proto.parse_event("#54 %2 4 3 ?")                     # member numbers (CR33)
+        self.assertEqual((ev.kind, ev.bars), ("quality", {2: 4, 3: None}))
+        self.assertIsNone(proto.parse_qstat("%Q 2 4 48 2"))
+        self.assertEqual(proto.parse_qstat("%Q 2 4 48 2 50 3 1 1 0 41 1 48 2 14")[2]["bytes_new"],
+                         4100)
         self.assertIsNone(proto.parse_event("#54 %OE3TEC 9"))
         self.assertIsNone(proto.parse_event("#54 %OE3TEC"))
 
@@ -355,5 +391,19 @@ class ClientQualityTests(unittest.TestCase):
                 self.assertEqual(sent[-1], "//RESEND 33-33")
                 core._event(proto.Event(53, "leave", "OE3TEC"))
                 self.assertEqual(core.snapshot()["quality"], {"OE3GAS": None})
+                # member numbers (CR33): join with number, % and %Q by number, leave by number
+                core._event(proto.parse_event("#36 +2 OE3TEC /-"))
+                core._event(proto.parse_event("#37 +3 OE1ABC"))
+                core._event(proto.parse_event("#38 %2 4 3 ?"))
+                self.assertEqual(core.snapshot()["quality"], {"OE3TEC": 4, "OE1ABC": None})
+                core._qstat("%Q 2 3 48 2 50 3 1 1 0 41 1 48 2 14")
+                snap = core.snapshot()
+                self.assertEqual(snap["linkq"]["OE3TEC"]["out_frames"], 48)
+                self.assertEqual(snap["quality"]["OE3TEC"], 3)
+                core._event(proto.parse_event("#39 -2"))
+                self.assertEqual(core.snapshot()["members"], ["OE1ABC"])
+                self.assertEqual(core.snapshot()["linkq"], {})
+                core._event(proto.parse_event("#3A +2 OE9XYZ"))       # number reused
+                self.assertEqual(core.numbers, {3: "OE1ABC", 2: "OE9XYZ"})
 
         asyncio.run(scenario())
