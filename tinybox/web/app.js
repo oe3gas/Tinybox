@@ -163,6 +163,7 @@ function startFeed() {
     const item = JSON.parse(e.data);
     if (item.type === "event") {
       if (item.name.startsWith("message.")) scheduleRefresh("status", "messages");
+      else if (item.name === "link.quality") scheduleRefresh("sessions");
       else scheduleRefresh("status", "sessions");
       return;
     }
@@ -275,17 +276,57 @@ function messagesCard(opts) {
   return { card, update };
 }
 
+// ---- link quality bars (PLANUNG.md 14) --------------------------------------------
+// q = session.quality from the API: bars 0..5 (0 = one red bar), null = no result yet.
+function barsEl(q, big) {
+  const bars = q ? q.bars : null;
+  const cls = "bars" + (big ? " big" : "") + (bars === null ? " none" : bars === 0 ? " red" : "");
+  const kids = [];
+  for (let i = 1; i <= 5; i++)
+    kids.push(h("i", { class: bars !== null && i > Math.max(bars, 1) ? "off" : "" }));
+  return h("span", { class: cls, title: barsTitle(q) }, ...kids);
+}
+function barsTitle(q) {
+  if (!q) return "no link quality data";
+  if (q.bars === null) return "not enough frames yet";
+  return q.bars + " of 5 bars" + (q.worst ? " - worst: " + q.worst.dir + " " + q.worst.loss + " %" : "");
+}
+// short text next to the bars: the direction that set them, or how many frames are missing
+function barsNote(q) {
+  if (!q) return "";
+  if (q.bars === null) {
+    const f = Math.max(q.frames.outgoing, q.frames.incoming);
+    return f + " / " + q.min_frames + " frames";
+  }
+  return q.worst ? q.worst.dir + " " + q.worst.loss + " %" : "";
+}
+function clientText(c) { return c ? "TBClient+ " + (c.version || c.proto) + (c.ui ? " (UI)" : "") : ""; }
+function hhmm(iso) { return iso.slice(11, 16); }
+function durationText(iso) {
+  const min = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  return min < 60 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min";
+}
+
 function sessionsCard() {
   const count = h("span", { class: "mono", style: "font-weight: 700" });
   const list = h("div");
   function update() {
     count.textContent = S.sessions.length + " / " + (S.status ? S.status.max_users : "-");
     if (!S.sessions.length) { list.replaceChildren(h("div", { class: "empty", text: "No users connected." })); return; }
-    list.replaceChildren(...S.sessions.map((s) => h("div", { class: "srow" },
-      h("div", { class: "grow" },
-        h("div", { class: "who-call", text: s.call }),
-        h("div", { class: "meta", text: s.origin + " · since " + shortTime(s.since) + " · " + s.state })),
-      h("button", { class: "btn sm danger", type: "button", onclick: () => disconnect(s.call) }, "Disconnect"))));
+    list.replaceChildren(...S.sessions.map((s) => {
+      const open = () => { location.hash = "#/user/" + encodeURIComponent(s.call); };
+      const meta = [s.origin, "connect time " + hhmm(s.since), s.state];
+      return h("div", { class: "srow click", tabindex: 0, role: "link",
+                        onclick: (e) => { if (e.target.tagName !== "BUTTON") open(); },
+                        onkeydown: (e) => { if (e.key === "Enter") open(); } },
+        h("div", { class: "grow" },
+          h("div", { class: "who-call", text: s.call }),
+          h("div", { class: "meta", text: meta.join(" \u00b7 ") },
+            s.client ? [" \u00b7 ", h("span", { class: "client", text: clientText(s.client) })] : [])),
+        h("div", { class: "qcell" }, barsEl(s.quality),
+          h("span", { class: "sub", text: barsNote(s.quality) })),
+        h("button", { class: "btn sm danger", type: "button", onclick: () => disconnect(s.call) }, "Disconnect"));
+    }));
   }
   const card = h("section", { class: "card", style: "flex-shrink: 0" },
     h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Connected" }), count), list);
@@ -524,11 +565,162 @@ function renderReader(article, m, onReply) {
       h("div", { class: "body", text: m.body })));
 }
 
+// Users and the user detail are a live dashboard: besides the feed events they poll
+// every few seconds (connect time, state, bars). The timer dies with the view.
+let liveTimer = null;
+function live(fn, sec) {
+  clearInterval(liveTimer);
+  liveTimer = setInterval(() => { fn().catch(() => {}); }, sec * 1000);
+}
+
 function viewUsers() {
   const sess = sessionsCard();
   main().className = "one";
   main().replaceChildren(sess.card);
+  live(refreshSessions, 5);
   return { updateSessions: sess.update };
+}
+
+function viewUser(call) {
+  const card = h("section", { class: "card", style: "flex-shrink: 0" });   // the page scrolls, not the card
+  main().className = "one";
+  main().replaceChildren(card);
+  const load = async () => {
+    try { renderUser(card, await api("sessions/" + encodeURIComponent(call) + "/linkq")); }
+    catch (e) {
+      clearInterval(liveTimer);
+      card.replaceChildren(
+        h("div", { class: "card-head" }, h("div", { class: "crumb grow" },
+          h("a", { href: "#/users", text: "Users" }), "\u203a", h("span", { class: "mono", text: call }))),
+        h("div", { class: "empty", text: e.message }));
+    }
+  };
+  load();
+  live(load, 5);
+  return { updateSessions: load };
+}
+
+function renderUser(card, d) {
+  const s = d.session, q = d.quality, r = d.result, w = d.window;
+  const pct = (x) => x === null || x === undefined ? "-" : x.toFixed(1).replace(/\.0$/, "") + " %";
+  const n = (x) => x === null || x === undefined ? "-" : String(x);
+
+  const hero = h("div", { class: "hero" },
+    h("div", { class: "grow" },
+      h("div", { class: "call", text: s.call }),
+      h("div", { class: "meta", text: s.origin + " \u00b7 connect time " + hhmm(s.since) +
+                                      " (" + durationText(s.since) + ") \u00b7 " + s.state }),
+      s.client ? h("div", { class: "meta client", text: clientText(s.client) }) : ""),
+    h("div", { class: "verdict" }, barsEl(q, true),
+      h("div", {},
+        h("div", { class: "num" }, q && q.bars !== null ? [String(q.bars), h("small", { text: " / 5 bars" })]
+                                                        : h("small", { text: q ? "not enough frames yet" : "no data" })),
+        h("div", { class: "why" }, q && q.worst ? ["worst direction: ", h("b", { text: q.worst.dir + " " + q.worst.loss + " %" }),
+                                                   " \u00b7 T1 timeouts: " + q.t1] : ""))));
+
+  // --- directions
+  const worstDir = q && q.worst ? q.worst.dir : null;
+  function dirBox(name, dir, desc, rows, formula) {
+    if (!dir) return h("div", { class: "dir na" }, h("div", { class: "t" }, h("span", { text: name }), h("span", { class: "pct", text: "-" })),
+                       h("div", { class: "d", text: desc }), h("div", { class: "f", text: "not available for this station" }));
+    const cls = "dir" + (name === worstDir ? " worst" : "") + (dir.enough ? "" : " na");
+    return h("div", { class: cls },
+      h("div", { class: "t" }, h("span", {}, name + " ", h("span", { class: "badge" + (name === worstDir ? " warn" : ""), text: dir.label })),
+        h("span", { class: "pct", text: dir.enough ? pct(dir.loss) : "-" })),
+      h("div", { class: "d", text: desc }),
+      h("div", { class: "f" }, ...rows.flatMap(([k, v]) => [h("span", { text: k }), h("b", { text: n(v) })])),
+      h("div", { class: "formula", text: dir.enough ? formula : "needs " + w.min_frames + " frames, has " + dir.frames }));
+  }
+  let dirs = h("div", { class: "empty", text: "No link quality data for this station yet." });
+  if (r) {
+    const o = r.outgoing, i = r.incoming, x = r.rx, wv = r.window;
+    dirs = h("div", { class: "dirs" },
+      dirBox("outgoing", o, "I-frames sent, how many had to be repeated",
+        [["frames (i_new + i_retry)", o.frames], ["repeated (i_retry)", o.lost]],
+        o.lost + " / " + o.frames + " = " + pct(o.loss)),
+      dirBox("incoming", i, "I-frames received, how many we had to ask for again",
+        [["frames (i_rx)", i.frames], ["REJ sent (rej_tx)", wv.rej_tx], ["repeats received (retry_rx)", wv.retry_rx]],
+        "(" + wv.rej_tx + " + " + wv.retry_rx + ") / " + i.frames + " = " + pct(i.loss)),
+      dirBox("rx quote", x, "chat events sent as UI frames (no ACK) and which the client asked for again (//RESEND, //LOST)",
+        x ? [["events sent", x.frames], ["missed", x.lost], ["received", pct(r.rx_quote)]] : [],
+        x ? "counts as outgoing if worse: " + pct(x.loss) + (o.loss !== null && x.loss <= o.loss ? " <= " + pct(o.loss) + " -> outgoing stays" : " -> used") : ""));
+  }
+
+  // --- bars from the worst direction
+  // the step the worst loss lands on, before the T1 deduction (same as linkq.evaluate)
+  let before = null;
+  if (q && q.bars !== null) {
+    before = 0;
+    for (let k = 0; k < w.steps.length; k++) if (q.worst.loss <= w.steps[k]) { before = 5 - k; break; }
+  }
+  const steps = h("div", { class: "steps" });
+  const labels = [5, 4, 3, 2, 1];
+  w.steps.forEach((lim, k) => steps.append(h("div", { class: "step" + (before === labels[k] ? " cur" : "") },
+    h("div", { class: "b", text: String(labels[k]) }), h("div", { class: "l", text: "\u2264 " + lim + " %" }))));
+  steps.append(h("div", { class: "step red" + (before === 0 ? " cur" : "") },
+    h("div", { class: "b", text: "X" }), h("div", { class: "l", text: "> " + w.steps[w.steps.length - 1] + " %" })));
+  let calc = "";
+  if (before !== null && r) {
+    const parts = [["outgoing", r.outgoing.loss], ["incoming", r.incoming.loss], ["rx quote", r.rx ? r.rx.loss : null]]
+      .filter((p) => p[1] !== null).map((p) => p[0] + " " + pct(p[1]));
+    calc = h("div", { class: "calc" },
+      "worst loss = max(" + parts.join(", ") + ") = ", h("span", { class: "hl", text: pct(q.worst.loss) }),
+      " \u2192 ", h("span", { class: "hl", text: before ? before + " bars" : "X (red bar)" }), h("br"),
+      "T1 timeouts in window: ", h("span", { class: "hl", text: String(q.t1) }),
+      " \u2192 max(0, " + before + " \u2212 " + q.t1 + ") = ", h("span", { class: "hl", text: q.bars + " bars" }));
+  }
+
+  // --- raw counters
+  const C = d.counters, CW = d.counters_window;
+  const kb = (x) => x >= 1000 ? (x / 1000).toFixed(1) + "k" : String(x);
+  const rows = [
+    ["i_new", "I-frames sent for the first time"], ["i_retry", "I-frames repeated (outgoing loss)"],
+    ["i_rx", "I-frames received"], ["rej_tx", "REJ we sent - the station has to repeat (incoming loss)"],
+    ["retry_rx", "repeated I-frames received (incoming loss)"], ["rej_rx", "REJ received - the station missed our frame"],
+    ["t1_exp", "T1 timeouts - no answer at all (-1 bar each)"], ["rnr_rx", "RNR received (station busy)"],
+    ["bytes_new", "payload bytes sent, net"], ["bytes_retry", "payload bytes sent again"],
+    ["bytes_rx", "payload bytes received (v=2)"], ["tx_busy_ms", "ms the transmitter was busy (v=2)"]];
+  const cur = [["srt", "smoothed round trip time, s"], ["t1v", "current T1 timer value, s"],
+               ["unack", "frames waiting for ACK"], ["rc", "current retry count"], ["baud", "link speed (v=2)"],
+               ["state", "AX.25 link state"], ["age", "link age, s"]];
+  let raw = h("div", { class: "empty", text: "No Direwolf counters: the station has no radio link via Direwolf" +
+                                             " (or Direwolf has no TinyBox extension)." });
+  if (C) {
+    const fmt = (k, v) => k.startsWith("bytes") ? kb(v) : k === "srt" || k === "t1v" ? v.toFixed(2) : String(v);
+    raw = h("table", { class: "raw" },
+      h("thead", {}, h("tr", {}, h("th", { text: "Field" }), h("th", { class: "r", text: "Window" }),
+                                 h("th", { class: "r", text: "Since link start" }), h("th", { text: "Meaning" }))),
+      h("tbody", {},
+        ...rows.map(([k, desc]) => h("tr", {}, h("td", { class: "mono", text: k }),
+          h("td", { class: "r", text: CW ? fmt(k, CW[k]) : "-" }), h("td", { class: "r", text: fmt(k, C[k]) }),
+          h("td", { class: "desc", text: desc }))),
+        ...cur.map(([k, desc]) => h("tr", { class: "dim" }, h("td", { class: "mono", text: k }),
+          h("td", { class: "r", text: "-" }), h("td", { class: "r", text: fmt(k, C[k]) }),
+          h("td", { class: "desc", text: desc })))));
+  }
+  const pollNote = C ? "AGW query 'Q' v=" + (C.v || "?") +
+                       " \u00b7 every " + w.poll_sec + " s" +
+                       (d.poll_age !== null ? " \u00b7 last answer " + d.poll_age + " s ago" : "") : "";
+
+  card.replaceChildren(
+    h("div", { class: "card-head" },
+      h("div", { class: "crumb grow" }, h("a", { href: "#/users", text: "Users" }), "\u203a",
+        h("span", { class: "mono", text: s.call })),
+      h("button", { class: "btn sm danger", type: "button", onclick: () => disconnect(s.call) }, "Disconnect")),
+    h("div", { class: "detail" },
+      hero,
+      h("div", { class: "section" },
+        h("h3", {}, "Directions ", h("span", { text: "window: last " + w.frames + " frames per direction, max. " +
+                                              w.minutes + " min \u00b7 a direction counts from " + w.min_frames + " frames" })),
+        dirs),
+      h("div", { class: "section" },
+        h("h3", {}, "Bars ", h("span", { text: "from the worst direction, minus one bar per T1 timeout in the window" })),
+        steps, calc),
+      h("div", { class: "section" },
+        h("h3", {}, "Direwolf counters ", h("span", { text: pollNote })),
+        raw,
+        h("div", { class: "legend", text: "Window = difference to the oldest sample in the window (what the bars are made of). " +
+                                           "Since link start = raw counter from Direwolf. Grey rows are current values, not differences." }))));
 }
 
 function viewMonitor() {
@@ -582,12 +774,14 @@ function route() {
   const parts = (location.hash || "#/dashboard").slice(2).split("/");
   const name = parts[0] || "dashboard";
   if (name !== "message") S.currentId = null;
-  const navKey = name === "message" || name === "compose" ? "messages" : name;
+  clearInterval(liveTimer);
+  const navKey = name === "message" || name === "compose" ? "messages" : name === "user" ? "users" : name;
   document.querySelectorAll(".side a").forEach((a) =>
     a.classList.toggle("active", a.dataset.nav === navKey));
   const views = { dashboard: viewDashboard, messages: viewMessages, compose: viewCompose,
                   users: viewUsers, monitor: viewMonitor, jlog: viewJlog, settings: viewSettings };
   if (name === "message" && /^\d+$/.test(parts[1] || "")) S.view = viewMessage(Number(parts[1]));
+  else if (name === "user" && parts[1]) S.view = viewUser(decodeURIComponent(parts[1]));
   else S.view = (views[name] || viewDashboard)();
   main().scrollTop = 0;
 }

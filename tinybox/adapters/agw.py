@@ -493,6 +493,7 @@ class AgwAdapter:
                 self.app.service.chat.quality_tick(self.app.service)
             except Exception:
                 log.exception("link quality: chat update failed")
+            self.app.bus.publish("link.quality")      # web GUI: refresh the bars
 
     async def _idle_watchdog(self) -> None:
         limit = self.cfg.mailbox.idle_timeout_min * 60

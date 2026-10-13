@@ -40,7 +40,7 @@ def parse(text: str) -> dict | None:
     parts = dict(p.split("=", 1) for p in text.split() if "=" in p)
     if parts.get("v") not in VERSIONS or "i_new" not in parts:
         return None
-    out: dict = {}
+    out: dict = {"v": int(parts["v"])}
     try:
         for k in FIELDS_INT:
             out[k] = int(parts.get(k, 0))

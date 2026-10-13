@@ -6,11 +6,13 @@ import asyncio
 import dataclasses
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 from tinybox.adapters import web
-from tests.test_tinybox import make_app
+from tests.test_tinybox import login as radio_login, make_app
+from tinybox import linkq
 
 
 async def request(port, method, path, *, host=None, cookie=None, csrf=None,
@@ -219,6 +221,39 @@ class WebTests(unittest.TestCase):
         data = self.run_async(scenario)
         self.assertIn(b"text/event-stream", data)
         self.assertIn(b'"name": "message.created"', data)
+
+
+    def test_sessions_with_link_quality(self):
+        """Users list carries the bars, the detail endpoint the whole calculation."""
+        sess, _ = radio_login(self.app, "OE3TEC-1")
+        self.app.registry.add(sess)
+        q = linkq.LinkQuality()
+        base = {k: 0 for k in linkq.FIELDS_INT} | {"srt": 0.0, "t1v": 0.0, "age": 0.0}
+        now = time.monotonic()                   # evaluate() measures the window from now
+        q.add(base | {"state": 3}, now=now - 100.0)
+        q.add(base | {"state": 3, "i_new": 48, "i_retry": 2, "i_rx": 50, "rej_tx": 3, "retry_rx": 1,
+                      "bytes_new": 4100, "bytes_retry": 120, "srt": 1.38, "age": 100.0}, now=now)
+        self.app.service.links["OE3TEC-1"] = q
+
+        async def scenario(s):
+            cookie, _ = await self.login(s)
+            get = lambda path: request(s.port, "GET", path, cookie=cookie)
+            _, _, p = await get("/api/sessions")
+            st_detail, _, d = await get("/api/sessions/OE3TEC-1/linkq")
+            st_missing, _, _ = await get("/api/sessions/OE9ZZZ/linkq")
+            return json.loads(p), st_detail, json.loads(d), st_missing
+
+        rows, st_detail, detail, st_missing = self.run_async(scenario)
+        row = next(r for r in rows if r["call"] == "OE3TEC-1")
+        self.assertEqual(row["quality"]["bars"], 4)                      # incoming 8 % -> 4 bars
+        self.assertEqual(row["quality"]["worst"], {"dir": "incoming", "loss": 8.0})
+        self.assertEqual(st_detail, 200)
+        self.assertEqual(detail["result"]["outgoing"]["loss"], 4.0)
+        self.assertEqual(detail["result"]["incoming"]["lost"], 4)
+        self.assertEqual(detail["counters"]["i_rx"], 50)
+        self.assertEqual(detail["counters_window"]["rej_tx"], 3)
+        self.assertEqual(detail["window"]["steps"][0], 5.0)
+        self.assertEqual(st_missing, 404)
 
 
 if __name__ == "__main__":

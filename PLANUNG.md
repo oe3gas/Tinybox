@@ -905,6 +905,7 @@ OE1ABC   2    14%   4%    -      -     2     1   -           86%
 | 3 | Ereignis `%` im TBCHAT, Balken neben dem Avatar im Client | ✅ |
 | 4 | Befehl `STAT` / `STAT ALL` | ✅ |
 | 5 | Chat-Ereignis „Verbindung verloren“ aus `RETRYOUT` | ✅ |
+| 6 | Web-GUI: Balken in der Userliste, Detailansicht je User (13.10.2026) | ✅ |
 
 - TinyBox fragt alle `quality_poll_sec` Sekunden (Standard 30) alle Funkverbindungen ab. Antwortet Direwolf nicht (normaler Direwolf ohne Erweiterung), fragt TinyBox bis zum nächsten AGW-Connect nicht mehr und schreibt das einmal ins Log.
 - Einstellungen in `[direwolf]`: `quality_poll_sec`, `quality_window_frames` (50), `quality_window_min` (30), `quality_min_frames` (20), `quality_steps` (5, 10, 20, 35, 50).
@@ -915,6 +916,7 @@ OE1ABC   2    14%   4%    -      -     2     1   -           86%
 - **Abbruch (5):** meldet Direwolf `*** DISCONNECTED RETRYOUT`, gehen ans Board `-CALL` und danach die Systemzeile `!Connection to CALL lost` (auch ältere Clients zeigen sie an); Terminals lesen „left … (connection lost)“.
 - Abfrage nach jeder Chat-Zeile: nicht umgesetzt, der 30-s-Takt reicht (die Balken dürfen sich ohnehin nur 1× pro Minute ändern).
 - Client-Version 2026.10.11.4 (CR18: ältere Clients bekommen den Hinweis auf die neue Version).
+- **Web-GUI (6, 13.10.2026):** Ansicht „Users“ zeigt pro Station die 5 Balken (grau = noch zu wenig Frames, ein roter Balken = über 50 % Verlust) mit der Richtung, die die Balken bestimmt hat („outgoing“ = TinyBox → Station, „incoming“ = Station → TinyBox, „rx quote“ = UI-Frames eines Clients), dazu Connect-Zeit (hh:mm UTC), Zustand und den TBClient+ samt Version. Klick auf die Zeile öffnet `#/user/CALL`: Richtungen mit Frames, Verlustzählern und Formel, Schwellenleiste mit Rechnung (inkl. T1-Abzug) und alle Direwolf-Zähler (Fenster-Differenz und Rohwert). API: `GET /api/sessions` liefert zusätzlich `client` und `quality`, neu `GET /api/sessions/CALL/linkq`. Beide Ansichten sind live: Feed-Ereignisse (neu `link.quality` nach jeder Abfragerunde) plus Abfrage alle 5 s.
 
 ---
 

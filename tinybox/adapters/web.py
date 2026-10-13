@@ -21,12 +21,13 @@ import json
 import logging
 import secrets
 import threading
+import time
 from collections import deque
 from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from .. import VERSION, config
+from .. import VERSION, config, linkq
 from ..app import App
 from ..config import base_call, normalize_call
 from ..service import ServiceError
@@ -358,6 +359,8 @@ class WebServer:
                 return self._msg(svc.read(self._int(parts[1]), sysop, sysop=True), body=True)
             if parts == ["sessions"]:
                 return self._sessions()
+            if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "linkq":
+                return self._linkq(parts[1])
             if parts == ["jlog"]:
                 return [asdict(e) for e in app.store.jlog_list(100)]
             if parts == ["config"]:
@@ -477,11 +480,69 @@ class WebServer:
                          "lines": self.app.forward.status_lines()}),
         }
 
+    def _session_json(self, s) -> dict:
+        client = s.client
+        return {"call": s.call, "origin": s.origin, "since": s.started,
+                "state": (f"chat {s.chat_board}" if s.chat_board
+                          else STATE_LABEL.get(s.state, s.state.name.lower())),
+                "client": ({"proto": client.proto, "version": client.version, "ui": client.ui}
+                           if client is not None else None)}
+
+    @staticmethod
+    def _direction(d, label: str) -> dict | None:
+        if d is None:
+            return None
+        return {"label": label, "frames": d.frames, "lost": d.lost, "enough": d.enough,
+                "loss": None if d.loss is None else round(d.loss, 1)}
+
+    def _quality(self, s) -> dict | None:
+        """Link quality summary for the user list: bars and the direction that set them."""
+        r = linkq.result_for(self.app.service, s.call, s)
+        if r is None:
+            return None
+        dirs = [("outgoing", r.out), ("incoming", r.inn), ("rx quote", r.rx)]
+        known = [(n, d.loss) for n, d in dirs if d is not None and d.loss is not None]
+        worst = max(known, key=lambda x: x[1]) if known else None
+        return {"bars": r.bars, "t1": r.t1,
+                "worst": None if worst is None else {"dir": worst[0], "loss": round(worst[1], 1)},
+                "frames": {"outgoing": r.out.frames, "incoming": r.inn.frames},
+                "min_frames": self.app.cfg.direwolf.quality_min_frames}
+
     def _sessions(self) -> list[dict]:
-        return [{"call": s.call, "origin": s.origin, "since": s.started,
-                 "state": (f"chat {s.chat_board}" if s.chat_board
-                           else STATE_LABEL.get(s.state, s.state.name.lower()))}
-                for s in self.app.registry]
+        return [self._session_json(s) | {"quality": self._quality(s)} for s in self.app.registry]
+
+    def _linkq(self, call: str) -> dict:
+        """Everything behind the bars of one station (detail view)."""
+        call = normalize_call(call)
+        sessions = [s for s in self.app.registry if s.call == call]
+        if not sessions:
+            raise HttpError(404, f"{call} is not connected")
+        s = sessions[0]
+        dw = self.app.cfg.direwolf
+        r = linkq.result_for(self.app.service, call, s)
+        q = self.app.service.links.get(call)
+        out = {"session": self._session_json(s), "quality": self._quality(s),
+               "window": {"frames": dw.quality_window_frames, "minutes": dw.quality_window_min,
+                          "min_frames": dw.quality_min_frames, "steps": list(dw.quality_steps),
+                          "poll_sec": dw.quality_poll_sec},
+               "result": None, "counters": None, "counters_window": None, "poll_age": None}
+        if r is not None:
+            out["result"] = {"bars": r.bars, "t1": r.t1,
+                             "outgoing": self._direction(r.out, "TinyBox -> " + call),
+                             "incoming": self._direction(r.inn, call + " -> TinyBox"),
+                             "rx": self._direction(r.rx, "chat UI frames"),
+                             "rx_quote": None if r.rx_quote is None else round(r.rx_quote, 1),
+                             "window": {"i_retry": r.i_retry, "rej_rx": r.rej_rx, "rej_tx": r.rej_tx,
+                                        "retry_rx": r.retry_rx, "t1_exp": r.t1,
+                                        "bytes_new": r.bytes_new, "bytes_retry": r.bytes_retry},
+                             "srt": r.srt}
+        if q is not None and q.last is not None:
+            out["counters"] = dict(q.last)
+            if q.samples:
+                out["poll_age"] = round(time.monotonic() - q.samples[-1][0])
+                oldest = q.samples[0][1]
+                out["counters_window"] = {k: q.last[k] - oldest.get(k, 0) for k in linkq.FIELDS_INT}
+        return out
 
     def _disconnect(self, call: str) -> list[str]:
         call = normalize_call(call)
