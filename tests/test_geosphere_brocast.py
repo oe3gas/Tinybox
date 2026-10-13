@@ -157,7 +157,7 @@ class RegionTests(unittest.TestCase):
         seite = g.brocast_ueberblick(region_daten(), "2026-10-03T16:00+00:00", 120)
         self.assertEqual(seite["typ"], "text")
         self.assertEqual(sum(len(b["rows"]) for b in seite["blk"]), 24)
-        self.assertEqual(len(seite["blk"]), 8)
+        self.assertEqual(len(seite["blk"]), 9)
         self.assertIn("hdr", seite["blk"][0])
         self.assertNotIn("hdr", seite["blk"][1])
         frames = split(self.codec, {**seite, "id": 30, "rev": 0, "t": 1790000000})
@@ -184,7 +184,7 @@ class RegionTests(unittest.TestCase):
         finally:
             g.REGION_NAME.update(g.REGION_NAME_SICHERUNG)
         frames = split(self.codec, {**seite, "id": 30, "rev": 0, "t": 1790000000})
-        self.assertLessEqual(len(frames), 6)
+        self.assertLessEqual(len(frames), 7)
 
 
 class EndToEndTests(unittest.TestCase):

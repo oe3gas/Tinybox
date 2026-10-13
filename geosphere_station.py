@@ -358,10 +358,11 @@ def brocast_ueberblick(daten: dict[str, dict], zeit: str, gueltig_min: int) -> d
         rows.append([k["name"], z(k["temp"]),
                      richtung(k["wdir"]) if k["wspd"] is not None else None,
                      z(k["wspd"]), z(k["boe1h"]), z(k["rr24"])])
-    blk = [{"k": "table", "sc": -1, "rows": rows[i:i + TABELLE_ZEILEN]}
-           for i in range(0, len(rows), TABELLE_ZEILEN)]
-    if blk:                                   # Kopfzeile nur einmal (Bytes)
-        blk[0]["hdr"] = ["Station", "T C", "Wind", "m/s", "Boe m/s", "RR24 mm"]
+    erste = TABELLE_ZEILEN - 1                # Kopfzeile nur einmal (Bytes), dafuer eine Zeile weniger
+    blk = [{"k": "table", "sc": -1, "rows": rows[:erste],
+            "hdr": ["Station", "°C", "Wind aus", "Wind m/s", "Böen", "Niederschlag 24h mm"]}]
+    blk += [{"k": "table", "sc": -1, "rows": rows[i:i + TABELLE_ZEILEN]}
+            for i in range(erste, len(rows), TABELLE_ZEILEN)]
     return {"typ": "text", "cat": ["wx"], "exp": gueltig_min,
             "ti": f"Wetter Region {lokalzeit(zeit)[-5:]}",
             "src": "GeoSphere Austria, TAWES (CC BY 4.0)", "blk": blk}
