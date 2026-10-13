@@ -110,6 +110,23 @@ class RegionTests(unittest.TestCase):
             {"properties": {"station": "11334", "parameters": {"TL": {"data": [7.2]}}}}]}
         self.assertEqual(g._je_station(antwort), {"11022": {"TL": [11.4]}, "11334": {"TL": [7.2]}})
 
+    def test_aktuelle_werte_take_each_stations_own_latest_time(self):
+        """API mit mehreren Stationen: zwei Zeitstempel, je Station nur an einem davon Werte."""
+        from unittest import mock
+        antwort = {"timestamps": ["2026-10-13T19:10+00:00", "2026-10-13T19:20+00:00"], "features": [
+            {"properties": {"station": "11022", "parameters": {"TL": {"data": [None, 11.5]}, "RR": {"data": [None, 0.0]}}}},
+            {"properties": {"station": "11334", "parameters": {"TL": {"data": [6.6, None]}, "RR": {"data": [0.1, None]}}}},
+            {"properties": {"station": "11025", "parameters": {"TL": {"data": [None, None]}, "RR": {"data": [None, None]}}}}]}
+        with mock.patch.object(g, "api_get", return_value=antwort):
+            w = g.aktuelle_werte_mehrere(["11022", "11334", "11025"])
+        self.assertEqual(w["11022"], ("2026-10-13T19:20+00:00", {"TL": 11.5, "RR": 0.0}))
+        self.assertEqual(w["11334"], ("2026-10-13T19:10+00:00", {"TL": 6.6, "RR": 0.1}))
+        self.assertNotIn("11025", w)
+        with mock.patch.object(g, "api_get", return_value=antwort):
+            self.assertEqual(g.aktuelle_werte("11334")[0], "2026-10-13T19:10+00:00")
+            with self.assertRaises(ValueError):
+                g.aktuelle_werte("11025")
+
     def test_ueberblick_text(self):
         zeilen = g.ueberblick(region_daten(ohne=("11025",)), "2026-10-03T16:00+00:00", 24)
         text = "\n".join(zeilen)

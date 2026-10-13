@@ -147,18 +147,30 @@ def _je_station(d: dict) -> dict:
             for f in d.get("features", [])}
 
 
-def aktuelle_werte_mehrere(station_ids: list[str]):
-    """-> (Messzeit, {ID: {Parameter: letzter Wert}}) fuer alle Stationen in einem Abruf."""
+def aktuelle_werte_mehrere(station_ids: list[str]) -> dict[str, tuple[str, dict]]:
+    """-> {ID: (Messzeit, {Parameter: Wert})} fuer alle Stationen in einem Abruf.
+
+    Bei mehreren Stationen liefert die API mehrere Zeitstempel (z. B. xx:10 und
+    xx:20); jede Station hat nur an ihrem eigenen juengsten Zeitpunkt Werte, sonst
+    null. Daher je Station den letzten Zeitpunkt mit Werten nehmen."""
     d = api_get(f"current/{DATASET}", {"station_ids": ",".join(station_ids),
                                        "parameters": ",".join(PARAMS)})
-    werte = {sid: {k: (reihe[-1] if reihe else None) for k, reihe in p.items()}
-             for sid, p in _je_station(d).items()}
-    return d["timestamps"][-1], werte
+    ts = d.get("timestamps") or []
+    out = {}
+    for sid, p in _je_station(d).items():
+        idx = [i for i in range(len(ts)) if any(r[i] is not None for r in p.values() if len(r) > i)]
+        if not idx:
+            continue
+        i = idx[-1]
+        out[sid] = (ts[i], {k: (r[i] if len(r) > i else None) for k, r in p.items()})
+    return out
 
 
 def aktuelle_werte(station_id: str):
-    zeit, werte = aktuelle_werte_mehrere([station_id])
-    return zeit, werte[station_id]
+    werte = aktuelle_werte_mehrere([station_id])
+    if station_id not in werte:
+        raise ValueError(f"Station {station_id}: keine aktuellen Werte")
+    return werte[station_id]
 
 
 def verlauf_mehrere(station_ids: list[str], stunden: int):
@@ -205,13 +217,13 @@ def zusammenfassung(ts, reihen, stunden):
 def abrufen_mehrere(stationen: list[str], stunden: int, kurz: bool) -> dict[str, dict]:
     """Alle Daten fuer mehrere Stationen in zwei Abrufen holen: -> {ID: Datensatz}.
     Stationen ohne aktuelle Werte (Ausfall) fehlen im Ergebnis."""
-    zeit, werte = aktuelle_werte_mehrere(stationen)
+    werte = aktuelle_werte_mehrere(stationen)
     ts, reihen = ([], {}) if kurz else verlauf_mehrere(stationen, stunden)
     out = {}
     for sid in stationen:
-        w = werte.get(sid)
-        if not w or all(v is None for v in w.values()):
+        if sid not in werte:
             continue
+        zeit, w = werte[sid]
         out[sid] = {"station": sid, "zeit": zeit, "w": w, "info": station_info(sid),
                     "ts": ts if sid in reihen else [], "reihen": reihen.get(sid, {})}
     return out
@@ -304,6 +316,8 @@ def ueberblick(daten: dict[str, dict], zeit: str, stunden: int) -> list[str]:
         if not kandidaten:
             return None
         wert, name = fn(kandidaten)
+        if fn is max and wert <= 0:                     # "Regen max. 0.0 mm" sagt nichts
+            return None
         return f"{label} {name} {wert:.1f}{einheit}"
     e = [extrem("tmin", min, " C", "  Tiefstwert  "), extrem("tmax", max, " C", "  Hoechstwert "),
          extrem("rr24", max, " mm", "  Regen max.  "), extrem("boe1h", max, " m/s", "  Boe max.    ")]
@@ -487,7 +501,7 @@ def region(args) -> int:
     daten = abrufen_mehrere(REGION_IDS, args.stunden, args.kurz)
     if not daten:
         raise ValueError("keine Station der Region liefert aktuelle Werte")
-    zeit = next(iter(daten.values()))["zeit"]
+    zeit = max(d["zeit"] for d in daten.values())      # juengste Messzeit der Region
     fehlend = [REGION_NAME[s] for s in REGION_IDS if s not in daten]
     if fehlend:
         protokoll(args.log, f"ohne Daten: {', '.join(fehlend)}")
