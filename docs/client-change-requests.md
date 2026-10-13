@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.10.2026 (CR26–CR29 und CR12 umgesetzt)
+Stand: 13.10.2026 (CR32 neu, Vorschlag zur Entscheidung)
 
 ## Übersicht
 
@@ -38,6 +38,7 @@ Stand: 12.10.2026 (CR26–CR29 und CR12 umgesetzt)
 | 29 | Terminal: Ausgaben über 10 Zeilen seitenweise mit „continue/abort“ (`L` und jeder andere Befehl), damit nicht hunderte Titel über die Luft laufen | ✅ siehe unten |
 | 30 | Bild-Upload eines Teilnehmers sichtbar machen: „OE1ABC uploading picture“ mit Fortschrittsbalken | ✅ siehe unten |
 | 31 | Kommentarbezug eindeutig machen (bisher Rufzeichen + Minute, mehrdeutig) | ✅ siehe unten |
+| 32 | Logfile zum Debuggen mit Claude: feste Datei, feste Spalten, Session-Nummer, Startblock, `LOG`-Befehl | offen – Vorschlag siehe unten, wartet auf Entscheidung |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -470,3 +471,120 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - **Client:** sendet nur noch das neue Format, liest beide (alte Zeilen stehen in der History). Kennt er den Bezug nicht (später eingecheckt), zeigt er „↩ message #4F“ – **kein Nachfordern über Funk**: echte Lücken holt die Lückenerkennung ohnehin selbst, und ein `//RESEND` für Ereignisse von vor dem Einchecken würde die Empfangsquote (14.3) verfälschen.
 - **Terminal-Teilnehmer:** Die TinyBox löst den Verweis auf und schreibt `[re OE3TEC: "Servus, Wetter passt"] Ich bin QRV` – vorher stand dort der rohe Verweis. Enthält der zitierte Beitrag ein Bild, steht im Auszug kurz `[Image]` (sonst bliebe vom Auszug nichts übrig). Im Verlauf (`/H`), wo das Ereignisfenster nicht mehr gilt, steht `[re #4F]`.
 - Kommentieren bleibt auf Beiträge beschränkt, die im laufenden Chat eintreffen (Entscheidung 12.10.2026) – History-Zeilen haben keine Folgenummer.
+
+## CR32 – Logfile zum Debuggen mit Claude (Vorschlag 13.10.2026, offen)
+
+**Problem:** Beim Debuggen mit Claude ist das Log heute nur eingeschränkt brauchbar.
+Jeder Start legt eine neue Datei `Tinybox_log_<Datum>_<Zeit>.log` an – nach einigen
+Neustarts liegen dort ein Dutzend Dateien und es muss erst geklärt werden, welche
+gemeint ist. Die Zeilen tragen keine Session-Nummer, zwei gleichzeitige Verbindungen
+derselben Station (Funk und Telnet) sind nicht auseinanderzuhalten. Es steht nicht
+drin, welche Version und welche Adapter überhaupt laufen, und `level = DEBUG` lässt
+sich nur global schalten, was die Datei mit Monitor-Verkehr zuschüttet.
+
+**Ziel:** Eine Datei, aus der sich der Ablauf ohne Rückfragen rekonstruieren lässt –
+auch von Claude, der den Rechner nicht sieht.
+
+### 32.1 Datei und Format
+
+- **Feste Datei** `tinybox.log` im `log_dir`. Beim Start rollt die alte Datei auf
+  `tinybox.log.1` … `tinybox.log.5` (zusätzlich Rollen bei 5 MB). Damit ist
+  „schau ins Log“ eindeutig; die Zeitstempel-Dateien verschwinden.
+- **Feste Spalten**, eine Zeile = ein Ereignis:
+
+  ```
+  2026-10-13 19:42:08.233 I session  #7 OE3TEC  < LIST
+  ```
+
+  Zeit mit Millisekunden | Level als ein Buchstabe (`D I W E`) | Komponente
+  (feste Breite) | Kontext (Session-Nummer + Rufzeichen) | Meldung.
+  Millisekunden, weil über Funk fast jeder Fehler ein Zeitproblem ist (T1, Retries).
+- **Dreizeilige Legende als Kopf der Datei**, damit die Leseregeln mitkommen,
+  wenn die Datei in einen Chat gelegt wird.
+
+### 32.2 Session-Nummer
+
+Jede Verbindung bekommt eine laufende Nummer (`#7`), die in **jeder** Zeile dieser
+Verbindung steht – auch in denen von `store`, `chat` und `sync`. `grep "#7"` liefert
+dann die Verbindung von `connected` bis `disconnected`, auch wenn drei Stationen
+gleichzeitig arbeiten. Zeilen ohne Verbindung tragen `#0 -`.
+
+### 32.3 Richtungszeichen in zwei Ebenen
+
+- `<` Eingabe der Station, `>` Ausgabe der TinyBox (wie heute im Monitor).
+- `<<` / `>>` für AGW-Frames mit Frametyp und Bytezahl.
+
+So ist auf einen Blick zu sehen, ob eine Zeile auf Text- oder auf Frameebene fehlt –
+genau die Unterscheidung, die bei Abbrüchen zählt.
+
+### 32.4 Startblock und Schlusszeile
+
+Erste Zeilen jedes Laufs, immer, auch auf `INFO`: TinyBox-Version und Git-Commit,
+Python- und OS-Version, Pfad der `tinybox.conf`, Datenverzeichnis, Mailbox- und
+Sysop-Rufzeichen, angebotene Client-Version, AGW-Host/Port und die Adapterliste
+(`telnet=on web=on brocast=on inbox=on forward=off mqtt=off`). **Keine Token und
+keine Login-URL**, nur `token=set` / `token=unset`.
+
+Schlusszeile: Grund des Endes (normal, Ctrl+C, RESTART, Ausnahme), Laufzeit und
+Zähler (Sessions, Frames rein/raus, Bulletins weitergeleitet, Fehler). Damit ist
+ein Lauf als sauber oder unsauber erkennbar, ohne die Datei zu lesen.
+
+### 32.5 Ausnahmen mit Kontext
+
+Unerwartete Ausnahmen in allen Adapter-Tasks laufen über einen gemeinsamen Helfer
+und kommen mit Traceback, Session-Kontext **und der auslösenden Eingabezeile** ins
+Log. Die Eingabezeile ist der Teil, der einen Fehler reproduzierbar macht.
+
+### 32.6 DEBUG je Komponente statt global
+
+In `[logging]` zusätzlich `debug = agw,forward`: nur diese Komponenten gehen auf
+DEBUG, der Rest bleibt auf `level`. Komponenten: `agw`, `session`, `cmd`, `chat`,
+`sync`, `fwd`, `web`, `brocast`, `inbox`, `store`, `linkq`.
+
+### 32.7 Sysop-Befehl `LOG`
+
+- `LOG` – zeigt Level, aktive Debug-Komponenten, Dateipfad und Dateigröße.
+- `LOG DEBUG agw` / `LOG OFF agw` – schaltet im Betrieb, ohne Neustart.
+- `LOG MARK <Text>` – schreibt `===== MARK: <Text> =====` in die Datei.
+  Marke setzen, Fehler auslösen, danach „ab der Marke“ sagen: spart beim Debuggen
+  die meiste Zeit.
+
+### 32.8 Laufzeiten
+
+Dauer in Millisekunden am Zeilenende in Klammern, dort wo sie etwas aussagt:
+Session gesamt, Befehlsausführung, Sync-Lauf, Forward-Session, Schreibzugriff über
+50 ms, AGW-Connect.
+
+### 32.9 Datensparsam
+
+Inhalte von Mail und Chat standardmäßig nur als Länge plus die ersten 40 Zeichen,
+vollständig erst mit DEBUG für diese Komponente. Die Datei wird in Chats gelegt –
+fremde persönliche Post soll nicht mitfahren, und die Datei bleibt klein.
+
+### 32.10 Übergabepaket
+
+`LOG BUNDLE` (bzw. `python -m tinybox --debugbundle`) schreibt
+`tinybox_debug_<Datum>.txt`: Startblock, die letzten n Zeilen des Logs, Version,
+`tinybox.conf` ohne Token, Verzeichnisübersicht von `data`. Eine Datei, die
+unverändert in den Chat gelegt werden kann.
+
+### 32.11 Lesehilfe
+
+```
+2026-10-13 19:42:01.004 I core     #0 -       ----- TinyBox 2026.10.12 (a1b2c3d) start -----
+2026-10-13 19:42:01.012 I core     #0 -       adapters: telnet=on web=on brocast=on forward=off
+2026-10-13 19:42:07.812 I agw      #7 OE3TEC  connected, agw port 0
+2026-10-13 19:42:08.233 I session  #7 OE3TEC  < LIST
+2026-10-13 19:42:08.251 D store    #7 OE3TEC  bulletins active=23 (14ms)
+2026-10-13 19:42:08.402 I session  #7 OE3TEC  > 23 bulletins, 2 pages
+2026-10-13 19:42:31.918 W agw      #7 OE3TEC  retry 3/10, frame=I len=212
+2026-10-13 19:42:44.002 E fwd      #0 -       forward OE3XYZ failed: timeout after 60s
+2026-10-13 19:45:12.771 I session  #7 OE3TEC  disconnected, 3m05s, 11 cmds, 4.2 kB out
+```
+
+- `-----` trennt die Läufe; alles darüber ist ein früherer Start.
+- ` E ` sind die Fehler, ` W ` die Warnungen – beides zuerst durchsehen.
+- `#7` greppen gibt eine Verbindung vollständig, quer über alle Komponenten.
+- `MARK:` zeigt, worauf gezeigt wurde.
+- Ein `>` ohne folgendes `<` innerhalb von Sekunden: die Station ist weg.
+- Zahl in Klammern: dort ist die Zeit geblieben.
