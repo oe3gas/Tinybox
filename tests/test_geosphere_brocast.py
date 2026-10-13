@@ -127,6 +127,19 @@ class RegionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 g.aktuelle_werte("11025")
 
+    def test_bergstation_pred_is_dropped(self):
+        from unittest import mock
+        d = daten()
+        d["w"]["PRED"] = 856.4
+        d["reihen"]["PRED"] = [856.0] * N
+        with mock.patch.object(g, "aktuelle_werte_mehrere", return_value={"11367": (d["zeit"], d["w"])}), \
+                mock.patch.object(g, "verlauf_mehrere", return_value=(d["ts"], {"11367": d["reihen"]})), \
+                mock.patch.object(g, "station_info", return_value=None):
+            out = g.abrufen("11367", 24, False)
+        self.assertIsNone(out["w"]["PRED"])
+        self.assertTrue(all(x is None for x in out["reihen"]["PRED"]))
+        self.assertNotIn("qff", g.brocast_seite(out, 24, 120)["dat"])
+
     def test_ueberblick_text(self):
         zeilen = g.ueberblick(region_daten(ohne=("11025",)), "2026-10-03T16:00+00:00", 24)
         text = "\n".join(zeilen)

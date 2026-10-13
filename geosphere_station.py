@@ -53,6 +53,7 @@ from pathlib import Path
 BASE = "https://dataset.api.hub.geosphere.at/v1/station"
 DATASET = "tawes-v1-10min"
 DEFAULT_STATION = "11334"  # SCHOENGRABERN
+PRED_MIN = 950             # hPa; darunter ist PRED kein reduzierter Druck (Bergstationen)
 
 # Parameter fuer die Anzeige (Station 11334 hat laut Metadaten keine Sonnenschein-/Strahlungsmessung)
 PARAMS = ["TL", "TP", "RF", "P", "PRED", "DD", "FF", "FFX", "RR"]
@@ -224,8 +225,15 @@ def abrufen_mehrere(stationen: list[str], stunden: int, kurz: bool) -> dict[str,
         if sid not in werte:
             continue
         zeit, w = werte[sid]
+        r = reihen.get(sid, {})
+        # Bergstationen (Baernkopf, Jauerling): unter 950 hPa ist PRED laut GeoSphere
+        # kein reduzierter Druck (dann gilt PGPM) - lieber kein Wert als ein falscher
+        if w.get("PRED") is not None and w["PRED"] < PRED_MIN:
+            w["PRED"] = None
+        if "PRED" in r:
+            r["PRED"] = [None if x is not None and x < PRED_MIN else x for x in r["PRED"]]
         out[sid] = {"station": sid, "zeit": zeit, "w": w, "info": station_info(sid),
-                    "ts": ts if sid in reihen else [], "reihen": reihen.get(sid, {})}
+                    "ts": ts if sid in reihen else [], "reihen": r}
     return out
 
 
