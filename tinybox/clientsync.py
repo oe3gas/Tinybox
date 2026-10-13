@@ -59,9 +59,13 @@ only what changed since the client's last sync (change counter seq, store.py):
            //RN <rubric>=<count> ...     bulletins per rubric (always, one line)
            //M <header>                  bulletins of the given rubrics with a higher
                                          number, or content replaced since n
+                                         (n=0: only the number counts, the client
+                                         knows no seq yet and its after= is right)
            //D <id> ...                  deleted in these rubrics since n
            //MSG ...                     texts up to want=
            //BSYNCEND <more> seq=<m> h=<hash>
+        more > 0: ask again with seq=<m> and the after= grown by this page. Every
+        page moves after= or seq= on, so the exchange always comes to an end.
     With cap Z (radio) an answer over ZSYNC_MIN bytes comes as one LZHUF block:
         //ZSYNC <n bytes> + n bytes      containing the text lines above (all plain)
 """
@@ -536,12 +540,27 @@ def _bsync(s: Session, parts: list[str]) -> None:
         ans.rows.append("//RL " + " ".join(names))
         ans.rows += static
     ans.rows.append("//RN " + " ".join(f"{r}={c[0]}" for r, c in sorted(count.items())))
-    rows: list[tuple[int, str, Message | None]] = []
+    # Two kinds of bulletins, each with its own marker for the next round:
+    #   backlog  what the client has never seen (id > after=), in id order. Its
+    #            after= grows with every page, so the backlog shrinks by itself.
+    #   changed  what it has, with the content replaced after seq. Only its own
+    #            seq says anything here: with seq=0 the client knows nothing
+    #            about seq, and its after= is the whole truth.
+    # The backlog goes first, the changed ones behind it in cseq order, so that
+    # every page moves one of the two markers on. Without that the client asks
+    # again with the very same request - for ever.
+    backlog, changed = [], []
     for m in _visible(s):
-        if m.type == "B" and m.to_call in after and (m.id > after[m.to_call] or m.cseq > seq):
-            rows.append((m.id, header(m), m))
-    rows.sort(key=lambda r: r[0])
-    page, more = _page_by_bytes(rows, ans.limit)
+        if m.type != "B" or m.to_call not in after:
+            continue
+        if m.id > after[m.to_call]:
+            backlog.append(m)
+        elif seq and m.cseq > seq:
+            changed.append(m)
+    backlog.sort(key=lambda m: m.id)
+    changed.sort(key=lambda m: m.cseq)
+    order = backlog + changed
+    page, more = _page_by_bytes([(i, header(m), m) for i, m in enumerate(order)], ans.limit)
     gone = [str(i) for i, _, typ, to, _ in (store.gone_since(seq) if seq else [])
             if typ == "B" and to in after]
     if gone:
@@ -549,7 +568,12 @@ def _bsync(s: Session, parts: list[str]) -> None:
     for _, line, _ in page:
         ans.rows.append(line)
     ans.push_texts([m for _, _, m in page if m is not None])
-    end_seq = seq if more else store.sync_seq()
+    if not more:
+        end_seq = store.sync_seq()
+    elif len(page) > len(backlog):            # changed ones went out as well
+        end_seq = order[len(page) - 1].cseq   # everything up to here is through
+    else:
+        end_seq = seq                         # still in the backlog: after= moves on
     ans.send(f"//BSYNCEND {more} seq={end_seq} h={h}",
              f"//BSYNC seq={seq}: {len(page)} header(s), {len(ans.texts)} text(s)")
 

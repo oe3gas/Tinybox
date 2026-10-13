@@ -1,0 +1,4 @@
+- Bulletin-Abgleich: Endlosschleife behoben. Die TinyBox schickte dieselbe
+  Seite immer wieder, der Client holte bekannte Bulletins erneut.
+- Bleibt ein Abgleich doch einmal stehen, bricht der Client ab, statt
+  weiter zu senden.

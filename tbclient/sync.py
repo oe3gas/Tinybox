@@ -58,6 +58,15 @@ class SyncError(Exception):
     pass
 
 
+def _no_loop(asked: set[str], req: str) -> None:
+    """A delta sync asks on until the TinyBox reports more=0. Every round has to
+    move seq= or after= on, so the very same request a second time means it never
+    will: the client stops instead of staying on the air for ever."""
+    if req in asked:
+        raise SyncError("the TinyBox sends the same page again (sync stopped)")
+    asked.add(req)
+
+
 def parse_rubrics(lines: list[str]) -> tuple[list[dict], list[str]]:
     """Answer to //RUBRICS -> (rubrics with name/count/max/desc, rubrics users may
     write to in the sysop's order; empty = the TinyBox has no list, free field)."""
@@ -460,6 +469,7 @@ class Syncer:
         st = self.store
         seq = st.get("seq.mail", 0)
         retry = True
+        asked: set[str] = set()
         while True:
             kills = st.todo("kill")[:CHUNK]
             reads = st.todo("read")[:CHUNK]
@@ -468,8 +478,10 @@ class Syncer:
                 req += " k=" + ",".join(map(str, kills))
             if reads:
                 req += " r=" + ",".join(map(str, reads))
+            req += f" max={self.core.cfg.sync_chunk} want={self._want()}"
+            _no_loop(asked, req)
             self._set(step="mail changes" if seq else "mail list")
-            await self._send(f"{req} max={self.core.cfg.sync_chunk} want={self._want()}")
+            await self._send(req)
             try:
                 end = await self._delta_answer("//SYNCEND", content=True)
             except SyncError as exc:
@@ -494,13 +506,16 @@ class Syncer:
         self._rubric_static = []
         self._rubric_counts = {}
         retry = True
+        asked: set[str] = set()
         while True:
             subs = st.get("subscribed", [])
             want = " ".join(f"{r}={st.max_bulletin(r)}" for r in subs)
+            req = (f"//BSYNC seq={seq} h={st.get('rubrics.h', '0')}"
+                   f"{' ' + want if want else ''} max={self.core.cfg.sync_chunk} "
+                   f"want={self._want()}")
+            _no_loop(asked, req)
             self._set(step="bulletin changes" if seq else "bulletin list")
-            await self._send(f"//BSYNC seq={seq} h={st.get('rubrics.h', '0')}"
-                             f"{' ' + want if want else ''} max={self.core.cfg.sync_chunk} "
-                             f"want={self._want()}")
+            await self._send(req)
             try:
                 end = await self._delta_answer("//BSYNCEND", content=True)
             except SyncError as exc:

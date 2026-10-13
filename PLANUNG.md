@@ -656,6 +656,41 @@ Bulletins analog, aber je Rubrik „was habe ich“ statt `seq` für Neues (Abon
 
 ---
 
+### 12.9a Bulletin-Abgleich lief im Kreis (Fehler, behoben 13.10.2026)
+
+**Befund (Direwolf-Mitschnitt):** Nach dem ersten `//BSYNC` fragte der Client elfmal
+hintereinander dasselbe (`//BSYNC seq=0 h=dd0b ALL=28 TBNEWS=39 WX=12 max=1024`), die
+TinyBox antwortete jedes Mal mit demselben 977-Byte-ZSYNC-Block. Zwei Ursachen in
+`_bsync` (`tinybox/clientsync.py`), die sich ergänzten:
+
+1. Die Auswahl lautete `m.id > after[Rubrik] or m.cseq > seq`. Jede Nachricht hat
+   `cseq ≥ 1`, bei `seq=0` war `cseq > 0` also **immer** wahr – die `after=`-Angaben des
+   Clients waren wirkungslos, die TinyBox hielt alle Bulletins für neu.
+2. Bei `<noch übrig> > 0` gab die TinyBox `seq=<n>` unverändert zurück. Es gab keinen
+   Fortschrittsmarker: die nächste Seite war wieder die erste.
+
+**Korrektur:** Die Treffer zerfallen in zwei Gruppen mit je eigenem Marker. Zuerst der
+*Rückstand* (`id > after=`, nach Nr. sortiert) – er schrumpft, weil das `after=` des
+Clients mit jeder Seite wächst. Dahinter die *geänderten* (`cseq > seq`, nach `cseq`
+sortiert, und nur wenn `seq > 0`, denn bei `seq=0` weiß der Client nichts über den
+Zähler und sein `after=` ist die Wahrheit). Endet eine Seite in den geänderten, ist
+`seq=<m>` deren letzte `cseq`, sonst bleibt `seq` stehen. So rückt **jede** Seite genau
+einen der beiden Marker vor, und der Austausch endet immer.
+
+**Mail-Pfad geprüft:** `_sync` war in Ordnung – er zieht aus `changed_since(seq)`
+(strikt `seq > n`), sortiert nach `seq` und liefert bei mehr Seiten `seq=<letzte Zeile>`.
+Ein Test über mehrere Seiten belegt das (`test_sync_paging_ends`).
+
+**Zusätzlich im Client:** `_delta_mail` und `_delta_bulletins` merken sich die gestellten
+Anfragen. Kommt dieselbe ein zweites Mal, bricht der Abgleich mit einer Fehlermeldung ab,
+statt weiter zu senden – ein Protokollfehler soll nie wieder den Kanal belegen.
+
+**Nebenbefund:** Direwolfs `ERROR!!! Unknown APRS Data Type Indicator "#"` stammt von den
+UI-Frames des Chatboards (`OE3GAS-1>TBCHAT-1:#0 …`). Direwolf versucht sie als APRS zu
+lesen; rein kosmetisch, kein Handlungsbedarf.
+
+---
+
 ### 12.10 Kleine Bilder im Chat (entschieden und umgesetzt 12.10.2026, CR12)
 
 Über Funk geht so wenig wie möglich – jedes Feld wurde einzeln auf Bytes geprüft:

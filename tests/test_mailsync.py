@@ -428,6 +428,109 @@ class DeltaSyncTests(unittest.TestCase):
         self.assertTrue(out[3].startswith(f"//M {self.d} B "))
         self.assertEqual(out[4:6], [f"//MSG {self.d} 1", "kurz"])
 
+    def bsync_rounds(self, s, t, after, seq=0, max_bytes=200, want=0):
+        """Plays the client: asks on until more=0, `after` grows with every page
+        as in the client. Returns the //M lines, the rounds and the new seq.
+        Fails as soon as a request repeats - that is the loop from the bug."""
+        h, seen, asked = "0", [], set()
+        for rounds in range(1, 31):
+            req = (f"//BSYNC seq={seq} h={h} "
+                   + " ".join(f"{r}={n}" for r, n in sorted(after.items()))
+                   + f" max={max_bytes} want={want}")
+            self.assertNotIn(req, asked, "the TinyBox asks for the same page again")
+            asked.add(req)
+            out = self.ask(s, t, req)
+            end = out[-1].split()
+            self.assertEqual(end[0], "//BSYNCEND", out[-1])
+            for line in out[:-1]:
+                if line.startswith("//M "):
+                    seen.append(line)
+                    p = line.split()                       # //M id type status fwd size
+                    after[p[7]] = max(after.get(p[7], 0), int(p[1]))     # from to ...
+            for w in end[2:]:
+                if w.startswith("seq="):
+                    seq = int(w[4:])
+                elif w.startswith("h="):
+                    h = w[2:]
+            if not int(end[1]):
+                return seen, rounds, seq
+        self.fail("the bulletin sync does not come to an end")
+
+    def test_bsync_keeps_after_at_seq0(self):
+        """seq=0 says nothing about the content: what the client has by after=
+        stays there. Before the fix every bulletin counted as changed."""
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        out = self.ask(s, t, f"//BSYNC seq=0 h=0 ALL={self.d} WX={self.e}")
+        self.assertEqual([x for x in out if x.startswith("//M ")], [])
+        self.assertTrue(out[-1].startswith("//BSYNCEND 0 "))
+
+    def test_bsync_paging_ends(self):
+        """A backlog over several pages: after= moves on, nothing comes twice."""
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        new = [mail(self.app, "OE3TEC", "ALL", f"Bulletin Nr {i}", f"Text {i}", type="B")
+               for i in range(8)]
+        seen, rounds, seq = self.bsync_rounds(s, t, {"ALL": 0, "WX": 0})
+        ids = [int(x.split()[1]) for x in seen]
+        self.assertGreater(rounds, 1)                        # really paged
+        self.assertEqual(len(ids), len(set(ids)))            # nothing twice
+        self.assertEqual(set(ids), {self.d, self.e, *new})
+        self.assertEqual(seq, self.app.service.store.sync_seq())
+
+    def test_bsync_replaced_paging_ends(self):
+        """Bulletins the client has, with new content: they page by cseq, and
+        seq= in the end line follows them."""
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        svc = self.app.service
+        for i in range(8):
+            svc.create(from_call="OE3TEC", to_call="ALL", type="B", subject=f"WX Lage {i}",
+                       body=f"Text {i}", replace_key=f"wx{i}", origin="telnet")
+        after = {"ALL": 0, "WX": 0}
+        self.bsync_rounds(s, t, after)                       # client is up to date
+        seen, _, seq = self.bsync_rounds(s, t, dict(after), seq=svc.store.sync_seq())
+        self.assertEqual(seen, [])
+        for i in range(8):                                   # same key: old number, new text
+            svc.create(from_call="OE3TEC", to_call="ALL", type="B",
+                       subject=f"WX Lage {i} neu", body=f"Text {i} neu",
+                       replace_key=f"wx{i}", origin="telnet")
+        seen, rounds, seq = self.bsync_rounds(s, t, after, seq=seq)
+        ids = [int(x.split()[1]) for x in seen]
+        self.assertGreater(rounds, 1)                        # really paged
+        self.assertEqual(len(ids), len(set(ids)))            # nothing twice
+        self.assertEqual(len(ids), 8)
+        self.assertEqual(seq, svc.store.sync_seq())
+
+    def test_sync_paging_ends(self):
+        """The mail path pages by seq: every round moves seq= on."""
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        for i in range(8):
+            mail(self.app, "OE3TEC", "OE3GAS", f"Nr {i}", f"Text {i}")
+        seq, seen, asked = 0, [], set()
+        for rounds in range(1, 31):
+            req = f"//SYNC seq={seq} max=200 want=0"
+            self.assertNotIn(req, asked, "the TinyBox asks for the same page again")
+            asked.add(req)
+            out = self.ask(s, t, req)
+            end = out[-1].split()
+            seen += [x for x in out[:-1] if x.startswith("//M ")]
+            seq = int(end[2][4:])
+            if not int(end[1]):
+                break
+        else:
+            self.fail("the mail sync does not come to an end")
+        ids = [int(x.split()[1]) for x in seen]
+        self.assertGreater(rounds, 1)
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(len(ids), 10)                       # the two from setUp and 8 new
+        self.assertEqual(seq, self.app.service.store.sync_seq())
+
+    def test_no_loop_guard(self):
+        """The client stops when a request repeats instead of staying on the air."""
+        asked: set[str] = set()
+        sync._no_loop(asked, "//SYNC seq=1 max=1024 want=754")
+        sync._no_loop(asked, "//SYNC seq=2 max=1024 want=754")
+        with self.assertRaises(sync.SyncError):
+            sync._no_loop(asked, "//SYNC seq=1 max=1024 want=754")
+
     def test_zsync_on_radio(self):
         s, t = client(self.app, caps="CHAT,SYNC,SYNC2,Z", radio=True)
         for i in range(6):
