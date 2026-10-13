@@ -631,7 +631,7 @@ function linkNode(text, ref) {
 }
 
 function renderBlocks(c, blocks, total, view) {
-  let cards = null;
+  let cards = null, lastTable = null;
   let part = 0;
   for (const b of blocks) {
     if (total > 1 && view !== "teletext" && b.sub !== part) {   // boundary between subpages
@@ -647,6 +647,13 @@ function renderBlocks(c, blocks, total, view) {
       continue;
     }
     cards = null;
+    // a table block without its own header right after a table continues it
+    // (long tables are sent in small blocks so each one fits into a frame)
+    if (b.k === "table" && !b.hdr && lastTable && view !== "parts") {
+      tableRows(lastTable, b);
+      continue;
+    }
+    lastTable = null;
     switch (b.k) {
       case "heading": c.append(el(b.v === 2 || b.v === 3 ? "h4" : "h3", null, b.x || "")); break;
       case "para": c.append(linkified("p", null, b.x || "")); break;
@@ -656,7 +663,7 @@ function renderBlocks(c, blocks, total, view) {
         c.append(ul);
         break;
       }
-      case "table": c.append(table(b)); break;
+      case "table": lastTable = table(b); c.append(lastTable); break;
       case "series": c.append(series(b)); break;
       case "link": c.append(linkNode(b.x, b.href)); break;
       case "note": c.append(linkified("div", "note" + (b.st === "warn" ? " warn" : b.st === "alarm" ? " alarm" : ""), b.x || "")); break;
@@ -671,18 +678,22 @@ function renderBlocks(c, blocks, total, view) {
 
 function table(b) {
   const t = el("table", "tbl");
-  const sc = typeof b.sc === "number" ? Math.pow(10, b.sc) : 1;   // scales every number cell (like series)
   if (Array.isArray(b.hdr) && b.hdr.length) {
     const tr = el("tr");
     for (const h of b.hdr) tr.append(el("th", null, h));
     t.append(tr);
   }
+  tableRows(t, b);
+  return t;
+}
+
+function tableRows(t, b) {
+  const sc = typeof b.sc === "number" ? Math.pow(10, b.sc) : 1;   // scales every number cell (like series)
   for (const row of b.rows || []) {
     const tr = el("tr");
     for (const cell of Array.isArray(row) ? row : [row]) tr.append(typeof cell === "string" ? linkified("td", null, cell) : el("td", null, typeof cell === "number" ? num(cell * sc) : num(cell)));
     t.append(tr);
   }
-  return t;
 }
 
 function series(b) {
