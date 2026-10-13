@@ -49,7 +49,10 @@ In der Sysop-Konsole:
 | `LOG BUNDLE` | eine Datei mit Log, Version und Konfiguration (ohne Token) zum Weitergeben |
 
 Dasselbe Paket ohne laufende TinyBox: `py -3 -m tinybox --debugbundle`.
-Details in `docs/client-change-requests.md`, CR32.
+
+**Vollständige Anleitung: `logging_manual.md`** – Einschalten, Zeilen lesen,
+welche Komponente für welches Problem, Suchrezepte für Windows und der
+Arbeitsablauf, um einen Fehler mit Claude zu debuggen.
 
 ## Ohne Funk testen (Telnet-Testport)
 
