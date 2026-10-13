@@ -1,0 +1,5 @@
+- Bulletin-Abgleich blieb stehen, sobald ein Text mit einer Leerzeile
+  kam (z.B. TBNEWS): der Client nahm die Endezeile als Textzeile und
+  wartete vergeblich. Behoben.
+- TinyBox: neue Bulletins kamen beim seitenweisen Abgleich doppelt
+  (als neu und als geaendert). Jeder Kopf geht jetzt nur einmal.

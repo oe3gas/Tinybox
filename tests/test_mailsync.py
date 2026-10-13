@@ -476,6 +476,42 @@ class DeltaSyncTests(unittest.TestCase):
         self.assertEqual(set(ids), {self.d, self.e, *new})
         self.assertEqual(seq, self.app.service.store.sync_seq())
 
+    def test_bsync_backlog_with_seq_not_twice(self):
+        """Log 2026-10-13: the client knew seq, then 24 WX bulletins came in.
+        Paged by after=, each bulletin came again as 'changed' (its cseq is
+        above the client's seq) - 49 headers for 25 bulletins."""
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2")
+        store = self.app.service.store
+        after = {"ALL": 0, "WX": 0}
+        self.bsync_rounds(s, t, after)                       # client is up to date
+        seq = store.sync_seq()
+        new = [mail(self.app, "OE3TEC", "WX", f"Wetter Nr {i}", f"Text {i}", type="B")
+               for i in range(8)]
+        seen, rounds, seq = self.bsync_rounds(s, t, after, seq=seq)
+        ids = [int(x.split()[1]) for x in seen]
+        self.assertGreater(rounds, 1)                        # really paged
+        self.assertEqual(ids, new)                           # each once, in order
+        self.assertEqual(seq, store.sync_seq())
+
+    def test_zsync_client_keeps_empty_text_lines(self):
+        """Log 2026-10-13, session #4: a bulletin text ends in an empty line
+        (clientnews: strip() + newline). The client dropped empty lines of a
+        //ZSYNC block, counted one body line short and swallowed //BSYNCEND
+        as text - the sync waited for its end for ever, and the next run asked
+        the very same thing again."""
+        syncer = sync.Syncer(object(), object())
+        syncer.queue = asyncio.Queue()
+        rows = ["//RN TBNEWS=1", "//M 77 B N OE3GAS-1 TBNEWS - - - 1791922433 Client",
+                "//MSG 77 3", "zeile1", "zeile2", "", "//BSYNCEND 0 seq=147 h=dd0b"]
+        plain = "".join(r + "\r" for r in rows).encode()
+        syncer._zsync(lzhuf.compress_b1(plain))
+        items = []
+        while not syncer.queue.empty():
+            items.append(syncer.queue.get_nowait())
+        self.assertEqual(items[2], ("text", 77, "zeile1\nzeile2\n"))
+        self.assertEqual(items[3], ("line", "//BSYNCEND 0 seq=147 h=dd0b"))
+        self.assertIsNone(syncer._body)
+
     def test_bsync_replaced_paging_ends(self):
         """Bulletins the client has, with new content: they page by cseq, and
         seq= in the end line follows them."""

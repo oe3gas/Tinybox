@@ -552,9 +552,14 @@ def _bsync(s: Session, parts: list[str]) -> None:
     #   changed  what it has, with the content replaced after seq. Only its own
     #            seq says anything here: with seq=0 the client knows nothing
     #            about seq, and its after= is the whole truth.
-    # The backlog goes first, the changed ones behind it in cseq order, so that
-    # every page moves one of the two markers on. Without that the client asks
-    # again with the very same request - for ever.
+    # The changed ones go first in cseq order, the backlog behind them in id
+    # order, so that every page moves one of the two markers on. Without that
+    # the client asks again with the very same request - for ever.
+    # Once the changed ones are through, seq= jumps to the current counter even
+    # while backlog is left: the backlog is covered by after= alone. Were the
+    # backlog sent first, its bulletins (created after the client's seq) would
+    # come again as "changed" on the next pages - every header twice.
+    now_seq = store.sync_seq()
     backlog, changed = [], []
     for m in _visible(s):
         if m.type != "B" or m.to_call not in after:
@@ -565,7 +570,7 @@ def _bsync(s: Session, parts: list[str]) -> None:
             changed.append(m)
     backlog.sort(key=lambda m: m.id)
     changed.sort(key=lambda m: m.cseq)
-    order = backlog + changed
+    order = changed + backlog
     page, more = _page_by_bytes([(i, header(m), m) for i, m in enumerate(order)], ans.limit)
     gone = [str(i) for i, _, typ, to, _ in (store.gone_since(seq) if seq else [])
             if typ == "B" and to in after]
@@ -574,12 +579,10 @@ def _bsync(s: Session, parts: list[str]) -> None:
     for _, line, _ in page:
         ans.rows.append(line)
     ans.push_texts([m for _, _, m in page if m is not None])
-    if not more:
-        end_seq = store.sync_seq()
-    elif len(page) > len(backlog):            # changed ones went out as well
-        end_seq = order[len(page) - 1].cseq   # everything up to here is through
+    if len(page) >= len(changed):             # all changed ones are through
+        end_seq = now_seq
     else:
-        end_seq = seq                         # still in the backlog: after= moves on
+        end_seq = order[len(page) - 1].cseq   # everything up to here is through
     ans.send(f"//BSYNCEND {more} seq={end_seq} h={h}",
              f"//BSYNC seq={seq}: {len(page)} header(s), {len(ans.texts)} text(s)")
 

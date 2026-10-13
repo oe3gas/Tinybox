@@ -189,9 +189,11 @@ class Syncer:
             return
         self.status["bytes"] += len(data)
         self.status["saved"] += len(text.encode()) - len(data)
-        for line in text.split("\r"):
-            if line:
-                self.take(line)
+        lines = text.split("\r")
+        if lines and lines[-1] == "":              # every line ends in \r: nothing after the last
+            lines.pop()
+        for line in lines:                         # empty lines too: they count in //MSG texts
+            self.take(line)
 
     # --- control -----------------------------------------------------------------
 
