@@ -1,2 +1,0 @@
-- Kommentar nur auf Beitraege aus dem laufenden Chat (History: nichts)
-- Leiste "You are adding a comment on ..." ueber dem Eingabefeld

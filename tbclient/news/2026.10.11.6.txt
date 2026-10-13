@@ -1,3 +1,0 @@
-- Bulletin: Rubrik aus Liste waehlen
-- Board antippen: farbig, bis man drin ist
-- Fix: Emoji-Leiste
