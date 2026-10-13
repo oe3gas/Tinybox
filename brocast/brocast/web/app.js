@@ -671,6 +671,7 @@ function renderBlocks(c, blocks, total, view) {
 
 function table(b) {
   const t = el("table", "tbl");
+  const sc = typeof b.sc === "number" ? Math.pow(10, b.sc) : 1;   // scales every number cell (like series)
   if (Array.isArray(b.hdr) && b.hdr.length) {
     const tr = el("tr");
     for (const h of b.hdr) tr.append(el("th", null, h));
@@ -678,7 +679,7 @@ function table(b) {
   }
   for (const row of b.rows || []) {
     const tr = el("tr");
-    for (const cell of Array.isArray(row) ? row : [row]) tr.append(typeof cell === "string" ? linkified("td", null, cell) : el("td", null, num(cell)));
+    for (const cell of Array.isArray(row) ? row : [row]) tr.append(typeof cell === "string" ? linkified("td", null, cell) : el("td", null, typeof cell === "number" ? num(cell * sc) : num(cell)));
     t.append(tr);
   }
   return t;

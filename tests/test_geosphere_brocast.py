@@ -76,6 +76,87 @@ class BrocastSeiteTests(unittest.TestCase):
         self.assertEqual([g.gueltig_minuten(x) for x in ("2h", "90m", "1d", "45")], [120, 90, 1440, 45])
 
 
+def region_daten(ohne: tuple[str, ...] = ()) -> dict:
+    """Ein Datensatz je Station der Region, leicht variiert; `ohne` fehlt (Ausfall)."""
+    out = {}
+    for i, sid in enumerate(g.REGION_IDS):
+        if sid in ohne:
+            continue
+        d = daten(temp_offset=i * 0.3)
+        d["station"] = sid
+        d["info"] = {"name": g.REGION_NAME[sid].upper(), "altitude": 150.0 + i * 30,
+                     "lat": 48.6, "lon": 16.0}
+        d["reihen"]["RR"] = [0.1 * (i % 3)] * N
+        d["reihen"]["FFX"] = [2.0 + i % 5] * N
+        out[sid] = d
+    return out
+
+
+class RegionTests(unittest.TestCase):
+    def setUp(self):
+        self.codec = Codec()
+
+    def test_station_list(self):
+        self.assertEqual(len(g.REGION_IDS), 24)
+        self.assertEqual(len(set(g.REGION_IDS)), 24)
+        self.assertIn("11334", g.REGION_IDS)
+        for kurz in g.REGION_NAME.values():
+            self.assertLessEqual(len(kurz), 13)
+            self.assertTrue(kurz.isascii())
+
+    def test_je_station_maps_by_id_not_order(self):
+        antwort = {"features": [
+            {"properties": {"station": "11022", "parameters": {"TL": {"data": [11.4]}}}},
+            {"properties": {"station": "11334", "parameters": {"TL": {"data": [7.2]}}}}]}
+        self.assertEqual(g._je_station(antwort), {"11022": {"TL": [11.4]}, "11334": {"TL": [7.2]}})
+
+    def test_ueberblick_text(self):
+        zeilen = g.ueberblick(region_daten(ohne=("11025",)), "2026-10-03T16:00+00:00", 24)
+        text = "\n".join(zeilen)
+        self.assertTrue(text.isascii(), "Ueberblick muss ASCII sein")
+        self.assertLessEqual(max(len(z) for z in zeilen), 60)
+        self.assertEqual(sum(z.startswith("---") for z in zeilen), 2)
+        self.assertIn("Weitra           -  (keine Daten)", text)
+        self.assertIn("Schoengrabern  240", text)
+        self.assertIn("Tiefstwert", text)
+        self.assertIn("Quelle: GeoSphere", text)
+        # 24 Stationen + Kopf/Legende/Extreme: rund 1,9 kB (nur Mailbox-Text, geht nicht ueber brocast)
+        self.assertLess(len(text.encode()), 2048)
+
+    def test_brocast_table_page_is_small(self):
+        seite = g.brocast_ueberblick(region_daten(), "2026-10-03T16:00+00:00", 120)
+        self.assertEqual(seite["typ"], "text")
+        self.assertEqual(sum(len(b["rows"]) for b in seite["blk"]), 24)
+        self.assertEqual(len(seite["blk"]), 8)
+        self.assertIn("hdr", seite["blk"][0])
+        self.assertNotIn("hdr", seite["blk"][1])
+        frames = split(self.codec, {**seite, "id": 30, "rev": 0, "t": 1790000000})
+        self.assertLessEqual(len(frames), 5)
+        for fr in frames:
+            self.assertLessEqual(len(fr), 240)
+        page = self.codec.decode(frames[0])
+        self.assertEqual((page["blk"][0]["k"], page["blk"][0]["sc"]), ("table", -1))
+        self.assertEqual(page["blk"][0]["rows"][0][:3], ["Retz", 213, "SO"])
+        self.assertIn("Retz | 21.3 | SO | 1.8 | 2 | 0", "\n".join(self.codec.describe(page)))
+
+    def test_brocast_table_worst_case_fits(self):
+        """Lange Namen, Minusgrade, dreistellige Boeen/Regen: jeder Block bleibt unter 240 Bytes."""
+        d = region_daten()
+        for i, x in enumerate(d.values()):
+            x["w"].update({"TL": -12.3, "FF": 25.5, "DD": 337})
+            x["reihen"]["FFX"] = [41.7] * N
+            x["reihen"]["RR"] = [0.9] * N
+        g.REGION_NAME_SICHERUNG = dict(g.REGION_NAME)
+        try:
+            for sid in g.REGION_IDS:
+                g.REGION_NAME[sid] = "Dreizehnzeich"          # 13 Zeichen
+            seite = g.brocast_ueberblick(d, "2026-10-03T16:00+00:00", 120)
+        finally:
+            g.REGION_NAME.update(g.REGION_NAME_SICHERUNG)
+        frames = split(self.codec, {**seite, "id": 30, "rev": 0, "t": 1790000000})
+        self.assertLessEqual(len(frames), 6)
+
+
 class EndToEndTests(unittest.TestCase):
     """geosphere_station --tinybox -> inbox file -> TinyBox -> brocastd accepts the page."""
 
@@ -112,6 +193,58 @@ class EndToEndTests(unittest.TestCase):
             station = Station(bconfig.load(conf), Codec(), BStore(":memory:"))
             res = station.put("tinybox", str(msg_id), page)
             self.assertEqual(res["subpages"], 1)
+
+    def test_region_to_inbox_and_brocastd(self):
+        """--region --tinybox (Abruf ersetzt): 24 Einzelbulletins + Ueberblick, brocastd nimmt die Tabelle."""
+        import argparse
+        import json
+        import tempfile
+        from unittest import mock
+        from brocast import config as bconfig
+        from brocast.station import Station
+        from brocast.store import Store as BStore
+        from tests.test_tinybox import make_app
+        from tinybox.adapters import brocast as adapter
+        from tinybox.adapters.inbox import Inbox
+        from tinybox.config import BrocastCfg, InboxCfg
+
+        d = region_daten(ohne=("11025",))
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(g, "abrufen_mehrere", return_value=d):
+            args = argparse.Namespace(stunden=24, kurz=False, tinybox=tmp, ziel="WX", gueltig="2h",
+                                      log=None, einzel_ohne_brocast=False)
+            self.assertEqual(g.region(args), 0)
+            dateien = sorted(Path(tmp).glob("*.txt"))
+            self.assertEqual(len(dateien), 24)                         # 23 Stationen + Ueberblick
+            app = make_app()
+            app.cfg.inbox = InboxCfg(enabled=True, directory=Path(tmp))
+            app.cfg.brocast = BrocastCfg(publish=True)
+            conf = Path(tmp) / "brocastd.conf"
+            conf.write_text("[brocastd]\nmode = station\ncallsign = OE3GAS-5\n"
+                            f"dictionary = {ROOT / 'brocast' / 'brocast-core.yaml'}\n",
+                            encoding="utf-8")
+            station = Station(bconfig.load(conf), Codec(), BStore(":memory:"))
+            msg = app.store.get(Inbox(app).process(Path(tmp) / "geosphere_wetter_region.txt"))
+            self.assertEqual(msg.replace_key, "geosphere-wetter-region")
+            self.assertIn("--- Waldviertel ---", msg.body)
+            res = station.put("tinybox", str(msg.id), adapter.to_page(msg, app))
+            self.assertLessEqual(res["subpages"], 5)
+            msg = app.store.get(Inbox(app).process(Path(tmp) / "geosphere_wetter_11022.txt"))
+            self.assertEqual(msg.replace_key, "geosphere-wetter-11022")
+            self.assertEqual(json.loads(msg.brocast)["typ"], "wx")
+
+    def test_region_einzel_ohne_brocast(self):
+        import argparse
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(g, "abrufen_mehrere", return_value=region_daten()):
+            args = argparse.Namespace(stunden=24, kurz=False, tinybox=tmp, ziel="WX", gueltig="2h",
+                                      log=None, einzel_ohne_brocast=True)
+            g.region(args)
+            einzel = (Path(tmp) / "geosphere_wetter_11334.txt").read_text(encoding="utf-8")
+            self.assertNotIn("Brocast:", einzel)
+            self.assertIn("Brocast:", (Path(tmp) / "geosphere_wetter_region.txt").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

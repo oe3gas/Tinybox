@@ -211,6 +211,9 @@ Zeitreihe (ein Wert je 2 h). Das ergibt normalerweise **einen** Frame
 ```
 py -3 geosphere_station.py --tinybox     Mailbox (Text) + brocast (Wetterseite)
 py -3 geosphere_station.py --brocast     nur zum Testen ohne TinyBox: direkt an brocastd
+py -3 geosphere_station.py --region --tinybox
+                                         24 Stationen Wein-/Waldviertel: Einzelberichte
+                                         + Gesamtueberblick (Tabellenseite, 4-5 Frames)
 ```
 
 Die Listener-Oberfläche zeigt Seiten vom typ `wx` als Kacheln (Temperatur mit

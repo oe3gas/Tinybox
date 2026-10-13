@@ -412,6 +412,12 @@ class Codec:
         if kind == "note":
             return [f"  ! {text}"]
         if kind == "table":
+            sc = block.get("sc")
+
+            def zelle(c):      # sc skaliert alle Zahlenzellen (wie bei series)
+                if isinstance(c, (int, float)) and not isinstance(c, bool) and isinstance(sc, int):
+                    return f"{c * 10 ** sc:g}"
+                return "-" if c is None else str(c)
             rows = [block.get("hdr", [])] + list(block.get("rows", []))
-            return ["  " + " | ".join(str(c) for c in row) for row in rows if row]
+            return ["  " + " | ".join(zelle(c) for c in row) for row in rows if row]
         return [f"  {text}" if text else f"  {block}"]

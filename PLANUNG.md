@@ -231,6 +231,7 @@ Text ...
 | Skript | Takt | Bulletin |
 |---|---|---|
 | `geosphere_station.py --tinybox` | stündlich xx:05 | an `WX`, `Replace: geosphere-wetter-11334`, `Valid: 2h`, mit `Brocast:` (Wetterseite `typ wx`, Abschnitt 6d) |
+| `geosphere_station.py --region --tinybox` | stündlich xx:05 (Alternative zur Zeile oben, 13.10.2026) | 24 Stationen Wein-/Waldviertel (`REGION` im Skript, 2 API-Abrufe): je Station ein Einzelbericht wie Schöngrabern (`Replace: geosphere-wetter-<ID>`, eigene `wx`-Seite = 1 Frame) **und** der Gesamtüberblick (`Replace: geosphere-wetter-region`, Text ~1,9 kB nur in der Mailbox; `Brocast:` Tabellenseite `typ text`, Blöcke `table` mit `sc -1`, 4–5 Frames). Funkmenge je Karussell-Lauf: 24 + 5 Frames ≈ 7 kB; mit `--einzel-ohne-brocast` nur der Überblick (5 Frames), die Einzelberichte bleiben Text in der Mailbox. |
 | `geosphere_warnungen.py --tinybox` | alle 15 min | an `WARN` nur bei Änderung, gültig bis Warnungsende; bei vorzeitiger Aufhebung „Entwarnung“ (3 h) |
 
 Bulletins an `WARN` werden in brocast zu Warnseiten (`[brocast] alert_destinations`, Rubrik Notfunk) und im Listener immer angezeigt und hervorgehoben.
@@ -254,6 +255,7 @@ Brocast: {"typ":"wx","dat":{"temp":21.3,"hum":31,"qff":1028.5},"blk":[{"k":"seri
 - **Prüfung im Eingang:** nur, ob es gültiges JSON und ein Objekt mit `typ` ist; sonst landet die Datei in `fehler\`. Die inhaltliche Prüfung macht brocastd.
 - **Speicherung:** neue Spalte `brocast` in `messages` (Schema 3, ältere Datenbanken werden beim Start ergänzt). `Replace:` ersetzt auch die Seite; „gleicher Inhalt“ heißt gleicher Text **und** gleiche Seite.
 - **Adapter:** Hat ein Bulletin eine Seite, wird sie gesendet. TinyBox ergänzt nur, was fehlt: `ti` (Betreff), `cat` (Rubrik aus dem Ziel), `exp` (wie bei Textseiten). `to` und `src` setzt TinyBox hier nicht, das entscheidet das Skript.
+- **Tabellen (13.10.2026):** `sc` gilt auch für `table`-Blöcke und skaliert alle Zahlenzellen (wie bei `series`); Text bleibt Text. Ein Block muss in einen Frame passen, der Splitter packt Blöcke nur ganz – lange Tabellen daher in kleine Blöcke teilen (Kopfzeile `hdr` nur im ersten).
 - **Rückfall:** Lehnt brocastd die Seite ab (z. B. Feld nicht im Dictionary), sendet der Adapter stattdessen die Textseite und schreibt eine Warnung ins Log. Ohne `Brocast:` bleibt alles wie bisher.
 - In der Mailbox ist die Kopfzeile unsichtbar (Funkamateure lesen Betreff und Text).
 

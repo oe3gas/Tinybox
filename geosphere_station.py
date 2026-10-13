@@ -23,6 +23,16 @@ Beispiele:
                                                # "Brocast:" (TinyBox reicht sie an brocastd weiter)
   python geosphere_station.py --brocast        # nur zum Testen ohne TinyBox: Wetterseite direkt
                                                # an brocastd (Seite geosphere/wx-<ID>)
+  python geosphere_station.py --region         # alle Stationen Wein-/Waldviertel (REGION):
+                                               # am Bildschirm der Gesamtueberblick
+  python geosphere_station.py --region --tinybox
+                                               # je Station ein Einzelbericht wie Schoengrabern
+                                               # (Replace: geosphere-wetter-<ID>) und dazu der
+                                               # Gesamtueberblick (Replace: geosphere-wetter-region,
+                                               # Brocast: Tabellenseite)
+  python geosphere_station.py --region --tinybox --einzel-ohne-brocast
+                                               # Einzelberichte nur als Text in der Mailbox
+                                               # (spart ~24 Frames je Karussell-Lauf)
 
 Exit-Codes: 0 = ok, 2 = Fehler
 """
@@ -49,6 +59,25 @@ PARAMS = ["TL", "TP", "RF", "P", "PRED", "DD", "FF", "FFX", "RR"]
 
 WINDRICHTUNG = ["N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO",
                 "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+
+# Stationen fuer --region: (ID, Kurzname fuer den Ueberblick), Stand TAWES-Metadaten 13.10.2026.
+# Kurznamen ASCII und max. 13 Zeichen (Tabelle im Ueberblick, Tabellenseite fuer brocast).
+REGION = {
+    "Weinviertel": [
+        ("11022", "Retz"), ("11335", "Laa/Thaya"), ("11032", "Poysdorf"),
+        ("11334", "Schoengrabern"), ("11332", "Mistelbach"), ("11333", "Hohenau"),
+        ("11083", "Leiser Berge"), ("11045", "Wolkersdorf"), ("11027", "Stockerau"),
+        ("11048", "Gaenserndorf"), ("11085", "Marchegg"), ("11037", "Gr.Enzersdorf"),
+    ],
+    "Waldviertel": [
+        ("11047", "Raabs/Thaya"), ("11021", "Litschau"), ("11025", "Weitra"),
+        ("8989083", "Schwarzau/Fw"), ("11019", "Allentsteig"), ("11020", "Stift Zwettl"),
+        ("11297", "Horn"), ("11064", "Gars/Kamp"), ("11367", "Baernkopf"),
+        ("11024", "Jauerling"), ("11075", "Langenlois"), ("11070", "Krems"),
+    ],
+}
+REGION_IDS = [sid for liste in REGION.values() for sid, _ in liste]
+REGION_NAME = {sid: kurz for liste in REGION.values() for sid, kurz in liste}
 
 
 # Zertifikatspruefung bewusst aus (Entscheidung OE3GAS, 03.10.2026): oeffentliche
@@ -93,8 +122,14 @@ def f(wert, fmt="{:.1f}", einheit=""):
     return "-" if wert is None else fmt.format(wert) + einheit
 
 
+_METADATEN: dict | None = None
+
+
 def metadaten() -> dict:
-    return api_get(f"current/{DATASET}/metadata", {})
+    global _METADATEN
+    if _METADATEN is None:
+        _METADATEN = api_get(f"current/{DATASET}/metadata", {})
+    return _METADATEN
 
 
 def station_info(station_id: str):
@@ -104,23 +139,44 @@ def station_info(station_id: str):
     return None
 
 
-def aktuelle_werte(station_id: str):
-    d = api_get(f"current/{DATASET}", {"station_ids": station_id, "parameters": ",".join(PARAMS)})
-    feat = d["features"][0]["properties"]["parameters"]
-    werte = {k: (v["data"][-1] if v.get("data") else None) for k, v in feat.items()}
+def _je_station(d: dict) -> dict:
+    """GeoJSON-Antwort -> {Stations-ID: {Parameter: Datenliste}}.
+    Die API liefert die Features nicht in der angefragten Reihenfolge."""
+    return {f["properties"]["station"]: {k: v.get("data") or [] for k, v in
+                                         f["properties"]["parameters"].items()}
+            for f in d.get("features", [])}
+
+
+def aktuelle_werte_mehrere(station_ids: list[str]):
+    """-> (Messzeit, {ID: {Parameter: letzter Wert}}) fuer alle Stationen in einem Abruf."""
+    d = api_get(f"current/{DATASET}", {"station_ids": ",".join(station_ids),
+                                       "parameters": ",".join(PARAMS)})
+    werte = {sid: {k: (reihe[-1] if reihe else None) for k, reihe in p.items()}
+             for sid, p in _je_station(d).items()}
     return d["timestamps"][-1], werte
 
 
-def verlauf(station_id: str, stunden: int):
+def aktuelle_werte(station_id: str):
+    zeit, werte = aktuelle_werte_mehrere([station_id])
+    return zeit, werte[station_id]
+
+
+def verlauf_mehrere(station_ids: list[str], stunden: int):
+    """-> (Zeitstempel, {ID: {Parameter: Reihe}}) fuer alle Stationen in einem Abruf."""
     ende = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     start = ende - timedelta(hours=stunden)
     d = api_get(f"historical/{DATASET}", {
-        "station_ids": station_id,
+        "station_ids": ",".join(station_ids),
         "parameters": "TL,RR,FFX,PRED",
         "start": start.strftime("%Y-%m-%dT%H:%M"),
         "end": ende.strftime("%Y-%m-%dT%H:%M"),
     })
-    return d["timestamps"], {k: v["data"] for k, v in d["features"][0]["properties"]["parameters"].items()}
+    return d["timestamps"], _je_station(d)
+
+
+def verlauf(station_id: str, stunden: int):
+    ts, reihen = verlauf_mehrere([station_id], stunden)
+    return ts, reihen[station_id]
 
 
 def zusammenfassung(ts, reihen, stunden):
@@ -146,14 +202,27 @@ def zusammenfassung(ts, reihen, stunden):
     return "\n".join(zeilen)
 
 
+def abrufen_mehrere(stationen: list[str], stunden: int, kurz: bool) -> dict[str, dict]:
+    """Alle Daten fuer mehrere Stationen in zwei Abrufen holen: -> {ID: Datensatz}.
+    Stationen ohne aktuelle Werte (Ausfall) fehlen im Ergebnis."""
+    zeit, werte = aktuelle_werte_mehrere(stationen)
+    ts, reihen = ([], {}) if kurz else verlauf_mehrere(stationen, stunden)
+    out = {}
+    for sid in stationen:
+        w = werte.get(sid)
+        if not w or all(v is None for v in w.values()):
+            continue
+        out[sid] = {"station": sid, "zeit": zeit, "w": w, "info": station_info(sid),
+                    "ts": ts if sid in reihen else [], "reihen": reihen.get(sid, {})}
+    return out
+
+
 def abrufen(station: str, stunden: int, kurz: bool) -> dict:
     """Alle Daten einmal holen: aktuelle Werte, Stationsinfo, optional der Verlauf."""
-    zeit, w = aktuelle_werte(station)
-    d = {"station": station, "zeit": zeit, "w": w, "info": station_info(station),
-         "ts": [], "reihen": {}}
-    if not kurz:
-        d["ts"], d["reihen"] = verlauf(station, stunden)
-    return d
+    daten = abrufen_mehrere([station], stunden, kurz)
+    if station not in daten:
+        raise ValueError(f"Station {station}: keine aktuellen Werte")
+    return daten[station]
 
 
 def stationsname(d: dict) -> str:
@@ -183,6 +252,97 @@ def bericht(d: dict, stunden: int) -> tuple[str, str, list[str]]:
         zeilen += ["", *zusammenfassung(d["ts"], d["reihen"], stunden).split("\n")]
     zeilen += ["", "Quelle: GeoSphere Austria, TAWES (CC BY 4.0)"]
     return name, lokalzeit(zeit), zeilen
+
+
+# ---------------------------------------------------------------------------
+# Gesamtueberblick Wein-/Waldviertel (--region)
+# ---------------------------------------------------------------------------
+
+def _kennzahlen(d: dict) -> dict:
+    """Die Werte einer Station fuer den Ueberblick: aktuell + letzte Stunde/24 h."""
+    w, reihen = d["w"], d["reihen"]
+
+    def gueltig(key, n):
+        return [x for x in reihen.get(key, [])[-n:] if x is not None]
+
+    rr24, ffx1, tl24 = gueltig("RR", 144), gueltig("FFX", 6), gueltig("TL", 144)
+    return {"name": REGION_NAME.get(d["station"], stationsname(d)[:13]),
+            "hoehe": d["info"]["altitude"] if d["info"] else None,
+            "temp": w.get("TL"), "dew": w.get("TP"), "hum": w.get("RF"), "qff": w.get("PRED"),
+            "wdir": w.get("DD"), "wspd": w.get("FF"),
+            "boe1h": max(ffx1) if ffx1 else w.get("FFX"),
+            "rr24": sum(rr24) if rr24 else None,
+            "tmin": min(tl24) if tl24 else None, "tmax": max(tl24) if tl24 else None}
+
+
+def ueberblick(daten: dict[str, dict], zeit: str, stunden: int) -> list[str]:
+    """Textzeilen des Gesamtueberblicks: eine Zeile je Station, dann die Extremwerte.
+    Nur ASCII, max. 60 Zeichen je Zeile (Terminal und Funk)."""
+    kz = {sid: _kennzahlen(d) for sid, d in daten.items()}
+    def zeile(name, hoehe, temp, dew, hum, qff, wind, wspd, boe, rr):
+        return (f"{name:<13} {hoehe:>4} {temp:>5} {dew:>4} {hum:>3} {qff:>6} "
+                f"{wind:<3}{wspd:>4} {boe:>5} {rr:>5}")
+
+    zeilen = [f"Wetter Wein-/Waldviertel {lokalzeit(zeit)} (10-min-Werte)", "",
+              zeile("Station", "m", "T", "Tp", "rF", "QFF", "", "Wind", "Boe", "RR24")]
+    for gebiet, liste in REGION.items():
+        zeilen.append(f"--- {gebiet} ---")
+        for sid, kurz in liste:
+            k = kz.get(sid)
+            if k is None:
+                zeilen.append(f"{kurz:<13}    -  (keine Daten)")
+                continue
+            zeilen.append(zeile(k["name"], f(k["hoehe"], "{:.0f}"), f(k["temp"]), f(k["dew"]),
+                                f(k["hum"], "{:.0f}"), f(k["qff"]),
+                                richtung(k["wdir"]) if k["wspd"] is not None else "-",
+                                f(k["wspd"]), f(k["boe1h"]), f(k["rr24"])))
+    zeilen += ["", "T Tp in C, rF %, QFF hPa, Wind/Boe m/s (Boe = Spitze",
+               f"der letzten Stunde), RR24 = Niederschlag mm, letzte {min(stunden, 24)} h"]
+
+    def extrem(key, fn, einheit, label):
+        kandidaten = [(k[key], k["name"]) for k in kz.values() if k[key] is not None]
+        if not kandidaten:
+            return None
+        wert, name = fn(kandidaten)
+        return f"{label} {name} {wert:.1f}{einheit}"
+    e = [extrem("tmin", min, " C", "  Tiefstwert  "), extrem("tmax", max, " C", "  Hoechstwert "),
+         extrem("rr24", max, " mm", "  Regen max.  "), extrem("boe1h", max, " m/s", "  Boe max.    ")]
+    zeilen += ["", f"Letzte {min(stunden, 24)} h in der Region:", *[x for x in e if x],
+               "", "Quelle: GeoSphere Austria, TAWES (CC BY 4.0)"]
+    return zeilen
+
+
+# Zeilen je Tabellenblock: ein Block muss auch im schlimmsten Fall (13-Zeichen-Namen,
+# dreistellige Werte) in einen Frame (240 Bytes) passen; der Splitter von brocastd
+# packt dann so viele Bloecke je Unterseite, wie hineingehen (normal 4-5 Frames).
+TABELLE_ZEILEN = 3
+
+
+def brocast_ueberblick(daten: dict[str, dict], zeit: str, gueltig_min: int) -> dict:
+    """Tabellenseite (typ text, Bloecke table) fuer brocastd: Kurzname, T, Wind, Boe, RR24.
+
+    Zahlen als Ganzzahlen in 0,1-Einheiten (sc -1, wie bei series; Floats kosten
+    9 Bytes je Zelle), Windrichtung als Kompass-Text. Bewusst wenige Spalten:
+    24 Zeilen x ~22 Bytes = 4-5 Frames je Karussell-Lauf (ca. 1 kB)."""
+    def z(x):
+        return None if x is None else round(x * 10)
+
+    rows = []
+    for sid in REGION_IDS:
+        d = daten.get(sid)
+        if d is None:
+            continue
+        k = _kennzahlen(d)
+        rows.append([k["name"], z(k["temp"]),
+                     richtung(k["wdir"]) if k["wspd"] is not None else None,
+                     z(k["wspd"]), z(k["boe1h"]), z(k["rr24"])])
+    blk = [{"k": "table", "sc": -1, "rows": rows[i:i + TABELLE_ZEILEN]}
+           for i in range(0, len(rows), TABELLE_ZEILEN)]
+    if blk:                                   # Kopfzeile nur einmal (Bytes)
+        blk[0]["hdr"] = ["Station", "T C", "Wind", "m/s", "Boe m/s", "RR24 mm"]
+    return {"typ": "text", "cat": ["wx"], "exp": gueltig_min,
+            "ti": f"Wetter Region {lokalzeit(zeit)[-5:]}",
+            "src": "GeoSphere Austria, TAWES (CC BY 4.0)", "blk": blk}
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +470,46 @@ def protokoll(datei: str | None, text: str) -> None:
         pass
 
 
+def bulletin_station(d: dict, args, mit_brocast: bool) -> Path:
+    """Einzelbericht einer Station als Bulletin in den TinyBox-Eingang (Vorlage Schoengrabern)."""
+    name, zeit, zeilen = bericht(d, args.stunden)
+    kopf = {"To": args.ziel, "Subject": f"Wetter {name} {zeit[-5:]}"[:60],
+            "Replace": f"geosphere-wetter-{d['station']}", "Valid": args.gueltig}
+    if mit_brocast:
+        seite = brocast_seite(d, args.stunden, gueltig_minuten(args.gueltig))
+        kopf["Brocast"] = json.dumps(seite, ensure_ascii=False, separators=(",", ":"))
+    return schreibe_tinybox(Path(args.tinybox), f"geosphere_wetter_{d['station']}",
+                            kopf, "\n".join(zeilen[2:]))     # Kopfzeile steckt im Betreff
+
+
+def region(args) -> int:
+    """--region: alle Stationen in zwei Abrufen, Einzelberichte + Gesamtueberblick."""
+    daten = abrufen_mehrere(REGION_IDS, args.stunden, args.kurz)
+    if not daten:
+        raise ValueError("keine Station der Region liefert aktuelle Werte")
+    zeit = next(iter(daten.values()))["zeit"]
+    fehlend = [REGION_NAME[s] for s in REGION_IDS if s not in daten]
+    if fehlend:
+        protokoll(args.log, f"ohne Daten: {', '.join(fehlend)}")
+    zeilen = ueberblick(daten, zeit, args.stunden)
+    if not args.tinybox:
+        print("\n".join(zeilen))
+        return 0
+    for sid in REGION_IDS:
+        if sid in daten:
+            bulletin_station(daten[sid], args, not args.einzel_ohne_brocast)
+    kopf = {"To": args.ziel, "Subject": f"Wetter Wein-/Waldviertel {lokalzeit(zeit)[-5:]}",
+            "Replace": "geosphere-wetter-region", "Valid": args.gueltig,
+            "Brocast": json.dumps(brocast_ueberblick(daten, zeit, gueltig_minuten(args.gueltig)),
+                                  ensure_ascii=False, separators=(",", ":"))}
+    ziel = schreibe_tinybox(Path(args.tinybox), "geosphere_wetter_region", kopf,
+                            "\n".join(zeilen[2:]))
+    info = f"Region: {len(daten)} Einzelberichte + Ueberblick abgelegt ({ziel})"
+    print(info)
+    protokoll(args.log, info)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Messwerte einer GeoSphere-Austria-Station abrufen")
     ap.add_argument("--station", default=DEFAULT_STATION, help="Stations-ID (Standard 11334 Schoengrabern)")
@@ -327,12 +527,22 @@ def main() -> int:
                     "brocastd senden (Standard: http://127.0.0.1:8090/api/v1)")
     ap.add_argument("--token", default="", help="Token der Ingest-API ([station] token)")
     ap.add_argument("--log", metavar="DATEI", help="Fehler zusaetzlich in diese Datei schreiben")
+    ap.add_argument("--region", action="store_true",
+                    help="alle Stationen Wein-/Waldviertel: Einzelberichte (nur mit --tinybox) "
+                         "und Gesamtueberblick")
+    ap.add_argument("--einzel-ohne-brocast", action="store_true",
+                    help="--region: Einzelberichte ohne Brocast-Seite (nur Text in der Mailbox)")
     args = ap.parse_args()
     if args.tinybox and args.brocast:
         ap.error("--tinybox liefert die Wetterseite schon mit (Kopfzeile Brocast:), "
                  "TinyBox reicht sie an brocastd weiter - --brocast nicht zusaetzlich angeben")
+    if args.region and (args.brocast or args.json):
+        ap.error("--region geht nur am Bildschirm oder mit --tinybox")
 
     try:
+        if args.region:
+            return region(args)
+
         if args.suche:
             for s in metadaten().get("stations", []):
                 if args.suche.lower() in s["name"].lower() and s.get("is_active"):
@@ -357,14 +567,9 @@ def main() -> int:
             print(info)
             protokoll(args.log, info)
         if args.tinybox:
-            seite = brocast_seite(daten, args.stunden, gueltig_minuten(args.gueltig))
-            kopf = {"To": args.ziel, "Subject": f"Wetter {name} {zeit[-5:]}"[:60],
-                    "Replace": f"geosphere-wetter-{args.station}", "Valid": args.gueltig,
-                    "Brocast": json.dumps(seite, ensure_ascii=False, separators=(",", ":"))}
-            ziel = schreibe_tinybox(Path(args.tinybox), f"geosphere_wetter_{args.station}",
-                                    kopf, "\n".join(zeilen[2:]))     # Kopfzeile steckt im Betreff
+            ziel = bulletin_station(daten, args, mit_brocast=True)
             print(f"Bulletin abgelegt: {ziel}")
-            protokoll(args.log, f"abgelegt: {ziel} ({kopf['Subject']})")
+            protokoll(args.log, f"abgelegt: {ziel} (Wetter {name} {zeit[-5:]})")
         if not args.tinybox and not args.brocast:
             print("\n".join(zeilen))
         return 0
