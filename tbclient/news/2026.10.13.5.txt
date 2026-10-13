@@ -1,0 +1,3 @@
+- Bild nochmal senden: Hat die TinyBox das Bild schon (gleicher
+  Inhalt), gehen keine Bytes mehr raus, aber die Chat-Zeile - das
+  Bild erscheint wieder im Chat. Bisher passierte stumm nichts.

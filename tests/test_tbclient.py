@@ -564,6 +564,31 @@ class ImageHoldTests(unittest.TestCase):
                 self.assertEqual(core.images.upload["sent"], len(webp))
         asyncio.run(scenario())
 
+    def test_known_picture_sends_only_the_chat_line(self):
+        """Bug of 13.10.2026: the TinyBox answered //IMGPUT with //IMGOK at once
+        (it had the picture), the client took that as done and never sent the
+        chat line - the picture did not show up again."""
+        async def scenario():
+            from tinybox import chatimg
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp))
+                sent: list = []
+                core.link.send_line = lambda t: sent.append(t)
+                core.link.send_bytes = lambda b: sent.append(b)
+                core.state = "online"
+                core.caps = {"IMG"}
+                core.board = {"n": 1, "name": "Treff", "keep": "7d", "img": 8192}
+                webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + bytes(range(256)) * 5
+                h = core.send_image(webp, "BEHV6nWB2yk8pyo0", "nochmal", "")
+                await until(lambda: len(sent) == 1)
+                core._on_line(f"//IMGOK {h}")
+                await until(lambda: core.images.upload["state"] == "done")
+                line = f"~#{h}{chatimg.size_code(len(webp))}BEHV6nWB2yk8pyo0 nochmal"
+                self.assertEqual(sent, [f"//IMGPUT {h} {len(webp)}", line])
+                self.assertTrue(core.images.upload["known"])
+                self.assertIsNone(core._hold)
+        asyncio.run(scenario())
+
     def test_upload_resumes_at_the_offset(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:

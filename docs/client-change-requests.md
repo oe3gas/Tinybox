@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.10.2026 (CR32 umgesetzt)
+Stand: 13.10.2026 (CR35 umgesetzt)
 
 ## Übersicht
 
@@ -39,6 +39,9 @@ Stand: 13.10.2026 (CR32 umgesetzt)
 | 30 | Bild-Upload eines Teilnehmers sichtbar machen: „OE1ABC uploading picture“ mit Fortschrittsbalken | ✅ siehe unten |
 | 31 | Kommentarbezug eindeutig machen (bisher Rufzeichen + Minute, mehrdeutig) | ✅ siehe unten |
 | 32 | Logfile zum Debuggen mit Claude: eine Datei pro Tag, feste Spalten, Session-Nummer, Startblock, `LOG`-Befehl | ✅ siehe unten |
+| 33 | Teilnehmernummern und Verbindungsdetails im Client (Detailansicht je Station) | ✅ siehe unten |
+| 34 | Bildübertragung schneller (256-Byte-Frames, Bild am Stück an Direwolf) | ✅ siehe unten |
+| 35 | Bug: Bekanntes Bild ließ sich nicht erneut in den Chat stellen – Upload brach stumm ab | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -688,3 +691,11 @@ mitkommen, wenn die Datei in einen Chat gelegt wird.
 - Dialog: Größenwahl **klein / normal / groß** (2 / 4 kB / Board-Limit, 192 / 256 / 320 px), Wahl bleibt im Browser; `[images] target_bytes` (4096) und `bytes_per_sec` (100) im Client, `piece_bytes`/`pause_sec` entfallen.
 - Erwartung: ≈ 115 B/s, 4-kB-Bild in ≈ 35 s, 8 kB in ≈ 70 s. Nach den ersten Funkmessungen `bytes_per_sec` nachziehen.
 - Client-Version 2026.10.13.4. Tests: `test_tbclient.py` (`ImageTests`, `ImageHoldTests`).
+
+## CR35 – Bekanntes Bild nochmal senden (✅ 13.10.2026)
+
+**Problem:** Ein Bild, das schon einmal übertragen wurde, ließ sich nicht erneut in den Chat stellen – der Upload „verschwand“ kommentarlos. Log 13.10., 22:50: `//IMGPUT 22cec8 8008` → sofort `//IMGOK 22cec8`, danach nichts mehr. Die TinyBox erkennt am Hash, dass sie das Bild hat, und verlangt die Bytes nicht nochmal (`//IMGOK` statt `//IMGGO`) – gewollt, spart Airtime. Der Client wertete das aber als „fertig“ und schickte die Chat-Zeile mit dem Verweis nie; die geht sonst erst hinter den Bytes raus (`_send_all`).
+
+**Lösung:** Kommt `//IMGOK` ohne vorheriges `//IMGGO`, sendet der Client nur die Chat-Zeile (`~#<hash>…` + Bildtext). Das Bild erscheint wieder im Chat, die anderen Stationen holen es wie sonst von der TinyBox bzw. haben es schon. Upload-Status trägt `known=True`. TinyBox unverändert.
+
+- Client-Version 2026.10.13.5. Test: `test_tbclient.py` (`ImageHoldTests.test_known_picture_sends_only_the_chat_line`).

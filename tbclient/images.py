@@ -117,7 +117,7 @@ class Images:
         if caption.strip():
             line += " " + caption.strip()
         self.upload = {"hash": h, "size": len(data), "sent": 0, "state": "waiting",
-                       "error": "", "line": line, "at": time.time()}
+                       "error": "", "line": line, "at": time.time(), "known": False}
         self._jobs.append({"kind": "up", "hash": h, "data": data, "line": line})
         self._kick()
         return h
@@ -284,6 +284,13 @@ class Images:
                     continue
                 p = item[1].split()
                 if p[0] == "//IMGOK" and p[1:2] == [h]:
+                    if progress is None:
+                        # the TinyBox has the picture already (same bytes, same
+                        # hash - no //IMGGO): nothing to send but the chat line,
+                        # so the picture shows up in the chat again (14.10.2026)
+                        self.core.say(job["line"])
+                        if up:
+                            up["known"] = True
                     break
                 if p[0] == "//IMGGO" and p[1:2] == [h] and len(p) == 3 and p[2].isdigit():
                     progress = self._send_all(data, int(p[2]), job["line"], up)
