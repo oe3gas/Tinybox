@@ -74,10 +74,12 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import zlib
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from . import logsetup
 from .config import base_call
 from .service import ServiceError
 from .store import Message
@@ -127,8 +129,12 @@ def handle(s: Session, cmd: str, parts: list[str]) -> None:
     if cmd in ("SYNC", "BSYNC") and "SYNC2" not in s.client.caps:
         s.out(f"//ERR {cmd} needs SYNC2")
         return
+    started = time.monotonic()
     {"MLIST": _mlist, "RUBRICS": _rubrics, "BLIST": _blist, "GET": _get, "PART": _part,
      "SEND": _send, "KILL": _kill, "READ": _read, "SYNC": _sync, "BSYNC": _bsync}[cmd](s, parts)
+    slow = logsetup.ms_if_slow(started)
+    if slow:
+        log.debug("//%s took %s", cmd, slow)
 
 
 def _paging(parts: list[str]) -> tuple[list[str], int, int | None] | None:
@@ -242,7 +248,7 @@ def _part(s: Session, parts: list[str]) -> None:
     piece = data[offset:offset + min(max(size, 1), MAX_PART)]
     s.transport.write(f"//P {msg_id} {kind} {offset} {len(data)} {len(piece)}\r")
     s.transport.write_bytes(piece)
-    log.info("%s > //PART %d: %d-%d of %d bytes (%s)", s.call, msg_id, offset,
+    log.info("> //PART %d: %d-%d of %d bytes (%s)", msg_id, offset,
              offset + len(piece), len(data), kind)
 
 
@@ -271,7 +277,7 @@ def _get(s: Session, parts: list[str]) -> None:
         comp += len(raw)
         s.transport.write("".join(x + "\r" for x in [f"//MSG {msg_id} {len(lines)}", *lines]))
     s.transport.write("//GEND\r")
-    log.info("%s > //GET %s: %d bytes text, %d on air", s.call, ids, plain, comp)
+    log.info("> //GET %s: %d bytes text, %d on air", ids, plain, comp)
 
 
 def _send(s: Session, parts: list[str]) -> None:

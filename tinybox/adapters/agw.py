@@ -29,7 +29,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 
-from .. import chatimg, linkq, texts
+from .. import chatimg, linkq, logsetup, texts
 from ..app import App
 from ..config import is_valid_call, normalize_call
 from ..session import MAX_LINE, Session
@@ -103,6 +103,11 @@ class AgwConnection:
         self._after_z = False
         self.pump_task: asyncio.Task | None = None
         self.quality = linkq.LinkQuality(adapter.quality_cfg)
+
+    @property
+    def log_ctx(self) -> str:
+        """Session context for the log, as soon as a session is attached (CR32)."""
+        return getattr(self.session, "log_ctx", None) or logsetup.NO_SESSION
 
     # --- Transport interface -------------------------------------------
 
@@ -239,12 +244,15 @@ class AgwAdapter:
     def send(self, frame: Frame) -> None:
         if self._writer is not None and not self._writer.is_closing():
             self._writer.write(frame.pack())
+            logsetup.counters.frames_out += 1
+            log.debug(">> %s len=%d to %s", frame.kind, len(frame.data),
+                      frame.call_to or "-")
 
     def send_ui(self, dest: str, text: str) -> None:
         """One UI frame (unproto) from the mailbox call, e.g. to TBCHAT-1."""
         self.send(Frame("M", self.radio_port, PID_NO_L3, self.mycall, dest,
                         text.encode("utf-8")))
-        logging.getLogger("tinybox.monitor").info("UI %s > %s", dest, text)
+        logging.getLogger("tinybox.monitor.agw").info("UI %s > %s", dest, text)
 
     # --- main loop --------------------------------------------------------
 
@@ -299,6 +307,16 @@ class AgwAdapter:
         return f.call_to if f.call_from == self.mycall else f.call_from
 
     def _dispatch(self, f: Frame) -> None:
+        """Count and tag the frame, then handle it. The '<<' / '>>' lines are the
+        layer below the session text: they show whether a line is missing on the
+        frame level or above it (CR32)."""
+        logsetup.counters.frames_in += 1
+        conn = self.conns.get(normalize_call(self._remote_of(f)))
+        with logsetup.session_context(getattr(conn, "log_ctx", None) or logsetup.NO_SESSION):
+            log.debug("<< %s len=%d from %s", f.kind, len(f.data), f.call_from or "-")
+            self._handle_frame(f)
+
+    def _handle_frame(self, f: Frame) -> None:
         if f.kind == "R":
             if len(f.data) >= 8:
                 major, _, minor, _ = struct.unpack("<hhhh", f.data[:8])
@@ -368,8 +386,10 @@ class AgwAdapter:
             conn.close()
             return
         conn.session = session
-        log.info("radio connect %s%s", remote, " (sysop)" if sysop else "")
-        session.start()
+        with logsetup.session_context(session.log_ctx):
+            log.info("radio connect, agw port %d%s", self.radio_port,
+                     " (sysop)" if sysop else "")
+            session.start()
 
     # --- outgoing connects (forward module) ------------------------------------
 
@@ -394,8 +414,15 @@ class AgwAdapter:
         else:
             self.send(Frame("C", port, PID_NO_L3, self.mycall, remote))
         log.info("connecting to %s%s", remote, f" via {','.join(via)}" if via else "")
+        started = time.monotonic()
         try:
-            return await asyncio.wait_for(fut, timeout)
+            conn = await asyncio.wait_for(fut, timeout)
+            log.info("link to %s up %s", remote, logsetup.ms(started))
+            return conn
+        except (asyncio.TimeoutError, ConnectionError) as exc:
+            log.warning("connect to %s failed after %s: %s", remote,
+                        logsetup.ms(started), exc or type(exc).__name__)
+            raise
         finally:
             self._pending.pop(remote, None)
 
@@ -412,6 +439,10 @@ class AgwAdapter:
         conn = self.conns.pop(remote, None)
         if conn is None:
             return
+        with logsetup.session_context(conn.log_ctx):
+            self._disconnect(remote, conn, lost)
+
+    def _disconnect(self, remote: str, conn: AgwConnection, lost: bool) -> None:
         self.app.service.links.pop(remote, None)
         conn.gone = True
         conn._wakeup.set()
@@ -423,7 +454,8 @@ class AgwAdapter:
             else:
                 conn.session.end()                  # forward link
             self.app.registry.remove(conn.session)
-        log.info("radio disconnect %s%s", remote, " (connection lost)" if lost else "")
+        log.info("radio disconnect %s%s", remote,
+                 " (connection lost)" if lost else "")
 
     def _drop_all(self) -> None:
         for remote in list(self.conns):

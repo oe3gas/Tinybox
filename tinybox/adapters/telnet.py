@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from .. import texts
+from .. import logsetup, texts
 from ..app import App
 from ..config import is_valid_call, normalize_call
 from ..session import MAX_LINE, Session
@@ -139,8 +139,9 @@ class TelnetConnection:
                 session = None
                 return
             registered = True
-            log.info("telnet connect %s from %s%s", call, peer, " (sysop)" if sysop else "")
-            session.start()
+            with logsetup.session_context(session.log_ctx):
+                log.info("telnet connect from %s%s", peer, " (sysop)" if sysop else "")
+                session.start()
             await self.writer.drain()
             while not session.closed:
                 # reading along in a chat board is allowed: no idle timeout there
@@ -155,7 +156,8 @@ class TelnetConnection:
                 session.end()
                 if registered:
                     self.app.registry.remove(session)
-                log.info("telnet disconnect %s", session.call)
+                with logsetup.session_context(session.log_ctx):
+                    log.info("telnet disconnect")
             try:
                 if not self.writer.is_closing():
                     await self.writer.drain()

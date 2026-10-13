@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 
+from .. import logsetup
 from ..service import MessageService
 from ..store import Message
 from . import b1, lzhuf
@@ -89,6 +90,8 @@ class Sender:
         self.offered.add(m.id)
         self.store.fwd_set(m.id, self.partner, state)
         log.info("%s: message %d (%s) %s", self.partner, m.id, m.bid, state)
+        if state == "done":
+            logsetup.counters.bulletins_fwd += 1
         states = self.store.fwd_states(m.id).values()
         if not any(s in ("open", "later") for s in states):
             msg = self.store.get(m.id)

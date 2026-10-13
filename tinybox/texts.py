@@ -178,6 +178,11 @@ HELP_CONSOLE = [
     "Console:",
     "  W          Who is connected",
     "  MON [ON|OFF]  Live monitor of user sessions",
+    "  LOG        Log file, level and debug components",
+    "  LOG DEBUG comp  Extra DEBUG for one component (agw, fwd, sync, ...)",
+    "  LOG OFF [comp]  Back to the normal level (without comp: all of them)",
+    "  LOG MARK text   Write a marker line into the log before a test",
+    "  LOG BUNDLE      One file with log, version and config, to hand over",
     "  DISC call  Disconnect a user",
     "  STATUS     Mailbox status",
     "  WEB        Show the web GUI login link",
@@ -197,6 +202,17 @@ WHO_HEADER = "Call       Via     Since (UTC)       State"
 WHO_ROW = "{call:<10} {via:<7} {since:<17} {state}"
 WHO_EMPTY = "No users connected."
 MON_STATE = "Monitor is {state}."
+# LOG (CR32)
+LOG_LINES = [
+    "Level {level}, extra DEBUG: {debug}",
+    "Log file: {file} ({size})",
+]
+LOG_NO_FILE = "No log file: [logging] log_dir in tinybox.conf is empty."
+LOG_MARKED = "Mark written to the log."
+LOG_UNKNOWN = "Unknown component. Known: {comps}"
+LOG_BUNDLE_DONE = "Debug bundle written: {path}"
+LOG_BUNDLE_FAILED = "Debug bundle failed: {error}"
+USAGE_LOG = "Usage: LOG | LOG DEBUG comp | LOG OFF [comp] | LOG MARK text | LOG BUNDLE"
 DISC_DONE = "{call} disconnected."
 DISC_NONE = "{call} is not connected."
 USAGE_DISC = "Usage: DISC call"

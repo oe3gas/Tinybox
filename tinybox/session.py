@@ -11,7 +11,7 @@ import time
 from enum import Enum
 from typing import Protocol
 
-from . import texts
+from . import logsetup, texts
 from .config import Config
 from .service import MessageService, ServiceError
 from .store import utc_now
@@ -57,6 +57,12 @@ class Session:
         self.origin = origin
         self.sysop = sysop
         self.monitor = monitor  # log traffic to logger "tinybox.monitor"
+        # Every log line of this connection carries "#7 OE3TEC" (CR32), also the
+        # lines written by store, chat and sync: grep "#7" gives the whole session.
+        self.log_id = logsetup.next_session_id()
+        self.log_ctx = f"#{self.log_id} {call}"
+        self._t0 = time.monotonic()
+        logsetup.counters.sessions += 1
         self.started = utc_now()
         self.state = State.COMMAND
         self.chat_board: str | None = None  # set by ChatHub while in a board
@@ -95,8 +101,9 @@ class Session:
             return
         text = "\r".join(lines) + "\r"
         if self.monitor:
-            for line in lines:
-                log.info("%s > %s", self.call, line)
+            with logsetup.session_context(self.log_ctx):
+                for line in lines:
+                    log.info("> %s", line)
         self.transport.write(text)
 
     # --- terminal paging (CR29) ------------------------------------------
@@ -131,7 +138,8 @@ class Session:
             more = texts.MORE_PROMPT.format(shown=self._page_shown,
                                             total=self._page_shown + len(self._page_rest))
             if self.monitor:
-                log.info("%s > %s", self.call, more.rstrip())
+                with logsetup.session_context(self.log_ctx):
+                    log.info("> %s", more.rstrip())
             self.transport.write(more)
         else:
             self.state = State.COMMAND
@@ -217,12 +225,16 @@ class Session:
 
     def end(self, lost: bool = False) -> None:
         """Called by the adapter when the connection is gone (lost: retries used up)."""
-        if self.state in (State.SEND_SUBJECT, State.SEND_BODY):
-            log.info("%s disconnected while sending, message discarded", self.call)
-        self.state = State.CLOSED
-        self.service.chat.leave(self, reason=texts.CHAT_REASON_LOST if lost
-                                else texts.CHAT_REASON_DISC, lost=lost)
-        self.service.logout(self.call, self.origin)
+        with logsetup.session_context(self.log_ctx):
+            if self.state in (State.SEND_SUBJECT, State.SEND_BODY):
+                log.info("disconnected while sending, message discarded")
+            self.state = State.CLOSED
+            self.service.chat.leave(self, reason=texts.CHAT_REASON_LOST if lost
+                                    else texts.CHAT_REASON_DISC, lost=lost)
+            self.service.logout(self.call, self.origin)
+            logging.getLogger("tinybox.session").info(
+                "session end via %s after %s%s", self.origin, logsetup.ms(self._t0),
+                " - connection lost" if lost else "")
 
     # --- input ----------------------------------------------------------
 
@@ -230,8 +242,19 @@ class Session:
         if self.closed:
             return
         line = line[:MAX_LINE]
+        with logsetup.session_context(self.log_ctx):
+            self._handle_line(line)
+
+    def _handle_line(self, line: str) -> None:
         if self.monitor:
-            log.info("%s < %s", self.call, line)
+            # The text of a mail only as length plus the first characters: the
+            # log is put into chats, other people's post must not ride along.
+            # With LOG DEBUG session it is written in full (CR32).
+            if self.state in (State.SEND_SUBJECT, State.SEND_BODY):
+                log.info("< %s", logsetup.short(line, full=logsetup.debug_on("session")))
+            else:
+                log.info("< %s", line)
+        started = time.monotonic()
         try:
             if self.state == State.COLLECT:
                 self._on_collect(line)
@@ -253,14 +276,19 @@ class Session:
                 chatcmd.handle(self, line)
         except Exception:
             # A bug or a storage error must not kill the connection (or, over
-            # AGW, the whole radio link). Log the traceback, tell the user.
+            # AGW, the whole radio link). The traceback goes to the log together
+            # with the line that caused it - that is what makes it reproducible.
             logging.getLogger("tinybox").exception(
-                "%s: internal error handling %r (state %s)", self.call, line, self.state.name)
+                "internal error handling %r (state %s)", line, self.state.name)
             if self.state != State.CLOSED:
                 self.service.chat.leave(self)
                 self._page_collect, self._page_buf, self._page_rest = False, [], []
                 self.state = State.COMMAND
                 self.out(texts.INTERNAL_ERROR)
+        else:
+            slow = logsetup.ms_if_slow(started)
+            if slow:
+                logging.getLogger("tinybox.commands").debug("%r took %s", line, slow)
         if self.state == State.COMMAND:
             self.prompt()
 
@@ -314,8 +342,9 @@ class Session:
                 done()
         except Exception:
             self._raw_end()
-            logging.getLogger("tinybox").exception(
-                "%s: internal error handling %d raw bytes", self.call, len(data))
+            with logsetup.session_context(self.log_ctx):
+                logging.getLogger("tinybox").exception(
+                    "internal error handling %d raw bytes", len(data))
             if self.state != State.CLOSED:
                 self.out(texts.INTERNAL_ERROR)
 
@@ -329,8 +358,9 @@ class Session:
             return False
         missing = self.raw_need
         _, cancel = self._raw_end()
-        logging.getLogger("tinybox").info(
-            "%s: %d bytes of binary data never arrived, back to lines", self.call, missing)
+        with logsetup.session_context(self.log_ctx):
+            logging.getLogger("tinybox").info(
+                "%d bytes of binary data never arrived, back to lines", missing)
         if cancel is not None and self.state != State.CLOSED:
             cancel()
         return True

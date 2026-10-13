@@ -1,7 +1,7 @@
 """Local sysop console in the TinyBox window.
 
 All mailbox commands work here with sysop rights (L, R, K, E, S, SB ...),
-plus console commands: W, MON, DISC, STATUS, SHUTDOWN, RESTART.
+plus console commands: W, MON, LOG, DISC, STATUS, SHUTDOWN, RESTART.
 Input comes from a background thread reading the keyboard, so the
 mailbox keeps running while the sysop types.
 """
@@ -15,7 +15,7 @@ import threading
 import time
 from typing import Callable
 
-from .. import VERSION, commands, config, texts
+from .. import VERSION, commands, config, logsetup, texts
 from ..app import App
 from ..config import base_call, normalize_call
 from ..session import Session, State
@@ -128,6 +128,46 @@ class SysopConsole:
         elif arg == "":
             self.filter.enabled = not self.filter.enabled
         self.out(texts.MON_STATE.format(state="ON" if self.filter.enabled else "OFF"))
+
+    def cmd_log(self, arg: str) -> None:
+        """LOG, LOG DEBUG agw, LOG OFF [agw], LOG MARK text, LOG BUNDLE (CR32)."""
+        control = self.app.log_control
+        if control is None:
+            self.out(texts.LOG_NO_FILE)
+            return
+        word, _, rest = arg.partition(" ")
+        word, rest = word.upper(), rest.strip()
+        if word in ("DEBUG", "OFF") and not rest and word == "OFF":
+            control.clear_debug()
+        elif word in ("DEBUG", "OFF"):
+            known = control.set_debug(rest.replace(";", ",").split(","), word == "DEBUG")
+            if not known:
+                self.out(texts.LOG_UNKNOWN.format(
+                    comps=" ".join(logsetup.COMPONENTS) + " all"))
+                return
+        elif word == "MARK":
+            if not rest:
+                self.out(texts.USAGE_LOG)
+                return
+            self.out(texts.LOG_MARKED if control.mark(rest) else texts.LOG_NO_FILE)
+            return
+        elif word == "BUNDLE":
+            try:
+                path = logsetup.write_bundle(self.app, control, VERSION)
+            except OSError as exc:
+                self.out(texts.LOG_BUNDLE_FAILED.format(error=exc))
+                return
+            self.out(texts.LOG_BUNDLE_DONE.format(path=path))
+            return
+        elif word:
+            self.out(texts.USAGE_LOG)
+            return
+        path = control.path
+        values = dict(level=control.level,
+                      debug=",".join(sorted(control.debug)) or "-",
+                      file=path or "none ([logging] log_dir is empty)",
+                      size=f"{control.size() / 1024:.0f} kB" if path else "-")
+        self.out(*[line.format(**values) for line in texts.LOG_LINES])
 
     def cmd_disc(self, arg: str) -> None:
         if not arg:
@@ -294,6 +334,7 @@ class SysopConsole:
         "B": cmd_bye, "BYE": cmd_bye,
         "W": cmd_who, "WHO": cmd_who,
         "MON": cmd_monitor,
+        "LOG": cmd_log,
         "DISC": cmd_disc,
         "STATUS": cmd_status,
         "WEB": cmd_web,

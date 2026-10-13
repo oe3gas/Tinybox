@@ -169,6 +169,8 @@ class LoggingCfg:
     level: str
     monitor: bool
     log_dir: Path | None  # None = no log file
+    debug: list[str] = field(default_factory=list)  # components on DEBUG (CR32)
+    keep_days: int = 14                             # older daily files are deleted
 
 
 @dataclass
@@ -370,6 +372,18 @@ def _check_range(sec: str, key: str, value: int, lo: int, hi: int) -> None:
         raise ConfigError(f"[{sec}] {key}: {value} must be between {lo} and {hi}")
 
 
+def _debug_components(value: str) -> list[str]:
+    """[logging] debug = agw,forward - these components go to DEBUG while the
+    rest stays on level (CR32). DEBUG everywhere drowns the file in traffic."""
+    from .logsetup import COMPONENTS
+    names = [n.strip().lower() for n in value.replace(";", ",").split(",") if n.strip()]
+    unknown = [n for n in names if n not in COMPONENTS and n != "all"]
+    if unknown:
+        raise ConfigError(f"[logging] debug: unknown component '{unknown[0]}' "
+                          f"(known: {', '.join(COMPONENTS)}, all)")
+    return names
+
+
 def _check_log_dir(value: str, base: Path) -> Path:
     """The log directory must already exist and be writable."""
     log_dir = Path(value)
@@ -490,9 +504,13 @@ def load(path: str | Path) -> Config:
     if level not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ConfigError(f"[logging] level: unknown level '{level}'")
     log_dir = _get(cp, "logging", "log_dir", "").strip()
+    keep_days = _get(cp, "logging", "keep_days", 14, int)
+    _check_range("logging", "keep_days", keep_days, 0, 3650)
     logging_cfg = LoggingCfg(level=level,
                              monitor=_get(cp, "logging", "monitor", True, bool),
-                             log_dir=_check_log_dir(log_dir, path.parent) if log_dir else None)
+                             log_dir=_check_log_dir(log_dir, path.parent) if log_dir else None,
+                             debug=_debug_components(_get(cp, "logging", "debug", "")),
+                             keep_days=keep_days)
 
     mqtt = MqttCfg(
         enabled=_get(cp, "mqtt", "enabled", False, bool),

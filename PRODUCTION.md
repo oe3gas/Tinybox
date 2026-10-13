@@ -136,6 +136,7 @@ The goal is to write to the eMMC only when real data changes. Reads don't wear t
 |---|---|---|
 | systemd journal (all program output) | RAM, max 16 MB (`Storage=volatile`) | `deploy/journald-tinybox.conf` |
 | brocastd program log | journal only (`log_dir` empty) | `brocastd.conf`, first install |
+| TinyBox program log | journal only (`[logging] log_dir` empty). For troubleshooting set it to `/run/tinybox/logs` – one file per day, every line flushed, so **not** on the eMMC. `keep_days` (default 14) deletes older files. | `tinybox.conf` |
 | Sendeprotokoll | `/run/tinybox/sendeprotokoll`, files older than 7 days deleted | `txlog_dir` in `brocastd.conf`, first install |
 | Inbox (GeoSphere → TinyBox) | `/run/tinybox/eingang`. `erledigt/` is cleaned after 2 days, `fehler/` after 7 days | `[inbox] dir` in `tinybox.conf` (first install) and `--tinybox` in the geosphere units. Both must match. |
 | Python bytecode | precompiled once by `install.sh`, never written at runtime | `PYTHONDONTWRITEBYTECODE=1` in the units |

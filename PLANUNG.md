@@ -308,7 +308,11 @@ Brocast: {"typ":"wx","dat":{"temp":21.3,"hum":31,"qff":1028.5},"blk":[{"k":"seri
   - `chat_lines(id, board, call, text, created)` – nur Boards mit Verlauf
   - `jlog(call, first_seen, last_seen, count)`
   - `users(call, last_login)`
-- Log-Datei optional: `[logging] log_dir` (Ordner muss existieren und beschreibbar sein), pro Start eine Datei `Tinybox_log_<JJJJ-MM-TT_hh-mm-ss>.log`, reiner Text
+- Log-Datei optional: `[logging] log_dir` (Ordner muss existieren und beschreibbar sein),
+  **eine Datei pro Tag** `tinybox-<JJJJ-MM-TT>.log`, reiner Text, feste Spalten mit
+  Session-Nummer; ein Neustart hängt an, `keep_days` räumt Ältere weg. DEBUG je
+  Komponente über `[logging] debug` bzw. im Betrieb mit `LOG DEBUG <komp>`.
+  Entwurf und Leseregeln: CR32 in `docs/client-change-requests.md`
 
 Nachrichtennummern laufen fortlaufend und werden nie wiederverwendet. Für ein Backup genügt es, den Ordner zu kopieren.
 
@@ -335,6 +339,7 @@ C:\Tinybox\                PC2 (Entwicklung); PC1: E:\Tinybox, per git pull
     clientproto.py          Client-Protokoll TB1 (//CLIENT, //BOARDS, //RESEND)
     dictfile.py             Befehl DICT
     texts.py                englische Ausgabetexte
+    logsetup.py             Logging: Tagesdatei, Spalten, Session-Kontext, LOG (CR32)
     adapters\
       agw.py                Direwolf/AGW (annehmen und anrufen)
       telnet.py             Testport

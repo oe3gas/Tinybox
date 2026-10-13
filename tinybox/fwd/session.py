@@ -28,8 +28,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 
+from .. import logsetup
 from ..config import PartnerCfg
 from ..service import MessageService
 from . import b1, lzhuf
@@ -145,6 +147,7 @@ class ForwardSession:
     async def run(self) -> SessionResult:
         log.info("%s: forward session %s %s", self.p.call,
                  "to" if self.master else "from", self.r.transport)
+        started = time.monotonic()
         try:
             await (self._master() if self.master else self._slave())
         except asyncio.TimeoutError:
@@ -158,7 +161,8 @@ class ForwardSession:
         finally:
             await self.link.drain()
             await self.link.close()
-        (log.info if self.r.ok else log.warning)("%s: %s", self.p.call, self.r.summary())
+        (log.info if self.r.ok else log.warning)("%s: %s %s", self.p.call,
+                                                  self.r.summary(), logsetup.ms(started))
         return self.r
 
     async def _master(self) -> None:

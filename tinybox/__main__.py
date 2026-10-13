@@ -7,9 +7,8 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime
 
-from . import VERSION, config, notify, texts
+from . import VERSION, config, logsetup, notify, texts
 from .adapters import agw, brocast, inbox, sysop, telnet, web
 from .app import App
 
@@ -18,28 +17,10 @@ log = logging.getLogger("tinybox")
 SHUTDOWN_GRACE_SEC = 10
 
 
-def setup_logging(cfg: config.Config) -> sysop.MonitorFilter:
-    """Console, plus an optional plain-text log file if [logging] log_dir is set.
-    Returns the console monitor filter (switched with MON ON/OFF)."""
-    cfg.storage.data_dir.mkdir(parents=True, exist_ok=True)
-    root = logging.getLogger()
-    root.setLevel(cfg.logging.level)
-
-    console_filter = sysop.MonitorFilter(cfg.console.monitor)
-    console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(logging.Formatter("[tinyb] %(asctime)s %(message)s", "%H:%M:%S"))
-    console.addFilter(console_filter)
-    root.addHandler(console)
-
-    if cfg.logging.log_dir is not None:
-        name = f"Tinybox_log_{datetime.now():%Y-%m-%d_%H-%M-%S}.log"
-        logfile = logging.FileHandler(cfg.logging.log_dir / name, encoding="utf-8")
-        logfile.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
-        logfile.addFilter(sysop.MonitorFilter(cfg.logging.monitor))
-        root.addHandler(logfile)
-        log.info("log file: %s", cfg.logging.log_dir / name)
-    return console_filter
+def setup_logging(cfg: config.Config) -> tuple[logsetup.LogControl, sysop.MonitorFilter]:
+    """Console, plus one log file per day if [logging] log_dir is set (CR32).
+    Returns the LOG control and the console monitor filter (MON ON/OFF)."""
+    return logsetup.setup(cfg, sysop.MonitorFilter)
 
 
 async def housekeeping(app: App) -> None:
@@ -62,17 +43,22 @@ async def close_sessions(app: App) -> None:
         await asyncio.sleep(0.1)
 
 
-async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter,
+async def run(cfg: config.Config, control: logsetup.LogControl,
+              monitor_filter: sysop.MonitorFilter,
               config_path: str | None = None) -> bool:
     """Runs until SHUTDOWN/RESTART. Returns True for a restart."""
+    # The start block answers the first question when debugging: which version
+    # is running, what is switched on (CR32). It comes before everything else,
+    # so a run always begins with it. Never tokens, only set/unset.
+    for line in logsetup.start_block(cfg, VERSION, config_path, control.path,
+                                     control.debug):
+        log.info("%s", line)
     app = App.create(cfg)
     app.stop_event = asyncio.Event()
     app.config_path = config_path
+    app.log_control = control
     from . import clientnews
     app.service.client_news_id = clientnews.ensure_bulletin(app)
-    log.info("TinyBox %s starting, mailbox %s, sysop %s",
-             VERSION, cfg.station.mailbox_call, cfg.station.sysop_call)
-    log.info("data directory: %s", cfg.storage.data_dir)
 
     servers = []
     if cfg.telnet.enabled:
@@ -113,7 +99,7 @@ async def run(cfg: config.Config, monitor_filter: sysop.MonitorFilter,
             web_server.close()
         await asyncio.gather(*tasks, return_exceptions=True)
         app.store.close()
-        log.info("TinyBox stopped%s.", " for a restart" if app.restart else "")
+        log.info("%s", logsetup.stop_line("RESTART" if app.restart else "SHUTDOWN"))
     return app.restart
 
 
@@ -121,20 +107,42 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tinybox", description="TinyBox mailbox")
     parser.add_argument("-c", "--config", default="tinybox.conf",
                         help="path to tinybox.conf (default: ./tinybox.conf)")
+    parser.add_argument("--debugbundle", action="store_true",
+                        help="write a debug bundle (log, version, config without "
+                             "tokens) and exit - one file to hand over")
     args = parser.parse_args(argv)
     try:
         cfg = config.load(args.config)
     except config.ConfigError as exc:
         print(f"[tinyb] Config error: {exc}", file=sys.stderr)
         return 2
-    monitor_filter = setup_logging(cfg)
+    control, monitor_filter = setup_logging(cfg)
+    if args.debugbundle:
+        return write_bundle_and_exit(cfg, control, args.config)
     restart = False
     try:
-        restart = asyncio.run(run(cfg, monitor_filter, args.config))
+        restart = asyncio.run(run(cfg, control, monitor_filter, args.config))
     except KeyboardInterrupt:
-        log.info("TinyBox stopped (Ctrl+C).")
+        log.info("%s", logsetup.stop_line("Ctrl+C"))
+    except Exception:
+        log.exception("TinyBox stopped by an unexpected error")
+        log.info("%s", logsetup.stop_line("crash"))
+        raise
     if restart:
         return restart_process(argv)
+    return 0
+
+
+def write_bundle_and_exit(cfg: config.Config, control: logsetup.LogControl,
+                          config_path: str) -> int:
+    """--debugbundle without starting the mailbox: the store stays untouched."""
+    app = App.create(cfg)
+    app.config_path = config_path
+    try:
+        path = logsetup.write_bundle(app, control, VERSION)
+    finally:
+        app.store.close()
+    print(f"[tinyb] debug bundle: {path}", flush=True)
     return 0
 
 

@@ -55,11 +55,18 @@ monitor = yes                  # show live session traffic there (toggle: MON)
 data_dir = data
 
 [logging]
-level   = INFO                 # DEBUG, INFO, WARNING, ERROR
-monitor = yes                  # include session traffic in the log file
-log_dir =                      # empty = no log file. Otherwise an existing,
+level     = INFO               # DEBUG, INFO, WARNING, ERROR
+monitor   = yes                # include session traffic in the log file
+log_dir   =                    # empty = no log file. Otherwise an existing,
                                # writable folder, e.g. logs or D:\Logs\Tinybox.
-                               # Each start creates Tinybox_log_<date>_<time>.log
+                               # One file per day: tinybox-<date>.log, a restart
+                               # appends to it (console command LOG shows the path)
+keep_days = 14                 # delete log files older than this (0 = keep all)
+debug     =                    # extra DEBUG for single components, e.g. agw,fwd
+                               # (level stays as above for the rest). Known:
+                               # agw bus brocast chat cmd core fwd inbox linkq
+                               # news notify session store svc sync sysop telnet
+                               # web - or all. At runtime: LOG DEBUG agw
 
 [brocast]
 dict_file  = brocast/brocast-core.yaml  # DICT command; empty = not offered

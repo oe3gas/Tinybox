@@ -17,9 +17,39 @@ py -3 -m tinybox -c tinybox.conf
 
 Beenden mit `SHUTDOWN` (verbundene Stationen werden 60 s vorher gewarnt) oder sofort mit `SHUTDOWN NOW` bzw. Ctrl+C. Die Daten liegen unter `data\`.
 
-Log-Datei: in `tinybox.conf` unter `[logging]` einen vorhandenen Ordner bei
-`log_dir` eintragen (z. B. `logs`). Jeder Start legt dort
-`Tinybox_log_<Datum>_<Uhrzeit>.log` an. Leer = keine Log-Datei.
+## Log-Datei
+
+In `tinybox.conf` unter `[logging]` einen vorhandenen Ordner bei `log_dir`
+eintragen (z. B. `logs`). Leer = keine Log-Datei.
+
+Dort entsteht **eine Datei pro Tag**, `tinybox-<Datum>.log`; ein Neustart hängt
+an dieselbe Datei an, Dateien älter als `keep_days` (Standard 14) werden gelöscht.
+Eine Zeile ist ein Ereignis, in festen Spalten:
+
+```
+2026-10-13 20:08:29.944 I session  #1 OE3TEC    < L
+Zeit mit ms             |  Level  |  Komponente  |  #Session Call  |  Meldung
+```
+
+`<` ist Eingabe der Station, `>` Ausgabe der TinyBox, `<<` und `>>` sind
+AGW-Frames; eine Zahl in Klammern ist eine Dauer. Die Session-Nummer steht in
+jeder Zeile dieser Verbindung – `grep "#1"` liefert sie vollständig. Jeder Lauf
+beginnt mit einem Block aus `-----`-Zeilen, der Version, Commit und die aktiven
+Adapter nennt, und endet mit einer Schlusszeile samt Zählern. Die ersten drei
+Zeilen jeder Datei sind eine Legende.
+
+In der Sysop-Konsole:
+
+| Befehl | Wirkung |
+|---|---|
+| `LOG` | Level, eingeschaltete Debug-Komponenten, Dateipfad und -größe |
+| `LOG DEBUG agw` | zusätzliches DEBUG nur für eine Komponente, ohne Neustart |
+| `LOG OFF [agw]` | zurück auf den normalen Level (ohne Namen: alle) |
+| `LOG MARK Text` | Markenzeile ins Log – Marke setzen, Fehler auslösen, „ab der Marke“ |
+| `LOG BUNDLE` | eine Datei mit Log, Version und Konfiguration (ohne Token) zum Weitergeben |
+
+Dasselbe Paket ohne laufende TinyBox: `py -3 -m tinybox --debugbundle`.
+Details in `docs/client-change-requests.md`, CR32.
 
 ## Ohne Funk testen (Telnet-Testport)
 
