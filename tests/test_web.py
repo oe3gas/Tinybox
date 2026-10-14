@@ -77,6 +77,19 @@ class WebTests(unittest.TestCase):
         self.assertEqual(t1, t2)
         self.assertGreaterEqual(len(t1), 32)
 
+    def test_status_names_the_radio_interface(self):
+        """Header: 'Direwolf connected via AGW' / 'via KISS' (PLANUNG.md 15)."""
+        async def scenario(s):
+            cookie, _ = await self.login(s)
+            _, _, payload = await request(s.port, "GET", "/api/status", cookie=cookie)
+            return json.loads(payload)
+
+        st = self.run_async(scenario)
+        self.assertEqual(st["interface"], "agw")
+        app_js = (Path(__file__).resolve().parent.parent / "tinybox/web/app.js").read_text(
+            encoding="utf-8")
+        self.assertIn('" via " + st.interface.toUpperCase()', app_js)
+
     def test_security_checks(self):
         async def scenario(s):
             results = {}

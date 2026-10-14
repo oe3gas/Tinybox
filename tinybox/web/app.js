@@ -102,6 +102,8 @@ async function refreshStatus() {
   $("hdr-mailbox").textContent = st.mailbox;
   $("hdr-sysop").textContent = st.sysop;
   $("hdr-agw").textContent = st.agw;
+  // how TinyBox reaches the radio: Direwolf does AX.25 (AGW) or TinyBox itself (KISS)
+  $("hdr-via").textContent = st.interface ? " via " + st.interface.toUpperCase() : "";
   $("hdr-dot").className = "dot " + (st.agw === "connected" ? "ok" : "bad");
   $("hdr-users").textContent = st.users + " / " + st.max_users;
   $("hdr-msgs").textContent = st.messages;
@@ -209,6 +211,7 @@ function startFeed() {
   es.onerror = () => {
     $("hdr-dot").className = "dot bad";
     $("hdr-agw").textContent = "TinyBox unreachable";
+    $("hdr-via").textContent = "";
   };
   es.onmessage = (e) => {
     const item = JSON.parse(e.data);
