@@ -1080,8 +1080,17 @@ const IMG_SHRINK_MAX = 8192;            // fallback if the board says nothing
 /* Three sizes to choose from (CR34): the target in bytes decides the time on
  * air, the long side in px keeps the picture sharp enough for that size.
  * "normal" is [images] target_bytes of the client (4 kB), "small" half of it,
- * "large" the board's limit; the choice is remembered in the browser. */
-const IMG_SIZES = { small: { px: 192, of: 0.5 }, normal: { px: 256, of: 1 }, large: { px: 320, of: 0 } };
+ * "large" the board's limit; the choice is remembered in the browser.
+ * The picture is shown in the chat at its own pixel size (CR36), so the
+ * three sizes differ on the screen as well: 108 / 192 / 320 px. */
+const IMG_SIZES = { small: { px: 108, of: 0.5 }, normal: { px: 192, of: 1 }, large: { px: 320, of: 0 } };
+/* Width in px for the blurred placeholder - the pixels are not on the wire,
+ * only the bytes, so guess the size step from them. */
+function imgGuessPx(bytes) {
+  const normal = imgTarget("normal"), small = imgTarget("small");
+  return bytes <= (small + normal) / 2 ? IMG_SIZES.small.px
+       : bytes <= (normal + imgTarget("large")) / 2 ? IMG_SIZES.normal.px : IMG_SIZES.large.px;
+}
 function imgTarget(size) {
   const limit = (S && S.board && S.board.img) || IMG_SHRINK_MAX;
   const normal = Math.min(limit, (S && S.img && S.img.target) || 4096);
@@ -1117,9 +1126,13 @@ function imgTime(size, sending) {
 }
 
 /* Draw a blurhash into a canvas the shape of its components (3x2 = landscape). */
-function blurCanvas(bh, cls) {
+function blurCanvas(bh, cls, bytes) {
   const sh = blurhashShape(bh);
   const c = el("canvas", cls);
+  if (bytes) {                            // CR36: placeholder about as big as the picture
+    const px = imgGuessPx(bytes);
+    c.style.width = (sh.nx >= sh.ny ? px : Math.round((px * sh.nx) / sh.ny)) + "px";
+  }
   const w = 32, h = Math.max(4, Math.round((32 * sh.ny) / sh.nx));
   c.width = w; c.height = h;
   const px = blurhashDecode(bh, w, h);
@@ -1140,7 +1153,7 @@ function imageBlock(ref, own) {
     box.append(img);
     return box;
   }
-  box.append(blurCanvas(ref.bh, "blur"));
+  box.append(blurCanvas(ref.bh, "blur", ref.size));
   const ov = el("div", "imgov");
   const ld = I.loading[ref.hash];
   if (ld && ld.error) {
@@ -1195,7 +1208,7 @@ function uploadBubble(up) {
   const box = el("div", "imgbox");
   if (ref && (S.images.have || []).includes(ref.hash)) {
     const img = el("img"); img.src = "/img/" + ref.hash; img.alt = "image"; box.append(img);
-  } else if (ref) box.append(blurCanvas(ref.bh, "blur"));
+  } else if (ref) box.append(blurCanvas(ref.bh, "blur", up.size || ref.size));
   const ov = el("div", "imgov");
   if (up.state === "error") {
     ov.append(el("div", "", `⚠ not sent: ${up.error}`));
@@ -1270,15 +1283,25 @@ async function shrinkImage(file, maxBytes, longPx = 320) {
 
 let imgPick = null;                      // {blob, bh} waiting for OK in the dialog
 let imgFile = null;                      // the chosen file, shrunk again on a size change
+let imgAspect = null;                    // width / height of the chosen file
 let imgSize = "normal";
 try { imgSize = localStorage.getItem("tb.imgsize") || "normal"; } catch (e) { /* no storage */ }
 if (!IMG_SIZES[imgSize]) imgSize = "normal";
 
+/* CR36: the three size buttons carry their numbers: pixels (from the shape
+ * of the chosen file), bytes and the time to upload. */
 function imgSizeButtons() {
   for (const b of document.querySelectorAll("#imgdlg-size button")) {
-    const size = b.dataset.size;
+    const size = b.dataset.size, px = IMG_SIZES[size].px, bytes = imgTarget(size);
     b.classList.toggle("on", size === imgSize);
-    b.title = `about ${kbText(imgTarget(size))}, ${secText(imgTime(imgTarget(size), true))}`;
+    let dims = `${px} px`;
+    if (imgAspect) {
+      const w = imgAspect >= 1 ? px : Math.round(px * imgAspect);
+      const h = imgAspect >= 1 ? Math.round(px / imgAspect) : px;
+      dims = `${w}×${h}`;
+    }
+    b.textContent = "";
+    b.append(el("b", "", size), el("span", "", ` (${dims}), ~${kbText(bytes)}, ${secText(imgTime(bytes, true))}`));
   }
 }
 async function pickImageSize(size) {
@@ -1290,7 +1313,7 @@ async function pickImageSize(size) {
 }
 async function chooseImage(file) {
   if (!file || !S || !S.board || !S.board.img) return;
-  imgFile = file;
+  imgFile = file; imgAspect = null;
   $("imgdlg-caption").value = $("input").value;
   $("imgdlg").classList.remove("hidden");
   imgSizeButtons();
@@ -1310,13 +1333,14 @@ async function shrinkForDialog() {
     return;
   }
   imgPick = r;
+  if (!imgAspect) { imgAspect = r.w / r.h; imgSizeButtons(); }
   $("imgdlg-text").textContent =
-    `The picture is reduced to ${r.w}×${r.h} px, about ${kbText(r.blob.size)}. ` +
-    `Upload ${secText(imgTime(r.blob.size, true))}, loading for others ${secText(imgTime(r.blob.size, false))} ` +
-    `(at ${S.img.rate} bytes/s). The chat line itself carries only ${26 + r.bh.length - 16} bytes.`;
+    `${r.w}×${r.h} px, ${kbText(r.blob.size)}: upload ${secText(imgTime(r.blob.size, true))}, ` +
+    `loading for others ${secText(imgTime(r.blob.size, false))} (at ${S.img.rate} bytes/s). ` +
+    `The chat line itself carries only ${26 + r.bh.length - 16} bytes.`;
   $("imgdlg-ok").disabled = false;
 }
-function closeImageDialog() { $("imgdlg").classList.add("hidden"); imgPick = imgFile = null; $("imgfile").value = ""; }
+function closeImageDialog() { $("imgdlg").classList.add("hidden"); imgPick = imgFile = imgAspect = null; $("imgfile").value = ""; }
 async function sendImage() {
   if (!imgPick) return;
   const { wire, bad } = textToWire($("imgdlg-caption").value);

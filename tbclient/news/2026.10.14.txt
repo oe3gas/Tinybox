@@ -1,0 +1,4 @@
+- Bilder im Chat in eigener Groesse: klein (108 px) bleibt klein,
+  normal 192 px, gross 320 px.
+- Bild-Dialog: Groessenknoepfe untereinander mit Pixel, Bytes und
+  Uploaddauer, Bildunterschrift daneben.

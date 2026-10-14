@@ -42,6 +42,7 @@ Stand: 13.10.2026 (CR35 umgesetzt)
 | 33 | Teilnehmernummern und Verbindungsdetails im Client (Detailansicht je Station) | ✅ siehe unten |
 | 34 | Bildübertragung schneller (256-Byte-Frames, Bild am Stück an Direwolf) | ✅ siehe unten |
 | 35 | Bug: Bekanntes Bild ließ sich nicht erneut in den Chat stellen – Upload brach stumm ab | ✅ siehe unten |
+| 36 | Bildgröße im Chat sichtbar (klein bleibt klein), Größenwahl mit Zahlen in den Knöpfen | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -699,3 +700,13 @@ mitkommen, wenn die Datei in einen Chat gelegt wird.
 **Lösung:** Kommt `//IMGOK` ohne vorheriges `//IMGGO`, sendet der Client nur die Chat-Zeile (`~#<hash>…` + Bildtext). Das Bild erscheint wieder im Chat, die anderen Stationen holen es wie sonst von der TinyBox bzw. haben es schon. Upload-Status trägt `known=True`. TinyBox unverändert.
 
 - Client-Version 2026.10.13.5. Test: `test_tbclient.py` (`ImageHoldTests.test_known_picture_sends_only_the_chat_line`).
+
+## CR36 – Bildgröße im Chat und Größenwahl im Dialog (✅ 14.10.2026)
+
+**Problem:** Ein „small“-Bild (gröbere Auflösung) wurde im Chat genauso groß angezeigt wie ein „large“-Bild – die Bubble streckte jedes Bild auf 240 px. Die Wahl im Dialog bestimmte nur die Bytes, auf dem Schirm war kein Unterschied. Außerdem standen die Zahlen (Pixel, Bytes, Dauer) nur als Hinweistext unter den drei Größenknöpfen.
+
+**Lösung:**
+- Größenstufen jetzt **108 / 192 / 320 px** lange Seite (vorher 192 / 256 / 320) bei unverändert 2 kB / 4 kB / Board-Limit.
+- **Anzeige in eigener Pixelgröße:** die Bild-Box folgt dem Bild (`fit-content`, höchstens 320 px bzw. 70 % der Fensterbreite). Der unscharfe Platzhalter vor dem Laden bekommt seine Breite aus den Bytes (die Pixel gehen nicht über Funk): bis ≈ 3 kB → 108 px, bis ≈ 6 kB → 192 px, sonst 320 px.
+- **Dialog:** „Select size“ mit drei Knöpfen untereinander, jeder trägt seine Zahlen, z. B. `small (108×81), ~2.0 KB, ~30 s` – Pixel aus dem Seitenverhältnis des gewählten Bildes, Dauer aus `bytes_per_sec`. Rechts daneben die Bildunterschrift, darunter die kurze Zeile mit dem tatsächlichen Ergebnis (Pixel, Bytes, Upload-/Ladedauer). Unter 700 px Breite rutscht die Unterschrift unter die Knöpfe.
+- Client-Version 2026.10.14. Nur Web-GUI (`index.html`, `app.js`, `app.css`), kein Protokoll berührt.
