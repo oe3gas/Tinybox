@@ -281,13 +281,24 @@ py -3 geosphere_station.py --tinybox     Mailbox (Text) + brocast (Wetterseite)
 py -3 geosphere_station.py --brocast     nur zum Testen ohne TinyBox: direkt an brocastd
 py -3 geosphere_station.py --region --tinybox
                                          24 Stationen Wein-/Waldviertel: Einzelberichte
-                                         + Gesamtueberblick (Tabellenseite, 4-5 Frames)
+                                         (je eine wx-Seite) + Gesamtueberblick
+                                         "Wetter Wein- & Waldviertel" (Tabellenseite,
+                                         gepackt 3 Frames)
 ```
 
 Die Listener-Oberfläche zeigt Seiten vom typ `wx` als Kacheln (Temperatur mit
 24-h-Spanne, Windrose, Luftdruck mit Tendenz, Feuchte, Verlauf, Niederschlag).
 Felder, die die Ansicht nicht kennt, erscheinen darunter als einfache Werte.
 Offline-Vorschau ohne laufenden brocastd: `mockup\wx-vorschau.html`.
+
+Der Gesamtüberblick ist eine Tabellenseite (`typ text`, Blöcke `table`), deren
+erster Block mit `n` die Spaltenbedeutung mitschickt (`["name", "temp", "wdir",
+"wspd", "gust", "r24h"]`, Namen aus dem Wetter-Dictionary). Der Listener macht
+daraus das Wetterraster: Extremwerte der Region, Temperaturbalken, Windpfeile,
+Regenbalken; Zeilen mit nur einer Zelle (`["Weinviertel"]`) sind Gruppen. Der
+Knopf **Grafisch / Text** auf der Seite schaltet auf die schlichte Tabelle bzw.
+bei `wx`-Seiten auf Wertekarten um (gemerkt im Browser). Vorschau:
+`mockup\wx-region-vorschau.html`.
 
 ## Rubriken der Station (Indexseite)
 

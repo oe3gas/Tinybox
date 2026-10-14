@@ -2,8 +2,11 @@
 rem ======================================================================
 rem  Windows-Aufgabenplanung fuer die GeoSphere-Skripte einrichten (PC2).
 rem   - Wetter:     stuendlich um xx:05 -> 24 Stationen Wein-/Waldviertel als
-rem                 Einzelberichte (nur Text in der Mailbox) + Gesamtueberblick
-rem                 (Text + brocast-Tabellenseite, 5 Frames) an WX (Replace, Valid 2h)
+rem                 Einzelberichte (Text + brocast-Wetterseite typ wx, je 1 Frame)
+rem                 + Gesamtueberblick (Text + brocast-Tabellenseite, ~5 Frames)
+rem                 an WX (Replace, Valid 2h). Nicht --einzel-ohne-brocast: die
+rem                 TinyBox sendet jedes Bulletin, ohne Wetterseite ginge der
+rem                 (groessere) Text ueber Funk und der Listener zeigt nur Text.
 rem   - Warnungen:  alle 15 Minuten     -> Bulletin an WARN (nur bei Aenderung)
 rem  Die Dateien landen in eingang\, TinyBox macht Bulletins daraus,
 rem  brocast sendet sie. Fehler stehen in logs\geosphere.log.
@@ -23,7 +26,7 @@ echo Python ohne Konsole: %PYW%
 if not exist "%~dp0logs" mkdir "%~dp0logs"
 
 schtasks /Create /F /TN "brocast\GeoSphere Wetter" /SC HOURLY /MO 1 /ST 00:05 ^
-  /TR "\"%PYW%\" -3 \"%~dp0geosphere_station.py\" --region --tinybox --einzel-ohne-brocast --log \"%~dp0logs\geosphere.log\""
+  /TR "\"%PYW%\" -3 \"%~dp0geosphere_station.py\" --region --tinybox --log \"%~dp0logs\geosphere.log\""
 if errorlevel 1 goto fehler
 
 schtasks /Create /F /TN "brocast\GeoSphere Warnungen" /SC MINUTE /MO 15 ^
@@ -33,7 +36,7 @@ if errorlevel 1 goto fehler
 echo.
 echo Fertig. Die Aufgaben stehen in der Aufgabenplanung unter "brocast".
 echo Erster Testlauf jetzt (mit Ausgabe):
-py -3 "%~dp0geosphere_station.py" --region --tinybox --einzel-ohne-brocast --log "%~dp0logs\geosphere.log"
+py -3 "%~dp0geosphere_station.py" --region --tinybox --log "%~dp0logs\geosphere.log"
 py -3 "%~dp0geosphere_warnungen.py" --tinybox --log "%~dp0logs\geosphere.log"
 echo.
 echo In eingang\erledigt\ sollten jetzt geosphere_wetter_region.txt und 24 x geosphere_wetter_^<ID^>.txt liegen.

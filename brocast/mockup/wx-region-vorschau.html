@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wetter Wein- & Waldviertel</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+/* Vorschau der brocast-Listener-Seite: bewusst nur das helle Listener-Design (color-scheme light) */
+:root {
+  --ink: #111111; --ink-2: #222222; --ink-3: #4a4a4a;
+  --ground: #E9E9E6; --paper: #FFFFFF; --paper-2: #F6F6F3; --rule: #C9C9C4;
+  --accent: #0B4A8F; --accent-dark: #062F5C;
+  --ok: #0B7A2F; --warn: #9A5B00; --danger: #A3001B;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Cascadia Mono", monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.45 var(--sans); color: var(--ink); background: var(--ground);
+       padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+       padding-block: 0 40px; font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; }
+.grow { flex-grow: 1; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btn { height: 34px; padding: 0 11px; font-weight: 700; font-size: 13px; background: var(--paper);
+       border: 2px solid var(--ink); border-radius: 6px; cursor: pointer; display: inline-flex;
+       align-items: center; gap: 6px; white-space: nowrap; }
+.btn:hover { background: var(--paper-2); }
+.btn.on { background: var(--ink); color: #fff; }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+.btn.danger:hover { background: var(--danger); color: #fff; }
+.note { background: #fff; border: 2px solid var(--accent); border-radius: 8px; padding: 10px 14px; margin: 18px 0 10px; font-size: 14px; max-width: 860px; }
+.note b { color: var(--accent); }
+.pagewrap { max-width: 860px; padding: 22px 0 10px; }
+.pagetitle { font-size: 27px; font-weight: 800; margin: 0 0 6px; line-height: 1.2; overflow-wrap: anywhere; text-wrap: balance; }
+.pmeta { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 14px; color: var(--ink-3); margin-bottom: 14px; }
+.pmeta b { color: var(--ink); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 2px solid var(--ink); margin-bottom: 18px; }
+.content { min-width: 0; }
+.content p { margin: 0 0 12px; font-size: 16px; max-width: 70ch; }
+.tblwrap { overflow-x: auto; }
+table.tbl { border-collapse: collapse; margin: 4px 0 16px; background: #fff; font-size: 14px; }
+table.tbl th, table.tbl td { border: 1.5px solid var(--ink); padding: 6px 10px; text-align: left; }
+table.tbl th { background: var(--paper-2); }
+table.tbl th.grp { text-align: left; letter-spacing: .04em; text-transform: uppercase; font-size: 12px; }
+/* ---------- weather grid (table block with column semantics in n) ---------- */
+.wxg { margin: 4px 0 16px; min-width: 0; container-type: inline-size; }
+.wxg-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.wxg-tile { background: #fff; border: 2px solid var(--ink); border-radius: 10px; padding: 10px 14px 12px; min-width: 0; }
+.wxg-cap { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.wxg-st { font-weight: 700; margin-top: 3px; overflow-wrap: anywhere; }
+.wxg-val { font: 700 28px/1.15 var(--mono); letter-spacing: -.02em; }
+.wxg-val small { font-size: 14px; font-weight: 600; margin-left: 4px; letter-spacing: 0; }
+.wxg-note { font-size: 13px; color: var(--ink-3); margin-top: 2px; }
+.wxg-scroll { overflow-x: auto; }
+.wxg-grid { background: #fff; border: 2px solid var(--ink); border-radius: 10px; overflow: hidden; min-width: 600px; }
+.wxg-row { display: grid; grid-template-columns: var(--wxg-cols); gap: 0 16px; align-items: center;
+           padding: 5px 14px; border-top: 1px solid var(--rule); font-size: 14px; }
+.wxg-head { border-top: 0; background: var(--paper-2); padding: 7px 14px; font-size: 12px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+.wxg-head small { font: 600 12px var(--mono); text-transform: none; letter-spacing: 0; }
+.wxg-group { padding: 6px 14px 4px; border-top: 2px solid var(--ink); background: var(--paper-2);
+             font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.wxg-row + .wxg-group { margin-top: 0; }
+.wxg-name { font-weight: 600; overflow-wrap: anywhere; }
+.wxg-row b { font: 700 15px var(--mono); white-space: nowrap; }
+.wxg-row b.dim, .wxg-row .dim { color: var(--ink-3); font-weight: 600; }
+.wxg-row small { font: 12px var(--mono); color: var(--ink-3); white-space: nowrap; }
+.wxg-temp, .wxg-rain, .wxg-hum { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wxg-temp b, .wxg-rain b, .wxg-hum b { min-width: 3.2ch; text-align: right; }
+.wxg-bar { flex: 1; height: 11px; border: 1.5px solid var(--rule); border-radius: 6px; background: #fff; min-width: 30px; }
+.wxg-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px 0 0 4px; }
+.wxg-wind { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.wxg-arrow { width: 20px; height: 20px; flex-shrink: 0; fill: var(--ink); }
+.wxg-dir { font: 600 13px var(--mono); min-width: 3.3ch; color: var(--ink-2); }
+.wxg-gust { display: flex; align-items: center; gap: 8px; }
+.wxg-bft { font: 700 11px var(--mono); padding: 1px 7px; border: 1.5px solid var(--ink-3); border-radius: 999px;
+           color: var(--ink-3); white-space: nowrap; }
+.wxg-bft.strong { color: var(--warn); border-color: var(--warn); }
+/* narrow page pane: tighter columns, no km/h, two summary tiles per row */
+@container (max-width: 640px) {
+  .wxg-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wxg-grid { min-width: 440px; }
+  .wxg-row { grid-template-columns: var(--wxg-cols-narrow); gap: 0 8px; padding-left: 10px; padding-right: 10px; }
+  .wxg-wind small { display: none; }
+  .wxg-dir { min-width: 0; }
+}
+
+@media (max-width: 700px) {
+  .pagetitle { font-size: 23px; }
+  .pmeta { font-size: 12px; gap: 2px 12px; }
+  .wxg-val { font-size: 22px; }
+}
+</style>
+
+<div class="pagewrap">
+  <h1 class="pagetitle">Wetter Wein- &amp; Waldviertel 14:50</h1>
+  <div class="pmeta">
+    <span>Station <b>OE3GAS-5</b></span><span>Rubrik <b>Wetter</b></span><span>Typ <b>Textseite / Bulletin</b></span>
+    <span>Stand <b>14:54</b></span><span>Revision <b>0</b></span><span>gültig bis <b>16:54</b></span>
+    <span>Sendezeit ca. <b>3,9 s</b></span><span>Quelle <b>GeoSphere Austria, TAWES (CC BY 4.0)</b></span>
+  </div>
+  <div class="actions">
+    <button class="btn" type="button">☆ Merken</button>
+    <button class="btn" type="button">Als ungelesen markieren</button>
+    <button class="btn on" type="button" id="btn-graphic">Grafisch</button>
+    <button class="btn" type="button">Rohansicht</button>
+    <button class="btn" type="button">Empfangslog</button>
+    <span class="grow"></span>
+    <button class="btn danger" type="button">Löschen</button>
+  </div>
+  <div class="content" id="content"></div>
+  <div class="note"><b>Vorschau.</b> So zeigt der brocast-Listener die Tabellenseite künftig an. Über Funk geht dieselbe Tabelle wie bisher (plus Spaltenbedeutung und zwei Gruppenzeilen, zusammen rund 60 Bytes mehr); die grafische Aufbereitung – Extremwerte, Farbbalken, Windpfeile – rechnet der Listener aus den Zahlen. Der Knopf <b>Grafisch / Text</b> schaltet zwischen beiden Ansichten um; die Wahl merkt sich der Browser.</div>
+</div>
+
+<script>
+"use strict";
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e.textContent = String(text); return e; }
+function svg(tag, attrs) { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); return e; }
+function num(v) { return typeof v === "number" ? v.toLocaleString("de-AT", { maximumFractionDigits: 1, useGrouping: false }) : (v === null || v === undefined ? "" : String(v)); }
+const WX_DIRS = ["N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+function wxDir(deg) { return WX_DIRS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16]; }
+function wxBft(ms) { const limits = [0.3, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.7]; const i = limits.findIndex(g => ms < g); return i < 0 ? 12 : i; }
+function wxNum(v, digits = 1) { return v.toLocaleString("de-AT", { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false }); }
+function wxClamp(x) { return Math.max(0, Math.min(100, x)); }
+
+/* ---------- weather grid (table block with column semantics) ----------
+ * A table block whose "n" is a list of column meanings – dat keys of the
+ * weather dictionary such as "temp", "wdir", "wspd", "gust", "r24h"; any other
+ * entry (e.g. "name") is a plain text column – is drawn as a weather grid:
+ * temperature bars coloured by value, wind arrows, rain bars and a summary of
+ * the extremes above. Rows with a single text cell are group headings
+ * ("Weinviertel"). Continuation blocks (no hdr) inherit hdr and n of the last
+ * table block that had them, as they do in the plain table. The plain table
+ * stays available with the "Text" button (state.graphic). */
+
+const WXG_TEMP = ["temp", "dew", "tmin", "tmax"];
+const WXG_SPEED = ["wspd", "gust", "gust10", "gmax"];
+const WXG_RAIN = ["r10m", "r1h", "rday", "r24h"];
+const WXG_KEYS = [...WXG_TEMP, ...WXG_SPEED, ...WXG_RAIN, "wdir", "hum"];
+
+function wxgCols(b) {
+  return Array.isArray(b.n) && b.n.some(k => WXG_KEYS.includes(k)) ? b.n : null;
+}
+
+/* diverging around the freezing point: blue below 0 °C, warm hues above,
+ * neutral grey at 0 – darker the further from zero */
+function wxgTempColor(t) {
+  if (t <= 0) { const k = Math.min(1, -t / 20); return `hsl(214 ${40 + 45 * k}% ${66 - 32 * k}%)`; }
+  const k = Math.min(1, t / 35);
+  return `hsl(${34 - 18 * k} ${50 + 40 * k}% ${66 - 30 * k}%)`;
+}
+
+function wxgArrow(deg) {            // points where the wind blows to (from deg + 180)
+  const s = svg("svg", { viewBox: "-12 -12 24 24", class: "wxg-arrow", role: "img",
+                         "aria-label": `Wind aus ${wxDir(deg)}` });
+  s.append(svg("path", { d: "M0,-10 L5,2 L1.5,0.5 L1.5,10 L-1.5,10 L-1.5,0.5 L-5,2 Z",
+                         transform: `rotate(${(deg + 180) % 360})` }));
+  return s;
+}
+
+function wxgBar(pct, color) {
+  const b = el("div", "wxg-bar");
+  const i = el("i");
+  i.style.width = wxClamp(pct) + "%";
+  if (color) i.style.background = color;
+  b.append(i);
+  return b;
+}
+
+/* rows: [[cell, ...], ...] already scaled; cols: the n list; hdr: header texts */
+function wxGrid(rows, cols, hdr, withSummary) {
+  const idx = k => cols.indexOf(k);
+  const col = (keys) => keys.map(idx).find(i => i >= 0) ?? -1;
+  const cTemp = col(WXG_TEMP), cDir = idx("wdir"), cSpd = col(["wspd"]), cGust = col(["gust", "gust10", "gmax"]),
+        cRain = col(WXG_RAIN), cHum = idx("hum");
+  const textCols = cols.map((k, i) => WXG_KEYS.includes(k) ? -1 : i).filter(i => i >= 0);
+  const data = rows.filter(r => Array.isArray(r) && r.length > 1);
+  const numsOf = c => c < 0 ? [] : data.map(r => r[c]).filter(x => typeof x === "number");
+  const temps = numsOf(cTemp), gusts = numsOf(cGust), rains = numsOf(cRain), spds = numsOf(cSpd);
+  const tMin = Math.min(...temps), tMax = Math.max(...temps);
+  const gMax = Math.max(0, ...gusts), rMax = Math.max(0, ...rains);
+  const name = r => textCols.map(i => r[i]).filter(x => x !== null && x !== undefined).join(" ");
+  const label = (c, fallback) => (Array.isArray(hdr) && typeof hdr[c] === "string") ? hdr[c] : fallback;
+
+  const wrap = el("div", "wxg");
+
+  // summary: the extremes of the whole table
+  if (withSummary && data.length > 1) {
+    const sum = el("div", "wxg-sum");
+    const tile = (title, r, value, unit, note) => {
+      const t = el("div", "wxg-tile");
+      t.append(el("div", "wxg-cap", title), el("div", "wxg-st", name(r)));
+      const v = el("div", "wxg-val", value);
+      v.append(el("small", null, unit));
+      t.append(v);
+      if (note) t.append(el("div", "wxg-note", note));
+      return t;
+    };
+    const pick = (c, fn) => data.filter(r => typeof r[c] === "number").reduce((a, r) => a === null || fn(r[c], a[c]) ? r : a, null);
+    if (temps.length) {
+      const hi = pick(cTemp, (x, y) => x > y), lo = pick(cTemp, (x, y) => x < y);
+      sum.append(tile("Wärmste Station", hi, wxNum(hi[cTemp]), "°C"),
+                 tile("Kälteste Station", lo, wxNum(lo[cTemp]), "°C",
+                      `Spanne ${wxNum(hi[cTemp] - lo[cTemp])} K`));
+    }
+    if (gusts.length) {
+      const g = pick(cGust, (x, y) => x > y);
+      sum.append(tile("Stärkste Böe", g, wxNum(g[cGust]), "m/s", `${Math.round(g[cGust] * 3.6)} km/h · Bft ${wxBft(g[cGust])}`));
+    }
+    if (rains.length) {
+      const r = pick(cRain, (x, y) => x > y);
+      const wet = rains.filter(x => x > 0).length;
+      sum.append(tile("Meiste Regen", r, wxNum(r[cRain]), "mm",
+                      r[cRain] > 0 ? `an ${wet} von ${rains.length} Stationen` : "überall trocken"));
+    }
+    wrap.append(sum);
+  }
+
+  // header row of the grid; the column template follows the columns present
+  const grid = el("div", "wxg-grid");
+  // (wide / narrow pane – the narrow template applies below 640px container width)
+  const tpl = ["minmax(118px, 1.1fr)"], narrow = ["minmax(84px, 1.1fr)"];
+  if (cTemp >= 0) { tpl.push("minmax(150px, 2fr)"); narrow.push("minmax(96px, 2fr)"); }
+  if (cSpd >= 0 || cDir >= 0) { tpl.push("minmax(150px, 1.6fr)"); narrow.push("minmax(86px, 1.4fr)"); }
+  if (cGust >= 0) { tpl.push("minmax(96px, 1fr)"); narrow.push("minmax(70px, 1fr)"); }
+  if (cHum >= 0) { tpl.push("minmax(110px, 1.2fr)"); narrow.push("minmax(80px, 1.2fr)"); }
+  if (cRain >= 0) { tpl.push("minmax(110px, 1.4fr)"); narrow.push("minmax(80px, 1.4fr)"); }
+  grid.style.setProperty("--wxg-cols", tpl.join(" "));
+  grid.style.setProperty("--wxg-cols-narrow", narrow.join(" "));
+  const head = el("div", "wxg-row wxg-head");
+  head.append(el("span", null, textCols.length ? label(textCols[0], "Station") : "Station"));
+  if (cTemp >= 0) {
+    const h = el("span", null, label(cTemp, "Temperatur"));
+    if (temps.length > 1) h.append(el("small", null, ` ${wxNum(tMin)} … ${wxNum(tMax)}`));
+    head.append(h);
+  }
+  if (cSpd >= 0 || cDir >= 0) head.append(el("span", null, label(cSpd >= 0 ? cSpd : cDir, "Wind")));
+  if (cGust >= 0) head.append(el("span", null, label(cGust, "Böe")));
+  if (cHum >= 0) head.append(el("span", null, label(cHum, "Feuchte")));
+  if (cRain >= 0) head.append(el("span", null, label(cRain, "Niederschlag")));
+  grid.append(head);
+
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    if (r.length === 1) {                                  // group heading
+      grid.append(el("div", "wxg-group", String(r[0])));
+      continue;
+    }
+    const row = el("div", "wxg-row");
+    row.append(el("span", "wxg-name", name(r) || "–"));
+    if (cTemp >= 0) {
+      const cell = el("span", "wxg-temp");
+      const t = r[cTemp];
+      if (typeof t === "number") {
+        // 4 % minimum so the coldest station still shows a stub, not an empty bar
+        cell.append(wxgBar(tMax > tMin ? 4 + (t - tMin) / (tMax - tMin) * 96 : 50, wxgTempColor(t)),
+                    el("b", null, wxNum(t)));
+      } else cell.append(el("b", "dim", "–"));
+      row.append(cell);
+    }
+    if (cSpd >= 0 || cDir >= 0) {
+      const cell = el("span", "wxg-wind");
+      const dir = cDir >= 0 ? r[cDir] : null, spd = cSpd >= 0 ? r[cSpd] : null;
+      const deg = typeof dir === "number" ? dir : (typeof dir === "string" && WX_DIRS.includes(dir) ? WX_DIRS.indexOf(dir) * 22.5 : null);
+      if (deg !== null) cell.append(wxgArrow(deg), el("span", "wxg-dir", typeof dir === "string" ? dir : wxDir(deg)));
+      else cell.append(el("span", "wxg-dir dim", typeof dir === "string" ? dir : "–"));
+      if (typeof spd === "number") {
+        cell.append(el("b", null, wxNum(spd)), el("small", null, `${Math.round(spd * 3.6)} km/h`));
+      }
+      row.append(cell);
+    }
+    if (cGust >= 0) {
+      const cell = el("span", "wxg-gust");
+      const g = r[cGust];
+      if (typeof g === "number") {
+        cell.append(el("b", null, wxNum(g)), el("span", "wxg-bft" + (wxBft(g) >= 6 ? " strong" : ""), `Bft ${wxBft(g)}`));
+      } else cell.append(el("b", "dim", "–"));
+      row.append(cell);
+    }
+    if (cHum >= 0) {
+      const cell = el("span", "wxg-hum");
+      const h = r[cHum];
+      if (typeof h === "number") cell.append(wxgBar(h, "var(--accent)"), el("b", null, Math.round(h)));
+      else cell.append(el("b", "dim", "–"));
+      row.append(cell);
+    }
+    if (cRain >= 0) {
+      const cell = el("span", "wxg-rain");
+      const x = r[cRain];
+      if (typeof x === "number" && x > 0) cell.append(wxgBar(rMax > 0 ? x / rMax * 100 : 0, "var(--accent)"), el("b", null, wxNum(x)));
+      else if (typeof x === "number") cell.append(el("b", "dim", "0"));
+      else cell.append(el("b", "dim", "–"));
+      row.append(cell);
+    }
+    grid.append(row);
+  }
+  const scroll = el("div", "wxg-scroll");
+  scroll.append(grid);
+  wrap.append(scroll);
+  return wrap;
+}
+
+
+/* the page as it comes from brocastd (table blocks, sc -1 already applied) */
+const HDR = ["Station", "°C", "Wind aus", "Wind m/s", "Böen", "Niederschlag 24h mm"];
+const COLS = ["name", "temp", "wdir", "wspd", "gust", "r24h"];
+const ROWS = [
+  ["Weinviertel"],
+  ["Retz", 18.5, "WNW", 4.6, 9.6, 0], ["Laa/Thaya", 18.6, "NW", 3.7, 7.4, 0], ["Poysdorf", 19.0, "NW", 2.8, 7.5, 0.1],
+  ["Schoengrabern", 19.2, "NW", 6.4, 11.8, 0.3], ["Mistelbach", 19.5, "NNW", 1.7, 5.7, 0], ["Hohenau", 18.4, "N", 1.7, 5.5, 0],
+  ["Leiser Berge", 16.1, "NNW", 3.8, 7.0, 0], ["Wolkersdorf", 16.6, "NW", 1.2, 4.2, 0], ["Stockerau", 18.1, "WNW", 6.8, 9.8, 0.4],
+  ["Gaenserndorf", 17.0, "NW", 2.4, 5.3, 0.2], ["Marchegg", 16.6, "SO", 2.7, 4.6, 0.1], ["Gr.Enzersdorf", 17.5, "NNW", 2.6, 4.7, 0.4],
+  ["Waldviertel"],
+  ["Raabs/Thaya", 16.2, "NW", 2.9, 7.7, 0.6], ["Litschau", 14.3, "NW", 2.9, 7.9, 1.3], ["Weitra", 16.2, "NNW", 2.8, 8.2, 0.5],
+  ["Schwarzau/Fw", 13.7, "NW", 3.8, 8.3, 1.4], ["Allentsteig", 14.7, "WNW", 4.0, 10.0, 0.2], ["Stift Zwettl", 15.8, "NW", 2.9, 8.0, 0.3],
+  ["Horn", 19.0, "WNW", 6.9, 12.3, 0.5], ["Gars/Kamp", 19.2, "NW", 7.0, 11.0, 0.6], ["Baernkopf", 11.0, "SSW", 2.0, 4.4, 1.3],
+  ["Jauerling", 11.9, "NW", 5.5, 11.2, 1.0], ["Langenlois", 19.0, "WNW", 4.6, 9.7, 0.4], ["Krems", 19.2, "WSW", 4.0, 9.0, 0.3],
+];
+
+function plainTable() {
+  const w = el("div", "tblwrap");
+  const t = el("table", "tbl");
+  const tr = el("tr"); for (const h of HDR) tr.append(el("th", null, h)); t.append(tr);
+  for (const r of ROWS) {
+    const row = el("tr");
+    if (r.length === 1) { const th = el("th", "grp", r[0]); th.colSpan = HDR.length; row.append(th); }
+    else for (const c of r) row.append(el("td", null, num(c)));
+    t.append(row);
+  }
+  w.append(t);
+  return w;
+}
+let graphic = true;
+try { graphic = localStorage.getItem("brocast.graphic") !== "0"; } catch (e) {}
+function draw() {
+  const c = document.getElementById("content");
+  c.replaceChildren(graphic ? wxGrid(ROWS, COLS, HDR, true) : plainTable());
+  const b = document.getElementById("btn-graphic");
+  b.textContent = graphic ? "Grafisch" : "Text";
+  b.classList.toggle("on", graphic);
+  b.title = graphic ? "Umschalten auf reinen Text" : "Umschalten auf die grafische Darstellung";
+}
+document.getElementById("btn-graphic").onclick = () => { graphic = !graphic; try { localStorage.setItem("brocast.graphic", graphic ? "1" : "0"); } catch (e) {} draw(); };
+draw();
+</script>
+
+</head>
+</html>

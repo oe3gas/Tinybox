@@ -231,7 +231,7 @@ Text ...
 | Skript | Takt | Bulletin |
 |---|---|---|
 | `geosphere_station.py --tinybox` | stündlich xx:05 | an `WX`, `Replace: geosphere-wetter-11334`, `Valid: 2h`, mit `Brocast:` (Wetterseite `typ wx`, Abschnitt 6d) |
-| `geosphere_station.py --region --tinybox --einzel-ohne-brocast` | stündlich xx:05 (**ersetzt die Zeile oben seit 13.10.2026**, Entscheidung: Variante B, nur der Überblick über Funk) | 24 Stationen Wein-/Waldviertel (`REGION` im Skript, 2 API-Abrufe): je Station ein Einzelbericht wie Schöngrabern (`Replace: geosphere-wetter-<ID>`, eigene `wx`-Seite = 1 Frame) **und** der Gesamtüberblick (`Replace: geosphere-wetter-region`, Text ~1,9 kB nur in der Mailbox; `Brocast:` Tabellenseite `typ text`, Blöcke `table` mit `sc -1`, 4–5 Frames). Funkmenge je Karussell-Lauf: 24 + 5 Frames ≈ 7 kB; mit `--einzel-ohne-brocast` nur der Überblick (5 Frames), die Einzelberichte bleiben Text in der Mailbox. |
+| `geosphere_station.py --region --tinybox` | stündlich xx:05 (**ersetzt die Zeile oben seit 13.10.2026**) | 24 Stationen Wein-/Waldviertel (`REGION` im Skript, 2 API-Abrufe): je Station ein Einzelbericht wie Schöngrabern (`Replace: geosphere-wetter-<ID>`, eigene `wx`-Seite = 1 Frame, grafisch im Listener) **und** der Gesamtüberblick „Wetter Wein- & Waldviertel“ (`Replace: geosphere-wetter-region`, Text ~1,9 kB nur in der Mailbox; `Brocast:` Tabellenseite `typ text`, Blöcke `table` mit `sc -1` und Spaltenbedeutung `n`, Abschnitt 6g; 3 Frames gepackt). Funkmenge je Karussell-Lauf: 24 + 3 Frames. **Nicht** `--einzel-ohne-brocast` (Variante B vom 13.10.2026, zurückgenommen 14.10.2026): die TinyBox sendet *jedes* Bulletin, ohne `Brocast:`-Seite ging der Mailbox-Text (≈ 600 B, 2–3 Frames) statt der `wx`-Seite (1 Frame) über Funk, und der Listener zeigte nur Text (Fehlerbild vom 14.10.). Der Schalter bleibt im Skript, taugt aber nur, wenn die Einzelbulletins gar nicht an brocast gehen sollen. |
 | `geosphere_warnungen.py --tinybox` | alle 15 min | an `WARN` nur bei Änderung, gültig bis Warnungsende; bei vorzeitiger Aufhebung „Entwarnung“ (3 h) |
 
 Bulletins an `WARN` werden in brocast zu Warnseiten (`[brocast] alert_destinations`, Rubrik Notfunk) und im Listener immer angezeigt und hervorgehoben.
@@ -305,6 +305,18 @@ Dauerzustand vorher 113 s Kanalzeit je Stunde (3,1 %), nachher rund 40 s, mit `a
 4. **Entfernen:** Rubrik aus `[rubrics]` streichen → RESTART → Abgleich ohne sie → neue Revision der Indexseite. Im Listener lebt eine eigene Rubrik, solange eine Station sie ankündigt **oder** Seiten dazu vorhanden sind; eine zurückgezogene Rubrik mit Restseiten ist als „zurückgezogen“ markiert, die Seiten laufen normal ab (wie CR19 bei Bulletins). Fällt beides weg, verschwindet sie samt Opt-out-Zeile (Aufräumlauf). Stationen ohne Indexseite: wie bisher, Rubrik kommt und geht mit den Seiten.
 
 Tests: `brocast/tests/test_rubrics.py` (Station, Funkweg Format 2, Listener), `tests/test_brocast_adapter.py`.
+
+### 6g. Regionsübersicht grafisch und Umschalter Grafisch/Text (entschieden und umgesetzt 14.10.2026)
+
+**Anlass:** Die Wetterseiten der Einzelstationen kamen als reine Textseiten an (Fehler in der Aufgabenplanung, siehe Tabelle oben), und der Gesamtüberblick war nur eine nackte HTML-Tabelle.
+
+**Entschieden:**
+
+1. **Spaltenbedeutung im Tabellenblock.** Der erste `table`-Block des Überblicks trägt neben `hdr` (Spaltentexte) den Block-Key `n` (Bezeichnung, Typ *any*) als Liste der Spaltenbedeutungen: `["name", "temp", "wdir", "wspd", "gust", "r24h"]` – die Namen sind die `dat`-Felder des Wetter-Dictionarys, alles andere (`name`) ist eine Textspalte. Folgeblöcke ohne `hdr` erben `hdr` und `n` wie bisher. Kosten: ≈ 35 B vor der Kompression, einmal je Seite. Terminal/Rohansicht ignorieren `n`. Keine Dictionary-Änderung (bleibt v2); die Zahlenmatrix mit Stationsnummern (6e, Dictionary v3) ist davon unberührt und ersetzt später nur die Zeilen, nicht die Semantik.
+2. **Gruppenzeilen.** Eine Tabellenzeile mit genau einer Textzelle (`["Weinviertel"]`, `["Waldviertel"]`) ist eine Gruppenüberschrift. Plain-Tabelle: Zeile über alle Spalten; Grafik: Abschnittsleiste. ≈ 25 B.
+3. **Listener, Wetterraster** (`app.js` `wxGrid`, Vorschau `brocast/mockup/wx-region-vorschau.html`): oben vier Kacheln mit den Extremen der Tabelle (wärmste/kälteste Station mit Spanne, stärkste Böe mit km/h und Bft, meiste Regen mit „an n von 24 Stationen“), darunter je Station eine Zeile: Temperaturbalken relativ zu min…max der Region (Farbe nach Wert: blau unter 0 °C, warm darüber, Spanne im Spaltenkopf), Windpfeil (zeigt wohin der Wind weht) mit Richtung, m/s und km/h, Böe mit Bft-Chip (ab Bft 6 hervorgehoben), Regenbalken relativ zum Maximum. Alles aus den gesendeten Zahlen gerechnet, nichts Zusätzliches über Funk. Die Spaltentexte kommen aus `hdr`, nicht aus dem Listener.
+4. **Umschalter Grafisch/Text.** Knopf in der Seitenleiste (neben „Rohansicht“), nur bei Seiten mit grafischer Ansicht (`typ wx` mit `dat` oder Tabelle mit `n`). „Text“ zeigt die Wetterseite als schlichte Wertekarten und die Tabelle als HTML-Tabelle; die Wahl merkt sich der Browser (`localStorage brocast.graphic`, Standard grafisch). Teilansicht „Mit Trennlinien“ zeigt je Teil nur die Zeilen dieses Teils (ohne Kacheln), „Teletext“ und „Fließtext“ die ganze Tabelle.
+5. **Titel:** „Wetter Wein- & Waldviertel hh:mm“ (Seite und Bulletin-Betreff), statt „Wetter Region“.
 
 ## 6. MQTT (vorbereitet, Umsetzung später)
 

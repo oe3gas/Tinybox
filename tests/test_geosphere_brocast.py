@@ -156,18 +156,32 @@ class RegionTests(unittest.TestCase):
     def test_brocast_table_page_is_small(self):
         seite = g.brocast_ueberblick(region_daten(), "2026-10-03T16:00+00:00", 120)
         self.assertEqual(seite["typ"], "text")
-        self.assertEqual(sum(len(b["rows"]) for b in seite["blk"]), 24)
-        self.assertEqual(len(seite["blk"]), 9)
+        self.assertEqual(seite["ti"], "Wetter Wein- & Waldviertel 18:00")
+        rows = [r for b in seite["blk"] for r in b["rows"]]
+        self.assertEqual(len(rows), 26)                                 # 24 Stationen + 2 Gruppenzeilen
+        self.assertEqual([r[0] for r in rows if len(r) == 1], ["Weinviertel", "Waldviertel"])
+        self.assertEqual(len(seite["blk"]), 10)
         self.assertIn("hdr", seite["blk"][0])
+        self.assertEqual(seite["blk"][0]["n"], ["name", "temp", "wdir", "wspd", "gust", "r24h"])
         self.assertNotIn("hdr", seite["blk"][1])
+        self.assertNotIn("n", seite["blk"][1])
         frames = split(self.codec, {**seite, "id": 30, "rev": 0, "t": 1790000000})
         self.assertLessEqual(len(frames), 5)
         for fr in frames:
             self.assertLessEqual(len(fr), 240)
-        page = self.codec.decode(frames[0])
-        self.assertEqual((page["blk"][0]["k"], page["blk"][0]["sc"]), ("table", -1))
-        self.assertEqual(page["blk"][0]["rows"][0][:3], ["Retz", 213, "SO"])
-        self.assertIn("Retz | 21.3 | SO | 1.8 | 2 | 0", "\n".join(self.codec.describe(page)))
+        pages = [self.codec.decode(fr) for fr in frames]
+        first = pages[0]["blk"][0]
+        self.assertEqual((first["k"], first["sc"], first["rows"]), ("table", -1, [["Weinviertel"]]))
+        self.assertEqual(first["n"][1], "temp")
+        rows = [r for p in pages for b in p["blk"] for r in b["rows"]]
+        self.assertEqual(rows[1][:3], ["Retz", 213, "SO"])
+        text = "\n".join(z for p in pages for z in self.codec.describe(p))
+        self.assertIn("Retz | 21.3 | SO | 1.8 | 2 | 0", text)
+        # Frame-Format 2 (Standard der Station, gepackt): 3 Frames
+        from brocast import fragment, zdict
+        built = fragment.build(self.codec, {**seite, "id": 30, "rev": 0, "t": 1790000000}, zdict.load())
+        self.assertTrue(built.packed)
+        self.assertLessEqual(built.fragments, 3)
 
     def test_brocast_table_worst_case_fits(self):
         """Lange Namen, Minusgrade, dreistellige Boeen/Regen: jeder Block bleibt unter 240 Bytes."""
@@ -184,7 +198,7 @@ class RegionTests(unittest.TestCase):
         finally:
             g.REGION_NAME.update(g.REGION_NAME_SICHERUNG)
         frames = split(self.codec, {**seite, "id": 30, "rev": 0, "t": 1790000000})
-        self.assertLessEqual(len(frames), 7)
+        self.assertLessEqual(len(frames), 8)                           # Frame-Format 1 (alt)
 
 
 class EndToEndTests(unittest.TestCase):

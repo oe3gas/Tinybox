@@ -19,6 +19,7 @@ const state = {
   screen: "pages",        // pages | settings | status
   raw: false,
   view: "flow",           // subpage view: flow | parts | teletext
+  graphic: true,          // weather pages and tables: graphic view (false = plain text/table)
   part: 1,                // selected subpage in teletext view
   rxFilter: null,         // receive log: {org, id} of one page, or null = all
   rxForeign: false,       // receive log: also show non-brocast frames
@@ -479,6 +480,15 @@ function renderPage(p) {
   };
   const raw = el("button", "btn sm" + (state.raw ? " on" : ""), "Rohansicht");
   raw.onclick = () => { state.raw = !state.raw; openPage(p.org, p.id); };
+  // graphic/plain switch, only where the page has a graphic view (weather tiles, weather grid)
+  const buttons = [fav, unr];
+  if (hasGraphic(p)) {
+    const gr = el("button", "btn sm" + (state.graphic ? " on" : ""), state.graphic ? "Grafisch" : "Text");
+    gr.title = state.graphic ? "Umschalten auf reinen Text" : "Umschalten auf die grafische Darstellung";
+    gr.onclick = () => { state.graphic = !state.graphic; saveGraphic(state.graphic); renderPage(p); };
+    buttons.push(gr);
+  }
+  buttons.push(raw);
   const del = el("button", "btn sm danger", "Löschen");
   del.onclick = async () => {
     if (!confirm(`Seite ${p.id} von ${p.org} löschen?\nSie kommt erst mit einer neuen Revision wieder.`)) return;
@@ -488,8 +498,8 @@ function renderPage(p) {
   };
   const hist = el("button", "btn sm", "Empfangslog");
   hist.onclick = () => renderRxlog({ org: p.org, id: p.id }).catch(e => toast(e.message, true));
-  for (const b of [fav, unr, raw, hist, del]) b.type = "button";
-  a.append(fav, unr, raw, hist, el("span", "grow"), del);
+  for (const b of [...buttons, hist, del]) b.type = "button";
+  a.append(...buttons, hist, el("span", "grow"), del);
   w.append(a);
 
   const holder = el("div");
@@ -515,6 +525,19 @@ function loadView() {
 
 function saveView(view) {
   try { localStorage.setItem("brocast.view", view); } catch (e) { /* private mode */ }
+}
+
+function loadGraphic() {
+  try { return localStorage.getItem("brocast.graphic") !== "0"; } catch (e) { return true; }
+}
+
+function saveGraphic(on) {
+  try { localStorage.setItem("brocast.graphic", on ? "1" : "0"); } catch (e) { /* private mode */ }
+}
+
+function hasGraphic(p) {
+  return (p.typ === "wx" && Array.isArray(p.data) && p.data.length > 0)
+    || p.blocks.some(b => b.k === "table" && wxgCols(b) !== null);
 }
 
 function partsBar(p, redraw) {
@@ -574,7 +597,7 @@ function renderContent(p) {
   const showFirst = !teletext || state.part === 1;      // txt and data live on subpage 1
   if (showFirst && p.txt) c.append(linkified("p", null, p.txt));
   let used = new Set();                                 // blocks already shown by a special view
-  if (showFirst && p.typ === "wx" && p.data && p.data.length) {
+  if (showFirst && state.graphic && p.typ === "wx" && p.data && p.data.length) {
     const wx = weatherView(p);
     c.append(wx.node);
     used = wx.used;
@@ -583,9 +606,10 @@ function renderContent(p) {
     for (const d of p.data) cards.append(card(d.label, d.value, d.unit));
     c.append(cards);
   }
+  const semantics = tableSemantics(p.blocks);          // from all blocks: teletext shows only one subpage
   let blocks = teletext ? p.blocks.filter(b => b.sub === state.part) : p.blocks;
   if (used.size) blocks = blocks.filter(b => !used.has(b));
-  renderBlocks(c, blocks, p.sub_total, teletext ? "teletext" : state.view);
+  renderBlocks(c, blocks, p.sub_total, teletext ? "teletext" : state.view, semantics);
   if (Array.isArray(p.lnk) && p.lnk.length && showFirst) {
     c.append(el("h4", null, "Verweise"));
     for (const ref of p.lnk) c.append(linkNode(null, ref));
@@ -632,8 +656,26 @@ function linkNode(text, ref) {
   return lk;
 }
 
-function renderBlocks(c, blocks, total, view) {
-  let cards = null, lastTable = null;
+/* hdr and n of a table block: its own, or inherited from the table block with
+ * hdr that it continues (table blocks directly following each other). */
+function tableSemantics(blocks) {
+  const sem = new Map();
+  let current = null;
+  for (const b of blocks) {
+    if (b.k !== "table") { current = null; continue; }
+    if (b.hdr) current = { cols: wxgCols(b), hdr: b.hdr };
+    if (current) sem.set(b, current);
+  }
+  return sem;
+}
+
+function scaledRows(b) {
+  const sc = typeof b.sc === "number" ? Math.pow(10, b.sc) : 1;
+  return (b.rows || []).map(r => (Array.isArray(r) ? r : [r]).map(x => typeof x === "number" ? x * sc : x));
+}
+
+function renderBlocks(c, blocks, total, view, semantics) {
+  let cards = null, lastTable = null, lastGrid = null;
   let part = 0;
   for (const b of blocks) {
     if (total > 1 && view !== "teletext" && b.sub !== part) {   // boundary between subpages
@@ -649,6 +691,22 @@ function renderBlocks(c, blocks, total, view) {
       continue;
     }
     cards = null;
+    // a table with column semantics (n) is drawn as a weather grid in graphic mode
+    const sem = b.k === "table" && semantics ? semantics.get(b) : null;
+    if (sem && sem.cols && state.graphic) {
+      lastTable = null;
+      if (!b.hdr && lastGrid && view !== "parts") {              // continuation: redraw with all rows
+        lastGrid.rows.push(...scaledRows(b));
+        lastGrid.node.replaceChildren(wxGrid(lastGrid.rows, sem.cols, sem.hdr, true));
+        continue;
+      }
+      const node = el("div");
+      lastGrid = { rows: scaledRows(b), node };
+      node.append(wxGrid(lastGrid.rows, sem.cols, sem.hdr, view !== "parts"));
+      c.append(node);
+      continue;
+    }
+    lastGrid = null;
     // a table block without its own header right after a table continues it
     // (long tables are sent in small blocks so each one fits into a frame)
     if (b.k === "table" && !b.hdr && lastTable && view !== "parts") {
@@ -691,9 +749,16 @@ function table(b) {
 
 function tableRows(t, b) {
   const sc = typeof b.sc === "number" ? Math.pow(10, b.sc) : 1;   // scales every number cell (like series)
+  const width = t.rows.length ? t.rows[0].cells.length : 0;
   for (const row of b.rows || []) {
     const tr = el("tr");
-    for (const cell of Array.isArray(row) ? row : [row]) tr.append(typeof cell === "string" ? linkified("td", null, cell) : el("td", null, typeof cell === "number" ? num(cell * sc) : num(cell)));
+    if (Array.isArray(row) && row.length === 1 && typeof row[0] === "string" && width > 1) {
+      const th = el("th", "grp", row[0]);                        // group heading inside the table
+      th.colSpan = width;
+      tr.append(th);
+    } else {
+      for (const cell of Array.isArray(row) ? row : [row]) tr.append(typeof cell === "string" ? linkified("td", null, cell) : el("td", null, typeof cell === "number" ? num(cell * sc) : num(cell)));
+    }
     t.append(tr);
   }
 }
@@ -985,6 +1050,183 @@ function weatherView(p) {
     node.append(cards);
   }
   return { node, used };
+}
+
+/* ---------- weather grid (table block with column semantics) ----------
+ * A table block whose "n" is a list of column meanings – dat keys of the
+ * weather dictionary such as "temp", "wdir", "wspd", "gust", "r24h"; any other
+ * entry (e.g. "name") is a plain text column – is drawn as a weather grid:
+ * temperature bars coloured by value, wind arrows, rain bars and a summary of
+ * the extremes above. Rows with a single text cell are group headings
+ * ("Weinviertel"). Continuation blocks (no hdr) inherit hdr and n of the last
+ * table block that had them, as they do in the plain table. The plain table
+ * stays available with the "Text" button (state.graphic). */
+
+const WXG_TEMP = ["temp", "dew", "tmin", "tmax"];
+const WXG_SPEED = ["wspd", "gust", "gust10", "gmax"];
+const WXG_RAIN = ["r10m", "r1h", "rday", "r24h"];
+const WXG_KEYS = [...WXG_TEMP, ...WXG_SPEED, ...WXG_RAIN, "wdir", "hum"];
+
+function wxgCols(b) {
+  return Array.isArray(b.n) && b.n.some(k => WXG_KEYS.includes(k)) ? b.n : null;
+}
+
+/* diverging around the freezing point: blue below 0 °C, warm hues above,
+ * neutral grey at 0 – darker the further from zero */
+function wxgTempColor(t) {
+  if (t <= 0) { const k = Math.min(1, -t / 20); return `hsl(214 ${40 + 45 * k}% ${66 - 32 * k}%)`; }
+  const k = Math.min(1, t / 35);
+  return `hsl(${34 - 18 * k} ${50 + 40 * k}% ${66 - 30 * k}%)`;
+}
+
+function wxgArrow(deg) {            // points where the wind blows to (from deg + 180)
+  const s = svg("svg", { viewBox: "-12 -12 24 24", class: "wxg-arrow", role: "img",
+                         "aria-label": `Wind aus ${wxDir(deg)}` });
+  s.append(svg("path", { d: "M0,-10 L5,2 L1.5,0.5 L1.5,10 L-1.5,10 L-1.5,0.5 L-5,2 Z",
+                         transform: `rotate(${(deg + 180) % 360})` }));
+  return s;
+}
+
+function wxgBar(pct, color) {
+  const b = el("div", "wxg-bar");
+  const i = el("i");
+  i.style.width = wxClamp(pct) + "%";
+  if (color) i.style.background = color;
+  b.append(i);
+  return b;
+}
+
+/* rows: [[cell, ...], ...] already scaled; cols: the n list; hdr: header texts */
+function wxGrid(rows, cols, hdr, withSummary) {
+  const idx = k => cols.indexOf(k);
+  const col = (keys) => keys.map(idx).find(i => i >= 0) ?? -1;
+  const cTemp = col(WXG_TEMP), cDir = idx("wdir"), cSpd = col(["wspd"]), cGust = col(["gust", "gust10", "gmax"]),
+        cRain = col(WXG_RAIN), cHum = idx("hum");
+  const textCols = cols.map((k, i) => WXG_KEYS.includes(k) ? -1 : i).filter(i => i >= 0);
+  const data = rows.filter(r => Array.isArray(r) && r.length > 1);
+  const numsOf = c => c < 0 ? [] : data.map(r => r[c]).filter(x => typeof x === "number");
+  const temps = numsOf(cTemp), gusts = numsOf(cGust), rains = numsOf(cRain), spds = numsOf(cSpd);
+  const tMin = Math.min(...temps), tMax = Math.max(...temps);
+  const gMax = Math.max(0, ...gusts), rMax = Math.max(0, ...rains);
+  const name = r => textCols.map(i => r[i]).filter(x => x !== null && x !== undefined).join(" ");
+  const label = (c, fallback) => (Array.isArray(hdr) && typeof hdr[c] === "string") ? hdr[c] : fallback;
+
+  const wrap = el("div", "wxg");
+
+  // summary: the extremes of the whole table
+  if (withSummary && data.length > 1) {
+    const sum = el("div", "wxg-sum");
+    const tile = (title, r, value, unit, note) => {
+      const t = el("div", "wxg-tile");
+      t.append(el("div", "wxg-cap", title), el("div", "wxg-st", name(r)));
+      const v = el("div", "wxg-val", value);
+      v.append(el("small", null, unit));
+      t.append(v);
+      if (note) t.append(el("div", "wxg-note", note));
+      return t;
+    };
+    const pick = (c, fn) => data.filter(r => typeof r[c] === "number").reduce((a, r) => a === null || fn(r[c], a[c]) ? r : a, null);
+    if (temps.length) {
+      const hi = pick(cTemp, (x, y) => x > y), lo = pick(cTemp, (x, y) => x < y);
+      sum.append(tile("Wärmste Station", hi, wxNum(hi[cTemp]), "°C"),
+                 tile("Kälteste Station", lo, wxNum(lo[cTemp]), "°C",
+                      `Spanne ${wxNum(hi[cTemp] - lo[cTemp])} K`));
+    }
+    if (gusts.length) {
+      const g = pick(cGust, (x, y) => x > y);
+      sum.append(tile("Stärkste Böe", g, wxNum(g[cGust]), "m/s", `${Math.round(g[cGust] * 3.6)} km/h · Bft ${wxBft(g[cGust])}`));
+    }
+    if (rains.length) {
+      const r = pick(cRain, (x, y) => x > y);
+      const wet = rains.filter(x => x > 0).length;
+      sum.append(tile("Meiste Regen", r, wxNum(r[cRain]), "mm",
+                      r[cRain] > 0 ? `an ${wet} von ${rains.length} Stationen` : "überall trocken"));
+    }
+    wrap.append(sum);
+  }
+
+  // header row of the grid; the column template follows the columns present
+  const grid = el("div", "wxg-grid");
+  // (wide / narrow pane – the narrow template applies below 640px container width)
+  const tpl = ["minmax(118px, 1.1fr)"], narrow = ["minmax(84px, 1.1fr)"];
+  if (cTemp >= 0) { tpl.push("minmax(150px, 2fr)"); narrow.push("minmax(96px, 2fr)"); }
+  if (cSpd >= 0 || cDir >= 0) { tpl.push("minmax(150px, 1.6fr)"); narrow.push("minmax(86px, 1.4fr)"); }
+  if (cGust >= 0) { tpl.push("minmax(96px, 1fr)"); narrow.push("minmax(70px, 1fr)"); }
+  if (cHum >= 0) { tpl.push("minmax(110px, 1.2fr)"); narrow.push("minmax(80px, 1.2fr)"); }
+  if (cRain >= 0) { tpl.push("minmax(110px, 1.4fr)"); narrow.push("minmax(80px, 1.4fr)"); }
+  grid.style.setProperty("--wxg-cols", tpl.join(" "));
+  grid.style.setProperty("--wxg-cols-narrow", narrow.join(" "));
+  const head = el("div", "wxg-row wxg-head");
+  head.append(el("span", null, textCols.length ? label(textCols[0], "Station") : "Station"));
+  if (cTemp >= 0) {
+    const h = el("span", null, label(cTemp, "Temperatur"));
+    if (temps.length > 1) h.append(el("small", null, ` ${wxNum(tMin)} … ${wxNum(tMax)}`));
+    head.append(h);
+  }
+  if (cSpd >= 0 || cDir >= 0) head.append(el("span", null, label(cSpd >= 0 ? cSpd : cDir, "Wind")));
+  if (cGust >= 0) head.append(el("span", null, label(cGust, "Böe")));
+  if (cHum >= 0) head.append(el("span", null, label(cHum, "Feuchte")));
+  if (cRain >= 0) head.append(el("span", null, label(cRain, "Niederschlag")));
+  grid.append(head);
+
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    if (r.length === 1) {                                  // group heading
+      grid.append(el("div", "wxg-group", String(r[0])));
+      continue;
+    }
+    const row = el("div", "wxg-row");
+    row.append(el("span", "wxg-name", name(r) || "–"));
+    if (cTemp >= 0) {
+      const cell = el("span", "wxg-temp");
+      const t = r[cTemp];
+      if (typeof t === "number") {
+        // 4 % minimum so the coldest station still shows a stub, not an empty bar
+        cell.append(wxgBar(tMax > tMin ? 4 + (t - tMin) / (tMax - tMin) * 96 : 50, wxgTempColor(t)),
+                    el("b", null, wxNum(t)));
+      } else cell.append(el("b", "dim", "–"));
+      row.append(cell);
+    }
+    if (cSpd >= 0 || cDir >= 0) {
+      const cell = el("span", "wxg-wind");
+      const dir = cDir >= 0 ? r[cDir] : null, spd = cSpd >= 0 ? r[cSpd] : null;
+      const deg = typeof dir === "number" ? dir : (typeof dir === "string" && WX_DIRS.includes(dir) ? WX_DIRS.indexOf(dir) * 22.5 : null);
+      if (deg !== null) cell.append(wxgArrow(deg), el("span", "wxg-dir", typeof dir === "string" ? dir : wxDir(deg)));
+      else cell.append(el("span", "wxg-dir dim", typeof dir === "string" ? dir : "–"));
+      if (typeof spd === "number") {
+        cell.append(el("b", null, wxNum(spd)), el("small", null, `${Math.round(spd * 3.6)} km/h`));
+      }
+      row.append(cell);
+    }
+    if (cGust >= 0) {
+      const cell = el("span", "wxg-gust");
+      const g = r[cGust];
+      if (typeof g === "number") {
+        cell.append(el("b", null, wxNum(g)), el("span", "wxg-bft" + (wxBft(g) >= 6 ? " strong" : ""), `Bft ${wxBft(g)}`));
+      } else cell.append(el("b", "dim", "–"));
+      row.append(cell);
+    }
+    if (cHum >= 0) {
+      const cell = el("span", "wxg-hum");
+      const h = r[cHum];
+      if (typeof h === "number") cell.append(wxgBar(h, "var(--accent)"), el("b", null, Math.round(h)));
+      else cell.append(el("b", "dim", "–"));
+      row.append(cell);
+    }
+    if (cRain >= 0) {
+      const cell = el("span", "wxg-rain");
+      const x = r[cRain];
+      if (typeof x === "number" && x > 0) cell.append(wxgBar(rMax > 0 ? x / rMax * 100 : 0, "var(--accent)"), el("b", null, wxNum(x)));
+      else if (typeof x === "number") cell.append(el("b", "dim", "0"));
+      else cell.append(el("b", "dim", "–"));
+      row.append(cell);
+    }
+    grid.append(row);
+  }
+  const scroll = el("div", "wxg-scroll");
+  scroll.append(grid);
+  wrap.append(scroll);
+  return wrap;
 }
 
 function rawView(raws) {
@@ -1363,6 +1605,7 @@ async function poll() {
 
 async function init() {
   state.view = loadView();
+  state.graphic = loadGraphic();
   $("tab-cat").onclick = () => setMode("cat");
   $("tab-st").onclick = () => setMode("st");
   $("sub-filter").onchange = () => { state.sub = $("sub-filter").value; renderList().catch(e => toast(e.message, true)); };

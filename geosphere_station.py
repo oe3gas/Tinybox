@@ -303,7 +303,7 @@ def ueberblick(daten: dict[str, dict], zeit: str, stunden: int) -> list[str]:
         return (f"{name:<13} {hoehe:>4} {temp:>5} {dew:>4} {hum:>3} {qff:>6} "
                 f"{wind:<3}{wspd:>4} {boe:>5} {rr:>5}")
 
-    zeilen = [f"Wetter Wein-/Waldviertel {lokalzeit(zeit)} (10-min-Werte)", "",
+    zeilen = [f"Wetter Wein- & Waldviertel {lokalzeit(zeit)} (10-min-Werte)", "",
               zeile("Station", "m", "T", "Tp", "rF", "QFF", "", "Wind", "Boe", "RR24")]
     for gebiet, liste in REGION.items():
         zeilen.append(f"--- {gebiet} ---")
@@ -340,31 +340,41 @@ def ueberblick(daten: dict[str, dict], zeit: str, stunden: int) -> list[str]:
 TABELLE_ZEILEN = 3
 
 
+# Spaltenbedeutung der Tabellenseite (Block-Key n): dat-Felder des Wetter-Dictionarys,
+# alles andere ("name") ist eine Textspalte. Der Listener zeichnet daraus das
+# Wetterraster (Farbbalken, Windpfeile, Extremwerte); Terminal/Rohansicht ignorieren n.
+TABELLE_HDR = ["Station", "°C", "Wind aus", "Wind m/s", "Böen", "Niederschlag 24h mm"]
+TABELLE_N = ["name", "temp", "wdir", "wspd", "gust", "r24h"]
+
+
 def brocast_ueberblick(daten: dict[str, dict], zeit: str, gueltig_min: int) -> dict:
     """Tabellenseite (typ text, Bloecke table) fuer brocastd: Kurzname, T, Wind, Boe, RR24.
 
     Zahlen als Ganzzahlen in 0,1-Einheiten (sc -1, wie bei series; Floats kosten
     9 Bytes je Zelle), Windrichtung als Kompass-Text. Bewusst wenige Spalten:
-    24 Zeilen x ~22 Bytes = 4-5 Frames je Karussell-Lauf (ca. 1 kB)."""
+    24 Zeilen x ~22 Bytes, gepackt 3 Frames je Karussell-Lauf. Je Gebiet eine
+    Gruppenzeile mit nur einer Zelle (["Weinviertel"]) als Zwischenueberschrift."""
     def z(x):
         return None if x is None else round(x * 10)
 
     rows = []
-    for sid in REGION_IDS:
-        d = daten.get(sid)
-        if d is None:
-            continue
-        k = _kennzahlen(d)
-        rows.append([k["name"], z(k["temp"]),
-                     richtung(k["wdir"]) if k["wspd"] is not None else None,
-                     z(k["wspd"]), z(k["boe1h"]), z(k["rr24"])])
-    erste = TABELLE_ZEILEN - 1                # Kopfzeile nur einmal (Bytes), dafuer eine Zeile weniger
-    blk = [{"k": "table", "sc": -1, "rows": rows[:erste],
-            "hdr": ["Station", "°C", "Wind aus", "Wind m/s", "Böen", "Niederschlag 24h mm"]}]
+    for gebiet, liste in REGION.items():
+        rows.append([gebiet])
+        for sid, _ in liste:
+            d = daten.get(sid)
+            if d is None:
+                continue
+            k = _kennzahlen(d)
+            rows.append([k["name"], z(k["temp"]),
+                         richtung(k["wdir"]) if k["wspd"] is not None else None,
+                         z(k["wspd"]), z(k["boe1h"]), z(k["rr24"])])
+    # Kopfzeile und Spaltenbedeutung nur einmal (Bytes); der erste Block traegt dazu
+    # nur die erste Gruppenzeile, damit er auch im Frame-Format 1 in einen Frame passt
+    blk = [{"k": "table", "sc": -1, "rows": rows[:1], "hdr": TABELLE_HDR, "n": TABELLE_N}]
     blk += [{"k": "table", "sc": -1, "rows": rows[i:i + TABELLE_ZEILEN]}
-            for i in range(erste, len(rows), TABELLE_ZEILEN)]
+            for i in range(1, len(rows), TABELLE_ZEILEN)]
     return {"typ": "text", "cat": ["wx"], "exp": gueltig_min,
-            "ti": f"Wetter Region {lokalzeit(zeit)[-5:]}",
+            "ti": f"Wetter Wein- & Waldviertel {lokalzeit(zeit)[-5:]}",
             "src": "GeoSphere Austria, TAWES (CC BY 4.0)", "blk": blk}
 
 
@@ -521,7 +531,7 @@ def region(args) -> int:
     for sid in REGION_IDS:
         if sid in daten:
             bulletin_station(daten[sid], args, not args.einzel_ohne_brocast)
-    kopf = {"To": args.ziel, "Subject": f"Wetter Wein-/Waldviertel {lokalzeit(zeit)[-5:]}",
+    kopf = {"To": args.ziel, "Subject": f"Wetter Wein- & Waldviertel {lokalzeit(zeit)[-5:]}",
             "Replace": "geosphere-wetter-region", "Valid": args.gueltig,
             "Brocast": json.dumps(brocast_ueberblick(daten, zeit, gueltig_minuten(args.gueltig)),
                                   ensure_ascii=False, separators=(",", ":"))}
