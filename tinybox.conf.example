@@ -30,6 +30,29 @@ quality_min_frames    = 20     # fewer frames: no result yet (grey bars)
 quality_steps         = 5, 10, 20, 35, 50   # loss in % up to which 5/4/3/2/1 bars,
                                # above the last one a single red bar
 
+[radio]
+interface = agw                # agw = Direwolf does AX.25 (above); kiss = TinyBox does
+                               # AX.25 itself over a KISS TNC (PLANUNG.md section 15)
+
+[kiss]                         # only with interface = kiss
+host        = 127.0.0.1        # kisshub, or Direwolf's KISS port for tests
+port        = 8001             # KISSPORT in direwolf.conf (default 8001)
+channel     = 0                # KISS port number of the radio
+air_baud    = 1200             # radio bit rate - TinyBox estimates its own air time
+txdelay_ms  = 300              # as set in the TNC
+
+[ax25]                         # only with interface = kiss; missing values: see below
+version      = 2.2             # 2.2: SABME/SREJ/XID, falls back to 2.0 by itself; 2.0: SABM only
+# paclen     = 128             # default: [direwolf] paclen
+# maxframe   = 4               # window modulo 8 (1..7), default: [direwolf] max_outstanding
+maxframe_ext = 7               # window modulo 128 (v2.2); 7 is plenty at 1200 Bd
+srej         = yes
+n2           = 10              # retries
+t1_min_sec   = 3               # T1 adapts itself between these limits
+t1_max_sec   = 30
+t2_sec       = 1.5             # acknowledge after the other station's burst
+t3_sec       = 300             # check an idle link after n seconds
+
 [mailbox]
 welcome_enabled      = yes
 welcome_text         = Amateur radio use only. No encryption, no business traffic.

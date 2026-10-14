@@ -310,6 +310,25 @@ class Frame:
         return frame
 
 
+def peek(data: bytes) -> tuple[str, str, list[str], list[bool]]:
+    """Only the address field: (dest, src, path, repeated). Lets the router find
+    the link - and with it the modulo - before decoding the control field."""
+    addrs: list[tuple[str, bool, bool]] = []
+    pos = 0
+    while True:
+        if pos + 7 > len(data):
+            raise AX25Error("address field incomplete")
+        addrs.append(decode_address(data[pos:pos + 7]))
+        pos += 7
+        if addrs[-1][2]:
+            break
+        if len(addrs) >= 2 + MAX_DIGIS:
+            raise AX25Error("too many addresses")
+    if len(addrs) < 2:
+        raise AX25Error("only one address")
+    return addrs[0][0], addrs[1][0], [a[0] for a in addrs[2:]], [a[1] for a in addrs[2:]]
+
+
 # --- constructors for the frames the link layer sends --------------------------------
 
 def i_frame(dest: str, src: str, ns: int, nr: int, info: bytes, *, poll: bool = False,

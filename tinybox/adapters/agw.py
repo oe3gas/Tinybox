@@ -227,6 +227,8 @@ class AgwConnection:
 
 
 class AgwAdapter:
+    conn_class = AgwConnection      # the KISS adapter plugs in its own connection type
+
     def __init__(self, app: App) -> None:
         self.app = app
         self.cfg = app.cfg
@@ -240,6 +242,11 @@ class AgwAdapter:
         self.quality_cfg = linkq.cfg_from(self.cfg.direwolf)
         self.q_supported: bool | None = None    # None = not known yet (per AGW connect)
         self._q_reply = asyncio.Event()
+
+    def describe(self) -> str:
+        """For STATUS and the web GUI."""
+        dw = self.cfg.direwolf
+        return f"AGW {dw.agw_host}:{dw.agw_port}"
 
     def send(self, frame: Frame) -> None:
         if self._writer is not None and not self._writer.is_closing():
@@ -365,7 +372,7 @@ class AgwAdapter:
         if remote in self.conns:
             log.warning("%s: duplicate connect ignored", remote)
             return
-        conn = AgwConnection(self, remote)
+        conn = self.conn_class(self, remote)
         self.conns[remote] = conn
         self.app.service.links[remote] = conn.quality
         conn.pump_task = asyncio.create_task(conn.pump())
@@ -427,7 +434,7 @@ class AgwAdapter:
             self._pending.pop(remote, None)
 
     def _on_outgoing_connected(self, remote: str, fut: asyncio.Future) -> None:
-        conn = AgwConnection(self, remote)
+        conn = self.conn_class(self, remote)
         self.conns[remote] = conn
         self.app.service.links[remote] = conn.quality
         conn.pump_task = asyncio.create_task(conn.pump())

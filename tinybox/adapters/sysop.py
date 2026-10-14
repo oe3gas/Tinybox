@@ -190,12 +190,14 @@ class SysopConsole:
         cfg = self.app.cfg
         msgs = self.app.store.list_messages()
         agw = self.app.agw
+        where = (agw.describe() if agw is not None and cfg.radio.interface == "kiss"
+                 else f"{cfg.direwolf.agw_host}:{cfg.direwolf.agw_port}")
         if agw is None:
             agw_state = "not started"
         elif agw.connected.is_set():
-            agw_state = f"connected ({cfg.direwolf.agw_host}:{cfg.direwolf.agw_port})"
+            agw_state = f"connected ({where})"
         else:
-            agw_state = f"NOT connected ({cfg.direwolf.agw_host}:{cfg.direwolf.agw_port})"
+            agw_state = f"NOT connected ({where})"
         values = dict(
             version=VERSION, mailbox=cfg.station.mailbox_call, sysop=cfg.station.sysop_call,
             since=self.app.started[:16].replace("T", " ") + " UTC", agw=agw_state,

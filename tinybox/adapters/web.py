@@ -465,6 +465,7 @@ class WebServer:
             "sysop": cfg.station.sysop_call, "started": self.app.started,
             "agw": "connected" if agw is not None and agw.connected.is_set()
                    else ("disconnected" if agw is not None else "not started"),
+            "interface": cfg.radio.interface,
             "users": len(self.app.registry), "max_users": cfg.mailbox.max_users,
             "messages": len(msgs), "private": sum(m.type == "P" for m in msgs),
             "bulletins": sum(m.type == "B" for m in msgs),

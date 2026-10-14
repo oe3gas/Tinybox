@@ -376,7 +376,7 @@ Fassungen gegen dieselben Testfälle.
 | K1 ✅ | AX.25-Codec (alle Frame-Typen, Modulo 8 und 128), KISS-I/O – `tinybox/ax25/frame.py`, `kissio.py` (14.10.2026) | 31 Unit-Tests inkl. von Hand gerechneter Bytes und 5000 Zufalls-/Müll-Frames; UI-Frames byte-gleich mit brocast; Mitschnitte von Direwolf folgen bei K2 |
 | K2 ✅ | `Ax25Link` v2.0 (SABM → Sitzung → DISC, auch ausgehend), REJ, RR/RNR, T1/T2/T3, N2 – `tinybox/ax25/link.py`, Simulator `tests/ax25sim.py` (14.10.2026) | 23 Tests; Stresstest 100 Zufallskanäle 5–40 % Verlust, k 1–7: alle Daten vollständig und in Reihenfolge |
 | K3 ✅ | v2.2: SABME, Modulo 128, SREJ, XID (mit Wiederholung), Rückfall-Logik – `tinybox/ax25/xid.py`, `link.py` (14.10.2026) | 20 neue Tests; Stresstest 150 Zufallskanäle, Versionen gemischt, 5–40 % Verlust: alle Daten vollständig |
-| K4 | `KissAdapter` als zweiter `LinkAdapter`, `app.agw` → `app.link`, UI für TBCHAT | alle bestehenden Tests grün mit beiden Adaptern |
+| K4 ✅ | `KissAdapter` (`tinybox/adapters/kiss.py`) als zweiter Adapter neben AGW, Router, UI für TBCHAT, ausgehende Connects inkl. via, Qualität aus dem eigenen Link (14.10.2026) | 16 Tests Ende-zu-Ende mit echter Gegenstation (v2.0/v2.2, 20 % Verlust); alle AGW-Tests unverändert grün |
 | K5 | ausgehende Connects inkl. via (Forwarding), Merken der Gegenstations-Version | Forward gegen LinBPQ und Direwolf |
 | K6 | Qualitätszähler aus dem Automaten | Balken wie mit Fork |
 | K7 | `kisshub` (eigener Prozess), brocastd daran | brocastd + TinyBox an einem TNC |
@@ -389,6 +389,38 @@ als „dummer TNC“, die Gegenstation auf PC1 mit Direwolf/AGW und
 Terminalprogramm. So wird der eigene Automat gegen Direwolfs v2.2-
 Implementierung getestet, bevor ein Hardware-TNC dazukommt. Bei Variante B
 ändert sich für die TinyBox beim Wechsel zum Hub nichts.
+
+## 8a. Funktest K4 auf PC2: TinyBox gegen Direwolfs KISS-Port
+
+Direwolf dient hier nur als Modem („dummer TNC“); AX.25 macht die TinyBox selbst.
+
+1. **PC2:** `git pull` in `C:\Tinybox`.
+2. **PC2, `tinybox.conf`** (nicht im Repo) ergänzen:
+   ```ini
+   [radio]
+   interface = kiss
+   [kiss]
+   port = 8001          ; KISSPORT in direwolf.conf (Standard 8001)
+   air_baud = 1200
+   ```
+   `[ax25]` kann fehlen – dann gelten `paclen`/`max_outstanding` aus `[direwolf]`
+   und Version 2.2.
+3. Direwolf wie gewohnt starten, dann die TinyBox. In der Konsole muss stehen:
+   `KISS mode: own AX.25 layer 2 (version 2.2), KISS 127.0.0.1:8001` und
+   `connected to KISS 127.0.0.1:8001`.
+4. In der Sysop-Konsole `LOG DEBUG kiss` – dann zeigt das Log jeden Frame
+   (`<<` empfangen, `>>` gesendet) im Monitor-Format.
+5. **PC1:** mit dem Terminalprogramm über Direwolf/AGW `OE3GAS-1` connecten und
+   eine normale Sitzung fahren: `L`, `R n`, `S`, `B`. Danach Chat mit dem
+   TinyBox-Client.
+6. Prüfen: `STATUS` zeigt `connected (KISS 127.0.0.1:8001)`; die Balken der
+   Verbindungsqualität erscheinen **ohne** Direwolf-Fork.
+7. Besonders beobachten:
+   - Ruft Direwolf auf PC1 mit SABME (v2.2), folgt ein XID-Austausch. Meldet
+     Direwolf dabei einen Fehler oder FRMR, stimmen die XID-Bitwerte nicht
+     (Abschnitt 3.4) – Log-Ausschnitt schicken.
+   - Ruft Direwolf mit SABM, läuft v2.0 – das ist in Ordnung.
+8. Zurück zu AGW: `interface = agw` (oder `[radio]` löschen), TinyBox neu starten.
 
 ## 9. Risiken
 

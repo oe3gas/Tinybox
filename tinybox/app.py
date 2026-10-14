@@ -21,7 +21,7 @@ class App:
     service: MessageService
     registry: SessionRegistry
     started: str = field(default_factory=utc_now)
-    agw: Any = None                      # AgwAdapter, set when running
+    agw: Any = None                      # radio adapter: AgwAdapter or KissAdapter
     stop_event: asyncio.Event | None = None
     web_login_url: str | None = None     # set when the web GUI runs
     brocast: Any = None                  # BrocastPublisher, set when publishing

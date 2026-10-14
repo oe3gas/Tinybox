@@ -128,6 +128,39 @@ class DirewolfCfg:
     quality_steps: tuple[float, ...] = (5.0, 10.0, 20.0, 35.0, 50.0)
 
 
+@dataclass(frozen=True)
+class RadioCfg:
+    """[radio] which way to the radio: Direwolf over AGW or a KISS TNC (PLANUNG.md 15)."""
+    interface: str = "agw"          # agw | kiss
+
+
+@dataclass(frozen=True)
+class KissCfg:
+    """[kiss] the KISS-TCP server: kisshub (owns the TNC) or Direwolf's KISS port."""
+    host: str = "127.0.0.1"
+    port: int = 8001
+    channel: int = 0                # KISS port number inside the stream
+    reconnect_sec: int = 5
+    air_baud: int = 1200            # radio bit rate (own transmit time, T1)
+    txdelay_ms: int = 300
+
+
+@dataclass(frozen=True)
+class Ax25Cfg:
+    """[ax25] TinyBox's own AX.25 layer 2, used with interface = kiss."""
+    version: str = "2.2"            # 2.2 = SABME first, fall back to 2.0; 2.0 = SABM only
+    paclen: int = 128               # info bytes per I frame
+    maxframe: int = 4               # window with modulo 8 (1..7)
+    maxframe_ext: int = 7           # window with modulo 128 (v2.2)
+    srej: bool = True
+    n2: int = 10
+    t1_min_sec: float = 3.0
+    t1_max_sec: float = 30.0
+    t2_sec: float = 1.5
+    t3_sec: float = 300.0
+    srt_init_sec: float = 2.5
+
+
 @dataclass
 class MailboxCfg:
     welcome_enabled: bool
@@ -328,6 +361,9 @@ class Config:
     rubrics: list[Rubric] = field(default_factory=list)
     forward: ForwardCfg = field(default_factory=ForwardCfg)
     client: ClientCfg = field(default_factory=ClientCfg)
+    radio: RadioCfg = field(default_factory=RadioCfg)
+    kiss: KissCfg = field(default_factory=KissCfg)
+    ax25: Ax25Cfg = field(default_factory=Ax25Cfg)
 
 
 def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
@@ -336,6 +372,8 @@ def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
             return cp.getboolean(sec, key, fallback=default)
         if kind is int:
             return cp.getint(sec, key, fallback=default)
+        if kind is float:
+            return cp.getfloat(sec, key, fallback=default)
         return cp.get(sec, key, fallback=default)
     except ValueError as exc:
         raise ConfigError(f"[{sec}] {key}: {exc}") from None
@@ -400,6 +438,53 @@ def _check_log_dir(value: str, base: Path) -> Path:
     return log_dir
 
 
+def _load_kiss(cp: configparser.ConfigParser,
+               direwolf: DirewolfCfg) -> tuple[RadioCfg, KissCfg, Ax25Cfg]:
+    """[radio], [kiss], [ax25] - all optional; without them TinyBox uses AGW as before."""
+    radio = RadioCfg(interface=_get(cp, "radio", "interface", "agw").strip().lower())
+    if radio.interface not in ("agw", "kiss"):
+        raise ConfigError(f"[radio] interface: '{radio.interface}' - use agw or kiss")
+    kiss = KissCfg(
+        host=_get(cp, "kiss", "host", "127.0.0.1").strip(),
+        port=_get(cp, "kiss", "port", 8001, int),
+        channel=_get(cp, "kiss", "channel", 0, int),
+        reconnect_sec=_get(cp, "kiss", "reconnect_sec", 5, int),
+        air_baud=_get(cp, "kiss", "air_baud", 1200, int),
+        txdelay_ms=_get(cp, "kiss", "txdelay_ms", 300, int),
+    )
+    _check_port("kiss", "port", kiss.port)
+    _check_range("kiss", "channel", kiss.channel, 0, 15)
+    _check_range("kiss", "reconnect_sec", kiss.reconnect_sec, 1, 3600)
+    _check_range("kiss", "air_baud", kiss.air_baud, 300, 1_000_000)
+    _check_range("kiss", "txdelay_ms", kiss.txdelay_ms, 0, 2550)
+    ax25 = Ax25Cfg(
+        version=_get(cp, "ax25", "version", "2.2").strip(),
+        # without [ax25] the AGW values apply, so switching interface changes nothing else
+        paclen=_get(cp, "ax25", "paclen", direwolf.paclen, int),
+        maxframe=_get(cp, "ax25", "maxframe", min(7, direwolf.max_outstanding), int),
+        maxframe_ext=_get(cp, "ax25", "maxframe_ext", 7, int),
+        srej=_get(cp, "ax25", "srej", True, bool),
+        n2=_get(cp, "ax25", "n2", 10, int),
+        t1_min_sec=_get(cp, "ax25", "t1_min_sec", 3.0, float),
+        t1_max_sec=_get(cp, "ax25", "t1_max_sec", 30.0, float),
+        t2_sec=_get(cp, "ax25", "t2_sec", 1.5, float),
+        t3_sec=_get(cp, "ax25", "t3_sec", 300.0, float),
+        srt_init_sec=_get(cp, "ax25", "srt_init_sec", 2.5, float),
+    )
+    if ax25.version not in ("2.0", "2.2"):
+        raise ConfigError(f"[ax25] version: '{ax25.version}' - use 2.0 or 2.2")
+    _check_range("ax25", "paclen", ax25.paclen, 16, 256)
+    _check_range("ax25", "maxframe", ax25.maxframe, 1, 7)
+    _check_range("ax25", "maxframe_ext", ax25.maxframe_ext, 1, 127)
+    _check_range("ax25", "n2", ax25.n2, 1, 50)
+    for key in ("t1_min_sec", "t1_max_sec", "t2_sec", "t3_sec", "srt_init_sec"):
+        if not 0 <= getattr(ax25, key) <= 3600:
+            raise ConfigError(f"[ax25] {key}: must be between 0 and 3600 seconds")
+    if not 0 < ax25.t1_min_sec <= ax25.t1_max_sec:
+        raise ConfigError("[ax25] t1_min_sec must be above 0 and not above t1_max_sec")
+    return radio, kiss, ax25
+
+
 def load(path: str | Path) -> Config:
     path = Path(path).resolve()
     if not path.is_file():
@@ -455,6 +540,8 @@ def load(path: str | Path) -> Config:
     _check_range("direwolf", "quality_window_min", direwolf.quality_window_min, 1, 1440)
     _check_range("direwolf", "quality_min_frames", direwolf.quality_min_frames, 1,
                  direwolf.quality_window_frames)
+
+    radio, kiss, ax25 = _load_kiss(cp, direwolf)
 
     mailbox = MailboxCfg(
         welcome_enabled=_get(cp, "mailbox", "welcome_enabled", True, bool),
@@ -590,7 +677,7 @@ def load(path: str | Path) -> Config:
     return Config(path=path, station=station, direwolf=direwolf, mailbox=mailbox,
                   telnet=telnet, web=web, console=console, storage=storage, logging=logging_cfg,
                   mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp), rubrics=_load_rubrics(cp),
-                  forward=forward,
+                  forward=forward, radio=radio, kiss=kiss, ax25=ax25,
                   client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)))
 
 
