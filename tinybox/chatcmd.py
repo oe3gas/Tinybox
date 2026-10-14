@@ -11,11 +11,14 @@ Inside a board every line is chat text, except lines starting with "/":
     //...         client protocol (clientproto.py)
 
 TinyBox clients (session.client set) get machine-readable lines instead
-of the human headers - see clientproto.py.
+of the human headers - see clientproto.py. From such a session a bare
+"C" or "C <board>" is not chat text but the mailbox command of a client
+that has lost track of where it is: it is answered, not broadcast.
 """
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -26,6 +29,9 @@ if TYPE_CHECKING:
     from .session import Session
 
 CTRL_Z = "\x1a"
+# "C" or "C <board>" from a client session: the mailbox command, sent into a
+# board by a client that lost track of where it is (see resync_client).
+CHAT_CMD_RE = re.compile(r"(?i)^C(?:\s+(\w{1,16}))?$")
 # A chat line is text. Control characters mean binary data ended up here (e.g.
 # the rest of an image upload after a line slipped into the byte stream, CR12):
 # such a line is dropped, never sent on to everybody in the board.
@@ -86,11 +92,10 @@ def history_rows(lines) -> list[str]:
     return [f"//H {_epoch(c.created)} {c.call}: {c.text}" for c in lines]
 
 
-def _enter_client(s: Session, board: ChatBoard) -> None:
-    from .session import State
+def _board_lines(s: Session, board: ChatBoard) -> list[str]:
+    """//IN (plus //WHO) for a client: which board it is in and what the board
+    offers. The caller decides whether a join belongs with it."""
     hub = s.service.chat
-    if s.chat_board is not None:
-        hub.leave(s)
     count, last = hub.history_info(board)
     hist = f" hist={count}" + (f" last={_epoch(last)}" if last else "")
     hist += f" now={int(datetime.now(timezone.utc).timestamp())}"   # the client's clock may be off
@@ -104,9 +109,34 @@ def _enter_client(s: Session, board: ChatBoard) -> None:
     if clientnews.version_key(s.client.version) < clientnews.version_key(HIST_CLIENT):
         lines += history_rows(hub.history(board))       # older client: as before
     lines.append(hub.who_line(board.name, s))      # CR33: with member numbers (NUM)
+    return lines
+
+
+def _enter_client(s: Session, board: ChatBoard) -> None:
+    from .session import State
+    hub = s.service.chat
+    if s.chat_board is not None:
+        hub.leave(s)                  # the //WHO below is without us
+    lines = _board_lines(s, board)
     s.state = State.CHAT
     s.out(*lines)
     hub.join(s, board)            # the join event follows the //WHO line
+
+
+def resync_client(s: Session) -> bool:
+    """The client is back on a session that never left the board: tell it where
+    it is. Only //IN and //WHO go out, nothing to the other members - the
+    station is still a member, so there is no leave and no join to announce.
+    //WHO therefore has our own call in it (with the member number, CR33)."""
+    if s.client is None or s.chat_board is None:
+        return False
+    hub = s.service.chat
+    board = hub.cfg.chat.board(s.chat_board)
+    if board is None:
+        return False
+    hub.rebind(s)                 # the new caps decide about the receive window
+    s.out(*_board_lines(s, board))
+    return True
 
 
 def _history(s: Session, n: int) -> None:
@@ -191,6 +221,17 @@ def handle(s: Session, line: str) -> None:
         return
     if text.startswith("//"):
         clientproto.handle(s, text)
+        return
+    if s.client is not None and (m := CHAT_CMD_RE.match(text)):
+        # A client does not mean "C <n>" as chat text: an older one that has
+        # restarted on a link that stayed up does not know it is still in a
+        # board and sends the mailbox command into it. Do what it meant - and
+        # above all do not put it in front of everybody in the board.
+        board = hub.find(m.group(1)) if m.group(1) else None
+        if board is not None and board.name != s.chat_board:
+            enter(s, board)
+        else:
+            resync_client(s)
         return
     if text.startswith("/"):
         cmd, _, arg = text[1:].partition(" ")

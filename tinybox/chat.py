@@ -172,12 +172,22 @@ class ChatHub:
 
     # --- membership -----------------------------------------------------
 
+    def _rx_window(self, session: Session) -> linkq.RxWindow | None:
+        return (linkq.RxWindow(linkq.cfg_from(self.cfg.direwolf))
+                if session.client and session.client.ui else None)
+
+    def rebind(self, session: Session) -> None:
+        """A client announced itself again on a session that is still in a board
+        (a restart on a link that stayed up): only the receive window follows the
+        new caps. No leave/join - the station never left, so nobody else hears a
+        thing and nothing goes over the air for the others."""
+        session.ui_rx = self._rx_window(session)
+
     def join(self, session: Session, board: ChatBoard) -> None:
         self.leave(session, quiet=False)
         self._members.setdefault(board.name, []).append(session)
         session.chat_board = board.name
-        session.ui_rx = (linkq.RxWindow(linkq.cfg_from(self.cfg.direwolf))
-                         if session.client and session.client.ui else None)
+        session.ui_rx = self._rx_window(session)
         sym = session.client.symbol if session.client else ""
         n = self._assign_no(board.name, session.call)
         tail = f" {sym}" if sym else ""

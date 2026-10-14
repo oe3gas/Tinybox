@@ -499,6 +499,45 @@ Eigener Client mit Zusatzfunktionen, die es nur mit der TinyBox gibt. Getrennt v
   - Hat die Sitzung einen Digi-Pfad (`via`), bleibt sie immer im I-Frame-Modus.
   - Der Client meldet sich nur für den UI-Modus an, wenn er die TinyBox selbst hört. Damit sind Node-Verbindungen abgedeckt.
 
+### 12.2a „C 1“ landete im Chat (Fehler, behoben 14.10.2026)
+
+**Befund:** Nach einem Client-Neustart erschienen `C 1`, `C 2` … als Chat-Zeilen im
+Board – für alle sichtbar, und der Client selbst sah nichts davon. Die Kette:
+
+1. Der Client wird beendet, **Direwolf hält den AX.25-Link**. Die TinyBox bekommt kein
+   `d` und räumt die Sitzung nicht ab: sie steht weiter in `State.CHAT`.
+2. Der neue Client verbindet. Direwolf meldet den bestehenden Link, die TinyBox verwirft
+   das in `agw.py:_on_connect()` als `duplicate connect ignored` – **keine neue Sitzung,
+   kein „Welcome to TinyBox“**.
+3. Ohne Welcome greift im Client nach 6 s `_handshake_fallback()`: `//CLIENT` geht raus.
+   `//`-Zeilen gelten auch im Board, also laufen `//OK`, `//BOARDS`, `//B …`, `//BEND`
+   ganz normal durch.
+4. Bei `//BEND` springt der Auto-Rejoin an. `self.board` ist im frischen Prozess `None`,
+   also sendet `join()` den **Mailbox**-Befehl `C <n>` statt `/J <n>`.
+5. Im Board ist jede Zeile ohne „/“ Chat-Text → `C 1` geht an alle. Der Client bleibt
+   ohne Board, verwirft wegen `if not self.board` alle `#`-Ereignisse und sieht die
+   eigene Zeile nicht – also klickt der Benutzer noch einmal.
+
+**Korrektur (Server, keine Client-Änderung nötig):**
+
+- `//CLIENT` auf einer Sitzung, die noch in einem Board steht, wird nach dem `//OK` mit
+  `//IN` + `//WHO` beantwortet (`chatcmd.resync_client()`). Der Client weiß damit sofort,
+  wo er ist, holt sich mit `last seq` den Anschluss und sendet gar kein `C <n>` mehr.
+- **Ohne leave/join**: die Station hat das Board nie verlassen. Es gibt kein `-n`/`+n` an
+  die anderen Mitglieder, nichts geht zusätzlich in die Luft, die Teilnehmernummer bleibt.
+  `//WHO` enthält deshalb das eigene Rufzeichen mit. Angepasst wird nur das
+  Empfangsfenster (`ChatHub.rebind()`), weil der neue Client andere Caps haben kann.
+- Im Normalfall (frische Verbindung, `chat_board` leer) ändert sich **kein einziges Byte**.
+- Zusätzlich fängt `chatcmd.handle()` eine Zeile `C` / `C <n>` **von einer Client-Sitzung**
+  ab: gleiches Board → `//IN`, anderes Board → regulärer Wechsel. Damit können auch ältere
+  Clients den Kanal nicht mehr mit `C 1` belegen. Für Terminal-Benutzer bleibt `C 1` im
+  Board normaler Chat-Text.
+
+**Tests:** `test_restart_in_board_gets_in_without_anybody_hearing_it` (Sequenzzähler
+unverändert, Terminal und UI hören nichts), `test_mailbox_command_from_a_client_is_not_chat`.
+
+---
+
 ### 12.3 Funktionen v1 (Reihenfolge = Umsetzungsreihenfolge)
 
 | # | Funktion | Kern |

@@ -183,6 +183,56 @@ class ClientProtoTests(unittest.TestCase):
         self.assertEqual(ct.take(), "#1 OE3GAS: test\r")
         self.assertEqual(self.ui, [])                 # nobody needs UI
 
+    def test_restart_in_board_gets_in_without_anybody_hearing_it(self):
+        """The client restarts while the link stays up: the session is still in
+        the board, so //CLIENT is answered with //IN and //WHO - and the other
+        members hear nothing (no leave, no join)."""
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF")
+        c, ct = radio_login(self.app, "OE3GAS")
+        type_lines(c, "//CLIENT TB1 caps=CHAT,UI sym=/-", "C 1")
+        ct.take(), tt.take(), self.ui.clear()
+        seq_before = self.app.service.chat._seq["TREFF"]
+
+        type_lines(c, f"//CLIENT TB1 v={clientnews.client_version()} caps=CHAT,UI,NUM sym=/-")
+        out = ct.take().split("\r")
+        self.assertEqual(out[0], "")                      # the answer starts on a fresh line
+        self.assertTrue(out[1].startswith("//OK TB1 "), out[1])
+        self.assertRegex(out[2], r"^//IN 1 TREFF 7d \S+ hist=\d+( last=\d+)? now=\d+$")
+        self.assertEqual(out[3], "//WHO 1 OE3XYZ 2 OE3GAS=/-")  # with us: we never left
+        self.assertEqual(tt.take(), "")                   # the terminal user hears nothing
+        self.assertEqual(self.ui, [])                     # and nothing goes out over UI
+        self.assertEqual(self.app.service.chat._seq["TREFF"], seq_before)   # no event
+        self.assertEqual(c.chat_board, "TREFF")
+        self.assertEqual(c.state, State.CHAT)
+        # and the client is live again: it speaks, the others hear it
+        type_lines(c, "wieder da")
+        self.assertIn("OE3GAS: wieder da", tt.take())
+
+    def test_mailbox_command_from_a_client_is_not_chat(self):
+        """An older client sends "C <n>" into the board after a restart. That
+        must not land in the chat: the same board answers with //IN, another
+        board is entered."""
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF")
+        c, ct = radio_login(self.app, "OE3GAS")
+        type_lines(c, "//CLIENT TB1 caps=CHAT", "C 1")
+        ct.take(), tt.take()
+
+        type_lines(c, "C 1")                      # the board it is already in
+        self.assertTrue(ct.take().startswith("//IN 1 TREFF "))
+        self.assertEqual(tt.take(), "")           # nobody saw a "C 1"
+        type_lines(c, "C")                        # bare, without a board
+        self.assertTrue(ct.take().startswith("//IN 1 TREFF "))
+        self.assertEqual(tt.take(), "")
+        # a terminal user in a board still says what it types
+        type_lines(term, "C 1")
+        self.assertIn("OE3XYZ: C 1", ct.take())
+        type_lines(c, "C 2")                      # a different board: a real change
+        self.assertTrue(ct.take().startswith("//IN 2 RUNDE "))
+        self.assertEqual(c.chat_board, "RUNDE")
+        self.assertIn("*** OE3GAS left TREFF", tt.take())
+
     def test_seq_wraps_and_board_over_15_has_no_ui(self):
         hub = self.app.service.chat
         hub._seq["TREFF"] = 0xFE

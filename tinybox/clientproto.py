@@ -22,6 +22,12 @@ the client gets machine-readable lines instead of the human text:
     //OUT <board>                          left the board
     #<seq> ...                             chat events, format see chat.py
 
+A client that announces itself again on a session that is still in a board
+(it restarted while the AX.25 link stayed up) gets the //IN and //WHO lines
+right after the //OK, and nobody is told about a join: it never left. So the
+client does not have to guess where it is, and the mailbox command "C <n>" -
+chat text inside a board - stays off the air.
+
 Other client commands:
     //BOARDS              -> //B <n> <board> <keep> <users> <description> ... //BEND
     //RESEND <a>-<b>      (inside a board) events a..b again, only to this client
@@ -149,6 +155,15 @@ def _client(s: Session, parts: list[str]) -> None:
         extra += " " + s.service.chat.quality_config()
     # the human prompt is still on the line: start the answer on a fresh line
     s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}{extra}")
+    if s.chat_board is not None:
+        # The session is still in a board: the client restarted while the AX.25
+        # link stayed up (Direwolf keeps it, so the mailbox never saw a connect
+        # and sent no welcome). Without this the client believes it is in no
+        # board and sends the mailbox command "C <n>" - which is chat text in a
+        # board and would go to everybody. //IN says where it is, and the others
+        # hear nothing.
+        from . import chatcmd          # local import avoids a cycle
+        chatcmd.resync_client(s)
 
 
 def _iso(unix: str) -> str | None:
