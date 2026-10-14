@@ -1081,7 +1081,7 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - **Sprache: Python.** C verworfen: keine Performance-Not (≤ 40 Frames/s bei 9600 Bd), Frames aus der Luft sind fremde Eingabe → Speichersicherheit wichtiger; falls je nötig, später Übertragung des Automaten nach Rust.
 - **Eigener Prozess `kisshub`** besitzt den TNC (seriell/USB/Bluetooth), initialisiert ihn per Geräteprofil und verteilt die Frames per KISS-TCP (`127.0.0.1:8001`) an TinyBox und brocastd. TinyBox spricht nur KISS-TCP – gegen den Hub genauso wie gegen Direwolfs KISS-Port. TinyBox-Neustarts trennen brocastd nicht mehr vom Funk.
 - Verbindungsqualität kommt im KISS-Mode direkt aus dem Automaten, **ohne Direwolf-Fork**.
-- **TNCs:** Schwerpunkt **PK-232** und **Kenwood TM-D710, TH-D74, TH-D75**; TNC2 nur der Vollständigkeit halber und nur mit **reinem KISS-EPROM**. **Erstes Gerät im Funktest: PK-232.**
+- **TNCs:** Schwerpunkt **PK-232** und **Kenwood TM-D710, TH-D74, TH-D75**; TNC2 nur der Vollständigkeit halber und nur mit **reinem KISS-EPROM**. **Erstes Gerät im Funktest: PK-232.** Getestet wird nur auf **VHF mit 1200 Bd**.
 - **Plattform:** Windows (PC2) und Raspberry Pi; NanoPi nicht als Ziel.
 - Digipeater/APRS von Direwolf wird nicht genutzt – im KISS-Mode nichts zu ersetzen.
 

@@ -14,6 +14,7 @@ Stand: 14.10.2026 (3. Fassung) · Status: **entschieden, bereit für K1**
 | 6 | Sprache des Layer-2-Automaten | **Python** (Abschnitt 7) |
 | 7 | TNC2 | nur mit **reinem KISS-EPROM** (sofort in KISS, keine Init-Zeilen) |
 | 8 | Erstes Gerät im Funktest | **PK-232** |
+| 9 | Funktests | **nur VHF, 1200 Bd** (beim PK-232 der VHF-Port) |
 
 ## 1. Ziel
 
@@ -371,5 +372,5 @@ Implementierung getestet, bevor ein Hardware-TNC dazukommt. Bei Variante B
 
 ## 10. Offene Fragen
 
-1. PK-232: welcher Funkport (HF oder VHF) für den ersten Test, welche Firmware-Version?
+1. PK-232: welche Firmware-Version?
 2. Raspi: welches Modell und welche Anbindung je TNC (USB-Seriell-Adapter, Bluetooth)?
