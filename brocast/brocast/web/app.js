@@ -18,7 +18,7 @@ const state = {
   selected: null,         // {org, id} of the open page
   screen: "pages",        // pages | settings | status
   raw: false,
-  view: "flow",           // subpage view: flow | parts | teletext
+  view: "flow",           // page view: flow | teletext
   graphic: true,          // weather pages and tables: graphic view (false = plain text/table)
   part: 1,                // selected subpage in teletext view
   rxFilter: null,         // receive log: {org, id} of one page, or null = all
@@ -512,15 +512,17 @@ function renderPage(p) {
   v.scrollTop = 0;
 }
 
-/* Subpages can be shown in three ways (remembered in this browser):
- *   flow     – one continuous text (anchors only, for the chips)
- *   parts    – with a visible line "Teil 2/4" between subpages
- *   teletext – only the selected subpage, chips and ◀ ▶ to turn pages
+/* A page can be shown in two ways (remembered in this browser):
+ *   flow     – one continuous text in the normal page layout
+ *   teletext – a teletext screen: pixel font on black, 40 columns, one subpage
+ *              at a time with chips and ◀ ▶ to turn pages
  */
-const VIEWS = [["flow", "Fließtext"], ["parts", "Mit Trennlinien"], ["teletext", "Teletext"]];
+const VIEWS = [["flow", "Fließtext"], ["teletext", "Teletext"]];
 
 function loadView() {
-  try { return localStorage.getItem("brocast.view") || "flow"; } catch (e) { return "flow"; }
+  let view = "flow";
+  try { view = localStorage.getItem("brocast.view") || "flow"; } catch (e) { /* private mode */ }
+  return VIEWS.some(([key]) => key === view) ? view : "flow";   // e.g. the dropped "parts"
 }
 
 function saveView(view) {
@@ -536,68 +538,76 @@ function saveGraphic(on) {
 }
 
 function hasGraphic(p) {
+  if (state.view === "teletext") return false;            // the teletext screen is always text
   return (p.typ === "wx" && Array.isArray(p.data) && p.data.length > 0)
     || p.blocks.some(b => b.k === "table" && wxgCols(b) !== null);
 }
 
+/* The bar above the page: the view switch, and in the teletext view the chips
+ * for the subpages. In the flow view all subpages are below one another, so
+ * there is nothing to turn and no chips are shown. */
 function partsBar(p, redraw) {
-  if (p.sub_total <= 1) return [];
-  const missing = new Set(p.blocks.filter(b => b.k === "missing").map(b => b.sub));
   const bar = el("div", "subnav");
 
-  const views = el("div", "segment");
-  for (const [key, label] of VIEWS) {
-    const b = el("button", state.view === key ? "on" : "", label);
-    b.type = "button";
-    b.onclick = () => { state.view = key; saveView(key); redraw(); };
-    views.append(b);
-  }
-
-  const turn = (delta) => {
-    state.part = Math.min(p.sub_total, Math.max(1, state.part + delta));
-    redraw();
-  };
-  bar.append("Teile ");
-  if (state.view === "teletext") {
+  if (state.view === "teletext" && p.sub_total > 1) {
+    const missing = new Set(p.blocks.filter(b => b.k === "missing").map(b => b.sub));
+    const turn = (delta) => {
+      state.part = Math.min(p.sub_total, Math.max(1, state.part + delta));
+      redraw();
+    };
     const prev = el("button", "chip", "◀");
     prev.type = "button"; prev.title = "vorheriger Teil"; prev.disabled = state.part <= 1;
     prev.onclick = () => turn(-1);
-    bar.append(prev);
-  }
-  for (let i = 1; i <= p.sub_total; i++) {
-    const on = state.view === "teletext" && i === state.part;
-    const chip = el("button", "chip" + (missing.has(i) ? " miss" : "") + (on ? " on" : ""), `${i}/${p.sub_total}`);
-    chip.type = "button";
-    chip.title = missing.has(i) ? `Teil ${i} noch nicht empfangen` : `Teil ${i} anzeigen`;
-    chip.onclick = () => {
-      if (state.view === "teletext") { state.part = i; redraw(); return; }
-      const target = document.getElementById("part-" + i);
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
-    };
-    bar.append(chip);
-  }
-  if (state.view === "teletext") {
+    bar.append("Teile ", prev);
+    for (let i = 1; i <= p.sub_total; i++) {
+      const chip = el("button", "chip" + (missing.has(i) ? " miss" : "") + (i === state.part ? " on" : ""),
+                      `${i}/${p.sub_total}`);
+      chip.type = "button";
+      chip.title = missing.has(i) ? `Teil ${i} noch nicht empfangen` : `Teil ${i} anzeigen`;
+      chip.onclick = () => { state.part = i; redraw(); };
+      bar.append(chip);
+    }
     const next = el("button", "chip", "▶");
     next.type = "button"; next.title = "nächster Teil"; next.disabled = state.part >= p.sub_total;
     next.onclick = () => turn(1);
     bar.append(next);
   }
+
+  const views = el("div", "segment");
+  for (const [key, label] of VIEWS) {
+    const b = el("button", state.view === key ? "on" : "", label);
+    b.type = "button";
+    b.onclick = () => { state.view = key; saveView(key); renderPage(p); };   // the buttons change too
+    views.append(b);
+  }
   bar.append(el("span", "grow"), el("span", "seglabel", "Ansicht"), views);
   return [bar];
 }
 
+/* Head of the teletext screen: rubric, page number, title - as on a real
+ * teletext page, so the screen is readable on its own. */
+function ttHead(p) {
+  const head = el("div", "tthead");
+  const cat = p.cats && p.cats.length ? p.cats.map(c => c.name).join(" ") : p.typ_name;
+  head.append(el("span", "cat", cat), el("span", "grow"),
+              el("span", "pg", `${p.org} S.${p.id}`));
+  return head;
+}
+
 function renderContent(p) {
-  const c = el("div", "content");
+  const teletext = state.view === "teletext";
+  const c = el("div", teletext ? "content ttscreen" : "content");
   if (p.dict_newer) {
     const local = state.status.dictionary ? state.status.dictionary.local : "?";
     c.append(el("div", "note warn", `Diese Seite verwendet Dictionary-Version ${p.dv}, installiert ist Version ${local}. ` +
       "Unbekannte Felder werden roh angezeigt."));
   }
-  const teletext = state.view === "teletext" && p.sub_total > 1;
-  const showFirst = !teletext || state.part === 1;      // txt and data live on subpage 1
+  const turn = teletext && p.sub_total > 1;             // only this subpage is shown
+  const showFirst = !turn || state.part === 1;          // txt and data live on subpage 1
+  if (teletext) c.append(ttHead(p), el("div", "ttitle", p.ti || `${p.typ_name} – Seite ${p.id}`));
   if (showFirst && p.txt) c.append(linkified("p", null, p.txt));
   let used = new Set();                                 // blocks already shown by a special view
-  if (showFirst && state.graphic && p.typ === "wx" && p.data && p.data.length) {
+  if (showFirst && !teletext && state.graphic && p.typ === "wx" && p.data && p.data.length) {
     const wx = weatherView(p);
     c.append(wx.node);
     used = wx.used;
@@ -606,10 +616,11 @@ function renderContent(p) {
     for (const d of p.data) cards.append(card(d.label, d.value, d.unit));
     c.append(cards);
   }
-  const semantics = tableSemantics(p.blocks);          // from all blocks: teletext shows only one subpage
-  let blocks = teletext ? p.blocks.filter(b => b.sub === state.part) : p.blocks;
+  // teletext: no weather grid either (no column semantics -> the plain table)
+  const semantics = teletext ? null : tableSemantics(p.blocks);
+  let blocks = turn ? p.blocks.filter(b => b.sub === state.part) : p.blocks;
   if (used.size) blocks = blocks.filter(b => !used.has(b));
-  renderBlocks(c, blocks, p.sub_total, teletext ? "teletext" : state.view, semantics);
+  renderBlocks(c, blocks, p.sub_total, semantics);
   if (Array.isArray(p.lnk) && p.lnk.length && showFirst) {
     c.append(el("h4", null, "Verweise"));
     for (const ref of p.lnk) c.append(linkNode(null, ref));
@@ -674,17 +685,9 @@ function scaledRows(b) {
   return (b.rows || []).map(r => (Array.isArray(r) ? r : [r]).map(x => typeof x === "number" ? x * sc : x));
 }
 
-function renderBlocks(c, blocks, total, view, semantics) {
+function renderBlocks(c, blocks, total, semantics) {
   let cards = null, lastTable = null, lastGrid = null;
-  let part = 0;
   for (const b of blocks) {
-    if (total > 1 && view !== "teletext" && b.sub !== part) {   // boundary between subpages
-      part = b.sub;
-      const mark = view === "parts" ? el("div", "partmark", `Teil ${part}/${total}`) : el("div", "anchor");
-      mark.id = "part-" + part;
-      c.append(mark);
-      if (view === "parts") cards = null;
-    }
     if (b.k === "value") {
       if (!cards) { cards = el("div", "cards"); c.append(cards); }
       cards.append(card(b.n || "", scaled(b), b.unit, b.st));
@@ -695,21 +698,21 @@ function renderBlocks(c, blocks, total, view, semantics) {
     const sem = b.k === "table" && semantics ? semantics.get(b) : null;
     if (sem && sem.cols && state.graphic) {
       lastTable = null;
-      if (!b.hdr && lastGrid && view !== "parts") {              // continuation: redraw with all rows
+      if (!b.hdr && lastGrid) {                                  // continuation: redraw with all rows
         lastGrid.rows.push(...scaledRows(b));
         lastGrid.node.replaceChildren(wxGrid(lastGrid.rows, sem.cols, sem.hdr, true));
         continue;
       }
       const node = el("div");
       lastGrid = { rows: scaledRows(b), node };
-      node.append(wxGrid(lastGrid.rows, sem.cols, sem.hdr, view !== "parts"));
+      node.append(wxGrid(lastGrid.rows, sem.cols, sem.hdr, true));
       c.append(node);
       continue;
     }
     lastGrid = null;
     // a table block without its own header right after a table continues it
     // (long tables are sent in small blocks so each one fits into a frame)
-    if (b.k === "table" && !b.hdr && lastTable && view !== "parts") {
+    if (b.k === "table" && !b.hdr && lastTable) {
       tableRows(lastTable, b);
       continue;
     }

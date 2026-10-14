@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.10.2026 (CR35 umgesetzt)
+Stand: 14.10.2026 (CR37 umgesetzt)
 
 ## Übersicht
 
@@ -43,6 +43,7 @@ Stand: 13.10.2026 (CR35 umgesetzt)
 | 34 | Bildübertragung schneller (256-Byte-Frames, Bild am Stück an Direwolf) | ✅ siehe unten |
 | 35 | Bug: Bekanntes Bild ließ sich nicht erneut in den Chat stellen – Upload brach stumm ab | ✅ siehe unten |
 | 36 | Bildgröße im Chat sichtbar (klein bleibt klein), Größenwahl mit Zahlen in den Knöpfen | ✅ siehe unten |
+| 37 | brocast-Listener: Ansicht „Mit Trennlinien“ raus, Teile-Knöpfe nur im Teletext, Teletext in echter Teletext-Optik (Pixelschrift, großer Zeilenabstand) | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -710,3 +711,37 @@ mitkommen, wenn die Datei in einen Chat gelegt wird.
 - **Anzeige in eigener Pixelgröße:** die Bild-Box folgt dem Bild (`fit-content`, höchstens 320 px bzw. 70 % der Fensterbreite). Der unscharfe Platzhalter vor dem Laden bekommt seine Breite aus den Bytes (die Pixel gehen nicht über Funk): bis ≈ 3 kB → 108 px, bis ≈ 6 kB → 192 px, sonst 320 px.
 - **Dialog:** „Select size“ mit drei Knöpfen untereinander, jeder trägt seine Zahlen, z. B. `small (108×81), ~2.0 KB, ~30 s` – Pixel aus dem Seitenverhältnis des gewählten Bildes, Dauer aus `bytes_per_sec`. Rechts daneben nur die Bildunterschrift; die früheren Erklärtexte (Ergebniszeile, Hinweis über „Send“) sind weg, die Zahlen stehen ja in den Knöpfen. Die Zeile rechts bleibt für „Shrinking…“ und Fehlermeldungen. Unter 700 px Breite rutscht die Unterschrift unter die Knöpfe.
 - Client-Version 2026.10.14.2 (Kosmetik nachgezogen). Nur Web-GUI (`index.html`, `app.js`, `app.css`), kein Protokoll berührt.
+
+## CR37 – Ansichten im brocast-Listener (✅ 14.10.2026)
+
+**Problem:** Drei Ansichten für eine Seite waren zwei zu viel. „Mit Trennlinien“ brachte gegenüber dem
+Fließtext nur eine gestrichelte Linie je Unterseite. Im Fließtext standen die Teile-Knöpfe (`1/8`, `2/8`, …),
+obwohl dort ohnehin alle Teile untereinander stehen – sie sprangen nur zum Anfang eines Teils. Und die
+Teletext-Ansicht hieß zwar so, sah aber aus wie der Fließtext mit weniger Inhalt.
+
+**Lösung:**
+
+1. **„Mit Trennlinien“ entfällt.** Es bleiben **Fließtext** und **Teletext**; ein im Browser gemerktes
+   `parts` fällt auf Fließtext zurück. Die Umschaltung steht jetzt bei *jeder* Seite (vorher erst ab zwei
+   Teilen), damit auch eine einteilige Seite als Teletext gelesen werden kann.
+2. **Fließtext ohne Teile-Knöpfe.** Dort steht nur noch rechts die Umschaltung „Ansicht“. Die Knöpfe
+   (mit ◀ ▶) gibt es im Teletext, wo sie wirklich blättern.
+3. **Teletext-Optik.** Die Seite wird als schwarzer Bildschirm gezeichnet: eigene Pixelschrift, 40 Zeichen
+   je Zeile, Zeilenabstand 1,65 (bewusst luftiger als das enge Original-Raster – das war am Bildschirm zu
+   gedrängt). Kopfzeile wie beim Teletext: Rubrik links im roten Feld, Station und Seitennummer rechts,
+   darunter der Titel in Gelb. Farben nach Bedeutung: Überschriften gelb, Hinweise/Tabellenköpfe cyan,
+   Warnungen gelb, Alarme rot, fehlende Teile magenta.
+   - Die Schrift (`brocast/brocast/web/teletext.woff`, 5,8 kB, 228 Zeichen) entsteht aus einem
+     7 × 13-Pixel-Raster: `brocast/tools/build_teletext_font.py` rastert DejaVu Sans Mono **Bold** bei 10 px
+     in reinem Schwarz-Weiß und macht aus jedem Pixel ein Quadrat im Umriss. Die fette Schnittlage liefert
+     2 Pixel breite Striche – das ist der grobe Teletext-Eindruck. Bei `font-size: 32px` ist ein Schriftpixel
+     genau zwei Bildschirmpixel (am Handy 24 px), daher die harten Kanten.
+   - Ausgeliefert wird sie vom Listener selbst (`/teletext.woff`, CSP `default-src 'self'` – kein
+     Internet, keine Google Fonts).
+   - **Der Teletext-Bildschirm ist immer Text:** Wetterkacheln und das Wetterraster (CR-Vorgänger,
+     PLANUNG 6g) erscheinen dort als Werteliste bzw. als einfache Tabelle, und der Knopf
+     „Grafisch/Text“ wird in dieser Ansicht ausgeblendet. Er gilt für den Fließtext.
+
+Vorschau ohne laufenden brocastd: `brocast/mockup/teletext-vorschau.html`.
+Betrifft nur den Listener (`app.js`, `app.css`, `webserver.py`, `listener_api.py`) – kein Protokoll, keine
+Änderung an dem, was über Funk geht.

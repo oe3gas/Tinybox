@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teletext-Ansicht im brocast-Listener</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+@font-face { font-family: "brocast Teletext"; src: url(data:font/woff;base64,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) format("woff"); font-display: block; }
+/* Vorschau der Listener-Seite: bewusst nur das helle Listener-Design (color-scheme light) */
+:root {
+  --ink: #111111; --ink-2: #222222; --ink-3: #4a4a4a;
+  --ground: #E9E9E6; --paper: #FFFFFF; --paper-2: #F6F6F3; --rule: #C9C9C4;
+  --accent: #0B4A8F; --accent-dark: #062F5C;
+  --ok: #0B7A2F; --warn: #9A5B00; --danger: #A3001B;
+  --tt-bg: #000000; --tt-yellow: #FFD400; --tt-cyan: #00D7E6; --tt-white: #FFFFFF;
+  --tt-green: #35D74A; --tt-red: #E02A2A; --tt-magenta: #E462E4;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Cascadia Mono", monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.45 var(--sans); color: var(--ink); background: var(--ground);
+       padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+       padding-block: 0 40px; }
+button { font: inherit; color: inherit; }
+.grow { flex-grow: 1; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 860px; margin: 0 auto; }
+.tt { background: var(--tt-bg); color: var(--tt-white); font: 700 16px var(--mono); padding: 8px 22px;
+      display: flex; align-items: center; gap: 18px; margin-top: 18px; }
+.tt .y { color: var(--tt-yellow); } .tt .c { color: var(--tt-cyan); }
+.pagewrap { padding: 22px 0 10px; }
+.pagetitle { font-size: 27px; font-weight: 800; margin: 0 0 6px; line-height: 1.2; text-wrap: balance; }
+.pmeta { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 14px; color: var(--ink-3); margin-bottom: 14px; }
+.pmeta b { color: var(--ink); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+.btn { height: 34px; padding: 0 11px; font-weight: 700; font-size: 13px; background: var(--paper);
+       border: 2px solid var(--ink); border-radius: 6px; cursor: pointer; display: inline-flex;
+       align-items: center; gap: 6px; white-space: nowrap; }
+.btn:hover { background: var(--paper-2); }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+.subnav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 14px 0 6px; font-size: 13px;
+          font-weight: 700; color: var(--ink-3); }
+.chip { min-width: 34px; height: 30px; padding: 0 7px; display: inline-flex; align-items: center;
+        justify-content: center; border: 2px solid var(--ink); border-radius: 5px; font: 700 13px var(--mono);
+        background: var(--paper); cursor: pointer; }
+.chip:hover { background: var(--ink); color: #fff; }
+.chip.on { background: var(--ink); color: #fff; }
+.chip:disabled { opacity: .35; cursor: default; }
+.seglabel { font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.segment { display: inline-flex; border: 2px solid var(--ink); border-radius: 6px; overflow: hidden; }
+.segment button { height: 30px; padding: 0 10px; border: 0; border-right: 2px solid var(--ink);
+                  background: var(--paper); font: 700 13px var(--sans); cursor: pointer; }
+.segment button:last-child { border-right: 0; }
+.segment button.on { background: var(--ink); color: #fff; }
+.content p { margin: 0 0 12px; font-size: 16px; max-width: 70ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* ---------- teletext view ----------
+   Pixelschrift (brocast/tools/build_teletext_font.py): 1 Zeichen = 7 x 16 Pixel
+   im em, bei font-size 32 px also genau 2 Bildschirmpixel je Schriftpixel. Nur
+   geradzahlige Groessen verwenden, sonst verwischen die Kanten. Die Zeilen
+   stehen bewusst weit auseinander (Zeilenabstand 1,65) - auf dem Bildschirm
+   liest sich das besser als das enge Original-Raster. */
+.content.ttscreen { background: var(--tt-bg); color: var(--tt-white); font-family: "brocast Teletext", var(--mono);
+                    font-size: 32px; line-height: 1.65; padding: 20px 16px 26px; margin: 4px 0 16px;
+                    max-width: calc(40ch + 32px); -webkit-font-smoothing: none; }
+.content.ttscreen .tthead { display: flex; align-items: baseline; gap: 1ch; margin-bottom: .5em;
+                            line-height: 1.25; }
+.content.ttscreen .tthead .cat { background: var(--tt-red); color: var(--tt-white); padding: 0 1ch;
+                                 text-transform: uppercase; overflow: hidden; text-overflow: ellipsis;
+                                 white-space: nowrap; }
+.content.ttscreen .tthead .pg { color: var(--tt-cyan); white-space: nowrap; }
+.content.ttscreen .ttitle { color: var(--tt-yellow); margin-bottom: .5em; overflow-wrap: anywhere; }
+.content.ttscreen h3, .content.ttscreen h4 { font: inherit; color: var(--tt-yellow); margin: .8em 0 .2em; }
+.content.ttscreen p { font-size: inherit; max-width: none; margin: 0 0 .9em; }
+.content.ttscreen ul { font-size: inherit; margin: 0 0 .9em; padding-left: 2ch; list-style: none; }
+.content.ttscreen li::before { content: "* "; color: var(--tt-cyan); }
+.content.ttscreen a.extlink { color: var(--tt-cyan); text-decoration: none; }
+.content.ttscreen a.extlink:hover { color: var(--tt-yellow); }
+.content.ttscreen .note { background: none; border: 0; border-left: 1ch solid var(--tt-cyan); color: var(--tt-cyan);
+                          padding: 0 0 0 1ch; margin: 0 0 .9em; font-weight: inherit; }
+.content.ttscreen .note.warn { border-color: var(--tt-yellow); color: var(--tt-yellow); }
+.content.ttscreen .note.alarm { border-color: var(--tt-red); color: var(--tt-red); }
+.content.ttscreen .missing { border: 0; color: var(--tt-magenta); padding: 0; font-weight: inherit; margin: 0 0 .9em; }
+.content.ttscreen .link { background: none; border: 0; color: var(--tt-cyan); padding: 0; margin: 0 0 .4em;
+                          font: inherit; display: flex; gap: 1ch; }
+.content.ttscreen .link .mono { color: var(--tt-white); font-family: inherit; }
+.content.ttscreen .cards { display: block; margin: 0 0 .9em; }
+.content.ttscreen .card { background: none; border: 0; border-radius: 0; padding: 0; display: flex;
+                          gap: 1ch; align-items: baseline; }
+.content.ttscreen .card .l { font: inherit; color: var(--tt-cyan); }
+.content.ttscreen .card .v { font: inherit; }
+.content.ttscreen .card .v small { font-size: inherit; margin-left: 1ch; color: var(--tt-cyan); }
+.content.ttscreen table.tbl { display: block; overflow-x: auto; border-collapse: collapse; background: none;
+                              font-size: inherit; max-width: 100%; margin: 0 0 .9em; }
+.content.ttscreen table.tbl th, .content.ttscreen table.tbl td { border: 0; padding: 0 1ch 0 0; color: inherit;
+                                                                 background: none; white-space: nowrap; }
+.content.ttscreen table.tbl th { color: var(--tt-cyan); font: inherit; text-transform: uppercase; }
+.content.ttscreen table.tbl th.grp { color: var(--tt-green); }
+.content.ttscreen .series { background: none; border: 0; border-radius: 0; padding: 0; margin: 0 0 .9em; }
+.content.ttscreen .series .l { font: inherit; color: var(--tt-cyan); }
+.content.ttscreen .series .l .mono { font-family: inherit; color: var(--tt-white); }
+.content.ttscreen .series path { stroke: var(--tt-green); }
+.content.ttscreen pre { background: none; border: 0; border-radius: 0; padding: 0; font: inherit; margin: 0 0 .9em; }
+.content.ttscreen hr { border-top: 2px solid var(--tt-cyan); margin: .6em 0; }
+.note-box { background: #fff; border: 2px solid var(--accent); border-radius: 8px; padding: 12px 16px;
+            margin: 22px 0 0; font-size: 14px; }
+.note-box b { color: var(--accent); }
+.note-box ul { margin: 8px 0 0; padding-left: 20px; }
+.note-box li { margin-bottom: 4px; }
+@media (max-width: 700px) {
+  .pagetitle { font-size: 23px; }
+  .pmeta { font-size: 12px; gap: 2px 12px; }
+  .content.ttscreen { font-size: 24px; padding: 14px 12px 18px; }
+  .tt { padding: 8px 12px; gap: 10px; font-size: 14px; flex-wrap: wrap; }
+}
+</style>
+
+<div class="wrap">
+  <div class="tt"><span class="c">OE3GAS-5</span><span class="y">S.46</span><span>brocast</span>
+    <span class="grow"></span><span class="y" id="clock">MI 14.10.26 15:49:49</span></div>
+  <div class="pagewrap">
+    <h1 class="pagetitle">PR Revival mit moderner Software</h1>
+    <div class="pmeta">
+      <span>Station <b>OE3GAS-5</b></span><span>Rubrik <b>oepr</b></span><span>Typ <b>Textseite / Bulletin</b></span>
+      <span>Stand <b>15:44</b></span><span>Revision <b>0</b></span><span>gültig bis <b>13.11. 14:44</b></span>
+      <span>An <b>OEPR</b></span><span>Sendezeit ca. <b>10,8 s</b></span><span>Quelle <b>TinyBox, OE3GAS</b></span>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button">☆ Merken</button>
+      <button class="btn" type="button">Als ungelesen markieren</button>
+      <button class="btn" type="button">Rohansicht</button>
+      <button class="btn" type="button">Empfangslog</button>
+      <span class="grow"></span>
+      <button class="btn danger" type="button">Löschen</button>
+    </div>
+    <div id="bar"></div>
+    <div id="content"></div>
+    <div class="note-box"><b>Vorschau der neuen Ansicht.</b> Die Seite ist dieselbe wie bisher – nur die
+      Darstellung ist neu.
+      <ul>
+        <li>Die Ansicht „Mit Trennlinien“ gibt es nicht mehr, es bleiben <b>Fließtext</b> und <b>Teletext</b>.</li>
+        <li>Im Fließtext stehen keine Teile-Knöpfe mehr (dort steht ohnehin alles untereinander).</li>
+        <li>Teletext: Pixelschrift auf Schwarz, 40 Zeichen je Zeile, Zeilenabstand 1,65 – deutlich luftiger
+          als beim Vorbild. Rubrik links im roten Feld, Station und Seitennummer rechts, Titel in Gelb.
+          Mit ◀ ▶ und den Teile-Knöpfen blättert man wie im Teletext durch die Unterseiten.</li>
+      </ul>
+      Die Schrift ist aus einem 7 × 13-Pixel-Raster gebaut; bei 32 px ist ein Schriftpixel genau zwei
+      Bildschirmpixel, daher die harten Kanten.</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const PAGE = {
+  org: "OE3GAS-5", id: 46, ti: "PR Revival mit moderner Software", cat: "oepr",
+  blocks: [
+    [1, "Im Jahr 2017 hat in Deutschland offiziell das bestehende PR Netz aufgehoert zu existieren. Viele Nodes wurden ins Hamnet eingegliedert."],
+    [2, "Userzugaenge gibt es seither keine mehr auf 2m oder 70 cm."],
+    [2, "Das wollen OE-Funkamateure aus Hollabrunn jetzt aendern."],
+    [3, "Derzeit entsteht eine neue benutzerfreundliche Software fuer den Betrieb mit klassischem PR mit 1200 Bd."],
+    [4, "TinyBox heisst das System, das neben einer klassischen BBS auch ein intelligentes, performantes Chatsystem und Broadcasts bietet."],
+    [5, "Wer das \"Look & Feel\" von WhatsApp oder anderen Messenger-Apps auf PR erleben will, der probiert TBClient aus."],
+    [6, "Dieser Client ist speziell auf Verbindungen mit TinyBox-Systemen ausgerichtet. Endlich wieder Spass auf 2m und 70 cm mit Direwolf oder klassischen TNCs."],
+    [7, "Unser Tipp: Ausprobieren!"],
+  ],
+  subTotal: 7,
+};
+const VIEWS = [["flow", "Fließtext"], ["teletext", "Teletext"]];
+let view = "teletext", part = 1;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = String(text);
+  return e;
+}
+
+function bar() {
+  const b = el("div", "subnav");
+  if (view === "teletext" && PAGE.subTotal > 1) {
+    const turn = (d) => { part = Math.min(PAGE.subTotal, Math.max(1, part + d)); draw(); };
+    const prev = el("button", "chip", "◀");
+    prev.type = "button"; prev.disabled = part <= 1; prev.title = "vorheriger Teil";
+    prev.onclick = () => turn(-1);
+    b.append("Teile ", prev);
+    for (let i = 1; i <= PAGE.subTotal; i++) {
+      const c = el("button", "chip" + (i === part ? " on" : ""), `${i}/${PAGE.subTotal}`);
+      c.type = "button"; c.title = `Teil ${i} anzeigen`;
+      c.onclick = () => { part = i; draw(); };
+      b.append(c);
+    }
+    const next = el("button", "chip", "▶");
+    next.type = "button"; next.disabled = part >= PAGE.subTotal; next.title = "nächster Teil";
+    next.onclick = () => turn(1);
+    b.append(next);
+  }
+  const seg = el("div", "segment");
+  for (const [key, label] of VIEWS) {
+    const btn = el("button", view === key ? "on" : "", label);
+    btn.type = "button";
+    btn.onclick = () => { view = key; draw(); };
+    seg.append(btn);
+  }
+  b.append(el("span", "grow"), el("span", "seglabel", "Ansicht"), seg);
+  return b;
+}
+
+function content() {
+  const teletext = view === "teletext";
+  const c = el("div", teletext ? "content ttscreen" : "content");
+  if (teletext) {
+    const head = el("div", "tthead");
+    head.append(el("span", "cat", PAGE.cat), el("span", "grow"),
+                el("span", "pg", `${PAGE.org} S.${PAGE.id}`));
+    c.append(head, el("div", "ttitle", PAGE.ti));
+  }
+  for (const [sub, text] of PAGE.blocks) {
+    if (teletext && sub !== part) continue;
+    c.append(el("p", null, text));
+  }
+  return c;
+}
+
+function draw() {
+  document.getElementById("bar").replaceChildren(bar());
+  document.getElementById("content").replaceChildren(content());
+}
+draw();
+</script>
+
+</head>
+</html>

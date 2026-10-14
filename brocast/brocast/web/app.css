@@ -5,6 +5,7 @@
   --accent: #0B4A8F; --accent-dark: #062F5C;
   --ok: #0B7A2F; --warn: #9A5B00; --danger: #A3001B;
   --tt-bg: #000000; --tt-yellow: #FFD400; --tt-cyan: #00D7E6; --tt-white: #FFFFFF;
+  --tt-green: #35D74A; --tt-red: #E02A2A; --tt-magenta: #E462E4;
   --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", Consolas, "Cascadia Mono", monospace;
 }
@@ -130,11 +131,6 @@ select.sel { height: 34px; border: 2px solid var(--ink); border-radius: 6px; fon
 button.chip { cursor: pointer; }
 button.chip:hover { background: var(--ink); color: #fff; }
 .chip.miss { border-style: dashed; color: var(--ink-3); background: transparent; }
-.partmark { display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; font: 700 12px var(--mono);
-            color: var(--ink-3); scroll-margin-top: 12px; }
-.partmark::after { content: ""; flex-grow: 1; border-top: 1.5px dashed var(--rule); }
-.content > .partmark:first-child { margin-top: 0; }
-.anchor { height: 0; scroll-margin-top: 12px; }
 .chip.on { background: var(--ink); color: #fff; }
 .chip:disabled { opacity: .35; cursor: default; }
 .subnav { flex-wrap: wrap; }
@@ -177,6 +173,60 @@ table.tbl { border-collapse: collapse; margin: 4px 0 16px; background: #fff; fon
 table.tbl th, table.tbl td { border: 1.5px solid var(--ink); padding: 6px 10px; text-align: left; }
 table.tbl th { background: var(--paper-2); }
 table.tbl th.grp { text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }
+/* ---------- teletext view ----------
+   Pixelschrift (brocast/tools/build_teletext_font.py): 1 Zeichen = 7 x 16 Pixel
+   im em, bei font-size 32 px also genau 2 Bildschirmpixel je Schriftpixel. Nur
+   geradzahlige Groessen verwenden, sonst verwischen die Kanten. Die Zeilen
+   stehen bewusst weit auseinander (Zeilenabstand 1,65) - auf dem Bildschirm
+   liest sich das besser als das enge Original-Raster. */
+@font-face {
+  font-family: "brocast Teletext";
+  src: url("/teletext.woff") format("woff");
+  font-display: swap;
+}
+.content.ttscreen { background: var(--tt-bg); color: var(--tt-white); font-family: "brocast Teletext", var(--mono);
+                    font-size: 32px; line-height: 1.65; padding: 20px 16px 26px; margin: 4px 0 16px;
+                    max-width: calc(40ch + 32px); -webkit-font-smoothing: none; }
+.content.ttscreen .tthead { display: flex; align-items: baseline; gap: 1ch; margin-bottom: .5em;
+                            line-height: 1.25; }
+.content.ttscreen .tthead .cat { background: var(--tt-red); color: var(--tt-white); padding: 0 1ch;
+                                 text-transform: uppercase; overflow: hidden; text-overflow: ellipsis;
+                                 white-space: nowrap; }
+.content.ttscreen .tthead .pg { color: var(--tt-cyan); white-space: nowrap; }
+.content.ttscreen .ttitle { color: var(--tt-yellow); margin-bottom: .5em; overflow-wrap: anywhere; }
+.content.ttscreen h3, .content.ttscreen h4 { font: inherit; color: var(--tt-yellow); margin: .8em 0 .2em; }
+.content.ttscreen p { font-size: inherit; max-width: none; margin: 0 0 .9em; }
+.content.ttscreen ul { font-size: inherit; margin: 0 0 .9em; padding-left: 2ch; list-style: none; }
+.content.ttscreen li::before { content: "* "; color: var(--tt-cyan); }
+.content.ttscreen a.extlink { color: var(--tt-cyan); text-decoration: none; }
+.content.ttscreen a.extlink:hover { color: var(--tt-yellow); }
+.content.ttscreen .note { background: none; border: 0; border-left: 1ch solid var(--tt-cyan); color: var(--tt-cyan);
+                          padding: 0 0 0 1ch; margin: 0 0 .9em; font-weight: inherit; }
+.content.ttscreen .note.warn { border-color: var(--tt-yellow); color: var(--tt-yellow); }
+.content.ttscreen .note.alarm { border-color: var(--tt-red); color: var(--tt-red); }
+.content.ttscreen .missing { border: 0; color: var(--tt-magenta); padding: 0; font-weight: inherit; margin: 0 0 .9em; }
+.content.ttscreen .link { background: none; border: 0; color: var(--tt-cyan); padding: 0; margin: 0 0 .4em;
+                          font: inherit; display: flex; gap: 1ch; }
+.content.ttscreen .link .mono { color: var(--tt-white); font-family: inherit; }
+.content.ttscreen .cards { display: block; margin: 0 0 .9em; }
+.content.ttscreen .card { background: none; border: 0; border-radius: 0; padding: 0; display: flex;
+                          gap: 1ch; align-items: baseline; }
+.content.ttscreen .card .l { font: inherit; color: var(--tt-cyan); }
+.content.ttscreen .card .v { font: inherit; }
+.content.ttscreen .card .v small { font-size: inherit; margin-left: 1ch; color: var(--tt-cyan); }
+.content.ttscreen table.tbl { display: block; overflow-x: auto; border-collapse: collapse; background: none;
+                              font-size: inherit; max-width: 100%; margin: 0 0 .9em; }
+.content.ttscreen table.tbl th, .content.ttscreen table.tbl td { border: 0; padding: 0 1ch 0 0; color: inherit;
+                                                                 background: none; white-space: nowrap; }
+.content.ttscreen table.tbl th { color: var(--tt-cyan); font: inherit; text-transform: uppercase; }
+.content.ttscreen table.tbl th.grp { color: var(--tt-green); }
+.content.ttscreen .series { background: none; border: 0; border-radius: 0; padding: 0; margin: 0 0 .9em; }
+.content.ttscreen .series .l { font: inherit; color: var(--tt-cyan); }
+.content.ttscreen .series .l .mono { font-family: inherit; color: var(--tt-white); }
+.content.ttscreen .series path { stroke: var(--tt-green); }
+.content.ttscreen pre { background: none; border: 0; border-radius: 0; padding: 0; font: inherit; margin: 0 0 .9em; }
+.content.ttscreen hr { border-top: 2px solid var(--tt-cyan); margin: .6em 0; }
+
 .raw { background: #111; color: #e8e8e8; border-radius: 8px; padding: 12px 14px; font: 13px/1.5 var(--mono);
        white-space: pre-wrap; word-break: break-all; margin-top: 20px; }
 .raw .h { color: var(--tt-yellow); }
@@ -438,6 +488,8 @@ a.extlink:hover { color: var(--accent-dark); }
   .chip { min-width: 40px; height: 38px; }
   .segment button { height: 38px; }
   .content table.tbl, table.log { display: block; overflow-x: auto; }
+  /* Teletext: halbe Pixelgroesse (24 px bleibt auf Handy-Displays scharf) */
+  .content.ttscreen { font-size: 24px; padding: 14px 12px 18px; }
   .settings { padding: 16px 14px 32px; }
   .fields { grid-template-columns: 1fr; }
   .fields input, .fields select { height: 44px; font-size: 16px; }

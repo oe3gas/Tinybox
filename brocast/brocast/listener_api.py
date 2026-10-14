@@ -33,7 +33,8 @@ from .webserver import HttpError, JsonServer, Request
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 STATIC = {"/": WEB_DIR / "index.html", "/app.css": WEB_DIR / "app.css",
-          "/app.js": WEB_DIR / "app.js"}
+          "/app.js": WEB_DIR / "app.js",
+          "/teletext.woff": WEB_DIR / "teletext.woff"}      # Pixelschrift der Teletext-Ansicht
 
 
 def _flag(req: Request, name: str) -> bool:

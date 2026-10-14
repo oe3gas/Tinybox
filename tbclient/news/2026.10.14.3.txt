@@ -1,0 +1,6 @@
+- brocast-Listener: Ansicht "Mit Trennlinien" entfaellt, es bleiben
+  Fliesstext und Teletext.
+- Fliesstext ohne Teile-Knoepfe, im Teletext blaettern sie weiter.
+- Teletext sieht jetzt aus wie Teletext: Pixelschrift auf Schwarz,
+  40 Zeichen je Zeile, weiter Zeilenabstand, Rubrik im roten Feld.
+- Nur Anzeige im Listener - der Client ist unveraendert.

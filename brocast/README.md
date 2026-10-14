@@ -213,10 +213,21 @@ auch ihre eigenen Seiten.
 Rubriken/Stationen links, Seitenliste in der Mitte, Seite rechts; Suche,
 Seitennummer-Eingabe, Einstellungen (Abo, Grenzen) und Status oben bzw. links unten.
 
-Seiten mit mehreren Unterseiten lassen sich auf drei Arten anzeigen (Umschalter
-„Ansicht“, wird im Browser gemerkt): **Fließtext**, **Mit Trennlinien**, **Teletext**
-(ein Teil, blättern mit den Chips oder ◀ ▶). Testseiten: `test\senden.bat bulletin`
+Jede Seite lässt sich auf zwei Arten anzeigen (Umschalter „Ansicht“, wird im
+Browser gemerkt): **Fließtext** (alles untereinander im normalen Seitenlayout) und
+**Teletext** – ein schwarzer Bildschirm mit eigener Pixelschrift, 40 Zeichen je
+Zeile und weitem Zeilenabstand, Rubrik im roten Feld, Titel in Gelb; bei mehreren
+Unterseiten blättern die Teile-Knöpfe und ◀ ▶ durch die Teile. Der Teletext-
+Bildschirm ist immer Text: Wetterkacheln und Wetterraster erscheinen dort als
+Werteliste bzw. einfache Tabelle (der Knopf „Grafisch/Text“ gilt für den Fließtext
+und wird im Teletext ausgeblendet). Testseiten: `test\senden.bat bulletin`
 (ein langer Text in 4 Teilen) und `test\senden.bat magazin` (3 thematische Teile).
+Vorschau ohne laufenden brocastd: `mockup\teletext-vorschau.html`.
+
+Die Pixelschrift `brocast/web/teletext.woff` (5,8 kB) wird mit
+`tools/build_teletext_font.py` aus einem 7 × 13-Pixel-Raster erzeugt (DejaVu Sans
+Mono Bold bei 10 px, schwarz-weiß gerastert, jedes Pixel ein Quadrat im Umriss).
+Das Skript muss nur laufen, wenn sich Zeichenvorrat oder Raster ändern.
 
 Die Rohdaten liefert weiterhin die JSON-API:
 
