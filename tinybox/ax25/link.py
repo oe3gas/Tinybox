@@ -794,6 +794,12 @@ class Ax25Link:
         if sent and self.t1_at is None:
             self._stop_t3()
             self._start_t1(now)
+        elif sent and self.state == State.CONNECTED and self.tx_end + self.t1v > self.t1_at:
+            # more frames joined the burst (a session writes an answer in pieces,
+            # e.g. the '//PART' line, then the data): the answer can only come after
+            # the LAST one - T1 must not run from the end of the first
+            # (field test PK-232, 14.10.2026)
+            self._start_t1(now)
 
     def _emit(self, f: Frame) -> None:
         """Queue a frame for the TNC and advance the estimated end of our transmission."""

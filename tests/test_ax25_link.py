@@ -96,6 +96,27 @@ class TransferTests(unittest.TestCase):
         self.assertEqual(sim.kinds("B").count("RR"), 1)
 
 
+class SessionWriteTests(unittest.TestCase):
+    def test_answer_written_in_pieces_does_not_expire_t1(self):
+        """Field test 14.10.2026 (PK-232): a session writes its answer in pieces
+        ('//PART 109 ...' header, then the data). T1 started after the first small
+        frame and was not moved when the rest followed - every longer answer
+        caused a T1 poll although nothing was lost."""
+        for version in ("2.0", "2.2"):
+            with self.subTest(version=version):
+                cfg = LinkCfg(version=version, paclen=256, maxframe=6)
+                a, b = pair(cfg)
+                sim = Sim(a, b)
+                connect(sim)
+                for i in range(10):
+                    b.send(b"//PART 109 0 1024\r", sim.now)        # header line ...
+                    b.send(payload(900, i), sim.now)               # ... then the data
+                    sim.run(stop=lambda: b.is_idle)
+                    sim.run(until=sim.now + 5)
+                self.assertEqual(b.c["t1_exp"], 0)
+                self.assertEqual(b.c["i_retry"], 0)
+
+
 class LossRecoveryTests(unittest.TestCase):
     def test_lost_i_frame_gives_one_rej(self):
         lost = []

@@ -180,6 +180,15 @@ Referenz zum Verständnis und für Interop-Tests.
 - **Fenster bei v2.2:** Standard `maxframe_ext = 7`. Größere Fenster lohnen erst
   bei 9600 Bd – bei 1200 Bd belegen 7 Frames den Kanal schon rund 9 s.
 
+**Fehler aus dem PK-232-Funktest (14.10.2026):** Eine Sitzung schreibt ihre
+Antwort in Stücken (Kopfzeile `//PART …`, dann die Daten). T1 startete nach dem
+ersten, kurzen Frame und wurde nicht verlängert, als der Rest des Blocks folgte –
+jede längere Antwort löste eine T1-Abfrage aus, obwohl nichts verloren war
+(18 T1-Abläufe bei 0 % Verlust, Balken auf 0). Behoben: Kommen Frames zu einem
+laufenden Block hinzu, läuft T1 ab dessen neuem geschätztem Ende. Der Mitschnitt
+zeigte zugleich, dass die Sendezeit-Schätzung stimmt (Quittung 1,9 s nach dem
+geschätzten Blockende).
+
 ### 3.5 Flusskontrolle
 
 `KissConnection.pump()` wartet auf das Ereignis „Fenster frei“ des Automaten
