@@ -480,6 +480,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
 | F0–F7 | Forwarding-Modul (Abschnitt 13) | F1–F5 fertig (06.–08.10.2026), mit LinBPQ getestet; F0 teilweise. Als Nächstes F6 |
 | C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast (08.10.2026), Offline-Mailbox (10.10.2026). Funktest C3 offen |
+| K1–K10 | KISS-Mode: eigener AX.25-Automat (v2.2) + `kisshub` (Abschnitt 15) | Konzept entschieden 14.10.2026, als Nächstes K1. Erstes Gerät: PK-232 |
 
 ---
 
@@ -1070,6 +1071,19 @@ OE1ABC   2    14%   4%    -      -     2     1   -           86%
 - **Payload:** 5 Stationen ≈ 165 Byte ≈ 1,5 s bei 1200 Bd inkl. TXDelay; im 2-Minuten-Takt < 1,5 % Kanal. Binär (≈ 85 Byte) verworfen: nur ≈ 0,3 s Gewinn, im Monitor unlesbar, Binärfilter (CR12).
 - **Client:** Teilnehmer antippen → Detailansicht (Richtungen, Schwellenleiter, Zähler) nach denselben Regeln wie `linkq.py`; Balkenzahl kommt mit, die Leiter rechnet der Client aus `q=`.
 - **Web-GUI (6, 13.10.2026):** Ansicht „Users“ zeigt pro Station die 5 Balken (grau = noch zu wenig Frames, ein roter Balken = über 50 % Verlust) mit der Richtung, die die Balken bestimmt hat („outgoing“ = TinyBox → Station, „incoming“ = Station → TinyBox, „rx quote“ = UI-Frames eines Clients), dazu Connect-Zeit (hh:mm UTC), Zustand und den TBClient+ samt Version. Klick auf die Zeile öffnet `#/user/CALL`: Richtungen mit Frames, Verlustzählern und Formel, Schwellenleiste mit Rechnung (inkl. T1-Abzug) und alle Direwolf-Zähler (Fenster-Differenz und Rohwert). API: `GET /api/sessions` liefert zusätzlich `client` und `quality`, neu `GET /api/sessions/CALL/linkq`. Beide Ansichten sind live: Feed-Ereignisse (neu `link.quality` nach jeder Abfragerunde) plus Abfrage alle 5 s.
+
+## 15. KISS-Mode (Konzept, entschieden 14.10.2026)
+
+Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
+
+- TinyBox kann wahlweise statt Direwolf/AGW an einem **KISS-TNC** laufen (`[radio] interface = agw | kiss`). Oberhalb der Verbindung ändert sich nichts.
+- Den **AX.25-Connected-Mode** übernimmt dann die TinyBox selbst: eigener, reiner Layer-2-Automat (ohne Uhr und I/O, im Simulator testbar), **gleich v2.2** (SABME, Modulo 128, SREJ, XID) mit Pflicht-Rückfall auf v2.0.
+- **Sprache: Python.** C verworfen: keine Performance-Not (≤ 40 Frames/s bei 9600 Bd), Frames aus der Luft sind fremde Eingabe → Speichersicherheit wichtiger; falls je nötig, später Übertragung des Automaten nach Rust.
+- **Eigener Prozess `kisshub`** besitzt den TNC (seriell/USB/Bluetooth), initialisiert ihn per Geräteprofil und verteilt die Frames per KISS-TCP (`127.0.0.1:8001`) an TinyBox und brocastd. TinyBox spricht nur KISS-TCP – gegen den Hub genauso wie gegen Direwolfs KISS-Port. TinyBox-Neustarts trennen brocastd nicht mehr vom Funk.
+- Verbindungsqualität kommt im KISS-Mode direkt aus dem Automaten, **ohne Direwolf-Fork**.
+- **TNCs:** Schwerpunkt **PK-232** und **Kenwood TM-D710, TH-D74, TH-D75**; TNC2 nur der Vollständigkeit halber und nur mit **reinem KISS-EPROM**. **Erstes Gerät im Funktest: PK-232.**
+- **Plattform:** Windows (PC2) und Raspberry Pi; NanoPi nicht als Ziel.
+- Digipeater/APRS von Direwolf wird nicht genutzt – im KISS-Mode nichts zu ersetzen.
 
 ---
 

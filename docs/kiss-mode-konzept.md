@@ -1,17 +1,19 @@
 # KISS-Mode für TinyBox – Konzept
 
-Stand: 14.10.2026 (2. Fassung) · Status: **Entwurf, Hub-Variante und Sprache noch offen**
+Stand: 14.10.2026 (3. Fassung) · Status: **entschieden, bereit für K1**
 
 ## 0. Entscheidungen (14.10.2026)
 
 | # | Frage | Entscheidung |
 |---|---|---|
-| 1 | Welche TNCs? | PK-232, TNC2, Kenwood TH-D74/TH-D75, TM-D710 (Abschnitt 5) |
-| 2 | Hub in der TinyBox oder eigener Prozess? | **offen** – Gegenüberstellung in Abschnitt 4 |
+| 1 | Welche TNCs? | PK-232, TNC2, Kenwood TH-D74/TH-D75, TM-D710 (Abschnitt 5); **Schwerpunkt PK-232 und Kenwood**, TNC2 nur der Vollständigkeit halber |
+| 2 | Hub in der TinyBox oder eigener Prozess? | **eigener Prozess `kisshub`** (Variante B, Abschnitt 4) |
 | 3 | Plattform | Windows (PC2) **und Raspberry Pi**; NanoPi nicht als Ziel |
 | 4 | AX.25-Umfang | **gleich v2.2** (Modulo 128, SREJ, XID), mit Rückfall auf v2.0 |
 | 5 | Digipeater/APRS von Direwolf | wird nicht genutzt → im KISS-Mode nichts zu ersetzen |
-| 6 | Sprache des Layer-2-Automaten | **offen** – Empfehlung Python, Begründung Abschnitt 7 |
+| 6 | Sprache des Layer-2-Automaten | **Python** (Abschnitt 7) |
+| 7 | TNC2 | nur mit **reinem KISS-EPROM** (sofort in KISS, keine Init-Zeilen) |
+| 8 | Erstes Gerät im Funktest | **PK-232** |
 
 ## 1. Ziel
 
@@ -204,7 +206,7 @@ TinyBox und brocastd sind beide nur KISS-TCP-Clients.
 | Wiederverwendung | nur mit TinyBox | jedes KISS-Programm (auch ohne TinyBox) |
 | Konfiguration | alles in `tinybox.conf` | eigene `kisshub.conf` (TNC-Typ, Port, Parameter) |
 
-**Empfehlung: Variante B.** Ausschlaggebend sind drei Punkte:
+**Entschieden: Variante B** (14.10.2026). Ausschlaggebend sind drei Punkte:
 
 1. TinyBox wird laufend weiterentwickelt und oft neu gestartet. Mit A hängt
    jedes Mal der Funkzugang samt brocastd mit, und die Kenwood-/PK-232-TNCs
@@ -242,7 +244,7 @@ TinyBox müsste zwei völlig verschiedene Wege pflegen.
 | Gerät | Anschluss | In KISS schalten | KISS verlassen | Besonderheiten |
 |---|---|---|---|---|
 | **PK-232 / PK-232MBX** (AEA/Timewave) | RS-232 | Terminal: `KISS ON`, dann `RESTART` | `C0 FF C0` | zwei Funkports (HF/VHF): Port vor dem Umschalten wählen, im Test prüfen; Firmware-Stand prüfen |
-| **TNC2** (bzw. Nachbauten) | RS-232 | abhängig vom EPROM: TAPR-Firmware ab 1.1.x `KISS ON` + `RESTART`; reines KISS-EPROM ist sofort in KISS; **TheFirmware (TF)** kann kein KISS, sondern WA8DED-Hostmode → anderes EPROM nötig | `C0 FF C0` (TAPR) | EPROM-Stand vorab klären |
+| **TNC2** (bzw. Nachbauten) – nur der Vollständigkeit halber | RS-232 | **reines KISS-EPROM vorausgesetzt**: TNC ist nach dem Einschalten sofort in KISS, keine Init-Zeilen | – | andere EPROMs (TAPR mit `KISS ON`, TheFirmware/Hostmode) werden nicht unterstützt |
 | **Kenwood TM-D710** | COM-Buchse am Bedienteil (PG-5G) | TNC in Packet-Mode schalten, dann Terminal: `KISS ON` + `RESTART` | `C0 FF C0` | 1200/9600 Bd; Datenband A/B im Menü; kleiner Puffer → PACLEN/Fenster vorsichtig |
 | **Kenwood TH-D74** | USB (virtueller COM) oder Bluetooth-SPP | im Gerätemenü KISS-Mode einschalten (keine Init-Zeilen) | Menü | 1200/9600 Bd; Datenband im Menü; Bluetooth-Abbrüche → Hub muss neu verbinden |
 | **Kenwood TH-D75** | USB oder Bluetooth-SPP | wie TH-D74, Menü | Menü | Firmware-Stand prüfen (KISS-Verhalten über USB) |
@@ -260,7 +262,7 @@ dann als **Geräteprofil** im Hub abgelegt:
 ```ini
 ; kisshub.conf (Variante B)
 [tnc]
-profile = tm-d710            ; pk232 | tnc2-tapr | tnc2-kiss | tm-d710 | th-d74 | th-d75 | generic
+profile = pk232              ; pk232 | tm-d710 | th-d74 | th-d75 | tnc2-kiss | generic
 device = COM3                ; Raspi: /dev/ttyUSB0, Bluetooth: /dev/rfcomm0
 serial_baud = 9600
 channel = 0
@@ -312,7 +314,7 @@ n2 = 10
 Frage: Sollte der Layer-2-Automat aus Gründen der Performance und
 Verlässlichkeit in C geschrieben werden?
 
-**Empfehlung: Python**, mit sauber abgekapseltem Automaten.
+**Entschieden: Python** (14.10.2026), mit sauber abgekapseltem Automaten.
 
 | Kriterium | C | Python |
 |---|---|---|
@@ -344,8 +346,10 @@ Fassungen gegen dieselben Testfälle.
 | K4 | `KissAdapter` als zweiter `LinkAdapter`, `app.agw` → `app.link`, UI für TBCHAT | alle bestehenden Tests grün mit beiden Adaptern |
 | K5 | ausgehende Connects inkl. via (Forwarding), Merken der Gegenstations-Version | Forward gegen LinBPQ und Direwolf |
 | K6 | Qualitätszähler aus dem Automaten | Balken wie mit Fork |
-| K7 | Hub (Variante A oder B), brocastd daran | brocastd + TinyBox an einem TNC |
-| K8 | Geräteprofile + Funktest je TNC: TM-D710, TH-D74, TH-D75, PK-232, TNC2 | Dauerlauf, auch auf dem Raspi |
+| K7 | `kisshub` (eigener Prozess), brocastd daran | brocastd + TinyBox an einem TNC |
+| K8 | Geräteprofil + Funktest **PK-232** (erstes Gerät) | Dauerlauf, auch auf dem Raspi |
+| K9 | Geräteprofile + Funktest TM-D710, TH-D74, TH-D75 | je Gerät |
+| K10 | TNC2 mit KISS-EPROM (Profil `generic`/`tnc2-kiss`) | Kurztest, wenn Gerät verfügbar |
 
 **Testtrick für K1–K6 ohne Hardware-TNC:** Direwolf auf PC2 mit KISS-TCP-Port
 als „dummer TNC“, die Gegenstation auf PC1 mit Direwolf/AGW und
@@ -367,7 +371,5 @@ Implementierung getestet, bevor ein Hardware-TNC dazukommt. Bei Variante B
 
 ## 10. Offene Fragen
 
-1. Hub-Variante A oder B (Empfehlung B, Abschnitt 4)?
-2. Sprache Python bestätigt (Empfehlung, Abschnitt 7)?
-3. TNC2: welcher EPROM-Stand ist drin (TAPR, reines KISS oder TheFirmware)?
-4. Welcher TNC kommt für den ersten Funktest (K8) zuerst dran?
+1. PK-232: welcher Funkport (HF oder VHF) für den ersten Test, welche Firmware-Version?
+2. Raspi: welches Modell und welche Anbindung je TNC (USB-Seriell-Adapter, Bluetooth)?
