@@ -148,6 +148,24 @@ Referenz zum Verständnis und für Interop-Tests.
   ist er ohne Funk und Netzwerk testbar (Simulator mit Paketverlust) – und
   ließe sich später isoliert in eine andere Sprache übertragen (Abschnitt 7).
 
+**Erkenntnisse aus dem Simulator (K2, 14.10.2026):**
+
+- **T1 und eigene Sendezeit:** Ein KISS-TNC meldet nicht, wann ein Frame wirklich
+  gesendet ist. Bei 1200 Bd brauchen vier 128-Byte-Frames über 5 s. Der Automat
+  schätzt deshalb seine eigene Sendezeit (`air_baud`, `txdelay`) und startet T1
+  erst ab dem geschätzten Ende des ganzen Blocks.
+- **T1 pausiert bei belegtem Kanal:** Jeder gehörte Frame schiebt T1 um seine
+  Sendezeit hinaus (halbduplex – solange jemand sendet, kann die Quittung nicht
+  kommen). Für Frames der eigenen Verbindung macht das der Automat selbst, für
+  fremde Frames auf der Frequenz meldet es der KISS-Adapter (`channel_busy`).
+- **T2 startet bei jedem I-Frame neu:** Quittiert wird erst, wenn der Block der
+  Gegenstation vorbei ist – ein RR für das ganze Fenster.
+- **Timer Recovery:** Solange die Antwort (F=1) auf die eigene Abfrage aussteht,
+  werden keine neuen I-Frames gesendet; sonst gehen sie doppelt raus.
+- **Wirkungsgrad mit Go-Back-N (REJ):** Anteil neuer Bytes am Gesendeten im
+  Mittel 90 % bei 5 % Verlust, 80 % bei 10 %, 67 % bei 20 %, rund 45 % bei
+  30–40 %. Hier setzt SREJ (K3) an.
+
 ### 3.5 Flusskontrolle
 
 `KissConnection.pump()` wartet auf das Ereignis „Fenster frei“ des Automaten
@@ -342,7 +360,7 @@ Fassungen gegen dieselben Testfälle.
 | # | Inhalt | Prüfung |
 |---|---|---|
 | K1 ✅ | AX.25-Codec (alle Frame-Typen, Modulo 8 und 128), KISS-I/O – `tinybox/ax25/frame.py`, `kissio.py` (14.10.2026) | 31 Unit-Tests inkl. von Hand gerechneter Bytes und 5000 Zufalls-/Müll-Frames; UI-Frames byte-gleich mit brocast; Mitschnitte von Direwolf folgen bei K2 |
-| K2 | `Ax25Link` v2.0 eingehend (SABM → Sitzung → DISC), REJ | Simulator mit 0 / 10 / 30 % Verlust |
+| K2 ✅ | `Ax25Link` v2.0 (SABM → Sitzung → DISC, auch ausgehend), REJ, RR/RNR, T1/T2/T3, N2 – `tinybox/ax25/link.py`, Simulator `tests/ax25sim.py` (14.10.2026) | 23 Tests; Stresstest 100 Zufallskanäle 5–40 % Verlust, k 1–7: alle Daten vollständig und in Reihenfolge |
 | K3 | v2.2: SABME, Modulo 128, SREJ, XID, Rückfall-Logik | Simulator, beide Seiten v2.2 und gemischt |
 | K4 | `KissAdapter` als zweiter `LinkAdapter`, `app.agw` → `app.link`, UI für TBCHAT | alle bestehenden Tests grün mit beiden Adaptern |
 | K5 | ausgehende Connects inkl. via (Forwarding), Merken der Gegenstations-Version | Forward gegen LinBPQ und Direwolf |
