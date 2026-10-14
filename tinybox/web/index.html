@@ -32,6 +32,12 @@
   <nav class="side" aria-label="Main">
     <a href="#/dashboard" data-nav="dashboard">Dashboard</a>
     <a href="#/messages" data-nav="messages">Messages<span class="count" id="nav-msgs"></span></a>
+    <div class="navgroup">
+      <button class="navtop" id="nav-rubrics" type="button" aria-expanded="true" aria-controls="nav-rubrics-list">
+        <span class="caret" aria-hidden="true">▾</span><span class="grow">Rubrics</span><span class="count" id="nav-rubrics-count"></span>
+      </button>
+      <div class="sub" id="nav-rubrics-list"></div>
+    </div>
     <a href="#/users" data-nav="users">Users<span class="count" id="nav-users"></span></a>
     <a href="#/monitor" data-nav="monitor">Monitor</a>
     <a href="#/jlog" data-nav="jlog">Stations (JLOG)</a>

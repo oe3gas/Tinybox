@@ -12,7 +12,8 @@ const S = {
   feed: [],
   filter: "all",
   search: "",
-  rubric: "",          // show only the bulletins of this rubric (from the rubrics card)
+  rubric: "",          // show only the bulletins of this rubric (nav or rubrics card)
+  rubrics: [],         // [rubrics] of tinybox.conf plus the ones only used by bulletins
   mon: true,
   view: null,        // references to live parts of the current view
   currentId: null,
@@ -122,7 +123,57 @@ async function refreshStatus() {
 
 async function refreshMessages() {
   S.messages = await api("messages");
+  await refreshRubrics();
   if (S.view && S.view.updateMessages) S.view.updateMessages();
+}
+
+/* The rubrics come from the server (order and descriptions of [rubrics], counts
+ * per rubric); the nav and the dashboard card both read S.rubrics. */
+async function refreshRubrics() {
+  try {
+    S.rubrics = await api("rubrics");
+  } catch (e) { /* keep the previous list, the nav stays as it is */ }
+  renderRubricNav();
+}
+
+// ---- rubrics in the nav ------------------------------------------------------------
+
+function openRubric(name) {
+  S.filter = "B";
+  S.rubric = name;
+  S.search = "";
+  setRubricsOpen(true);
+  if (location.hash === "#/messages") {
+    if (S.view && S.view.updateMessages) S.view.updateMessages();
+    renderRubricNav();
+  } else {
+    location.hash = "#/messages";                  // route() draws the list and the nav
+  }
+}
+
+function setRubricsOpen(open) {
+  $("nav-rubrics-list").hidden = !open;
+  $("nav-rubrics").setAttribute("aria-expanded", open ? "true" : "false");
+  $("nav-rubrics").querySelector(".caret").textContent = open ? "▾" : "▸";
+  try { localStorage.setItem("tinybox.rubrics", open ? "1" : "0"); } catch (e) { /* private mode */ }
+}
+
+function renderRubricNav() {
+  const box = $("nav-rubrics-list");
+  const rows = S.rubrics || [];
+  const onMessages = (location.hash || "#/dashboard").startsWith("#/messages");
+  box.replaceChildren(...rows.map((r) => h("a", {
+    href: "#/messages",
+    class: (onMessages && S.rubric === r.name ? "active" : "") + (r.status === "refused" ? " off" : ""),
+    title: (r.description || r.name)
+           + (r.status === "refused" ? " · refused: no bulletins are taken" : "")
+           + (r.status === "unlisted" ? " · not in [rubrics] of tinybox.conf" : ""),
+    onclick: (e) => { e.preventDefault(); openRubric(r.name); },
+  },
+    h("span", { class: "nm", text: r.name }),
+    h("span", { class: "count", text: r.count ? r.count + (r.unread ? " (" + r.unread + ")" : "") : "" }))));
+  if (!rows.length) box.append(h("div", { class: "none", text: "No rubrics." }));
+  $("nav-rubrics-count").textContent = rows.length || "";
 }
 
 async function refreshSessions() {
@@ -225,7 +276,7 @@ function messagesCard(opts) {
     oninput: (e) => { S.search = e.target.value; update(); },
   });
   const chip = h("button", { class: "btn sm", type: "button", title: "Show all again",
-                             onclick: () => { S.rubric = ""; update(); } });
+                             onclick: () => { S.rubric = ""; update(); renderRubricNav(); } });
   const head = compact ? ["Msg#", "TS", "From", "Date (UTC)", "Subject"]
                        : ["Msg#", "TS", "Size", "To", "From", "Date (UTC)", "Subject", "Origin"];
 
@@ -352,12 +403,12 @@ function rubricsCard() {
   const tbody = h("tbody");
   const foot = h("span");
   async function update() {
-    let rows = [];
-    try { rows = await api("rubrics"); } catch (e) { foot.textContent = e.message; return; }
+    if (!S.rubrics.length) await refreshRubrics();
+    const rows = S.rubrics;
     tbody.replaceChildren(...rows.map((r) => {
       const [cls, label] = RUBRIC_STATUS[r.status] || ["", r.status];
-      const show = () => { S.filter = "B"; S.rubric = r.name; S.search = ""; location.hash = "#/messages"; };
-      return h("tr", { class: "click", title: "Show the bulletins of " + r.name, onclick: show },
+      return h("tr", { class: "click", title: "Show the bulletins of " + r.name,
+                       onclick: () => openRubric(r.name) },
         h("td", { class: "mono", style: "font-weight: 700", text: r.name }),
         h("td", { class: "subject", text: r.description || "-" }),
         h("td", { class: "mono", text: r.count ? r.count + (r.unread ? " (" + r.unread + " new)" : "") : "-" }),
@@ -776,8 +827,9 @@ function route() {
   if (name !== "message") S.currentId = null;
   clearInterval(liveTimer);
   const navKey = name === "message" || name === "compose" ? "messages" : name === "user" ? "users" : name;
-  document.querySelectorAll(".side a").forEach((a) =>
+  document.querySelectorAll(".side a[data-nav]").forEach((a) =>
     a.classList.toggle("active", a.dataset.nav === navKey));
+  renderRubricNav();                              // Rubrik in der Seitenleiste markieren
   const views = { dashboard: viewDashboard, messages: viewMessages, compose: viewCompose,
                   users: viewUsers, monitor: viewMonitor, jlog: viewJlog, settings: viewSettings };
   if (name === "message" && /^\d+$/.test(parts[1] || "")) S.view = viewMessage(Number(parts[1]));
@@ -862,11 +914,17 @@ async function init() {
   $("btn-shutdown").addEventListener("click", () => shutdown(false));
   $("btn-restart").addEventListener("click", () => shutdown(true));
   window.addEventListener("hashchange", route);
+  let offen = true;                               // Rubriken standardmaessig aufgeklappt
+  try { offen = localStorage.getItem("tinybox.rubrics") !== "0"; } catch (e) { /* private mode */ }
+  setRubricsOpen(offen);
+  $("nav-rubrics").addEventListener("click",
+    () => setRubricsOpen($("nav-rubrics-list").hidden));
   try {
     S.csrf = (await api("session")).csrf;
     await refreshStatus();
     S.messages = await api("messages");
     S.sessions = await api("sessions");
+    await refreshRubrics();
   } catch (e) { toast(e.message, true); }
   route();
   startFeed();

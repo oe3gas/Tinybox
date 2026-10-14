@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 14.10.2026 (CR38 umgesetzt)
+Stand: 14.10.2026 (CR39 umgesetzt)
 
 ## Übersicht
 
@@ -45,6 +45,7 @@ Stand: 14.10.2026 (CR38 umgesetzt)
 | 36 | Bildgröße im Chat sichtbar (klein bleibt klein), Größenwahl mit Zahlen in den Knöpfen | ✅ siehe unten |
 | 37 | brocast-Listener: Ansicht „Mit Trennlinien“ raus, Teile-Knöpfe nur im Teletext, Teletext in echter Teletext-Optik (Pixelschrift, großer Zeilenabstand) | ✅ siehe unten |
 | 38 | Teletext: Zeilenabstand auf Zeichenhöhe, brocast-Schriftzug nach der Teletext-Titelseite über jeder Seite; Bildkonverter (Bilder als Mosaik-Bulletins, nur station) | ✅ siehe unten |
+| 39 | TinyBox-Web-GUI: „Rubrics“ aufklappbar in der Seitenleiste, Klick zeigt die Bulletins dieser Rubrik | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -790,3 +791,23 @@ ASCII-Art-Prinzip, nur sechsmal feiner.
 Tests: `brocast/tests/test_mosaic.py` (Zeichentabelle gegen die Unicode-Namen, Raster, Seitenverhältnis,
 Blockgrößen, Frames, und ob die Pixelschrift jedes Mosaikzeichen kennt).
 Vorschau: `brocast/mockup/teletext-vorschau.html` (Textseite und Bildseite).
+
+## CR39 – Rubriken in der Seitenleiste der Web-GUI (✅ 14.10.2026)
+
+**Problem:** Die Rubriken standen nur in der Karte „Rubrics" auf dem Dashboard. Wer in den Messages
+arbeitete, musste erst aufs Dashboard zurück, um auf eine Rubrik zu filtern.
+
+**Lösung:** In der Seitenleiste unter *Messages* der aufklappbare Punkt **Rubrics** (Pfeil ▾/▸, daneben die
+Zahl der Rubriken).
+
+- Darunter je Rubrik eine Zeile mit Name und `Bulletins (ungelesen)`; ein Klick öffnet die Messages,
+  gefiltert auf diese Rubrik (wie bisher die Dashboard-Karte, inklusive Chip „Rubric XY ✕" zum Aufheben).
+  Die gewählte Rubrik ist in der Seitenleiste markiert.
+- Reihenfolge wie in `[rubrics]` der `tinybox.conf`, danach `TBNEWS` und die Rubriken, die nur durch
+  Bulletins existieren. Eine abgelehnte Rubrik (`NAME = -`) steht durchgestrichen und grau da,
+  der Tooltip nennt den Grund („refused" / „not in [rubrics] of tinybox.conf").
+- Auf- und zugeklappt bleibt im Browser gemerkt (`localStorage tinybox.rubrics`), Standard aufgeklappt.
+- Die Liste kommt aus `GET /api/rubrics` – dieselbe Quelle wie die Dashboard-Karte, die jetzt denselben
+  Zwischenspeicher nutzt (ein Abruf je Aktualisierung statt zwei). Keine Änderung am Server.
+
+Nur Sysop-Oberfläche, daher keine neue Client-Version und keine TBNEWS.
