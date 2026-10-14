@@ -16,7 +16,9 @@ devices there (firmware 30.DEC.88, 01.AUG.91, 13.SEP.95):
     - KISS init after TRM section 4.7.1 (pk232py comm/kiss.py), plus VHF ON and
       HBAUD 1200 (modes/packet_vhf.py): the 1200 Bd Bell 202 modem.
       EXPERT ON first (Gerhard, 14.10.2026): some of the commands are expert
-      commands - without it the PK-232 answers "?EXPERT command" and ignores them
+      commands - without it the PK-232 answers "?EXPERT command" and ignores them.
+      Order checked by Gerhard on the device; RESTART after AWLEN/PARITY (TRM) is
+      not needed
       NOT YET TRIED ON THE AIR with KISS - pk232py only queried the KISS
       parameter (hw_logs 20261006_fw_scan_*). The first PK-232 test (K8)
       confirms or corrects these lines.
@@ -85,17 +87,19 @@ PK232 = Profile(
         Step(CR, (CMD_PROMPT,), 2.0, "CR after leaving Host Mode"),
     ),
     init=(
-        line("EXPERT ON"),                             # RAWHDLC, HPOLL, PPERSIST need it
+        # order and content checked on the device by Gerhard (14.10.2026):
+        # EXPERT ON first (RAWHDLC, HPOLL, PPERSIST need it); VHF ON and HBAUD 1200
+        # are the power-on defaults, sent anyway to be sure; RESTART not needed
+        line("EXPERT ON"),
+        line("VHF ON"),
+        line("HBAUD 1200"),
         line("AWLEN 8"),
         line("PARITY 0"),
-        line("RESTART", timeout=6.0),
         line("CONMODE TRANS"),
         line("TRACE OFF"),
         line("HID OFF"),
         line("BEACON EVERY 0"),
         line("PACKET"),
-        line("VHF ON"),
-        line("HBAUD 1200"),
         line("RAWHDLC ON"),
         line("HPOLL OFF"),
         line("PPERSIST ON"),

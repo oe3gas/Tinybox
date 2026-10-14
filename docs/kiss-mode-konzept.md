@@ -425,7 +425,7 @@ Direwolf dient hier nur als Modem („dummer TNC“); AX.25 macht die TinyBox se
 ## 8b. Funktest K8: PK-232 über kisshub (VHF, 1200 Bd)
 
 Die Init-Zeilen des PK-232 stammen aus TRM 4.7.1 (über pk232py) plus `VHF ON` und
-`HBAUD 1200`, mit `EXPERT ON` an erster Stelle (RAWHDLC, HPOLL, PPERSIST sind
+`HBAUD 1200`, mit `EXPERT ON` an erster Stelle, gefolgt von `VHF ON` und `HBAUD 1200` (Einschalt-Standard, zur Sicherheit gesendet), ohne `RESTART` – Reihenfolge von Gerhard am Gerät geprüft (14.10.2026) (RAWHDLC, HPOLL, PPERSIST sind
 Experten-Befehle; ohne ihn antwortet der PK-232 `?EXPERT command`). Eine Antwort mit
 `?` bricht den Init ab, statt den TNC halb eingerichtet in KISS zu schalten; mit KISS auf der Luft sind sie noch nicht erprobt. kisshub
 protokolliert jede Zeile mit der Antwort des TNC – damit lässt sich jede
