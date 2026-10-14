@@ -1,4 +1,8 @@
-"""AX.25 link state machine, v2.0 part (KISS step K2, docs/kiss-mode-konzept.md)."""
+"""AX.25 link state machine, v2.0 part (KISS step K2, docs/kiss-mode-konzept.md).
+
+These tests pin the v2.0 behaviour (LinkCfg(version="2.0")); the transfer tests
+run with both versions. v2.2 specifics: tests/test_ax25_v22.py.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +17,8 @@ from tinybox.ax25.link import Ax25Link, LinkCfg, State
 from tests.ax25sim import Sim, pair
 
 A_CALL, B_CALL = "OE3ABC", "OE3GAS-1"
+V20 = LinkCfg(version="2.0")
+V22 = LinkCfg(version="2.2")
 
 
 def payload(n: int, seed: int = 0) -> bytes:
@@ -28,7 +34,7 @@ def connect(sim: Sim) -> None:
 
 class TransferTests(unittest.TestCase):
     def transfer(self, loss: float, seed: int, n_ab: int = 4000, n_ba: int = 1500,
-                 cfg: LinkCfg | None = None) -> Sim:
+                 cfg: LinkCfg = V20) -> Sim:
         a, b = pair(cfg)
         sim = Sim(a, b, loss=loss, seed=seed)
         connect(sim)
@@ -49,7 +55,7 @@ class TransferTests(unittest.TestCase):
         return sim
 
     def test_clean_channel(self):
-        sim = self.transfer(0.0, 1)
+        sim = self.transfer(0.0, 1, cfg=V20)
         a, b = sim.links["A"], sim.links["B"]
         for link in (a, b):
             self.assertEqual((link.c["i_retry"], link.c["rej_rx"], link.c["rej_tx"]),
@@ -61,26 +67,28 @@ class TransferTests(unittest.TestCase):
         self.assertEqual(sim.kinds("B")[0], "UA")
 
     def test_ten_percent_loss(self):
-        for seed in range(1, 6):
-            with self.subTest(seed=seed):
-                sim = self.transfer(0.10, seed)
-                self.assertGreater(sim.links["A"].c["i_retry"], 0)
+        for cfg in (V20, V22):
+            for seed in range(1, 6):
+                with self.subTest(version=cfg.version, seed=seed):
+                    sim = self.transfer(0.10, seed, cfg=cfg)
+                    self.assertGreater(sim.links["A"].c["i_retry"], 0)
 
     def test_thirty_percent_loss(self):
-        for seed in range(1, 6):
-            with self.subTest(seed=seed):
-                self.transfer(0.30, seed, n_ab=2000, n_ba=600)
+        for cfg in (V20, V22):
+            for seed in range(1, 6):
+                with self.subTest(version=cfg.version, seed=seed):
+                    self.transfer(0.30, seed, n_ab=2000, n_ba=600, cfg=cfg)
 
     def test_window_sizes_and_immediate_acks(self):
         for k in (1, 7):
             for t2 in (0.0, 1.5):
                 with self.subTest(k=k, t2=t2):
                     self.transfer(0.15, 7, n_ab=1500, n_ba=500,
-                                  cfg=LinkCfg(maxframe=k, t2_sec=t2))
+                                  cfg=LinkCfg(version="2.0", maxframe=k, t2_sec=t2))
 
     def test_t2_groups_acknowledgements(self):
         """B answers a window of 4 I frames with ONE RR, not four."""
-        a, b = pair()
+        a, b = pair(V20)
         sim = Sim(a, b)
         connect(sim)
         a.send(payload(4 * 128), sim.now)
@@ -98,7 +106,7 @@ class LossRecoveryTests(unittest.TestCase):
                 return True
             return False
 
-        a, b = pair()
+        a, b = pair(V20)
         sim = Sim(a, b, drop=drop)
         connect(sim)
         data = payload(4 * 128)
@@ -110,7 +118,7 @@ class LossRecoveryTests(unittest.TestCase):
         self.assertEqual(a.c["t1_exp"], 0)              # REJ, not the timer, fixed it
 
     def test_lost_last_frame_recovered_by_t1_poll(self):
-        a, b = pair()
+        a, b = pair(V20)
         dropped = []
         sim = Sim(a, b, drop=lambda f, s: s == "A" and f.is_i and not dropped
                   and not dropped.append(1))
@@ -122,7 +130,7 @@ class LossRecoveryTests(unittest.TestCase):
         self.assertIn("RR", sim.kinds("A"))             # the poll (RR command, P=1)
 
     def test_retryout_when_channel_dies(self):
-        a, b = pair(LinkCfg(n2=3))
+        a, b = pair(LinkCfg(version="2.0", n2=3))
         dead = []
         sim = Sim(a, b, drop=lambda f, s: bool(dead))
         connect(sim)
@@ -134,15 +142,15 @@ class LossRecoveryTests(unittest.TestCase):
         self.assertLess(sim.now, 300)
 
     def test_nobody_answers(self):
-        a = Ax25Link(A_CALL, B_CALL, cfg=LinkCfg(n2=2))
-        sim = Sim(a, Ax25Link(B_CALL, A_CALL), drop=lambda f, s: True)
+        a = Ax25Link(A_CALL, B_CALL, cfg=LinkCfg(version="2.0", n2=2))
+        sim = Sim(a, Ax25Link(B_CALL, A_CALL, cfg=V20), drop=lambda f, s: True)
         a.connect(0.0)
         sim.run(stop=lambda: a.state == State.DISCONNECTED)
         self.assertEqual(sim.kinds("A"), ["SABM"] * 3)
         self.assertEqual(sim.event_names("A"), [("disconnected", "timeout")])
 
     def test_t1_backs_off_and_srt_learns(self):
-        a, b = pair()
+        a, b = pair(V20)
         sim = Sim(a, b)
         connect(sim)
         a.send(payload(2000), sim.now)
@@ -157,7 +165,7 @@ class LossRecoveryTests(unittest.TestCase):
 
 class BusyTests(unittest.TestCase):
     def test_rnr_stops_and_rr_resumes(self):
-        a, b = pair()
+        a, b = pair(V20)
         sim = Sim(a, b)
         connect(sim)
         b.set_busy(True, sim.now)
@@ -178,14 +186,14 @@ class EdgeTests(unittest.TestCase):
         return ax.Frame(kind, B_CALL, A_CALL, **kw)
 
     def connected_b(self) -> Ax25Link:
-        b = Ax25Link(B_CALL, A_CALL)
+        b = Ax25Link(B_CALL, A_CALL, cfg=V20)
         b.receive(self.frame("SABM", pf=True), 0.0)
         b.pop_output()
         b.pop_events()
         return b
 
     def test_disconnected_answers_dm(self):
-        b = Ax25Link(B_CALL, A_CALL)
+        b = Ax25Link(B_CALL, A_CALL, cfg=V20)
         b.receive(self.frame("DISC", pf=True), 0.0)
         b.receive(self.frame("I", pf=True, info=b"x"), 0.0)
         b.receive(self.frame("RR", pf=False), 0.0)      # no poll: no answer
@@ -193,14 +201,14 @@ class EdgeTests(unittest.TestCase):
         self.assertEqual([(f.kind, f.pf, f.command) for f in out],
                          [("DM", True, False), ("DM", True, False)])
 
-    def test_sabme_refused_until_k3(self):
-        b = Ax25Link(B_CALL, A_CALL)
+    def test_sabme_refused_with_version_20(self):
+        b = Ax25Link(B_CALL, A_CALL, cfg=V20)
         b.receive(self.frame("SABME", pf=True), 0.0)
         self.assertEqual([f.kind for f in b.pop_output()], ["DM"])
         self.assertEqual(b.state, State.DISCONNECTED)
 
     def test_dm_refuses_our_connect(self):
-        a = Ax25Link(A_CALL, B_CALL)
+        a = Ax25Link(A_CALL, B_CALL, cfg=V20)
         a.connect(0.0)
         a.receive(ax.Frame("DM", A_CALL, B_CALL, command=False, pf=True), 1.0)
         self.assertEqual(a.pop_events(), [("disconnected", "refused")])
@@ -240,7 +248,7 @@ class EdgeTests(unittest.TestCase):
         self.assertEqual((f.kind, f.command, f.info), ("TEST", False, b"ping"))
 
     def test_t3_idle_poll_keeps_link(self):
-        a, b = pair(LinkCfg(t3_sec=60))
+        a, b = pair(LinkCfg(version="2.0", t3_sec=60))
         sim = Sim(a, b)
         connect(sim)
         sim.run(until=sim.now + 200)
@@ -248,7 +256,7 @@ class EdgeTests(unittest.TestCase):
         self.assertGreaterEqual([k for k in sim.kinds("A") if k == "RR"].__len__(), 2)
 
     def test_digipeater_path_is_used(self):
-        a = Ax25Link(A_CALL, B_CALL, path=["OE3XWR"])
+        a = Ax25Link(A_CALL, B_CALL, path=["OE3XWR"], cfg=V20)
         a.connect(0.0)
         f = a.pop_output()[0]
         self.assertEqual(f.path, ["OE3XWR"])
@@ -268,15 +276,20 @@ class FuzzTests(unittest.TestCase):
         """Any sequence of well-formed frames from the air: no exception, sane state."""
         rnd = random.Random(1)
         kinds = list(ax.KINDS)
-        for _ in range(300):
-            link = Ax25Link(B_CALL, A_CALL)
+        for i in range(300):
+            link = Ax25Link(B_CALL, A_CALL, cfg=V20 if i % 2 else V22)
             now = 0.0
             for _ in range(60):
                 now += rnd.random() * 5
                 kind = rnd.choice(kinds)
+                m = link.modulo
+                info = b"x" * rnd.randrange(3) if kind in ax.WITH_INFO else b""
+                if kind == "XID" and rnd.random() < 0.5:
+                    info = bytes((0x82, 0x80, 0, rnd.randrange(12))) + bytes(
+                        rnd.randrange(256) for _ in range(rnd.randrange(14)))
                 f = ax.Frame(kind, B_CALL, A_CALL, command=rnd.random() < 0.6,
-                             pf=rnd.random() < 0.3, ns=rnd.randrange(8), nr=rnd.randrange(8),
-                             info=b"x" * rnd.randrange(3) if kind in ax.WITH_INFO else b"")
+                             pf=rnd.random() < 0.3, ns=rnd.randrange(m), nr=rnd.randrange(m),
+                             info=info, modulo=m)
                 link.receive(f, now)
                 if rnd.random() < 0.3:
                     link.send(b"y" * rnd.randrange(300), now)
@@ -288,7 +301,8 @@ class FuzzTests(unittest.TestCase):
                     out.encode()                          # everything we send is valid
                 link.pop_events()
                 self.assertLessEqual(link.unacked, link.k)
-                self.assertTrue(0 <= link.va < 8 and 0 <= link.vs < 8 and 0 <= link.vr < 8)
+                m = link.modulo
+                self.assertTrue(0 <= link.va < m and 0 <= link.vs < m and 0 <= link.vr < m)
 
 
 if __name__ == "__main__":

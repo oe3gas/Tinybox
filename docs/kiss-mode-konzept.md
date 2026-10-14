@@ -162,9 +162,23 @@ Referenz zum Verständnis und für Interop-Tests.
   Gegenstation vorbei ist – ein RR für das ganze Fenster.
 - **Timer Recovery:** Solange die Antwort (F=1) auf die eigene Abfrage aussteht,
   werden keine neuen I-Frames gesendet; sonst gehen sie doppelt raus.
-- **Wirkungsgrad mit Go-Back-N (REJ):** Anteil neuer Bytes am Gesendeten im
-  Mittel 90 % bei 5 % Verlust, 80 % bei 10 %, 67 % bei 20 %, rund 45 % bei
-  30–40 %. Hier setzt SREJ (K3) an.
+- **REJ (v2.0) gegen SREJ (v2.2), K3:** 4000 Byte, je 20 Läufe, Standardwerte
+  (k = 4 bzw. 7, 1200 Bd, TXDELAY 300 ms):
+
+  | Verlust | v2.0 neue Bytes | v2.0 Nutzrate | v2.2 neue Bytes | v2.2 Nutzrate |
+  |---|---|---|---|---|
+  | 5 % | 83 % | 465 bit/s | 90 % | 564 bit/s |
+  | 10 % | 72 % | 379 bit/s | 80 % | 458 bit/s |
+  | 20 % | 53 % | 159 bit/s | 61 % | 223 bit/s |
+  | 30 % | 39 % | 67 bit/s | 44 % | 88 bit/s |
+
+  v2.2 ist damit rund 20–40 % schneller. Ab etwa 40 % Verlust brechen
+  Verbindungen in beiden Versionen nach N2 Abfragen ordentlich ab (`retryout`)
+  – dort muss Abfrage *und* Antwort durchkommen.
+- **XID-Bitwerte:** nach Direwolfs `xid.c` übernommen; im Interop-Test gegen
+  Direwolf (K4) zu bestätigen.
+- **Fenster bei v2.2:** Standard `maxframe_ext = 7`. Größere Fenster lohnen erst
+  bei 9600 Bd – bei 1200 Bd belegen 7 Frames den Kanal schon rund 9 s.
 
 ### 3.5 Flusskontrolle
 
@@ -310,7 +324,7 @@ air_baud = 1200
 version = 2.2                ; 2.2 = SABME versuchen, Rückfall 2.0
 paclen = 128
 maxframe = 4                 ; v2.0 (Modulo 8)
-maxframe_ext = 16            ; v2.2 (Modulo 128)
+maxframe_ext = 7             ; v2.2 (Modulo 128); bei 1200 Bd reichen 7
 t1_min_sec = 3
 t1_max_sec = 30
 t2_sec = 1.5
@@ -361,7 +375,7 @@ Fassungen gegen dieselben Testfälle.
 |---|---|---|
 | K1 ✅ | AX.25-Codec (alle Frame-Typen, Modulo 8 und 128), KISS-I/O – `tinybox/ax25/frame.py`, `kissio.py` (14.10.2026) | 31 Unit-Tests inkl. von Hand gerechneter Bytes und 5000 Zufalls-/Müll-Frames; UI-Frames byte-gleich mit brocast; Mitschnitte von Direwolf folgen bei K2 |
 | K2 ✅ | `Ax25Link` v2.0 (SABM → Sitzung → DISC, auch ausgehend), REJ, RR/RNR, T1/T2/T3, N2 – `tinybox/ax25/link.py`, Simulator `tests/ax25sim.py` (14.10.2026) | 23 Tests; Stresstest 100 Zufallskanäle 5–40 % Verlust, k 1–7: alle Daten vollständig und in Reihenfolge |
-| K3 | v2.2: SABME, Modulo 128, SREJ, XID, Rückfall-Logik | Simulator, beide Seiten v2.2 und gemischt |
+| K3 ✅ | v2.2: SABME, Modulo 128, SREJ, XID (mit Wiederholung), Rückfall-Logik – `tinybox/ax25/xid.py`, `link.py` (14.10.2026) | 20 neue Tests; Stresstest 150 Zufallskanäle, Versionen gemischt, 5–40 % Verlust: alle Daten vollständig |
 | K4 | `KissAdapter` als zweiter `LinkAdapter`, `app.agw` → `app.link`, UI für TBCHAT | alle bestehenden Tests grün mit beiden Adaptern |
 | K5 | ausgehende Connects inkl. via (Forwarding), Merken der Gegenstations-Version | Forward gegen LinBPQ und Direwolf |
 | K6 | Qualitätszähler aus dem Automaten | Balken wie mit Fork |

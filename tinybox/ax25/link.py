@@ -1,8 +1,24 @@
 """AX.25 data link state machine for ONE connection (KISS step K2).
 
 Follows the SDL of the AX.25 2.2 specification (Direwolf's ax25_link.c
-implements the same SDL). Step K2 covers the v2.0 part: modulo 8, REJ,
-RR/RNR, T1/T2/T3, N2. K3 adds SABME / modulo 128 / SREJ / XID.
+implements the same SDL): modulo 8 and 128, REJ and SREJ, RR/RNR, XID,
+T1/T2/T3, N2 (K2: v2.0 part, K3: v2.2).
+
+v2.2 and the fall back to v2.0
+    We call with SABME (modulo 128). A v2.0 station answers DM or FRMR, or
+    does not answer at all: after `sabme_tries` SABMEs we call again with
+    SABM (modulo 8). `peer_version` tells the caller what the station spoke,
+    so the next connect can start with SABM directly (`peer_v20=True`).
+    Incoming SABME is accepted with cfg.version "2.2", answered DM with "2.0".
+    After a SABME/UA the caller sends XID: window, I field length and SREJ
+    are negotiated (xid.py). The XID is repeated after T1, `xid_tries` times
+    in all; without an answer: our window, REJ only.
+
+SREJ (selective reject, only when both sides agreed in the XID)
+    The receiver keeps frames that arrive after a gap and asks with one SREJ
+    per missing frame; the sender repeats exactly that frame. SREJ never
+    acknowledges anything (only RR/RNR/REJ and I frames move V(A)). A lost
+    SREJ is repaired by the normal T1 poll and Go-Back-N from V(R).
 
 The machine is PURE: no clock, no sockets, no asyncio. Every call gets the
 current time `now` (seconds, any monotonic origin) and leaves its results in
@@ -44,6 +60,7 @@ from collections import deque
 from dataclasses import dataclass
 from enum import IntEnum
 
+from . import xid
 from .frame import Frame, i_frame, s_frame, u_frame
 
 
@@ -70,6 +87,11 @@ class LinkCfg:
     max_rx_info: int = 512       # longer I frames from the air are dropped
     air_baud: int = 1200         # radio bit rate, for the own transmit time
     txdelay_sec: float = 0.3     # key-up time per transmission
+    version: str = "2.2"         # "2.2": call with SABME, accept SABME; "2.0": SABM only
+    maxframe_ext: int = 7        # k with modulo 128 (1..127); 7 is plenty at 1200 Bd
+    srej: bool = True            # offer SREJ in the XID (v2.2 links only)
+    sabme_tries: int = 2         # unanswered SABMEs before calling with SABM
+    xid_tries: int = 3           # XID commands before giving up (then REJ only)
 
 
 @dataclass
@@ -82,7 +104,8 @@ class Ax25Link:
     """One AX.25 connection between mycall and remote."""
 
     def __init__(self, mycall: str, remote: str, path: list[str] | None = None,
-                 cfg: LinkCfg | None = None, now: float = 0.0) -> None:
+                 cfg: LinkCfg | None = None, now: float = 0.0,
+                 peer_v20: bool = False) -> None:
         self.mycall = mycall.upper()
         self.remote = remote.upper()
         self.path = list(path or [])          # digipeaters in OUR sending order
@@ -91,6 +114,13 @@ class Ax25Link:
         self.state = State.DISCONNECTED
         self.modulo = 8
         self.k = self.cfg.maxframe
+        self.n1 = self.cfg.paclen              # max info bytes we send (XID may lower)
+        self.srej_on = False                   # SREJ agreed in the XID
+        self.peer_v20 = peer_v20               # known v2.0 station: call with SABM
+        self.peer_version: str | None = None   # "2.2" / "2.0" once connected
+        self._xid_waiting = False
+        self.xid_at: float | None = None       # repeat the XID command at this time
+        self._xid_left = 0
         self._reset_vars()
         hops = 1 + len(self.path)
         self.srt = self.cfg.srt_init_sec * hops
@@ -112,18 +142,19 @@ class Ax25Link:
         self._events: list[tuple[str, object]] = []
         # counters in the format of linkq.parse() (PLANUNG.md section 14)
         self.c = dict(i_new=0, i_retry=0, bytes_new=0, bytes_retry=0, i_rx=0,
-                      retry_rx=0, rej_rx=0, rej_tx=0, t1_exp=0, rnr_rx=0, bytes_rx=0)
+                      retry_rx=0, rej_rx=0, rej_tx=0, t1_exp=0, rnr_rx=0, bytes_rx=0,
+                      srej_rx=0, srej_tx=0)
 
     # ======================================================================
     # public interface
     # ======================================================================
 
     def connect(self, now: float) -> None:
-        """Start an outgoing connection (SABM)."""
+        """Start an outgoing connection: SABME (v2.2), SABM for a known v2.0 station."""
         self._now = now
         if self.state != State.DISCONNECTED:
             return
-        self._establish(now)
+        self._establish(now, v22=self.cfg.version == "2.2" and not self.peer_v20)
 
     def disconnect(self, now: float) -> None:
         """Release the link. Unsent data is dropped: the caller waits for
@@ -138,14 +169,14 @@ class Ax25Link:
             self._start_t1(now)
             self.t2_at = None
             self.state = State.AWAITING_RELEASE
-        elif self.state == State.AWAITING_CONNECTION:
+        elif self.state in (State.AWAITING_CONNECTION, State.AWAITING_V22_CONNECTION):
             self._stop_t1()
             self._to_disconnected("local")
 
     def send(self, data: bytes, now: float) -> None:
         """Queue payload; it is cut into I frames of at most paclen bytes."""
         self._now = now
-        n = self.cfg.paclen
+        n = self.n1
         self.queue.extend(data[i:i + n] for i in range(0, len(data), n))
         self._pump(now)
 
@@ -163,8 +194,12 @@ class Ax25Link:
         """A frame from the air addressed to this link (dest = mycall, src = remote)."""
         self._now = now
         self.channel_busy(self._airtime(len(f.encode())), now)
-        if self.state == State.DISCONNECTED:
+        if f.kind == "XID":
+            self._rx_xid(f, now)
+        elif self.state == State.DISCONNECTED:
             self._rx_disconnected(f, now)
+        elif self.state == State.AWAITING_V22_CONNECTION:
+            self._rx_awaiting_v22(f, now)
         elif self.state == State.AWAITING_CONNECTION:
             self._rx_awaiting_connection(f, now)
         elif self.state == State.AWAITING_RELEASE:
@@ -200,10 +235,18 @@ class Ax25Link:
             self.t2_at = None
             if self.state in (State.CONNECTED, State.TIMER_RECOVERY):
                 self._tx_s(self._rr(), command=False, pf=False)
+        if self.xid_at is not None and now >= self.xid_at:
+            self.xid_at = None
+            if self._xid_waiting and self.connected:
+                if self._xid_left > 0:
+                    self._send_xid(now, repeat=True)
+                else:
+                    self._xid_waiting = False          # no XID answer: REJ only
         self._pump(now)
 
     def next_deadline(self) -> float | None:
-        times = [t for t in (self.t1_at, self.t2_at, self.t3_at) if t is not None]
+        times = [t for t in (self.t1_at, self.t2_at, self.t3_at, self.xid_at)
+                 if t is not None]
         return min(times) if times else None
 
     def pop_output(self) -> list[Frame]:
@@ -240,31 +283,20 @@ class Ax25Link:
 
     def _rx_disconnected(self, f: Frame, now: float) -> None:
         if f.kind == "SABM" and f.command:
-            self._reset_vars()
-            self._tx_u("UA", command=False, pf=f.pf)
-            self._stop_t1()
-            self._start_t3(now)
-            self.state = State.CONNECTED
+            self._accept(f, now, 8)
+            self._events.append(("connected", "incoming"))
+        elif f.kind == "SABME" and f.command and self.cfg.version == "2.2":
+            self._accept(f, now, 128)
             self._events.append(("connected", "incoming"))
         elif f.kind in ("SABME", "DISC"):
-            # SABME: v2.2 not before K3 - DM makes the caller fall back to SABM
+            # SABME with version 2.0: DM makes the caller fall back to SABM
             self._tx_u("DM", command=False, pf=f.pf)
         elif f.command and f.pf and f.kind not in ("UI", "XID", "TEST"):
             self._tx_u("DM", command=False, pf=True)
 
     def _rx_awaiting_connection(self, f: Frame, now: float) -> None:
         if f.kind == "UA" and f.pf:
-            self._stop_t1()
-            self._select_t1(now, measured=True)
-            reestablish = self._reestablish
-            self._reset_vars()
-            self.rc = 0
-            self._start_t3(now)
-            self.state = State.CONNECTED
-            if reestablish:
-                self._events.append(("reset", "reestablished"))
-            else:
-                self._events.append(("connected", "outgoing"))
+            self._connected_after_ua(now, 8)
         elif f.kind == "DM" and f.pf:
             self._stop_t1()
             self._to_disconnected("retryout" if self._reestablish else "refused")
@@ -272,6 +304,36 @@ class Ax25Link:
             self._tx_u("UA", command=False, pf=f.pf)
         elif f.kind == "DISC" and f.command:
             self._tx_u("DM", command=False, pf=f.pf)
+
+    def _rx_awaiting_v22(self, f: Frame, now: float) -> None:
+        if f.kind == "UA" and f.pf:
+            self._connected_after_ua(now, 128)
+        elif (f.kind == "DM" and f.pf) or f.kind == "FRMR":
+            self._fall_back_to_v20(now)               # a v2.0 station said no to SABME
+        elif f.kind == "SABME" and f.command:         # both sides called at once
+            self._tx_u("UA", command=False, pf=f.pf)
+        elif f.kind in ("SABM", "DISC") and f.command:
+            self._tx_u("DM", command=False, pf=f.pf)
+
+    def _connected_after_ua(self, now: float, modulo: int) -> None:
+        self._stop_t1()
+        self._select_t1(now, measured=True)
+        reestablish = self._reestablish
+        self._set_modulo(modulo)
+        self._reset_vars()
+        self.rc = 0
+        self._start_t3(now)
+        self.state = State.CONNECTED
+        if reestablish:
+            self._events.append(("reset", "reestablished"))
+        else:
+            self._events.append(("connected", "outgoing"))
+        if modulo == 128:
+            self._send_xid(now)
+
+    def _fall_back_to_v20(self, now: float) -> None:
+        self.peer_v20 = True
+        self._establish(now, reestablish=self._reestablish, v22=False)
 
     def _rx_awaiting_release(self, f: Frame, now: float) -> None:
         if f.kind in ("UA", "DM") and f.pf:
@@ -291,12 +353,12 @@ class Ax25Link:
         elif f.is_s:
             self._rx_s(f, now)
         elif kind == "SABM" and f.command:            # peer restarted the link
-            self._tx_u("UA", command=False, pf=f.pf)
-            self._stop_t1()
-            self._reset_vars()
             self.queue.clear()
-            self._start_t3(now)
-            self.state = State.CONNECTED
+            self._accept(f, now, 8)
+            self._events.append(("reset", "remote"))
+        elif kind == "SABME" and f.command and self.cfg.version == "2.2":
+            self.queue.clear()
+            self._accept(f, now, 128)
             self._events.append(("reset", "remote"))
         elif kind == "SABME" and f.command:
             self._tx_u("DM", command=False, pf=f.pf)
@@ -314,7 +376,7 @@ class Ax25Link:
         elif kind == "TEST" and f.command:
             self._emit(u_frame("TEST", self.remote, self.mycall, command=False,
                                      pf=f.pf, info=f.info, path=self.path))
-        # UA here is unexpected (SDL: DL-ERROR C) and ignored; XID follows in K3
+        # UA here is unexpected (SDL: DL-ERROR C) and ignored
 
     # --- I frames -----------------------------------------------------------------
 
@@ -336,12 +398,12 @@ class Ax25Link:
                 self._tx_s("RNR", command=False, pf=True)
                 self.t2_at = None
             return
+        if self.srej_on:
+            self._rx_i_srej(f, now)
+            return
         if f.ns == self.vr:
-            self.vr = (self.vr + 1) % self.modulo
-            self._rx_accepted += 1
+            self._deliver(f.info)
             self.reject_exception = False
-            self.c["bytes_rx"] += len(f.info)
-            self._events.append(("data", f.info))
             if f.pf:
                 self._tx_s("RR", command=False, pf=True)
                 self.t2_at = None
@@ -367,14 +429,62 @@ class Ax25Link:
             self._tx_s("REJ", command=False, pf=f.pf)
             self.t2_at = None
 
+    def _deliver(self, info: bytes) -> None:
+        self.vr = (self.vr + 1) % self.modulo
+        self._rx_accepted += 1
+        self.c["bytes_rx"] += len(info)
+        self._events.append(("data", info))
+
+    def _rx_i_srej(self, f: Frame, now: float) -> None:
+        """Receive with selective reject: keep frames after a gap, ask per missing frame."""
+        ahead = (f.ns - self.vr) % self.modulo
+        if ahead == 0:
+            self._deliver(f.info)
+            self.srej_sent.discard(f.ns)
+            while self.vr in self.rx_buf:            # the gap is closed: hand on the rest
+                n = self.vr
+                self._deliver(self.rx_buf.pop(n))
+                self.srej_sent.discard(n)
+            if f.pf:
+                self._tx_s(self._rr(), command=False, pf=True)
+                self.t2_at = None
+            else:
+                self._ack_later(now)
+            return
+        if 0 < ahead < self.k and f.ns not in self.rx_buf:
+            self.rx_buf[f.ns] = f.info
+            asked = False
+            n = self.vr
+            while n != f.ns:
+                if n not in self.rx_buf and n not in self.srej_sent:
+                    self.srej_sent.add(n)
+                    self.c["srej_tx"] += 1
+                    self.c["rej_tx"] += 1             # 'asked again' for link quality
+                    self._tx_s("SREJ", command=False, pf=f.pf and not asked, nr=n)
+                    asked = True
+                n = (n + 1) % self.modulo
+            if f.pf and not asked:
+                self._tx_s(self._rr(), command=False, pf=True)
+            self.t2_at = None
+            return
+        self.c["retry_rx"] += 1                       # repeat of something we have
+        if f.pf:
+            self._tx_s(self._rr(), command=False, pf=True)
+            self.t2_at = None
+        else:
+            self._ack_later(now)
+
     # --- S frames -----------------------------------------------------------------
 
     def _rx_s(self, f: Frame, now: float) -> None:
         kind = f.kind
+        if kind == "SREJ":
+            self._rx_srej(f, now)
+            return
         self.peer_busy = kind == "RNR"
         if kind == "RNR":
             self.c["rnr_rx"] += 1
-        if kind in ("REJ", "SREJ"):
+        if kind == "REJ":
             self.c["rej_rx"] += 1
         if f.command and f.pf:
             self._tx_s(self._rr(), command=False, pf=True)      # enquiry response
@@ -383,7 +493,7 @@ class Ax25Link:
             self._nr_error(now)
             return
         if self.state == State.CONNECTED:
-            if kind in ("REJ", "SREJ"):              # SREJ as REJ until K3
+            if kind == "REJ":
                 self._set_va(f.nr)
                 self._stop_t1()
                 self._stop_t3()
@@ -410,8 +520,75 @@ class Ax25Link:
                 self._start_t1(now)
         else:
             self._set_va(f.nr)
-            if kind in ("REJ", "SREJ"):
+            if kind == "REJ":
                 self._invoke_retransmission(f.nr)
+
+    def _rx_srej(self, f: Frame, now: float) -> None:
+        """The peer misses exactly frame N(R): send that one again, ack nothing."""
+        self.peer_busy = False
+        self.c["srej_rx"] += 1
+        self.c["rej_rx"] += 1
+        if f.command and f.pf:
+            self._tx_s(self._rr(), command=False, pf=True)
+            self.t2_at = None
+        entry = self.sent.get(f.nr)
+        if entry is None or not self._nr_valid(f.nr) or f.nr == self.vs:
+            return                                    # already acked or never sent
+        self._emit(i_frame(self.remote, self.mycall, f.nr, self.vr, entry.info,
+                           modulo=self.modulo, path=self.path))
+        entry.sends += 1
+        self.c["i_retry"] += 1
+        self.c["bytes_retry"] += len(entry.info)
+        self.t2_at = None
+        if self.t1_at is not None:
+            self._start_t1(now)                       # give the repeat time to arrive
+
+    # --- XID ----------------------------------------------------------------------
+
+    def _my_xid(self) -> xid.XidParams:
+        return xid.XidParams(srej=self.cfg.srej, rej=True, modulo=self.modulo,
+                             n1_rx=self.cfg.max_rx_info, k_rx=self.k,
+                             t1_ms=int(self.t1v * 1000), n2=self.cfg.n2)
+
+    def _send_xid(self, now: float, repeat: bool = False) -> None:
+        if not repeat:
+            self._xid_left = self.cfg.xid_tries
+        self._xid_left -= 1
+        self._xid_waiting = True
+        self._emit(u_frame("XID", self.remote, self.mycall, command=True, pf=True,
+                           info=xid.encode(self._my_xid()), path=self.path))
+        self.xid_at = max(now, self.tx_end) + self.t1v
+
+    def _rx_xid(self, f: Frame, now: float) -> None:
+        try:
+            theirs = xid.decode(f.info)
+        except xid.XidError:
+            if f.command:                              # cannot parse: answer with ours
+                self._emit(u_frame("XID", self.remote, self.mycall, command=False,
+                                   pf=f.pf, info=xid.encode(self._my_xid()),
+                                   path=self.path))
+            return
+        agreed = xid.combine(self._my_xid(), theirs)
+        if f.command:
+            self._emit(u_frame("XID", self.remote, self.mycall, command=False, pf=f.pf,
+                               info=xid.encode(agreed), path=self.path))
+        elif not self._xid_waiting:
+            return                                     # an answer we did not ask for
+        self._xid_waiting = False
+        self.xid_at = None
+        if self.connected:
+            self._apply_xid(agreed)
+
+    def _apply_xid(self, agreed: xid.XidParams) -> None:
+        self.srej_on = bool(agreed.srej) and self.modulo == 128
+        if agreed.k_rx:
+            self.k = max(1, min(self.k, agreed.k_rx, self.modulo - 1))
+        if agreed.n1_rx:
+            n1 = max(16, min(self.cfg.paclen, agreed.n1_rx))
+            if n1 < self.n1:                           # cut what is queued to the new size
+                data = b"".join(self.queue)
+                self.queue = deque(data[i:i + n1] for i in range(0, len(data), n1))
+            self.n1 = n1
 
     # ======================================================================
     # timers
@@ -434,6 +611,14 @@ class Ax25Link:
                 self.rc += 1
                 self._select_t1(now, measured=False)
                 self._transmit_enquiry(now)
+        elif st == State.AWAITING_V22_CONNECTION:
+            if self.rc + 1 >= self.cfg.sabme_tries:
+                self._fall_back_to_v20(now)            # silence to SABME: try SABM
+            else:
+                self.rc += 1
+                self._select_t1(now, measured=False)
+                self._tx_u("SABME", command=True, pf=True)
+                self._start_t1(now)
         elif st == State.AWAITING_CONNECTION:
             if self.rc >= self.cfg.n2:
                 self._to_disconnected("retryout" if self._reestablish else "timeout")
@@ -478,7 +663,7 @@ class Ax25Link:
         self.t3_at = None
 
     def _stop_timers(self) -> None:
-        self.t1_at = self.t2_at = self.t3_at = None
+        self.t1_at = self.t2_at = self.t3_at = self.xid_at = None
 
     def _ack_later(self, now: float) -> None:
         """Acknowledge once the peer's burst is over (T2 restarts per I frame)."""
@@ -499,15 +684,41 @@ class Ax25Link:
         self.retx = deque()
         self.t2_at = None
         self._rx_accepted = 0
+        self.rx_buf: dict[int, bytes] = {}    # SREJ: frames received after a gap
+        self.srej_sent: set[int] = set()
 
-    def _establish(self, now: float, reestablish: bool = False) -> None:
-        """SDL 'establish data link': SABM and wait for UA."""
+    def _establish(self, now: float, reestablish: bool = False,
+                   v22: bool | None = None) -> None:
+        """SDL 'establish data link': SABM(E) and wait for UA.
+        v22 None: keep the modulo the link has (re-establishing after an error)."""
+        if v22 is None:
+            v22 = self.modulo == 128
         self._reestablish = reestablish
         self._stop_timers()
         self.rc = 0
-        self._tx_u("SABM", command=True, pf=True)
+        self._tx_u("SABME" if v22 else "SABM", command=True, pf=True)
         self._start_t1(now)
-        self.state = State.AWAITING_CONNECTION
+        self.state = State.AWAITING_V22_CONNECTION if v22 else State.AWAITING_CONNECTION
+
+    def _accept(self, f: Frame, now: float, modulo: int) -> None:
+        """Answer SABM / SABME with UA and start a fresh link."""
+        self._set_modulo(modulo)
+        self._reset_vars()
+        self._tx_u("UA", command=False, pf=f.pf)
+        self._stop_t1()
+        self.rc = 0
+        self._start_t3(now)
+        self.state = State.CONNECTED
+
+    def _set_modulo(self, modulo: int) -> None:
+        self.modulo = modulo
+        self.k = max(1, min(self.cfg.maxframe_ext if modulo == 128 else self.cfg.maxframe,
+                            modulo - 1))
+        self.n1 = self.cfg.paclen
+        self.srej_on = False
+        self._xid_waiting = False
+        self.xid_at = None
+        self.peer_version = "2.2" if modulo == 128 else "2.0"
 
     def _to_disconnected(self, reason: str) -> None:
         self._stop_timers()
@@ -607,8 +818,9 @@ class Ax25Link:
         self.t2_at = None
         self._start_t1(now)
 
-    def _tx_s(self, kind: str, *, command: bool, pf: bool) -> None:
-        self._emit(s_frame(kind, self.remote, self.mycall, self.vr, command=command,
+    def _tx_s(self, kind: str, *, command: bool, pf: bool, nr: int | None = None) -> None:
+        self._emit(s_frame(kind, self.remote, self.mycall,
+                           self.vr if nr is None else nr, command=command,
                                  pf=pf, modulo=self.modulo, path=self.path))
 
     def _tx_u(self, kind: str, *, command: bool, pf: bool) -> None:
