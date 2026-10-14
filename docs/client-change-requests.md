@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 14.10.2026 (CR37 umgesetzt)
+Stand: 14.10.2026 (CR38 umgesetzt)
 
 ## Übersicht
 
@@ -44,6 +44,7 @@ Stand: 14.10.2026 (CR37 umgesetzt)
 | 35 | Bug: Bekanntes Bild ließ sich nicht erneut in den Chat stellen – Upload brach stumm ab | ✅ siehe unten |
 | 36 | Bildgröße im Chat sichtbar (klein bleibt klein), Größenwahl mit Zahlen in den Knöpfen | ✅ siehe unten |
 | 37 | brocast-Listener: Ansicht „Mit Trennlinien“ raus, Teile-Knöpfe nur im Teletext, Teletext in echter Teletext-Optik (Pixelschrift, großer Zeilenabstand) | ✅ siehe unten |
+| 38 | Teletext: Zeilenabstand auf Zeichenhöhe, brocast-Schriftzug nach der Teletext-Titelseite über jeder Seite; Bildkonverter (Bilder als Mosaik-Bulletins, nur station) | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -745,3 +746,47 @@ Teletext-Ansicht hieß zwar so, sah aber aus wie der Fließtext mit weniger Inha
 Vorschau ohne laufenden brocastd: `brocast/mockup/teletext-vorschau.html`.
 Betrifft nur den Listener (`app.js`, `app.css`, `webserver.py`, `listener_api.py`) – kein Protokoll, keine
 Änderung an dem, was über Funk geht.
+
+## CR38 – Teletext-Kopf, Zeilenabstand und Bildkonverter (✅ 14.10.2026)
+
+**1. Zeilenabstand auf Zeichenhöhe.** 1,65 war gut zwei Zeichenhöhen Luft zwischen den Zeilen – zu viel.
+Jetzt 1,125 (18 von 16 Schriftpixeln): zwischen zwei Zeilen bleibt genau eine Zeichenhöhe. Die Zahl ist so
+gewählt, dass der Zeilenabstand bei `font-size: 32px` volle 36 Bildschirmpixel sind; bei krummen Werten
+säße jede zweite Grundlinie auf einem halben Pixel und die Schrift würde verwischen.
+
+**2. brocast-Schriftzug über jeder Teletext-Seite.** Vorbild ist die ORF-Teletext-Titelseite (Vorlage von
+OE3GAS): ein Feld aus lauter hellen Quadraten mit schwarzen Fugen, der Schriftzug steht als ausgesparte,
+schwarze Fläche darin, darunter die rote Linie.
+
+- Erzeugt von `brocast/tools/build_logo.py` nach `brocast/brocast/web/brocast-logo.svg` (5,7 kB):
+  Raster 6 Einheiten je Zelle (davon 5 das helle Quadrat), Buchstaben aus Liberation Sans Bold
+  (Arial-Nachbau wie auf der Vorlage), schwarz-weiß gerastert; die Schriftgröße wird automatisch so
+  gewählt, dass der Schriftzug in die Feldbreite passt (91 × 20 Zellen).
+- SVG mit `shape-rendering="crispEdges"`, Breite 100 % des Bildschirms – bei 40 Zeichen × 14 px sind
+  das genau 560 px, also 1 SVG-Einheit = 1 Bildschirmpunkt.
+- Ausgeliefert vom Listener selbst (`/brocast-logo.svg`, CSP `img-src 'self'`).
+
+**3. Bildkonverter (neu).** `py -3 -m brocast bild <datei>` macht aus einem Bild eine Teletext-Bildseite –
+ASCII-Art-Prinzip, nur sechsmal feiner.
+
+- **Nur im station-Betrieb:** der Befehl liest `brocastd.conf` und bricht bei `mode = listener` ab.
+- **Darstellung:** ein Zeichen trägt 2 × 3 Felder (Sextanten `U+1FB00…U+1FB3B` plus Leer-, Halb- und
+  Vollblock, `brocast/mosaic.py`). Ein Bild ist damit ganz normaler Text in `pre`-Blöcken – **keine neue
+  Blockart, kein neues Dictionary** (bleibt v2). Der Listener erkennt ein Bild daran, dass der Block nur
+  aus Mosaikzeichen besteht, und zeichnet es mit Zeilenhöhe 0,75 em lückenlos; die Zeichen dafür sind in
+  der Pixelschrift gezeichnet statt gerastert, damit die Felder exakt aneinanderstoßen.
+- **Bytes:** je Zeichen vier Bytes UTF-8, davon sind aber drei bei allen gleich – mit dem
+  Preset-Wörterbuch (PLANUNG 6e) bleiben rund 0,9 Byte je Zeichen. Gemessen: 40 × 16 Zeichen
+  (80 × 48 Punkte) = 2 096 Byte roh → **514 Byte gepackt, 3–4 Frames**. Eine eigene 1-Byte-Kodierung
+  käme auf 370 Byte – die 40 % mehr sind es wert, dafür bleibt die Seite reiner Text.
+- **Aufruf:** ohne weitere Angabe nur Vorschau im Fenster samt Byte- und Frame-Zahl; `--senden` gibt die
+  Seite an das laufende brocastd (Ingest-API, Lieferant `bild`, Schlüssel = Dateiname → neue Revision
+  statt neuer Seite), `--tinybox ORDNER` legt sie als **Bulletin** in den TinyBox-Eingang (Kopfzeile
+  `Brocast:` wie bei den GeoSphere-Skripten, Text in der Mailbox ist dasselbe Mosaik).
+  Dazu `--spalten` (Breite in Zeichen, max. 40), `--invert`, `--hart` (harte Schwelle für Zeichnungen
+  statt Fehlerstreuung), `--titel`, `--text`, `--rubrik`, `--gueltig`.
+- **Pillow** wird nur für diesen Befehl gebraucht; fehlt es, sagt der Befehl das und bricht ab.
+
+Tests: `brocast/tests/test_mosaic.py` (Zeichentabelle gegen die Unicode-Namen, Raster, Seitenverhältnis,
+Blockgrößen, Frames, und ob die Pixelschrift jedes Mosaikzeichen kennt).
+Vorschau: `brocast/mockup/teletext-vorschau.html` (Textseite und Bildseite).

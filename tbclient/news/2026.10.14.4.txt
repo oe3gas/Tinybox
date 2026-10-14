@@ -1,0 +1,5 @@
+- brocast-Listener: ueber jeder Teletext-Seite steht jetzt der
+  brocast-Schriftzug wie auf der alten Teletext-Titelseite.
+- Teletext-Zeilen stehen enger: eine Zeichenhoehe Abstand.
+- Neu: Bilder als Teletext-Mosaik. Die Station macht aus einem Foto
+  eine Bildseite (py -3 -m brocast bild foto.jpg), rund 500 Byte.

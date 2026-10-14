@@ -3,6 +3,7 @@
     py -3 -m brocast demo              Beispiel-Wetterseite kodieren und anzeigen
     py -3 -m brocast decode <hex>      CBOR-Hexstring dekodieren und anzeigen
     py -3 -m brocast dict              Dictionary-Version und Hash anzeigen
+    py -3 -m brocast bild <datei>      Bild als Teletext-Mosaik (nur Station, --help dort)
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import sys
 
 from .codec import BrocastError, Codec
+from .config import ConfigError
 
 DEMO_PAGE = {
     "id": 7,
@@ -41,13 +43,16 @@ def main(argv: list[str]) -> int:
             show(codec, codec.encode(DEMO_PAGE), ax25_src="OE3GAS-10")
         elif argv[0] == "decode" and len(argv) == 2:
             show(codec, bytes.fromhex(argv[1]))
+        elif argv[0] == "bild":
+            from .imagecmd import main as bild_main
+            return bild_main(argv[1:])
         elif argv[0] == "dict":
             d = codec.d
             print(f"{d.name} Version {d.version}, Hash {d.hash4.hex()}")
         else:
             print(__doc__)
             return 2
-    except (BrocastError, ValueError) as exc:
+    except (BrocastError, ConfigError, ValueError, OSError) as exc:
         print(f"Fehler: {exc}", file=sys.stderr)
         return 1
     return 0

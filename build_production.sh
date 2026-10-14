@@ -17,8 +17,11 @@ brocast/brocast
 brocast/brocast-core.yaml
 brocast/brocastd.conf.example
 brocast/requirements.txt
+brocast/zdict
 geosphere_station.py
 geosphere_warnungen.py
+tbclient/__init__.py
+tbclient/news
 tinybox.conf.example
 deploy'
 
@@ -29,7 +32,9 @@ EXCLUDE='.gitattributes
 *.md
 *.bat
 *.odt
+*.txt
 docs
+test
 tests
 production
 build_production.sh
@@ -40,7 +45,10 @@ brocast/brocast.cddl
 brocast/funktest
 brocast/mockup
 brocast/test
-brocast/tests'
+brocast/tests
+brocast/tools
+tbclient
+tbclient.conf.example'
 
 # true if path $1 equals or lies below one of the patterns in list $2
 matches() {

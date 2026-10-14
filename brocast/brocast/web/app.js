@@ -584,14 +584,18 @@ function partsBar(p, redraw) {
   return [bar];
 }
 
-/* Head of the teletext screen: rubric, page number, title - as on a real
- * teletext page, so the screen is readable on its own. */
+/* Head of the teletext screen: the brocast wordmark (pixel graphic, as on the
+ * teletext title pages), then rubric, page number and title - so the screen is
+ * readable on its own. */
 function ttHead(p) {
+  const logo = el("img", "ttlogo");
+  logo.src = "/brocast-logo.svg";
+  logo.alt = "brocast";
   const head = el("div", "tthead");
   const cat = p.cats && p.cats.length ? p.cats.map(c => c.name).join(" ") : p.typ_name;
   head.append(el("span", "cat", cat), el("span", "grow"),
               el("span", "pg", `${p.org} S.${p.id}`));
-  return head;
+  return [logo, head];
 }
 
 function renderContent(p) {
@@ -604,7 +608,7 @@ function renderContent(p) {
   }
   const turn = teletext && p.sub_total > 1;             // only this subpage is shown
   const showFirst = !turn || state.part === 1;          // txt and data live on subpage 1
-  if (teletext) c.append(ttHead(p), el("div", "ttitle", p.ti || `${p.typ_name} – Seite ${p.id}`));
+  if (teletext) c.append(...ttHead(p), el("div", "ttitle", p.ti || `${p.typ_name} – Seite ${p.id}`));
   if (showFirst && p.txt) c.append(linkified("p", null, p.txt));
   let used = new Set();                                 // blocks already shown by a special view
   if (showFirst && !teletext && state.graphic && p.typ === "wx" && p.data && p.data.length) {
@@ -685,8 +689,25 @@ function scaledRows(b) {
   return (b.rows || []).map(r => (Array.isArray(r) ? r : [r]).map(x => typeof x === "number" ? x * sc : x));
 }
 
+/* A picture (brocast/mosaic.py) is plain text made of mosaic characters: the
+ * sextants U+1FB00…U+1FB3B plus space, half and full block. Nothing in the page
+ * says "picture" – the characters do, and the pixel font draws them edge to edge. */
+function isMosaic(text) {
+  let any = false;
+  for (const ch of String(text || "")) {
+    const cp = ch.codePointAt(0);
+    if (cp === 10 || cp === 32) continue;                       // newline, space
+    if (cp === 0x2588 || cp === 0x258C || cp === 0x2590 || (cp >= 0x1FB00 && cp <= 0x1FB3B)) {
+      any = true;
+      continue;
+    }
+    return false;
+  }
+  return any;
+}
+
 function renderBlocks(c, blocks, total, semantics) {
-  let cards = null, lastTable = null, lastGrid = null;
+  let cards = null, lastTable = null, lastGrid = null, lastMosaic = null;
   for (const b of blocks) {
     if (b.k === "value") {
       if (!cards) { cards = el("div", "cards"); c.append(cards); }
@@ -694,6 +715,20 @@ function renderBlocks(c, blocks, total, semantics) {
       continue;
     }
     cards = null;
+    // picture: mosaic blocks that follow each other are one picture (a long
+    // picture is sent in several blocks so each one fits into a frame)
+    if (b.k === "pre" && isMosaic(b.x)) {
+      lastTable = null;
+      lastGrid = null;
+      if (lastMosaic) {
+        lastMosaic.append("\n" + b.x);
+        continue;
+      }
+      lastMosaic = el("pre", "mosaic", b.x);
+      c.append(lastMosaic);
+      continue;
+    }
+    lastMosaic = null;
     // a table with column semantics (n) is drawn as a weather grid in graphic mode
     const sem = b.k === "table" && semantics ? semantics.get(b) : null;
     if (sem && sem.cols && state.graphic) {

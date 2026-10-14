@@ -18,8 +18,14 @@ Direwolf is not part of the build. Install and configure it separately (`AGWPORT
 **Included:**
 - the `tinybox/` and `brocast/brocast/` packages, with their `web/` folders
 - `brocast/brocast-core.yaml`
+- `brocast/zdict/` (the preset dictionary for the compressed frames – without it
+  brocastd sends uncompressed, see PLANUNG 6e)
+- `tbclient/__init__.py` and `tbclient/news/` – only the client version and its
+  news files: TinyBox reads them to publish the TBNEWS bulletins and to tell a
+  client that it is out of date (CR18). The client itself runs on the user PCs
+  and is not part of the build.
 - the two GeoSphere scripts
-- both `*.conf.example` templates
+- `tinybox.conf.example` and `brocast/brocastd.conf.example`
 - `brocast/requirements.txt`
 - `deploy/` (the systemd units and `install.sh`)
 - a generated `VERSION` file
@@ -28,11 +34,14 @@ Direwolf is not part of the build. Install and configure it separately (`AGWPORT
 - documentation and planning: `*.md`, `docs/`, `*.odt`
 - tests: `tests/`, `brocast/tests/`, `brocast/test/`, `brocast/funktest/`
 - `fwdsim/` (the forwarding simulator)
-- `brocast/mockup/`
+- `brocast/mockup/` and `brocast/tools/` (build tools such as the zdict and font
+  builders – their results are in the build, the scripts are not)
+- the client package `tbclient/` apart from version and news, and
+  `tbclient.conf.example`
 - old dictionary versions (`brocast-core.v*.yaml`) and `brocast.cddl`
 - all Windows `*.bat` launchers
 
-A build is about 0.8 MB, compared with 3.7 MB for the full repository.
+A build is about 1.2 MB, compared with 3.7 MB for the full repository.
 
 ## Files that drive the build
 

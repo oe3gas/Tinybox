@@ -329,6 +329,16 @@ Tests: `brocast/tests/test_rubrics.py` (Station, Funkweg Format 2, Listener), `t
 
 Nur Anzeige im Listener; über Funk ändert sich nichts. Vorschau: `brocast/mockup/teletext-vorschau.html`.
 
+### 6i. Teletext-Kopf und Bildseiten (entschieden und umgesetzt 14.10.2026, CR38)
+
+1. **Zeilenabstand** im Teletext-Bildschirm auf 1,125 (18 von 16 Schriftpixeln): zwischen zwei Zeilen genau eine Zeichenhöhe. Nur geradzahlige Zeilenabstände, sonst sitzt jede zweite Grundlinie auf einem halben Bildschirmpixel.
+2. **Schriftzug** nach der ORF-Teletext-Titelseite über jeder Teletext-Seite: Feld aus hellen Quadraten mit schwarzen Fugen, Buchstaben ausgespart, darunter die rote Linie. `brocast/tools/build_logo.py` → `brocast/brocast/web/brocast-logo.svg` (Liberation Sans Bold, Raster 6 Einheiten je Zelle, 91 × 20 Zellen), vom Listener selbst ausgeliefert.
+3. **Bildseiten (Bildkonverter).** Entschieden: **keine neue Blockart, kein Dictionary v3** – ein Bild ist Text aus Mosaikzeichen (Sextanten `U+1FB00…U+1FB3B`, 2 × 3 Felder je Zeichen) in `pre`-Blöcken, wie ASCII-Art, nur sechsmal feiner.
+   - Gemessen an einer 40 × 16-Zeichen-Seite (80 × 48 Punkte): roh 2 096 B, **gepackt 514 B, 3–4 Frames**. Eine eigene 1-Byte-Kodierung (6 Bit je Zeichen) käme auf 370 B; die 40 % Mehrkosten sind der Preis dafür, dass die Seite reiner Text bleibt – kein neues Dictionary, kein Sonderweg im Codec, und ältere Listener zeigen wenigstens Kästchen statt Unsinn. Die Kompression macht das möglich: von den vier UTF-8-Bytes je Zeichen sind drei bei allen gleich.
+   - Der Listener erkennt ein Bild daran, dass ein Block nur aus Mosaikzeichen besteht; aufeinanderfolgende Bildblöcke setzt er wieder zusammen (ein Bild wird in Blöcke zu drei Zeilen zerlegt, damit auch im Frame-Format 1 jeder Block in einen Frame passt).
+   - Die Mosaikzeichen sind in der Pixelschrift **gezeichnet** (7 × 12 Punkte je Zelle, Zeilenhöhe 0,75 em), nicht aus der Quellschrift gerastert – nur so stoßen die Felder fugenlos aneinander.
+   - Werkzeug: `py -3 -m brocast bild <datei>` – **nur im station-Betrieb** (liest `brocastd.conf`). Standard ist die Vorschau samt Byte- und Frame-Zahl; `--senden` gibt die Seite an das laufende brocastd (Lieferant `bild`), `--tinybox ORDNER` legt sie als Bulletin in den TinyBox-Eingang (Kopfzeile `Brocast:`). Pillow nur dafür nötig.
+
 ## 6. MQTT (vorbereitet, Umsetzung später)
 
 **Richtungen**

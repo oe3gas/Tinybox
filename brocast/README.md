@@ -224,10 +224,33 @@ und wird im Teletext ausgeblendet). Testseiten: `test\senden.bat bulletin`
 (ein langer Text in 4 Teilen) und `test\senden.bat magazin` (3 thematische Teile).
 Vorschau ohne laufenden brocastd: `mockup\teletext-vorschau.html`.
 
-Die Pixelschrift `brocast/web/teletext.woff` (5,8 kB) wird mit
+Über jeder Teletext-Seite steht der brocast-Schriftzug nach dem Vorbild der
+Teletext-Titelseite (helle Quadrate mit schwarzen Fugen, Buchstaben ausgespart,
+darunter die rote Linie): `brocast/web/brocast-logo.svg`, erzeugt mit
+`tools/build_logo.py`.
+
+Die Pixelschrift `brocast/web/teletext.woff` (7 kB) wird mit
 `tools/build_teletext_font.py` aus einem 7 × 13-Pixel-Raster erzeugt (DejaVu Sans
-Mono Bold bei 10 px, schwarz-weiß gerastert, jedes Pixel ein Quadrat im Umriss).
-Das Skript muss nur laufen, wenn sich Zeichenvorrat oder Raster ändern.
+Mono Bold bei 10 px, schwarz-weiß gerastert, jedes Pixel ein Quadrat im Umriss);
+die Mosaikzeichen für Bildseiten sind darin gezeichnet statt gerastert. Das
+Skript muss nur laufen, wenn sich Zeichenvorrat oder Raster ändern.
+
+## Bilder (nur Station)
+
+```
+py -3 -m brocast bild foto.jpg --titel "Shack von OE3GAS"      nur Vorschau + Bytes
+py -3 -m brocast bild foto.jpg --senden                        an das laufende brocastd
+py -3 -m brocast bild foto.jpg --tinybox ..\eingang            als Bulletin in die TinyBox
+```
+
+Das Bild wird zu Teletext-Mosaik: ein Zeichen trägt 2 × 3 Felder (Sextanten
+`U+1FB00…U+1FB3B`), 40 × 16 Zeichen sind also 80 × 48 Punkte. Die Seite besteht
+aus ganz normalen `pre`-Blöcken – keine neue Blockart, kein neues Dictionary –
+und kostet gepackt rund 500 Byte (3–4 Frames). Weitere Schalter: `--spalten`
+(Breite in Zeichen, höchstens 40), `--invert`, `--hart` (harte Schwelle statt
+Fehlerstreuung, gut für Zeichnungen und Logos), `--text` (Bildunterschrift),
+`--rubrik`, `--gueltig`. Dafür wird Pillow gebraucht (`pip install pillow`);
+im Listener-Betrieb lehnt der Befehl ab.
 
 Die Rohdaten liefert weiterhin die JSON-API:
 

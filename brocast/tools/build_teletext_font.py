@@ -34,6 +34,9 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from PIL import Image, ImageDraw, ImageFont
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from brocast.mosaic import FELD_BITS, TABELLE, ZEICHEN_HOEHE                  # noqa: E402
+
 QUELLE = Path("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf")
 ZIEL = Path(__file__).resolve().parent.parent / "brocast" / "web" / "teletext.woff"
 
@@ -53,6 +56,14 @@ ZEICHEN = (
     + list("€–—‘’‚“”„•…‹›′″≈≠≤≥±×÷←↑→↓◀▶▲▼■□●○★☆✓✗⌀Ω")
 )
 
+# Mosaik (Bildseiten, brocast/mosaic.py): die 64 Sextanten-Zeichen werden nicht
+# gerastert, sondern gezeichnet - 2 Spalten x 3 Zeilen, die die ganze Zelle fuellen.
+# Nur so stossen die Zeichen im Bild luecken- und fugenlos aneinander.
+MOSAIK = [ch for ch in TABELLE if ch != " "]
+MOSAIK_BITS = {ch: bits for bits, ch in enumerate(TABELLE)}
+MOSAIK_OBEN = 10          # Oberkante ueber der Grundlinie, in Pixeln (= PPEM-Aufstieg)
+MOSAIK_SPALTE = 4         # linke Spalte 4 Pixel breit, rechte 3 (Zelle ist 7 breit)
+
 
 def raster(ch: str, font: ImageFont.FreeTypeFont, asc: int, desc: int) -> set[tuple[int, int]]:
     """Gesetzte Pixel eines Zeichens, (x, y) mit y = 0 an der Oberkante (Grundlinie bei asc)."""
@@ -63,6 +74,25 @@ def raster(ch: str, font: ImageFont.FreeTypeFont, asc: int, desc: int) -> set[tu
     d.text((0, 0), ch, font=font, fill=1, anchor="la")
     px = img.load()
     return {(x, y) for y in range(img.height) for x in range(img.width) if px[x, y]}
+
+
+def mosaik(ch: str) -> set[tuple[int, int]]:
+    """Pixel eines Sextanten-Zeichens: 2 x 3 Felder ueber der ganzen Zelle.
+
+    Das Feldraster ist 7 x 12 Pixel (ZELLE x ZEICHEN_HOEHE) und liegt so, dass es
+    bei line-height 0,75 em nahtlos kachelt: oben MOSAIK_OBEN Pixel ueber der
+    Grundlinie, unten 2 Pixel darunter."""
+    bits = MOSAIK_BITS[ch]
+    hoch = ZEICHEN_HOEHE // 3
+    out = set()
+    for i, (sp, ze) in enumerate(((0, 0), (1, 0), (0, 1), (1, 1), (0, 2), (1, 2))):
+        if not bits & FELD_BITS[i]:
+            continue
+        x0, x1 = (0, MOSAIK_SPALTE) if sp == 0 else (MOSAIK_SPALTE, ZELLE)
+        for y in range(ze * hoch, (ze + 1) * hoch):
+            for x in range(x0, x1):
+                out.add((x, y))
+    return out
 
 
 def rechtecke(pixel: set[tuple[int, int]]) -> list[tuple[int, int, int, int]]:
@@ -111,8 +141,14 @@ def main() -> int:
     vorschub = {".notdef": (advance * PX, 0)}
     cmap = {}
     breit = []
-    for ch in ZEICHEN:
+    for ch in ZEICHEN + MOSAIK:
         name = f"uni{ord(ch):04X}"
+        if ch in MOSAIK_BITS and ch != " ":
+            # gezeichnet statt gerastert; die Zelle liegt MOSAIK_OBEN ueber der Grundlinie
+            glyphen[name] = glyph(mosaik(ch), MOSAIK_OBEN)
+            vorschub[name] = (advance * PX, 0)
+            cmap[ord(ch)] = name
+            continue
         pixel = raster(ch, font, asc, desc)
         if pixel and max(x for x, _ in pixel) >= advance:
             breit.append(ch)                            # passt nicht in die Zelle: beschneiden

@@ -176,17 +176,18 @@ table.tbl th.grp { text-transform: uppercase; letter-spacing: .04em; font-size: 
 /* ---------- teletext view ----------
    Pixelschrift (brocast/tools/build_teletext_font.py): 1 Zeichen = 7 x 16 Pixel
    im em, bei font-size 32 px also genau 2 Bildschirmpixel je Schriftpixel. Nur
-   geradzahlige Groessen verwenden, sonst verwischen die Kanten. Die Zeilen
-   stehen bewusst weit auseinander (Zeilenabstand 1,65) - auf dem Bildschirm
-   liest sich das besser als das enge Original-Raster. */
+   geradzahlige Groessen verwenden, sonst verwischen die Kanten. Zeilenabstand
+   1,125 = 18 Schriftpixel: zwischen zwei Zeilen bleibt genau eine Zeichenhoehe
+   Luft - etwas mehr als beim engen Original, aber kein Doppelabstand. */
 @font-face {
   font-family: "brocast Teletext";
   src: url("/teletext.woff") format("woff");
   font-display: swap;
 }
 .content.ttscreen { background: var(--tt-bg); color: var(--tt-white); font-family: "brocast Teletext", var(--mono);
-                    font-size: 32px; line-height: 1.65; padding: 20px 16px 26px; margin: 4px 0 16px;
+                    font-size: 32px; line-height: 1.125; padding: 20px 16px 26px; margin: 4px 0 16px;
                     max-width: calc(40ch + 32px); -webkit-font-smoothing: none; }
+.content.ttscreen .ttlogo { display: block; width: 100%; margin: 0 0 .5em; }
 .content.ttscreen .tthead { display: flex; align-items: baseline; gap: 1ch; margin-bottom: .5em;
                             line-height: 1.25; }
 .content.ttscreen .tthead .cat { background: var(--tt-red); color: var(--tt-white); padding: 0 1ch;
@@ -226,6 +227,16 @@ table.tbl th.grp { text-transform: uppercase; letter-spacing: .04em; font-size: 
 .content.ttscreen .series path { stroke: var(--tt-green); }
 .content.ttscreen pre { background: none; border: 0; border-radius: 0; padding: 0; font: inherit; margin: 0 0 .9em; }
 .content.ttscreen hr { border-top: 2px solid var(--tt-cyan); margin: .6em 0; }
+
+/* Bildblöcke (brocast/mosaic.py): Mosaikzeichen stoßen nur bei genau dieser
+   Zeilenhöhe (12 von 16 Schriftpixeln = 0,75 em) fugenlos aneinander. Auch im
+   Fließtext wird ein Bild als Bild gezeigt, nicht als Zeichensalat. */
+pre.mosaic, .content pre.mosaic, .content.ttscreen pre.mosaic {
+  font-family: "brocast Teletext", var(--mono); font-size: 32px; line-height: .75;
+  background: var(--tt-bg); color: var(--tt-white); border: 0; border-radius: 0; padding: 0;
+  width: fit-content; max-width: 100%; overflow-x: auto; margin: 0 0 .9em;
+  -webkit-font-smoothing: none;
+}
 
 .raw { background: #111; color: #e8e8e8; border-radius: 8px; padding: 12px 14px; font: 13px/1.5 var(--mono);
        white-space: pre-wrap; word-break: break-all; margin-top: 20px; }
@@ -490,6 +501,8 @@ a.extlink:hover { color: var(--accent-dark); }
   .content table.tbl, table.log { display: block; overflow-x: auto; }
   /* Teletext: halbe Pixelgroesse (24 px bleibt auf Handy-Displays scharf) */
   .content.ttscreen { font-size: 24px; padding: 14px 12px 18px; }
+  /* Bild ganz sichtbar statt seitlich scrollen: 1 Schriftpixel = 1 Bildschirmpixel */
+  pre.mosaic, .content pre.mosaic, .content.ttscreen pre.mosaic { font-size: 16px; }
   .settings { padding: 16px 14px 32px; }
   .fields { grid-template-columns: 1fr; }
   .fields input, .fields select { height: 44px; font-size: 16px; }
