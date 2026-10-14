@@ -323,10 +323,15 @@ class KissConfigTests(unittest.TestCase):
     def load(self, extra: str):
         import tempfile
         from pathlib import Path
-        text = (ROOT / "tinybox.conf.example").read_text(encoding="utf-8") + "\n" + extra
+        import configparser
+        # the example already has [radio]/[kiss]/[ax25]: merge, do not append twice
+        cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+        cp.read_string((ROOT / "tinybox.conf.example").read_text(encoding="utf-8"))
+        cp.read_string(extra)
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "t.conf"
-            p.write_text(text, encoding="utf-8")
+            with open(p, "w", encoding="utf-8") as fh:
+                cp.write(fh)
             return config.load(p)
 
     def test_defaults_follow_agw(self):

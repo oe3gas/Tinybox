@@ -480,7 +480,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
 | F0–F7 | Forwarding-Modul (Abschnitt 13) | F1–F5 fertig (06.–08.10.2026), mit LinBPQ getestet; F0 teilweise. Als Nächstes F6 |
 | C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast (08.10.2026), Offline-Mailbox (10.10.2026). Funktest C3 offen |
-| K1–K10 | KISS-Mode: eigener AX.25-Automat (v2.2) + `kisshub` (Abschnitt 15) | K1–K4 ✅ 14.10.2026: Codec, Automat v2.0/v2.2 mit SREJ/XID, `KissAdapter` (`[radio] interface = kiss`), 90 neue Tests grün. Als Nächstes Funktest gegen Direwolf-KISS auf PC2 (`docs/kiss-mode-konzept.md` 8a), dann K5–K7. Erstes Gerät: PK-232 |
+| K1–K10 | KISS-Mode: eigener AX.25-Automat (v2.2) + `kisshub` (Abschnitt 15) | K1–K4 ✅, K5 ✅ (Tests laut Gerhard erfolgreich), K7 ✅ `kisshub` mit PK-232-Profil (14.10.2026). Als Nächstes K8: Funktest PK-232 (`docs/kiss-mode-konzept.md` 8b), danach K6, K9 (Kenwood), K10 |
 
 ---
 
@@ -1085,6 +1085,7 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - **Plattform:** Windows (PC2) und Raspberry Pi; NanoPi nicht als Ziel.
 - Digipeater/APRS von Direwolf wird nicht genutzt – im KISS-Mode nichts zu ersetzen.
 - **Umgesetzt (K4):** `[radio] interface = kiss` schaltet auf `tinybox/adapters/kiss.py` um; `[kiss]` und `[ax25]` in `tinybox.conf.example`. Ohne `[radio]` bleibt alles bei AGW. Eine verlorene KISS-TCP-Verbindung beendet die AX.25-Verbindungen nicht; Stationen, die SABME mit DM ablehnen, werden bis zum Neustart als v2.0 gemerkt.
+- **Umgesetzt (K7):** `kisshub` (`python -m kisshub -c kisshub.conf`, `kisshub.bat`) besitzt den TNC, Standard-Port **8101** (8001 bleibt Direwolf). PK-232-Profil mit Weckkette und Schnittstellen-Einstellungen aus pk232py (8N1, ohne Flusskontrolle, DTR/RTS high) und Init nach TRM 4.7.1 + `VHF ON`/`HBAUD 1200`; beim Beenden `C0 FF C0` + `KISS OFF`. Sendewarteschlange: Steuer-Frames vor I-Frames vor UI, höchstens 1,5 s Sendezeit im TNC.
 
 ---
 

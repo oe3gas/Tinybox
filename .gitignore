@@ -30,6 +30,8 @@ secrets/
 tinybox.conf
 tbclient.conf
 fwdsim.conf
+kisshub.conf
+kisshub.log
 brocast/brocastd.conf
 brocast/brocastd.conf.neu
 

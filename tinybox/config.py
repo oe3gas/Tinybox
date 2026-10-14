@@ -138,7 +138,7 @@ class RadioCfg:
 class KissCfg:
     """[kiss] the KISS-TCP server: kisshub (owns the TNC) or Direwolf's KISS port."""
     host: str = "127.0.0.1"
-    port: int = 8001
+    port: int = 8101                # kisshub; Direwolf's KISS port is 8001
     channel: int = 0                # KISS port number inside the stream
     reconnect_sec: int = 5
     air_baud: int = 1200            # radio bit rate (own transmit time, T1)
@@ -446,7 +446,7 @@ def _load_kiss(cp: configparser.ConfigParser,
         raise ConfigError(f"[radio] interface: '{radio.interface}' - use agw or kiss")
     kiss = KissCfg(
         host=_get(cp, "kiss", "host", "127.0.0.1").strip(),
-        port=_get(cp, "kiss", "port", 8001, int),
+        port=_get(cp, "kiss", "port", 8101, int),
         channel=_get(cp, "kiss", "channel", 0, int),
         reconnect_sec=_get(cp, "kiss", "reconnect_sec", 5, int),
         air_baud=_get(cp, "kiss", "air_baud", 1200, int),

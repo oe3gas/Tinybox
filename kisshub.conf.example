@@ -1,0 +1,32 @@
+; kisshub - owns the KISS TNC and shares it over KISS-TCP (PLANUNG.md section 15)
+; Copy to kisshub.conf and adjust. TinyBox: [radio] interface = kiss, [kiss] port = 8101
+
+[tnc]
+profile   = pk232          ; pk232 | tm-d710 | th-d74 | th-d75 | tnc2-kiss | generic
+transport = serial         ; serial | tcp (TNC behind a network serial server)
+device    = COM3           ; Windows COM3, Raspberry Pi /dev/ttyUSB0, Bluetooth /dev/rfcomm0
+serial_baud = 9600         ; PC <-> TNC (PK-232: its TBAUD; 9600 as pk232py uses it)
+; host = 127.0.0.1         ; only with transport = tcp
+; port = 4001
+reconnect_sec = 10
+exit_kiss_on_stop = yes    ; on Ctrl+C: leave KISS, so pk232py / a terminal finds cmd:
+; init_lines = AWLEN 8 | PARITY 0 | RESTART | ... | KISS ON | HOST ON
+;              replaces the profile's init; the last line enters KISS
+
+[kiss]
+air_baud    = 1200         ; radio bit rate
+txdelay_ms  = 300          ; sent to the TNC as KISS TXDELAY
+persist     = 63           ; KISS P (0..255)
+slottime_ms = 100
+send_params = yes          ; no: keep what is set in the TNC
+max_lead_ms = 1500         ; at most this much air time queued in the TNC, so
+                           ; acknowledgements overtake long frames (priorities)
+
+[server]
+listen = 127.0.0.1         ; loopback only
+port   = 8101              ; not 8001: that is Direwolf's KISS port
+
+[log]
+level = INFO               ; DEBUG shows every byte of the TNC dialog
+file  =                    ; e.g. kisshub.log
+status_every_sec = 600

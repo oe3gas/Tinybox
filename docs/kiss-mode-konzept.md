@@ -377,9 +377,9 @@ Fassungen gegen dieselben Testfälle.
 | K2 ✅ | `Ax25Link` v2.0 (SABM → Sitzung → DISC, auch ausgehend), REJ, RR/RNR, T1/T2/T3, N2 – `tinybox/ax25/link.py`, Simulator `tests/ax25sim.py` (14.10.2026) | 23 Tests; Stresstest 100 Zufallskanäle 5–40 % Verlust, k 1–7: alle Daten vollständig und in Reihenfolge |
 | K3 ✅ | v2.2: SABME, Modulo 128, SREJ, XID (mit Wiederholung), Rückfall-Logik – `tinybox/ax25/xid.py`, `link.py` (14.10.2026) | 20 neue Tests; Stresstest 150 Zufallskanäle, Versionen gemischt, 5–40 % Verlust: alle Daten vollständig |
 | K4 ✅ | `KissAdapter` (`tinybox/adapters/kiss.py`) als zweiter Adapter neben AGW, Router, UI für TBCHAT, ausgehende Connects inkl. via, Qualität aus dem eigenen Link (14.10.2026) | 16 Tests Ende-zu-Ende mit echter Gegenstation (v2.0/v2.2, 20 % Verlust); alle AGW-Tests unverändert grün |
-| K5 | ausgehende Connects inkl. via (Forwarding), Merken der Gegenstations-Version | Forward gegen LinBPQ und Direwolf |
+| K5 ✅ | ausgehende Connects inkl. via (Forwarding), Merken der Gegenstations-Version | Forward gegen LinBPQ und Direwolf – Tests laut Gerhard erfolgreich (14.10.2026) |
 | K6 | Qualitätszähler aus dem Automaten | Balken wie mit Fork |
-| K7 | `kisshub` (eigener Prozess), brocastd daran | brocastd + TinyBox an einem TNC |
+| K7 ✅ | `kisshub` (eigener Prozess): Geräteprofile, Weck-/Init-Dialog, KISS-TCP-Server, Sendewarteschlange mit Prioritäten, Spiegeln an andere Clients (14.10.2026) | 13 Tests mit simuliertem PK-232 (alle Ausgangszustände), Ende-zu-Ende TinyBox → kisshub → PK-232 → Station |
 | K8 | Geräteprofil + Funktest **PK-232** (erstes Gerät) | Dauerlauf, auch auf dem Raspi |
 | K9 | Geräteprofile + Funktest TM-D710, TH-D74, TH-D75 | je Gerät |
 | K10 | TNC2 mit KISS-EPROM (Profil `generic`/`tnc2-kiss`) | Kurztest, wenn Gerät verfügbar |
@@ -421,6 +421,35 @@ Direwolf dient hier nur als Modem („dummer TNC“); AX.25 macht die TinyBox se
      (Abschnitt 3.4) – Log-Ausschnitt schicken.
    - Ruft Direwolf mit SABM, läuft v2.0 – das ist in Ordnung.
 8. Zurück zu AGW: `interface = agw` (oder `[radio]` löschen), TinyBox neu starten.
+
+## 8b. Funktest K8: PK-232 über kisshub (VHF, 1200 Bd)
+
+Die Init-Zeilen des PK-232 stammen aus TRM 4.7.1 (über pk232py) plus `VHF ON` und
+`HBAUD 1200`; mit KISS auf der Luft sind sie noch nicht erprobt. kisshub
+protokolliert jede Zeile mit der Antwort des TNC – damit lässt sich jede
+Abweichung sofort zuordnen.
+
+1. **PC2:** `git pull`, dann einmal `py -3 -m pip install pyserial`.
+2. `kisshub.conf.example` nach `kisshub.conf` kopieren (bleibt außerhalb des
+   Repos) und `device` auf den COM-Port des PK-232 setzen, `serial_baud` auf
+   seine Terminal-Baudrate (pk232py: 9600).
+3. **pk232py beenden** – der COM-Port gehört dann kisshub allein.
+4. `kisshub.bat` starten. Erwartet:
+   `TNC answers (...)`, eine `init ...`-Zeile je Befehl, zuletzt
+   `TNC in KISS mode - ready`.
+   - Zeile mit `?bad` / `?What?` (Warnung) oder `TNC init failed`: Log schicken.
+     Mit `[log] level = DEBUG` steht jedes Byte des Dialogs drin.
+   - Zeile kann man ohne Code-Änderung ersetzen: `[tnc] init_lines = ...`.
+5. **`tinybox.conf`:** `[radio] interface = kiss`, `[kiss] port = 8101`
+   (8101 = kisshub, 8001 = Direwolf), TinyBox neu starten. kisshub meldet
+   `client1 ... connected`, die Web-GUI zeigt `via KISS`.
+6. Funk: VHF-Ausgang des PK-232 an das FM-Gerät, gleiche Frequenz wie die
+   Gegenstation. Von PC1 (Direwolf + Terminal) `OE3GAS-1` connecten und eine
+   Sitzung fahren (`L`, `R n`, `S`, `B`), dann Chat mit dem Client.
+7. brocastd (optional): in `brocastd.conf` `interface = kiss`, `kiss_port = 8101` –
+   dann teilen sich TinyBox und brocastd den PK-232 über kisshub.
+8. Ende: **Strg+C im kisshub-Fenster** – kisshub holt den PK-232 aus KISS
+   (`C0 FF C0`) und schaltet `KISS OFF`; danach findet pk232py ihn wieder bei `cmd:`.
 
 ## 9. Risiken
 
