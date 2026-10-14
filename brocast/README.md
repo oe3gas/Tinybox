@@ -12,8 +12,10 @@ https://claude.ai/code/artifact/bf4b91a7-7807-42d7-b72e-5739d9c257bd
 | --- | --- |
 | `brocast-core.yaml` | Kern-Dictionary Version 2 (Umschlag, Bausteine, Enums, Wetter); v1 als Referenz in `tests\data` |
 | `brocast.cddl` | Schema zur Validierung |
-| `brocast/` | Codec (`codec.py`) und brocastd (`daemon.py`, `station.py`, `carousel.py`, `ingest.py`, `agw.py`, `kiss.py`, `ax25.py`, `store.py`, `splitter.py`) |
+| `brocast/` | Codec (`codec.py`) und brocastd (`daemon.py`, `station.py`, `carousel.py`, `ingest.py`, `agw.py`, `kiss.py`, `ax25.py`, `store.py`, `fragment.py`, `splitter.py`, `zdict.py`) |
 | `brocastd.conf`, `brocastd.bat` | Konfiguration und Start |
+| `zdict/` | Preset-Wörterbuch für die Kompression (binär, Teil der Software) |
+| `tools/` | `payload_report.py` (Vorher/Nachher-Rechnung), `build_zdict.py` (Wörterbuch bauen) |
 | `tests/` | Tests (`runtests.bat`) |
 | `dictionary-empfehlung.md` | Momentaufnahme der Spezifikation |
 
@@ -64,6 +66,71 @@ curl -X PUT -H "Content-Type: application/json" ^
 ```
 
 Status: `http://127.0.0.1:8090/api/v1/status` im Browser.
+
+## Was über Funk geht: Frame-Format 2 (ab 14.10.2026)
+
+Eine Seite steht nicht mehr Stück für Stück in den Frames, sondern einmal als
+Umschlag und dahinter der gepackte Inhalt:
+
+| | Format 1 (bis 13.10.2026) | **Format 2 (Standard)** |
+| --- | --- | --- |
+| Umschlag (Titel, Rubrik, Quelle, Zeit) | in **jeder** Unterseite | nur im ersten Fragment |
+| Inhalt | Klartext-CBOR, nur ganze Blöcke je Frame | alle Blöcke als ein Blob, mit deflate gepackt |
+| Füllung der Frames | 70–80 % | randvoll bis auf das letzte |
+| Lesbarkeit im Terminal | theoretisch | nein (ausdrücklich nicht das Ziel) |
+
+Gemessen an den Testseiten in `test\`: 45 % weniger Bytes und 42 % weniger
+Kanalzeit, bei langen Bulletins deutlich mehr. Selbst nachrechnen:
+
+```
+py -3 tools\payload_report.py                   Seiten der eigenen Datenbank
+py -3 tools\payload_report.py test\*.json       Seiten aus Dateien
+py -3 tools\payload_report.py --conf brocastd.conf
+```
+
+Beides steht im Header-Byte jedes Frames (hohes Nibble = Format), ein Listener
+mit alter Software lässt die neuen Frames also liegen, statt halbe Seiten
+anzuzeigen – und meldet im Empfangslog „neueres Format, brocastd
+aktualisieren“. Umstellen in `brocastd.conf`:
+
+```
+[station]
+wire_format = 2        ; 1 = alt, nur für Vergleichsmessungen
+compress    = yes
+```
+
+**Preset-Wörterbuch.** Gepackt wird mit einem Wörterbuch, das beide Seiten
+schon haben (`zdict\brocast-zdict-1.bin`, 32 kB: Funk- und Mailbox-Wortschatz,
+Stationsnamen, Blockgerüste). Deshalb schrumpfen auch kurze Seiten um 30–50 %.
+Das Wörterbuch gehört zur Software, nicht zum brocast-Dictionary: Seine
+**Generation** (1) steht im Frame, und beim Start prüft brocastd den SHA-256
+der Datei. Passt sie nicht, wird unkomprimiert gesendet (Warnung im Log) bzw.
+eine Seite verworfen – dann hilft `git pull`. Wer das Wörterbuch ändert, muss
+`tools\build_zdict.py --gen 2` benutzen und **beide** PCs aktualisieren.
+
+**Verlorene Fragmente.** Eine Seite ist erst vollständig, wenn alle Fragmente
+da sind; brocastd sammelt sie im Arbeitsspeicher (15 min, höchstens 64 halbe
+Seiten) und setzt sie beim nächsten Karussell-Lauf zusammen. Weil es viel
+weniger Fragmente als früher Unterseiten sind, kommt eine Seite trotzdem
+häufiger ganz an: bei 97 % Frame-Erfolg sind 3 Fragmente in 91 % der Fälle
+komplett, 8 Unterseiten nur in 78 %. Was noch fehlt, zeigt die Statusseite
+(`wire.waiting`).
+
+## Wie oft eine Seite wiederholt wird
+
+Eine neue Revision geht sofort hinaus, dann nach `repeat_minutes`, danach alle
+`max_interval_min`. Eine alte Revision braucht das nicht mehr so oft –
+`aging` staffelt nach dem Alter:
+
+```
+[station]
+aging = 24:120, 168:0   ; ab 24 h alle 120 min, ab 7 Tagen nicht mehr senden
+```
+
+`0` heißt: die Seite ruht. Sie bleibt im Bestand und geht wieder auf Funk,
+sobald der Lieferant sie ändert (neue Revision). Das ist der größte Hebel,
+wenn viele alte Bulletins im Karussell liegen – zum Beispiel ein Dutzend
+Client-News, die sich nicht mehr ändern.
 
 ## Verbindung zu Direwolf: AGW oder KISS
 

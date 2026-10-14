@@ -1,0 +1,1190 @@
+). Antwort: eine Textzeile mit allen Zählern seit Verbindungsaufbau. Normale AGW-Clients schicken nie `Q`, es bricht also nichts.
+
+**Umgesetzt (11.10.2026):** Repo `oe3gas/direwolf-tinybox`, Zweig `tinybox` (`master` = unverändertes Original), lokal `C:\direwolf-tinybox`. Format und alle Schlüssel in `TINYBOX.md` dort, z. B. `v=1 state=3 i_new=21 i_retry=0 … srt=1.38 unack=4 age=2405`; ohne Verbindung `v=1 none`. Jeder AGW-Client darf fragen (nur lesend); Diagnose-Werkzeug `tinybox-tools\agw_q.py`. Windows-Programm per MinGW gebaut, unter Windows 11 mit echtem Funk getestet.
+
+Der **Abbruchgrund** braucht keinen Fork: Direwolf meldet ihn schon im AGW-Frame `d` als Text (`*** DISCONNECTED RETRYOUT With …` statt `*** DISCONNECTED From Station …`). TinyBox wertet das heute noch nicht aus.
+
+**Der Patch im Fork** (Stand `bfed142`, 2 Commits auf `master` = `eda1383`, Direwolf 1.8.2; 340 Zeilen in 9 Dateien, jede Stelle mit `TinyBox` kommentiert, Überblick `git diff master tinybox`):
+
+| Datei | Änderung |
+|---|---|
+| `src/ax25_link.c` | `struct tb_stats_s` im Zustandsblock `ax25_dlsm_t` (Feld `tb`); Zähler an den Stellen aus der Tabelle oben: `i_new` beim Senden aus der Warteschlange, `i_retry` bei Wiederholung nach REJ/SREJ/T1, `rej_tx` beim Senden von REJ/SREJ, `retry_rx` wenn N(S) hinter V(R) liegt, `t1_exp` in `t1_expiry()`, `rnr_rx`; neue Funktion `dl_link_stats_request()` baut die Antwortzeile (`v=1 …`, ohne Verbindung `v=1 none`) – darf jeder AGW-Client abfragen, nicht nur der Besitzer der Verbindung |
+| `src/ax25_link.h` | Prototyp `dl_link_stats_request` |
+| `src/dlq.c`, `src/dlq.h` | neuer Warteschlangen-Typ `DLQ_LINK_STATS` mit Einreihfunktion, wie `DLQ_OUTSTANDING_FRAMES_REQUEST` für `Y` |
+| `src/recv.c` | Verteiler: `DLQ_LINK_STATS` → `dl_link_stats_request` |
+| `src/server.c` | `case 'Q'` beim Empfang vom AGW-Client (reiht ein), `server_link_stats_reply()` schickt Frame `Q` mit der Textzeile zurück; Beschriftung für das Debug-Log |
+| `src/server.h` | Prototyp `server_link_stats_reply` |
+| `TINYBOX.md` | Format, Schlüssel, Bau, Tests |
+| `tinybox-tools/agw_q.py` | Diagnose: fragt `Q` für eine Verbindung ab und zeigt die Zeile |
+
+Nichts davon ändert Protokollverhalten; ohne `Q`-Anfrage läuft der Fork wie das Original. (`TINYBOX.md` im Fork sagt noch „Funktest unter Windows 11 steht aus“ – der ist seit 11.10.2026 erledigt, Satz dort nachziehen.)
+
+**Verteilung des Windows-Programms (`direwolf.exe`):** Das Tinybox-Repo enthält den Fork nicht, ein `git pull` dort bringt also keine neue `direwolf.exe`. Der Fork ist ein eigenes Repo mit Quelltext; die `.exe` ist ein Bauergebnis und liegt in keinem Repo. Gebraucht wird sie nur dort, wo die TinyBox läuft (PC2) – der Client braucht keinen Fork, seine Balken kommen von der TinyBox. Vorgehen:
+1. Auf PC2 `git pull` in `C:\direwolf-tinybox` (Zweig `tinybox`), dann mit MSYS2/MinGW + CMake bauen und die `.exe` in den Direwolf-Ordner kopieren, Direwolf neu starten.
+2. Soll die `.exe` ohne Bauen auf einen zweiten Rechner: als **GitHub-Release** im Fork-Repo anhängen (Tag = Direwolf-Version + Datum, z. B. `1.8.2-tb1`); privates Repo, Download mit `gh release download` oder im Browser nach Login. Entschieden 12.10.2026: kein Binary ins Tinybox-Repo (ein paar MB je Stand, wächst für immer), keine automatische Verteilung – ein Rechner, seltene Änderungen.
+
+### 14.2 Messung in der TinyBox
+
+TinyBox fragt die Zähler per `Q` ab und rechnet selbst; Bewertung, Fenster und Formatierung liegen in der TinyBox, nicht im Fork.
+
+Pro Richtung eine Verlustquote:
+
+| Richtung | Terminal-User (I-Frames) | Client im UI-Modus |
+|---|---|---|
+| TinyBox → Station | `i_retry` / (`i_new` + `i_retry`); `rej_rx` nur Anzeige | Empfangsquote der TBCHAT-Frames (14.3) |
+| Station → TinyBox | (`rej_tx` + `retry_rx`) / empfangene I-Frames | wie links |
+
+- **Fenster:** die letzten **50 Frames pro Richtung, höchstens aber die letzten 30 Minuten** – was zuerst greift (TinyBox bildet Differenzen zwischen den Abfragen). Zeigt den aktuellen Zustand, nicht den Durchschnitt seit Verbindungsaufbau. Die Zeitgrenze kam nach dem ersten Funktest dazu: in 40 Minuten BBS-/Chat-Betrieb fielen nur 21 bzw. 13 Frames an, 50 Frames hätten also weit über eine Stunde zurückgereicht.
+- **Mindestmenge:** eine Richtung zählt erst ab **20 Frames**. Hat keine Richtung 20 Frames → noch kein Ergebnis.
+- **Die schlechtere Richtung bestimmt die Balken.**
+- **Schwellen** (geändert 12.10.2026, in `tinybox.conf` einstellbar):
+
+| Verlust | Balken |
+|---|---|
+| ≤ 5 % | 5 |
+| ≤ 10 % | 4 |
+| ≤ 20 % | 3 |
+| ≤ 35 % | 2 |
+| ≤ 50 % | 1 |
+| darüber | 1 roter Balken (Code `0`, Terminal `X....`) |
+| zu wenig Daten | 5 ausgegraute Balken |
+
+- Jeder T1-Ablauf im Fenster kostet zusätzlich einen Balken (minimal der rote Balken).
+- `bytes_new`/`bytes_retry` fließen nicht in die Balken ein, nur in `stat`.
+
+### 14.3 Empfangsquote der Clients (ohne zusätzliche Frames)
+
+Die Folgenummern gibt es schon (`chat.py`, hex 0–FF pro Board). Der Client fordert Lücken mit `//RESEND von-bis` nach (`tbclient/core.py`, bis Lücke 32). TinyBox kennt also gesendete und nachgeforderte Ereignisse und berechnet die Quote selbst – der Client meldet nichts zusätzlich (sonst wieder 1 Frame pro Teilnehmer).
+
+- Neu: `//LOST <n>` vom Client, wenn eine Lücke größer als 32 ist (heute fordert er dann nichts an, TinyBox erführe davon nichts).
+- Fehlende letzte Frames merkt der Client erst beim nächsten Ereignis; die Quote hinkt in ruhigen Boards etwas nach. Akzeptiert.
+- Maßnahmen bei schlechter Quote (z. B. priorisieren) später.
+
+### 14.4 Ausgabe
+
+**Live-Ansicht im Client:** Balken neben dem Avatar in der Teilnehmerliste. Alle sehen die Qualität aller. Neuer Ereignistyp im TBCHAT-Schema (12.4), z. B.
+
+```
+#53 %OE3TEC 4 OE1ABC 2 OE3XYZ ?
+```
+
+- `?` = noch kein Ergebnis (graue Balken).
+- Bekommt eine Folgenummer wie alle Ereignisse (Lückenerkennung, RESEND).
+- Nur bei Änderung der Balken, alle Stationen gebündelt, höchstens 1× pro Minute und Board.
+- Nicht in der Chat-History (`chat_lines`) speichern; Terminal-User bekommen ihn nicht.
+
+**Abbruch:** nur als Chat-Ereignis „Verbindung zu OE3XYZ verloren“ statt „hat das Board verlassen“ (aus dem AGW-`d`-Text, 14.1). Fließt nicht in die Balken ein.
+
+**Befehl `stat`** (Mailbox und Chat): `stat` = eigene Verbindung, `stat alle` = alle Verbindungen. Reiner Text, z. B.
+
+```
+Call     Bal  Hin   Rück  Retry  REJrx REJtx T1  Netto/Wdh   RX-Quote
+OE3TEC   4    3%    1%    3%     1     0     0   2.1k/64     -
+OE1ABC   2    14%   4%    -      -     2     1   -           86%
+```
+
+### 14.5 Stand der Umsetzung (11.10.2026)
+
+| Schritt | Inhalt | Stand |
+|---|---|---|
+| 1 | `Q`-Abfrage im AGW-Adapter, Fenster, Balken (`tinybox/linkq.py`) | ✅ |
+| 2 | Empfangsquote aus `//RESEND`, `//LOST` im Client | ✅ |
+| 3 | Ereignis `%` im TBCHAT, Balken neben dem Avatar im Client | ✅ |
+| 4 | Befehl `STAT` / `STAT ALL` | ✅ |
+| 5 | Chat-Ereignis „Verbindung verloren“ aus `RETRYOUT` | ✅ |
+| 6 | Web-GUI: Balken in der Userliste, Detailansicht je User (13.10.2026) | ✅ |
+| 7 | Teilnehmernummern, `%Q`-Statusframe, Detailansicht im Client (CR33, 13.10.2026) | ✅ |
+
+- TinyBox fragt alle `quality_poll_sec` Sekunden (Standard 30) alle Funkverbindungen ab. Antwortet Direwolf nicht (normaler Direwolf ohne Erweiterung), fragt TinyBox bis zum nächsten AGW-Connect nicht mehr und schreibt das einmal ins Log.
+- Einstellungen in `[direwolf]`: `quality_poll_sec`, `quality_window_frames` (50), `quality_window_min` (30), `quality_min_frames` (20), `quality_steps` (5, 10, 20, 35, 50).
+- `STAT` nutzt den letzten Messwert (höchstens `quality_poll_sec` alt). Ausgabe englisch wie die übrige Bedienung; Balken als Text: `#####` = bestens, `#....` = schlecht, `-----` = noch kein Ergebnis.
+- Getestet: Unit-Tests (`tests/test_linkq.py`) und Ende-zu-Ende mit zwei Direwolf-Instanzen (Fork) über Audio-Schleife: TinyBox findet die Erweiterung, `STAT` zeigt die Werte der laufenden Verbindung.
+- **Empfangsquote (2):** TinyBox merkt sich pro UI-Client im Board die per UI gesendeten Ereignisse (`linkq.RxWindow`, gleiches Fenster 50/30 min) und markiert die per `//RESEND a-b` nachgeforderten. Neu `//LOST a-b`: der Client meldet Lücken über 32, ohne Nachsenden. Die Quote zählt als Richtung „Out“ (die schlechtere von I-Frames und UI), in `STAT` als Spalte `RXq`. Auch ohne Fork-Direwolf gibt es so Balken für UI-Clients.
+- **Ereignis `%` (3):** nach jeder Abfragerunde pro Board `#nn %CALL b CALL b …` (b = 1–5, `?` = noch kein Ergebnis), alle Stationen mit Daten, nur bei Änderung, höchstens 1× pro Minute, nur an Clients, nicht in der History. Der Client zeigt die Balken in der Teilnehmerliste rechts (grün 4–5, gelb 3, rot 1–2, grau = `?`).
+- **Abbruch (5):** meldet Direwolf `*** DISCONNECTED RETRYOUT`, gehen ans Board `-CALL` und danach die Systemzeile `!Connection to CALL lost` (auch ältere Clients zeigen sie an); Terminals lesen „left … (connection lost)“.
+- Abfrage nach jeder Chat-Zeile: nicht umgesetzt, der 30-s-Takt reicht (die Balken dürfen sich ohnehin nur 1× pro Minute ändern).
+- Client-Version 2026.10.11.4 (CR18: ältere Clients bekommen den Hinweis auf die neue Version).
+
+### 14.6 Teilnehmernummern und Statusframe `%Q` (CR33, 13.10.2026)
+
+- **Teilnehmernummern:** kleinste freie Nummer 1…n je Board beim Betreten, frei nach dem Verlassen. Cap `NUM` im Handshake; dann `//WHO <Tn> <Call>[=<Sym>]`, Ereignisse `+<Tn> <Call> [<Sym>]`, `-<Tn>`, `=<Tn> [<Sym>]`, `%<Tn> <Balken> …`. Spart je Station ≈ 7 Byte im `%`-Ereignis und macht den `%Q`-Frame möglich. `//OK` nennt `q=<Fenster-Frames>/<Minuten>/<Mindest-Frames>/<Schwellen>`.
+- **Alte Clients (ohne `NUM`)** bekommen unverändert die Rufzeichenform: UI-Frame in Nummernform, dazu die alte Zeile als I-Frame mit derselben Folgenummer; `//RESEND` ebenso.
+- **`%Q`-Zeile:** `%Q <Tn> <Balken|?> <out Frames> <out Wdh> <in Frames> <REJ tx> <Wdh rx> <REJ rx> <T1> <Netto/100> <Wdh/100> <RX gesendet> <RX verpasst> <SRT·10>;…` für alle Teilnehmer mit Daten (Fensterwerte aus `linkq.Result`). Ohne Folgenummer: wird nie nachgefordert, zählt nicht für die Empfangsquote, steht nicht in der History. Nur bei Änderung, höchstens alle 2 Minuten je Board (`QSTAT_MIN_SEC`), nach dem `%`-Ereignis derselben Abfragerunde. Einmal als UI-Frame an TBCHAT-n, per I-Frame an NUM-Clients ohne UI.
+- **Payload:** 5 Stationen ≈ 165 Byte ≈ 1,5 s bei 1200 Bd inkl. TXDelay; im 2-Minuten-Takt < 1,5 % Kanal. Binär (≈ 85 Byte) verworfen: nur ≈ 0,3 s Gewinn, im Monitor unlesbar, Binärfilter (CR12).
+- **Client:** Teilnehmer antippen → Detailansicht (Richtungen, Schwellenleiter, Zähler) nach denselben Regeln wie `linkq.py`; Balkenzahl kommt mit, die Leiter rechnet der Client aus `q=`.
+- **Web-GUI (6, 13.10.2026):** Ansicht „Users“ zeigt pro Station die 5 Balken (grau = noch zu wenig Frames, ein roter Balken = über 50 % Verlust) mit der Richtung, die die Balken bestimmt hat („outgoing“ = TinyBox → Station, „incoming“ = Station → TinyBox, „rx quote“ = UI-Frames eines Clients), dazu Connect-Zeit (hh:mm UTC), Zustand und den TBClient+ samt Version. Klick auf die Zeile öffnet `#/user/CALL`: Richtungen mit Frames, Verlustzählern und Formel, Schwellenleiste mit Rechnung (inkl. T1-Abzug) und alle Direwolf-Zähler (Fenster-Differenz und Rohwert). API: `GET /api/sessions` liefert zusätzlich `client` und `quality`, neu `GET /api/sessions/CALL/linkq`. Beide Ansichten sind live: Feed-Ereignisse (neu `link.quality` nach jeder Abfragerunde) plus Abfrage alle 5 s.
+
+---
+
+## Quellen
+
+- Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a
+- W0RLI-BBS-Spezifikation vom 12.10.1998: `docs/w0rli/w0rli-bbs-spec-12oct1998.pdf`
+- AEA PK-232MBX Operating Manual, Kap. 5 (nur Orientierung): https://www.dl0bn.de/dc7xj/Anleitungen/AEA%20PK-232MBX_Manual.pdf
+- Direwolf-Dokumentation (AGW-Interface): https://github.com/wb2osz/direwolf/tree/master/doc
+
+# brocast
+
+Kompaktes Seitenprotokoll über AX.25 Packet Radio: CBOR mit Integer-Keys,
+die Bedeutung der Nummern steht im lokalen Dictionary.
+
+Spezifikation (lebendes Dokument):
+https://claude.ai/code/artifact/bf4b91a7-7807-42d7-b72e-5739d9c257bd
+
+## Dateien
+
+| Datei | Inhalt |
+| --- | --- |
+| `brocast-core.yaml` | Kern-Dictionary Version 2 (Umschlag, Bausteine, Enums, Wetter); v1 als Referenz in `tests\data` |
+| `brocast.cddl` | Schema zur Validierung |
+| `brocast/` | Codec (`codec.py`) und brocastd (`daemon.py`, `station.py`, `carousel.py`, `ingest.py`, `agw.py`, `kiss.py`, `ax25.py`, `store.py`, `splitter.py`) |
+| `brocastd.conf`, `brocastd.bat` | Konfiguration und Start |
+| `tests/` | Tests (`runtests.bat`) |
+| `dictionary-empfehlung.md` | Momentaufnahme der Spezifikation |
+
+## Einrichten
+
+Python 3.10 oder neuer, dazu zwei Pakete:
+
+```
+cd /d E:\Tinybox\brocast
+py -3 -m pip install -r requirements.txt
+```
+
+## Ausprobieren
+
+```
+py -3 -m brocast demo              Beispiel-Wetterseite (57 Bytes) anzeigen
+py -3 -m brocast decode <hex>      eine empfangene Seite dekodieren
+py -3 -m brocast dict              Dictionary-Version und Hash
+```
+
+## brocastd starten (Meilenstein M1)
+
+In `direwolf.conf` muss der AGW-Port aktiv sein (Direwolf-Standard, TinyBox
+nutzt ihn ebenfalls):
+
+```
+AGWPORT 8000
+```
+
+Wer brocastd über KISS anbindet (`interface = kiss`, siehe unten), braucht
+stattdessen `KISSPORT 8001`.
+
+Dann `brocastd.bat` doppelklicken oder:
+
+```
+py -3 -m brocast.daemon -c brocastd.conf
+```
+
+Einstellungen in `brocastd.conf` (Modus `station` oder `listener`, Rufzeichen
+`OE3GAS-5`, Airtime-Budget …). Daten liegen unter `data\brocastd.db`.
+
+Seite von Hand einspielen (Ingest-API, z. B. mit curl):
+
+```
+curl -X PUT -H "Content-Type: application/json" ^
+  http://127.0.0.1:8090/api/v1/pages/test/wetter ^
+  -d "{\"typ\":\"wx\",\"ti\":\"Wetter Hollabrunn\",\"dat\":{\"temp\":12.5,\"hum\":65}}"
+```
+
+Status: `http://127.0.0.1:8090/api/v1/status` im Browser.
+
+## Verbindung zu Direwolf: AGW oder KISS
+
+brocastd spricht mit Direwolf **entweder über AGW oder über KISS**, nie über
+beide gleichzeitig. Gewählt wird in `brocastd.conf`:
+
+```
+[direwolf]
+interface = agw        ; agw (empfohlen) oder kiss
+agw_port  = 8000
+kiss_port = 8001
+channel   = 0
+```
+
+Eine alte `brocastd.conf` mit Abschnitt `[kiss]` (ohne `[direwolf]`) läuft
+unverändert weiter, und zwar über KISS.
+
+### Sendepausen (`burst_frames`, `burst_gap_s`)
+
+Direwolf sendet alles, was in seiner Sendewarteschlange liegt, in **einer**
+Aussendung (ein PTT-Zyklus). Eine Seite mit vielen Teilen, z. B. das Dictionary
+mit ca. 15 Frames, würde die Frequenz sonst eine halbe Minute am Stück belegen.
+brocastd teilt deshalb selbst auf:
+
+```
+[station]
+burst_frames = 4       ; höchstens 4 Frames pro Aussendung (0 = keine Aufteilung)
+burst_gap_s  = 3       ; danach 3 s Pause, Kanal frei für andere Stationen
+```
+
+Bei 1200 Bd sind 4 volle Frames rund 8 s Sendezeit. In der Pause können andere
+Stationen senden; Direwolf prüft vor der nächsten Aussendung wieder den Kanal
+(DCD, `DWAIT`, `SLOTTIME`, `PERSIST`). Mehr Frames pro Block und kürzere Pausen
+sind schneller, aber weniger kanalfreundlich.
+
+### Der Unterschied: wer weiß, wann gesendet wurde?
+
+**AGW (empfohlen).** brocastd fragt Direwolf (AGW-Abfrage `y`), wie viele
+Frames noch in der Warteschlange liegen, und schickt den nächsten Block erst,
+wenn sie leer ist – plus Sendezeit des letzten Frames, ein kleiner Zuschlag für
+TXTAIL und `burst_gap_s`. Die Pause gilt damit auch, wenn der Kanal belegt war
+und Direwolf warten musste. Der Takt kommt von Direwolf.
+
+**KISS.** Über KISS meldet Direwolf nicht, wann eine Aussendung zu Ende ist.
+brocastd **berechnet** das Ende aus Baudrate, `txdelay_ms` und Framelänge und
+nimmt dabei an, dass Direwolf sofort senden konnte. Folgen:
+
+- Bei freiem Kanal funktioniert die Aufteilung wie bei AGW.
+- **Bei belegtem Kanal** hält Direwolf den ersten Block zurück. brocastd
+  rechnet trotzdem weiter und reicht nach Ablauf der Pause den nächsten Block
+  nach. Beide liegen dann gemeinsam in Direwolfs Warteschlange und gehen **in
+  einer langen Aussendung** hinaus – die Aufteilung ist genau dann wirkungslos,
+  wenn auf der Frequenz viel los ist.
+- Stimmen `baud` oder `txdelay_ms` in `brocastd.conf` nicht mit `direwolf.conf`
+  überein, sind die berechneten Pausen zu kurz oder zu lang.
+
+KISS ist sinnvoll, wenn kein AGW-Port verfügbar ist (z. B. ein Hardware-TNC
+oder ein anderes Programm statt Direwolf). Beim Start schreibt brocastd im
+Modus `station` mit KISS einen Hinweis ins Log.
+
+### Sonderfälle bei AGW
+
+- Beantwortet Direwolf die Abfrage nicht (sehr alte Version), schreibt brocastd
+  einmal eine Warnung ins Log und rechnet die Pausen wie bei KISS.
+- Hält Direwolf Frames länger als 60 s zurück (Kanal dauerhaft belegt, DCD
+  hängt), steht eine Warnung im Log; brocastd schickt bis dahin nichts nach.
+- TinyBox und brocastd teilen sich den AGW-Port; Direwolf erlaubt mehrere
+  AGW-Programme gleichzeitig. Die Abfrage `y` zählt die Frames des ganzen
+  Kanals, also voraussichtlich auch die von TinyBox – brocastd wartet dann auch
+  auf TinyBox-Aussendungen (beim ersten Funktest im Debug-Log prüfen).
+
+## Listener (Meilenstein M2)
+
+brocastd hält empfangene Seiten wie Teletext: gelesen/ungelesen, „aktualisiert“
+bei neuer Revision, Favoriten, Löschen bis zur nächsten Revision, Ablauf,
+Höchstzahlen, Abo mit Opt-out, Warnungen immer sichtbar. Eine Station zeigt
+auch ihre eigenen Seiten.
+
+**Oberfläche (M3):** bei laufendem brocastd im Browser `http://127.0.0.1:7733/` öffnen.
+Rubriken/Stationen links, Seitenliste in der Mitte, Seite rechts; Suche,
+Seitennummer-Eingabe, Einstellungen (Abo, Grenzen) und Status oben bzw. links unten.
+
+Seiten mit mehreren Unterseiten lassen sich auf drei Arten anzeigen (Umschalter
+„Ansicht“, wird im Browser gemerkt): **Fließtext**, **Mit Trennlinien**, **Teletext**
+(ein Teil, blättern mit den Chips oder ◀ ▶). Testseiten: `test\senden.bat bulletin`
+(ein langer Text in 4 Teilen) und `test\senden.bat magazin` (3 thematische Teile).
+
+Die Rohdaten liefert weiterhin die JSON-API:
+
+| Adresse | Inhalt |
+| --- | --- |
+| `http://127.0.0.1:7733/api/v1/status` | Status |
+| `http://127.0.0.1:7733/api/v1/categories` | Rubriken mit Anzahl/ungelesen |
+| `http://127.0.0.1:7733/api/v1/stations` | gehörte Stationen |
+| `http://127.0.0.1:7733/api/v1/pages?cat=dx` | Seiten einer Rubrik (auch `station=`, `unread=1`, `favorite=1`, `q=`) |
+| `http://127.0.0.1:7733/api/v1/pages/OE3GAS-5/25?raw=1` | eine Seite, mit Rohansicht |
+
+Schreibende Aufrufe (lesen/ungelesen, Favorit, löschen, Einstellungen, Abo)
+brauchen den Header `X-Brocast-Client: 1`; Details in `brocast/listener_api.py`.
+
+**Zugriff aus dem LAN/WLAN** (z. B. vom Handy): in `brocastd.conf`
+
+```
+[listener]
+web_host  = 0.0.0.0
+allow_lan = yes
+lan_names = pc2.fritz.box     ; nur nötig, wenn der Browser einen anderen Namen benutzt
+```
+
+Dann im Browser `http://<IP-Adresse des PCs>:7733/` oder `http://<Rechnername>:7733/`.
+Die Oberfläche hat **keine Anmeldung** – jedes Gerät im Netz kann Seiten löschen
+und Einstellungen ändern. Deshalb in der Windows-Firewall TCP 7733 eingehend nur
+für das Heimnetz freigeben (PowerShell als Administrator, Netz anpassen):
+
+```
+New-NetFirewallRule -DisplayName "brocastd Listener" -Direction Inbound -Protocol TCP -LocalPort 7733 -RemoteAddress 192.168.1.0/24 -Action Allow
+```
+
+Aufrufe mit fremden Domainnamen im Host-Header werden weiter abgewiesen
+(Schutz gegen DNS-Rebinding). Die Ingest-API (Port 8090) bleibt immer auf
+127.0.0.1 – über sie wird gesendet.
+
+## Dauerbetrieb (PC2) und Sendeprotokoll
+
+- `..\start_alles.bat` startet Direwolf, brocastd und TinyBox in eigenen Fenstern
+  (Direwolf-Pfad oben in der Datei einmal anpassen). brocastd und TinyBox werden
+  nach einem Absturz automatisch neu gestartet.
+- Autostart: Verknüpfung zu `start_alles.bat` in den Autostart-Ordner legen
+  (Win+R → `shell:startup`).
+- `logs\brocastd_log_<Datum>_<Zeit>.log`: Programm-Log, eine Datei pro Start.
+- `logs\Sendeprotokoll_<JJJJ-MM>.txt`: jeder gesendete Frame mit Zeit (UTC),
+  Rufzeichen, Seite, Revision, Teil, Bytes, Sendezeit, Lieferant und Titel.
+  Nachweis für den Betrieb, wird nie automatisch gelöscht.
+
+## Wetterseite (GeoSphere, typ wx)
+
+`geosphere_station.py --tinybox` (im TinyBox-Ordner) legt den Wetterbericht wie
+bisher als Bulletin in den TinyBox-Eingang, dazu in der Kopfzeile `Brocast:` die
+fertige Wetterseite. Die Mailbox zeigt den Text, der brocast-Adapter von TinyBox
+reicht die Seite an brocastd weiter (PLANUNG.md, Abschnitt 6d). Gesendet werden
+nur Zahlen (Dictionary `wx`, ab Version 2), dazu der Temperaturverlauf 24 h als
+Zeitreihe (ein Wert je 2 h). Das ergibt normalerweise **einen** Frame
+(~205 Bytes, ca. 1,9 s bei 1200 Bd) statt mehrerer Textseiten.
+
+```
+py -3 geosphere_station.py --tinybox     Mailbox (Text) + brocast (Wetterseite)
+py -3 geosphere_station.py --brocast     nur zum Testen ohne TinyBox: direkt an brocastd
+py -3 geosphere_station.py --region --tinybox
+                                         24 Stationen Wein-/Waldviertel: Einzelberichte
+                                         + Gesamtueberblick (Tabellenseite, 4-5 Frames)
+```
+
+Die Listener-Oberfläche zeigt Seiten vom typ `wx` als Kacheln (Temperatur mit
+24-h-Spanne, Windrose, Luftdruck mit Tendenz, Feuchte, Verlauf, Niederschlag).
+Felder, die die Ansicht nicht kennt, erscheinen darunter als einfache Werte.
+Offline-Vorschau ohne laufenden brocastd: `mockup\wx-vorschau.html`.
+
+## Dictionary über Funk (gepackt)
+
+Eine Station sendet ihr Dictionary zusätzlich gepackt über Funk (zlib über die
+CBOR-Form, ~2,8 kB statt ~12 kB): ca. 15 Frames, rund 30 s bei 1200 Bd. Gleich
+nach dem Start bzw. einer neuen Version, 15 min später noch einmal, danach alle
+`dict_broadcast_hours` Stunden (`brocastd.conf`, Standard 24, 0 = aus).
+
+Ein Listener braucht dafür kein Rufzeichen. Er sammelt die Teile auch über
+mehrere Aussendungen, prüft dann Länge, Prüfsumme, Version und dass nur Einträge
+dazukommen. Installiert wird
+
+- automatisch, wenn die Station unter Einstellungen → „Dictionary über Funk
+  automatisch übernehmen von“ eingetragen ist (z. B. `OE3GAS-5`),
+- sonst nach Klick auf „Installieren“ im gelben Hinweis.
+
+Die alte Datei bleibt als `brocast-core.v<alt>.bak.yaml` erhalten.
+
+## Dictionary aktualisieren (über TinyBox)
+
+1. Station: neue `brocast-core.yaml` (höhere `version`, nur Ergänzungen) in den
+   brocast-Ordner legen. TinyBox bietet sie sofort mit dem Befehl `DICT` an
+   (`[brocast] dict_file` in `tinybox.conf`), brocastd kündigt sie an
+   (`dict_source` in `brocastd.conf`, brocastd neu starten).
+2. Listener: gelber Hinweis „Dictionary v2 erhältlich …“. Mailbox connecten,
+   `DICT` eingeben, Ausgabe mitschneiden.
+3. Im Listener „Importieren“ → Mitschnitt-Datei wählen oder einfügen →
+   „Prüfen und installieren“. Die alte Datei bleibt als
+   `brocast-core.v1.bak.yaml` erhalten, ein Neustart ist nicht nötig.
+
+## In Python
+
+```python
+from brocast import Codec
+
+codec = Codec()
+data = codec.encode({"id": 7, "t": 1790000000, "typ": "wx",
+                     "dat": {"temp": 12.5, "hum": 65}})
+page = codec.decode(data, ax25_src="OE3GAS-10")
+print("\n".join(codec.describe(page)))
+```
+
+## Regeln fürs Dictionary
+
+- Eine vergebene Nummer wird nie umgedeutet.
+- Neue Einträge nur mit neuer `version`; Versionen sind additiv.
+- Keys 0–23 und −1…−24 (1 Byte) nur für die Kern-Spezifikation.
+
+- Laedt jemand ein Bild hoch, steht es im Chat: "OE1ABC uploading picture"
+  mit Fortschrittsbalken (echt, solange man die Station hoert).
+- Kommentare beziehen sich jetzt eindeutig auf den Beitrag (vorher konnte
+  der falsche getroffen werden, wenn zwei in derselben Minute kamen).
+
+- TinyBox-Logo in der Titelleiste und als Seitensymbol
+
+- Delta-Sync (CR26): Mail- und Bulletin-Abgleich in einem Wechsel,
+  nur Aenderungen, kurze Texte gleich mit, Koepfe LZHUF-gepackt
+- In der TinyBox geloeschte Post verschwindet jetzt auch im Client
+- Braucht TinyBox mit SYNC2, sonst alter Ablauf
+
+Neu: Post an mehrere Empfaenger (CR27)
+- Im Feld To mit Komma: OE3TEC,OE1ABC (bis 10). Jeder bekommt
+  seine Nachricht, der Text geht einmal ueber Funk.
+Neu: Emoticons werden Emojis (CR28)
+- ;-) :-D :-( 8-) <3 ... beim Tippen sofort als Emoji, auch
+  wenn sie vom Terminal kommen
+- Emojis mit ASCII-Form gehen als :-) ueber Funk statt als
+  Code ~0B, damit Terminal-User sie lesen koennen
+
+- Post an mehrere Empfaenger: jede Kopie beginnt mit
+  "To: OE3TEC, OE1ABC", so sieht jeder, wer sie noch bekam
+
+- Bilder im Chat: Knopf neben den Emojis, Bild wird klein gemacht
+  (max. 8 KB), Dialog zeigt Groesse und Dauer. Andere sehen eine
+  unscharfe Vorschau und laden das Bild erst beim Antippen.
+
+- Verbindungsbalken: 5 bis 5% Verlust, 4 bis 10, 3 bis 20, 2 bis 35,
+  1 bis 50, darueber ein roter Balken.
+
+TinyBox am Terminal: lange Ausgaben (L, LB, H, lange Texte)
+kommen jetzt in Seiten zu 10 Zeilen. Enter = weiter,
+A = Rest ueberspringen. Clients und Chat sind nicht betroffen.
+
+- Bilder: Fehler behoben, bei dem die letzten Bytes eines Bildes im Chat
+  landeten. Waehrend ein Bild hochgeht, warten getippte Zeilen und gehen
+  danach hinaus.
+- Fehlgeschlagener Upload: Knopf "Try again" (Bild muss nicht neu gewaehlt
+  werden).
+
+- Teilnehmer antippen: Details zur Verbindungsqualitaet (Richtungen,
+  Verluste, Balkenrechnung, Zaehler) - wie in der Sysop-Oberflaeche.
+- Chat-Ereignisse mit Teilnehmernummern statt Rufzeichen: kuerzere
+  Frames. Die TinyBox schickt die Zahlen hinter den Balken bei Aenderung,
+  hoechstens alle 2 Minuten, als einen UI-Frame fuer alle.
+
+- Bulletin-Abgleich blieb stehen, sobald ein Text mit einer Leerzeile
+  kam (z.B. TBNEWS): der Client nahm die Endezeile als Textzeile und
+  wartete vergeblich. Behoben.
+- TinyBox: neue Bulletins kamen beim seitenweisen Abgleich doppelt
+  (als neu und als geaendert). Jeder Kopf geht jetzt nur einmal.
+
+- Bilder gehen bis zu 3x schneller: 256-Byte-Frames, das Bild am
+  Stueck an Direwolf, Chat-Zeile gleich dahinter. 4 KB in ca. 35 s.
+- Bild-Dialog: Groesse klein/normal/gross (2 KB/4 KB/Limit), Wahl
+  bleibt im Browser.
+- direwolf.conf: PACLEN 256, MAXFRAME 4, EMAXFRAME 6 setzen (sonst
+  geht ein Bild als eine 60-s-Sendung raus).
+
+- Bild nochmal senden: Hat die TinyBox das Bild schon (gleicher
+  Inhalt), gehen keine Bytes mehr raus, aber die Chat-Zeile - das
+  Bild erscheint wieder im Chat. Bisher passierte stumm nichts.
+
+- Bulletin-Abgleich: Endlosschleife behoben. Die TinyBox schickte dieselbe
+  Seite immer wieder, der Client holte bekannte Bulletins erneut.
+- Bleibt ein Abgleich doch einmal stehen, bricht der Client ab, statt
+  weiter zu senden.
+
+Allgemein
+General
+all
+DX
+DX
+dx
+Wetter
+Weather
+wx
+Bahndaten
+Keplerians
+keps
+Contest
+Contest
+contest
+Satelliten
+Satellites
+amsat
+Notfunk
+Emergency comms
+notfunk
+SOTA
+SOTA
+sota
+POTA
+POTA
+pota
+Club / Verband
+Club
+club
+Technik
+Technical
+tech
+Flohmarkt
+For sale
+sale
+Funkrunde
+Net
+net
+zurückgezogen
+withdrawn
+withdrawn
+Test
+test
+test
+Übung
+exercise
+exercise
+Antwort erwünscht
+reply wanted
+reply_wanted
+Routine
+Routine
+routine
+Wohlfahrt
+Welfare
+welfare
+Vorrang
+Priority
+priority
+Notfall
+Emergency
+emergency
+Textseite / Bulletin
+Text / bulletin
+/B
+text
+Wetter
+Weather
+/_
+wx
+Telemetrie
+Telemetry
+/T
+tlm
+Nachricht
+Message
+msg
+Quittung
+Acknowledgement
+ack
+Objekt / Ort
+Object / place
+obj
+Stationsstatus
+Station status
+node
+DX-Spot
+DX spot
+dx
+Warnung / Notfunk
+Alert
+alert
+Inhaltsverzeichnis
+Index
+index
+Dictionary-Seite
+Dictionary page
+dict
+Formularantwort
+Form reply
+formreply
+v2
+Deutsch
+German
+de
+Englisch
+English
+en
+°C
+Cel
+%
+%RH
+hPa
+hPa
+°
+deg
+m/s
+m/s
+mm
+mm
+m
+m
+km
+km
+V
+V
+A
+A
+W
+W
+%
+%
+Hz
+Hz
+kHz
+kHz
+MHz
+MHz
+dB
+dB
+dBm
+dBm
+s
+s
+min
+min
+ppm
+ppm
+W/m²
+W/m2
+cm
+cm
+lx
+lx
+Absatz
+Paragraph
+para
+Überschrift
+Heading
+heading
+Liste
+List
+list
+Tabelle
+Table
+table
+Messwert
+Value
+value
+Zeitreihe
+Series
+series
+Link
+Link
+link
+Hinweis
+Note
+note
+Vorformatiert
+Preformatted
+pre
+Kartenpunkt
+Map point
+mappoint
+Trenner
+Separator
+sep
+normal
+ok
+ok
+Info
+info
+info
+Warnung
+warning
+warn
+Alarm
+alarm
+alarm
+Lufttemperatur
+Air temperature
+temp
+int
+Cel
+Relative Feuchte
+Relative humidity
+hum
+uint
+%RH
+Luftdruck (QNH)
+Pressure (QNH)
+qnh
+uint
+hPa
+Windrichtung
+Wind direction
+wdir
+uint
+deg
+Windgeschwindigkeit
+Wind speed
+wspd
+uint
+m/s
+Böe (5 min)
+Gust (5 min)
+gust
+uint
+m/s
+Niederschlag 1 h
+Rain 1 h
+r1h
+uint
+mm
+Niederschlag 24 h
+Rain 24 h
+r24h
+uint
+mm
+Niederschlag seit Mitternacht
+Rain since midnight
+rday
+uint
+mm
+Luftdruck (QFE)
+Pressure (QFE)
+qfe
+uint
+hPa
+Taupunkt
+Dew point
+dew
+int
+Cel
+Globalstrahlung
+Solar radiation
+sol
+uint
+W/m2
+UV-Index
+UV index
+uv
+uint
+Schneehöhe
+Snow depth
+snow
+uint
+cm
+Temperatur-Minimum 24 h
+Min. temperature 24 h
+tmin
+int
+Cel
+Temperatur-Maximum 24 h
+Max. temperature 24 h
+tmax
+int
+Cel
+Stärkste Böe 24 h
+Max. gust 24 h
+gmax
+uint
+m/s
+Drucktendenz 3 h
+Pressure tendency 3 h
+ptnd
+int
+hPa
+Niederschlag 10 min
+Rain 10 min
+r10m
+uint
+mm
+Luftdruck (QFF)
+Pressure (QFF)
+qff
+uint
+hPa
+Windspitze (10 min)
+Peak wind (10 min)
+gust10
+uint
+m/s
+Version
+Version
+version
+uint
+Prüfsumme
+Checksum
+hash
+tstr
+Bezugsquelle
+Available from
+source
+tstr
+Gepackte Daten (Teil)
+Packed data (part)
+zdata
+bstr
+Länge der gepackten Daten
+Packed data length
+zlen
+uint
+Dictionary-Version
+Dictionary version
+dv
+uint
+Seiten-ID
+Page ID
+id
+uint
+Revision
+Revision
+rev
+uint
+Urheber
+Originator
+org
+callsign
+@ax25_src
+Erstellt
+Created
+t
+time
+Gültig für
+Valid for
+exp
+uint
+min
+@typ
+Seitentyp
+Page type
+typ
+typ
+enum
+Kennzeichen
+Flags
+flg
+flg
+bits
+Titel
+Title
+ti
+tstr
+Kurztext
+Summary
+txt
+tstr
+Adressat
+Addressee
+to
+any
+Gebiet
+Area
+area
+tstr
+Ort
+Position
+pos
+position
+Symbol
+Symbol
+sym
+tstr
+@typ
+Links
+Links
+lnk
+pagerefs
+Bezug
+Reference
+ref
+pageref
+Priorität
+Priority
+pri
+pri
+enum
+Sprache
+Language
+lang
+lang
+enum
+Rubriken
+Categories
+cat
+cat
+enums
+Inhalt
+Content
+blk
+blocks
+Daten
+Data
+dat
+data
+Quelle
+Source
+src
+any
+Muss verstanden werden
+Critical keys
+crit
+any
+Unterseite
+Subpage
+sub
+subpage
+de
+en
+Blockart
+Block kind
+block
+k
+enum
+Text
+Text
+x
+tstr
+Wert
+Value
+v
+any
+Einheit
+Unit
+unit
+u
+enum
+Bezeichnung
+Label
+n
+any
+Zeitversatz
+Time offset
+dt
+int
+s
+Ort
+Position
+pos
+position
+Linkziel
+Link target
+href
+pageref
+Zeilen
+Rows
+rows
+any
+Spaltenköpfe
+Header
+hdr
+any
+Minimum
+Minimum
+lo
+any
+Maximum
+Maximum
+hi
+any
+Zustand
+State
+state
+st
+enum
+Genauigkeit
+Accuracy
+acc
+any
+Skalierung
+Scale
+sc
+int
+brocast-core
+��  !`��  !`�  !`$`��  !`�  !`$`� !`��  !`�  !`$`� !`� !`$`��  !`�  !`$`� !`� !`$`� !`��  !`�  !`$`� !`� !`$`� !`� !`$`� !`� !`$`�� "�            # $`% �� "��` `   # '�``````
+TinyBox
+TinyBox-Client
+tbclient
+brocast
+brocastd
+Listener
+Station
+Mailbox
+Bulletin
+Rubrik
+Nachricht
+Nachrichten
+Packet Radio
+Direwolf
+Digipeater
+Node
+AX.25
+APRS
+KISS
+AGW
+Frame
+Frames
+Baud
+1200 Bd
+9600 Bd
+MHz
+kHz
+Frequenz
+Antenne
+Transceiver
+Rufzeichen
+Sysop
+Terminal
+Browser
+Oberfläche
+Konfiguration
+Version
+Fehler behoben
+neu:
+geändert:
+behoben:
+Umgesetzt
+Hinweis
+Achtung
+Abgleich
+Verbindung
+Sendezeit
+Kanal
+Empfang
+Aussendung
+Rundspruch
+Funkrunde
+Ortsstelle
+Ortsgruppe
+Clubabend
+Flohmarkt
+Contest
+Wettbewerb
+Teilnehmer
+QRV
+QSL via
+QSL via LoTW
+ClubLog OQRS
+CW und FT8
+SSB
+FM
+Digital
+SOTA
+POTA
+Satellit
+Bahndaten
+DX-News
+Expedition
+Aktivität
+Die Aktivität dauert
+ab sofort
+ab morgen
+jeden Montag um
+jeden Dienstag um
+jeden Mittwoch um
+jeden Donnerstag um
+Beginn
+Uhr
+UTC
+Ortszeit
+Einladung
+Anmeldung
+Vielen Dank
+Viel Erfolg
+73 und
+vy 73
+Alle Angaben ohne Gewähr
+Wetter
+Wetterbericht
+Wetterlage
+Vorhersage
+Temperatur
+Höchstwert
+Tiefstwert
+Luftfeuchte
+relative Feuchte
+Taupunkt
+Luftdruck
+Windrichtung
+Windgeschwindigkeit
+Böen
+Böe max.
+Niederschlag
+Regen
+Schnee
+Gewitter
+Nebel
+sonnig
+wolkig
+bedeckt
+Warnung
+Unwetterwarnung
+Quelle: GeoSphere Austria, TAWES (CC BY 4.0)
+GeoSphere Austria
+Letzte 24 h in der Region
+Station
+Wind aus
+Wind m/s
+Niederschlag 24h mm
+Hollabrunn
+Niederösterreich
+Weinviertel
+Waldviertel
+Wien
+Retz
+Laa/Thaya
+Poysdorf
+Schoengrabern
+Schöngrabern
+Mistelbach
+Hohenau
+Leiser Berge
+Wolkersdorf
+Stockerau
+Gaenserndorf
+Marchegg
+Gr.Enzersdorf
+Raabs/Thaya
+Litschau
+Weitra
+Schwarzau/Fw
+Allentsteig
+Stift Zwettl
+Horn
+Gars/Kamp
+Baernkopf
+Jauerling
+Langenlois
+Krems
+OE1
+OE2
+OE3
+OE4
+OE5
+OE6
+OE7
+OE8
+OE9
+OE3GAS
+OE3TEC
+OE3XYZ
+Gekürzt. Vollständig in der Mailbox
+: R
+(leer)
+(kein Betreff)
+Weitere Informationen in der Mailbox
+Fortsetzung folgt
+siehe
+zum Beispiel
+und
+oder
+mit
+ohne
+nicht
+auch
+schon
+noch
+nur
+sehr
+mehr
+weniger
+bis
+von
+für
+auf
+aus
+dem
+der
+die
+das
+den
+ein
+eine
+einer
+einem
+einen
+ist
+sind
+war
+wird
+werden
+kann
+können
+muss
+müssen
+soll
+sollen
+hat
+haben
+gibt es
+es gibt
+damit
+dann
+deshalb
+also
+aber
+wenn
+weil
+dass
+wie
+was
+wer
+wann
+wo

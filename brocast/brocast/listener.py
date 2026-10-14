@@ -43,6 +43,10 @@ RESULT_TEXT = {
     "ignored": "Rückzug einer unbekannten Seite – ignoriert",
     "error": "nicht dekodierbar",
     "foreign": "kein brocast-Frame (z. B. APRS, Mailbox, Node)",
+    "fragment": "Teil einer Seite – wartet auf die übrigen Fragmente",
+    "zdict": "gepackt mit einem anderen Preset-Wörterbuch – brocastd aktualisieren",
+    "bad": "Fragment unbrauchbar – verworfen (siehe Log)",
+    "newer_format": "brocast-Frame in einem neueren Format – brocastd aktualisieren",
     "dictionary": "Dictionary-Ankündigung, Version bereits installiert",
     "dictionary_new": "Dictionary-Ankündigung einer neueren Version",
     "dict_part": "Dictionary über Funk: Teil gesammelt",
@@ -65,6 +69,8 @@ RESULT_CHIP = {
     "dict_part": ("Neuer Inhalt", "new"), "dict_ready": ("Neuer Inhalt", "new"),
     "dict_installed": ("Neuer Inhalt", "new"), "dict_have": ("Wiederholung", "repeat"),
     "dict_current": ("Wiederholung", "repeat"), "dict_bad": ("Nicht dekodierbar", "error"),
+    "fragment": ("Teil gesammelt", "new"), "zdict": ("Nicht dekodierbar", "error"),
+    "bad": ("Nicht dekodierbar", "error"), "newer_format": ("Nicht dekodierbar", "error"),
 }
 
 DEFAULT_SETTINGS: dict[str, Any] = {
@@ -188,8 +194,14 @@ class Listener:
 
     # -- receive ------------------------------------------------------------
 
-    def on_page(self, page: dict[str, Any], raw: bytes, heard_from: str) -> str:
-        """Process one decoded subpage. Returns what happened (for logging/tests)."""
+    def on_page(self, page: dict[str, Any], raw: bytes, heard_from: str,
+                wire: tuple[int, int] | None = None) -> str:
+        """Process one decoded subpage. Returns what happened (for logging/tests).
+
+        wire: (Frames, Bytes) wie die Seite tatsächlich über Funk kam. Im
+        Format 2 ist das die Summe der Fragmente – aus den gespeicherten Daten
+        wäre sie nicht mehr zu erkennen, denn dort liegt die zusammengesetzte,
+        entpackte Seite."""
         now = int(self.clock())
         self.store.heard(heard_from, now)
         org = page.get("org") or heard_from
@@ -238,6 +250,7 @@ class Listener:
                 "pri": self.d.enums["pri"].num(page.get("pri", 0)) if isinstance(
                     page.get("pri", 0), (int, str)) else 0,
                 "alert": int(alert), "exp_min": exp, "sub_total": total,
+                "wire_frames": wire[0] if wire else 0, "wire_bytes": wire[1] if wire else 0,
                 "status": "unread", "updated": int(visible_before),
                 "favorite": lp["favorite"] if lp else 0, "deleted_rev": None,
                 "first_seen": lp["first_seen"] if lp else now, "last_seen": now,
@@ -247,6 +260,8 @@ class Listener:
             return "updated" if visible_before else "new"
 
         fields: dict[str, Any] = {"last_seen": now}
+        if wire:
+            fields["wire_frames"], fields["wire_bytes"] = wire
         if stored == "new":                          # a subpage we did not have yet
             fields["search"] = self._search_text(org, page_id)
             fields["sub_total"] = total
@@ -504,6 +519,7 @@ class Listener:
             "favorite": bool(p["favorite"]), "alert": bool(p["alert"]),
             "pri": self.d.enums["pri"].name(p["pri"]),
             "sub_total": p["sub_total"], "sub_present": present,
+            "wire_frames": p["wire_frames"], "wire_bytes": p["wire_bytes"],
             "expired": p["exp_min"] is not None and p["t"] + p["exp_min"] * 60 < now,
         }
 
@@ -601,12 +617,18 @@ class Listener:
         out["data"] = self._data(first, lang)
         out["dv"] = first.get("dv")
         out["dict_newer"] = isinstance(first.get("dv"), int) and first["dv"] > self.d.version
-        # rough time on air of all subpages sent back to back (no digipeater path):
-        # one TXDELAY, then per frame header byte + AX.25 address/control/pid (16 bytes)
-        frames = [len(r["data"]) + 1 + 16 for r in rows.values()]
-        if frames and len(frames) == p["sub_total"]:
-            out["airtime_s"] = round(self.txdelay_ms / 1000 + sum(
-                airtime_s(n, self.baud, 0) for n in frames), 1)
+        # rough time on air of all frames sent back to back (no digipeater path):
+        # one TXDELAY, then per frame header byte + AX.25 address/control/pid (16 bytes).
+        # Format 2: die echte Funkgröße steht in der Seite (wire_bytes), denn
+        # gespeichert ist die entpackte, zusammengesetzte Seite.
+        if p["wire_frames"] and p["wire_bytes"]:
+            out["airtime_s"] = round(self.txdelay_ms / 1000 + airtime_s(
+                p["wire_bytes"], self.baud, 0), 1)
+        else:
+            frames = [len(r["data"]) + 1 + 16 for r in rows.values()]
+            if frames and len(frames) == p["sub_total"]:
+                out["airtime_s"] = round(self.txdelay_ms / 1000 + sum(
+                    airtime_s(n, self.baud, 0) for n in frames), 1)
         if raw:
             out["raw"] = [{"sub": n, "rev": r["rev"], "bytes": len(r["data"]),
                            "hex": r["data"].hex(), "heard_from": r["heard_from"],

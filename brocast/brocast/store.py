@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3          # 2: pages.hdr (Frame-Format je Seite); 3: lpages.wire_*
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS pages (
     tx_count      INTEGER NOT NULL DEFAULT 0,  -- sends of the current revision
     last_tx       INTEGER,
     next_tx       INTEGER NOT NULL,
+    hdr           INTEGER NOT NULL DEFAULT 16, -- header byte of this page's frames
     UNIQUE (provider, pkey)
 );
 CREATE TABLE IF NOT EXISTS frames (
@@ -68,6 +69,8 @@ CREATE TABLE IF NOT EXISTS lpages (               -- listener: one row per page
     alert       INTEGER NOT NULL DEFAULT 0,
     exp_min     INTEGER,
     sub_total   INTEGER NOT NULL DEFAULT 1,
+    wire_frames INTEGER NOT NULL DEFAULT 0,       -- Frames, die die Seite auf Funk brauchte
+    wire_bytes  INTEGER NOT NULL DEFAULT 0,       -- Bytes auf Funk (Format 2: alle Fragmente)
     status      TEXT NOT NULL DEFAULT 'unread' CHECK (status IN ('unread', 'read')),
     updated     INTEGER NOT NULL DEFAULT 0,      -- new revision of a read page
     favorite    INTEGER NOT NULL DEFAULT 0,
@@ -111,8 +114,8 @@ CREATE TABLE IF NOT EXISTS rxlog (                -- every frame heard (and sent
 RXLOG_KEEP = 5000
 
 LPAGE_FIELDS = ("org", "id", "rev", "t", "typ", "ti", "cats", "cat_key", "pri", "alert",
-                "exp_min", "sub_total", "status", "updated", "favorite", "deleted_rev",
-                "first_seen", "last_seen", "search")
+                "exp_min", "sub_total", "wire_frames", "wire_bytes", "status", "updated",
+                "favorite", "deleted_rev", "first_seen", "last_seen", "search")
 
 
 @dataclass
@@ -132,6 +135,7 @@ class PageRow:
     tx_count: int
     last_tx: int | None
     next_tx: int
+    hdr: int = 16               # Header-Byte der Frames (frame.header(); 16 = Format 1)
 
 
 class Store:
@@ -145,8 +149,20 @@ class Store:
         self.lock = threading.Lock()
         with self.db:
             self.db.executescript(SCHEMA)
-            self.db.execute("INSERT OR IGNORE INTO meta VALUES ('schema', ?)",
+            self._migrate()
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('schema', ?)",
                             (str(SCHEMA_VERSION),))
+
+    def _migrate(self) -> None:
+        """Ältere Datenbanken nachziehen (neue Spalten; Daten bleiben erhalten)."""
+        cols = {r["name"] for r in self.db.execute("PRAGMA table_info(pages)")}
+        if "hdr" not in cols:                    # Schema 1 -> 2 (Frame-Format je Seite)
+            self.db.execute("ALTER TABLE pages ADD COLUMN hdr INTEGER NOT NULL DEFAULT 16")
+        lcols = {r["name"] for r in self.db.execute("PRAGMA table_info(lpages)")}
+        for name in ("wire_frames", "wire_bytes"):   # Schema 2 -> 3 (echte Funkgröße)
+            if name not in lcols:
+                self.db.execute(f"ALTER TABLE lpages ADD COLUMN {name} "
+                                "INTEGER NOT NULL DEFAULT 0")
 
     def close(self) -> None:
         self.db.close()
@@ -188,7 +204,7 @@ class Store:
     def save_page(self, row: PageRow, frames: list[bytes]) -> int:
         """Insert (pid == 0) or update a page together with its frames."""
         fields = ("provider", "pkey", "id", "rev", "t", "content", "content_hash", "exp_min",
-                  "pri", "state", "withdraw_left", "tx_count", "last_tx", "next_tx")
+                  "pri", "state", "withdraw_left", "tx_count", "last_tx", "next_tx", "hdr")
         values = tuple(getattr(row, f) for f in fields)
         with self.lock, self.db:
             if row.pid:

@@ -1,8 +1,15 @@
 """Station logic behind the ingest API: turn provider content into pages on air.
 
-Providers send named content (JSON). The station adds id, rev, t, splits
-into subpages and stores the frames for the carousel. org is not put on
-air: it defaults to the AX.25 sender, which is this station.
+Providers send named content (JSON). The station adds id, rev, t, cuts the
+page into frames and stores them for the carousel. org is not put on air:
+it defaults to the AX.25 sender, which is this station.
+
+Zwei Frame-Formate ([station] wire_format):
+  2 (Standard)  Umschlag einmal, Blockliste gepackt, Frames randvoll
+                (fragment.py) – deutlich weniger Funkbytes
+  1 (alt)       eine vollständige Seite je Frame, lange Inhalte als
+                Unterseiten (splitter.py); nur noch für Vergleichsmessungen
+                und Gegenstellen mit alter Software
 """
 
 from __future__ import annotations
@@ -14,11 +21,13 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from . import fragment
 from .codec import BrocastError, Codec
 from .config import Config
-from .frame import airtime_s, build as build_frame
+from .frame import FORMAT_PAGE, airtime_s, build as build_frame, header
 from .splitter import TooLargeError, split
 from .store import PageRow, Store
+from .zdict import ZDict
 
 PROVIDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$")
@@ -32,10 +41,12 @@ class NotFound(BrocastError):
 class Station:
     def __init__(self, cfg: Config, codec: Codec, store: Store,
                  clock: Callable[[], float] = time.time,
-                 on_change: Callable[[], None] = lambda: None):
+                 on_change: Callable[[], None] = lambda: None,
+                 zd: ZDict | None = None):
         self.cfg, self.codec, self.store = cfg, codec, store
         self.clock = clock
         self.on_change = on_change
+        self.zd = zd                  # Preset-Wörterbuch; None = nicht komprimieren
 
     # -- helpers ------------------------------------------------------------
 
@@ -78,23 +89,36 @@ class Station:
     def _pri(self, content: dict[str, Any]) -> int:
         return self.codec.d.enums["pri"].num(content.get("pri", 0))
 
-    def _frames(self, content: dict[str, Any], page_id: int, rev: int, t: int) -> list[bytes]:
+    def _frames(self, content: dict[str, Any], page_id: int, rev: int,
+                t: int) -> tuple[list[bytes], int]:
+        """Frames (Nutzdaten ohne Header-Byte) und das Header-Byte dieser Seite."""
         # "parts" is an ingest-only field: thematic sections, each starts a subpage
         page = {k: v for k, v in content.items() if k != "parts"}
         page.update({"id": page_id, "rev": rev, "t": t})
-        return split(self.codec, page, max_subpages=self.cfg.station.max_subpages,
-                     parts=content.get("parts"))
-
-    def _airtime(self, frames: list[bytes]) -> float:
         st = self.cfg.station
-        return round(sum(airtime_s(len(build_frame(self.cfg.callsign, f, st.path)),
+        if st.wire_format == FORMAT_PAGE:
+            return split(self.codec, page, max_subpages=st.max_subpages,
+                         parts=content.get("parts")), header()
+        # Format 2: der ganze Inhalt geht als ein Blob über Funk. "parts" teilt
+        # dort nichts mehr auf (die Frames werden ohnehin voll gefüllt), die
+        # Blöcke der Abschnitte kommen aber hintereinander in die Blockliste.
+        if content.get("parts") and "blk" not in page:
+            page["blk"] = [block for part in content["parts"] for block in part]
+        built = fragment.build(self.codec, page, self.zd if st.compress else None,
+                               max_fragments=st.max_subpages)
+        return built.payloads, built.hdr
+
+    def _airtime(self, frames: list[bytes], hdr: int) -> float:
+        st = self.cfg.station
+        return round(sum(airtime_s(len(build_frame(self.cfg.callsign, f, st.path, hdr)),
                                    st.baud, st.txdelay_ms) for f in frames), 1)
 
     def _result(self, row: PageRow, frames: list[bytes], changed: bool) -> dict[str, Any]:
         return {
             "id": row.id, "rev": row.rev, "changed": changed, "state": row.state,
             "subpages": len(frames), "bytes": [len(f) for f in frames],
-            "airtime_s": self._airtime(frames),
+            "airtime_s": self._airtime(frames, row.hdr),
+            "wire": row.hdr >> 4, "packed": bool(row.hdr >> 4 != FORMAT_PAGE and row.hdr & 0x1),
             "next_tx": datetime.fromtimestamp(row.next_tx, timezone.utc).isoformat(),
         }
 
@@ -116,8 +140,9 @@ class Station:
         body = {k: v for k, v in content.items() if k != "id"}
 
         if row and row.state == "active" and row.content_hash == h:
-            frames = self._frames(body, row.id, row.rev, now)      # confirm: refresh t only
+            frames, hdr = self._frames(body, row.id, row.rev, now)  # confirm: refresh t only
             row.t = now
+            row.hdr = hdr
             self.store.save_page(row, frames)
             return self._result(row, frames, changed=False)
 
@@ -126,11 +151,12 @@ class Station:
         else:
             page_id = fixed_id or self.store.next_auto_id(self.cfg.station.id_auto_start)
             rev = 0
-        frames = self._frames(body, page_id, rev, now)
+        frames, hdr = self._frames(body, page_id, rev, now)
         new = PageRow(pid=row.pid if row else 0, provider=provider, pkey=key, id=page_id,
                       rev=rev, t=now, content=json.dumps(content, ensure_ascii=False),
                       content_hash=h, exp_min=self._exp_min(content), pri=self._pri(content),
-                      state="active", withdraw_left=0, tx_count=0, last_tx=None, next_tx=now)
+                      state="active", withdraw_left=0, tx_count=0, last_tx=None, next_tx=now,
+                      hdr=hdr)
         new.pid = self.store.save_page(new, frames)
         self.on_change()
         return self._result(new, frames, changed=True)
@@ -169,8 +195,8 @@ class Station:
         row.state = "withdrawn"
         row.withdraw_left = self.cfg.station.withdraw_repeats
         row.tx_count, row.next_tx = 0, now
-        frames = [self.codec.encode({"id": row.id, "rev": row.rev, "t": now,
-                                     "typ": content["typ"], "flg": ["withdrawn"]})]
+        frames, row.hdr = self._frames({"typ": content["typ"], "flg": ["withdrawn"]},
+                                       row.id, row.rev, now)
         self.store.save_page(row, frames)
         self.on_change()
         return self._result(row, frames, changed=True)
@@ -216,10 +242,11 @@ class Station:
     def validate(self, content: Any) -> dict[str, Any]:
         content = self._check_content(content)
         body = {k: v for k, v in content.items() if k != "id"}
-        frames = self._frames(body, content.get("id", self.cfg.station.id_auto_start),
-                              0, int(self.clock()))
+        frames, hdr = self._frames(body, content.get("id", self.cfg.station.id_auto_start),
+                                   0, int(self.clock()))
         return {"ok": True, "subpages": len(frames), "bytes": [len(f) for f in frames],
-                "airtime_s": self._airtime(frames)}
+                "airtime_s": self._airtime(frames, hdr), "wire": hdr >> 4,
+                "packed": bool(hdr >> 4 != FORMAT_PAGE and hdr & 0x1)}
 
 
 __all__ = ["Station", "NotFound", "TooLargeError"]

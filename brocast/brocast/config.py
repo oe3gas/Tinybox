@@ -58,7 +58,13 @@ class StationCfg:
     burst_gap_s: float = 3.0      # pause after each transmission, channel free for others
     repeat_minutes: list[int] = field(default_factory=lambda: [0, 2, 5, 10])
     max_interval_min: int = 30
+    # Alterung: (Alter der Revision in Stunden, Intervall in Minuten), aufsteigend.
+    # Eine alte Seite muss nicht so oft wiederholt werden wie eine frische;
+    # 0 Minuten = gar nicht mehr senden (bleibt im Bestand, neue Revision weckt sie).
+    aging: list[tuple[int, int]] = field(default_factory=lambda: [(24, 120)])
     withdraw_repeats: int = 3
+    wire_format: int = 2          # 1 = eine Seite je Frame (alt), 2 = Fragmente (fragment.py)
+    compress: bool = True         # Format 2: Blockliste mit Preset-Wörterbuch packen
     id_auto_start: int = 24       # ids 1..23 (1 byte) stay for manual pages
     max_subpages: int = 40
     dict_source: str = ""         # e.g. "Mailbox OE3GAS-1, Befehl DICT"; empty = no announcement
@@ -98,6 +104,27 @@ def _ints(text: str, what: str) -> list[int]:
         raise ConfigError(f"{what}: Liste von Ganzzahlen erwartet") from None
 
 
+def _aging(text: str, what: str) -> list[tuple[int, int]]:
+    """"24:120, 168:0" -> [(24, 120), (168, 0)]; leer = keine Alterung."""
+    steps: list[tuple[int, int]] = []
+    for item in text.replace(" ", "").split(","):
+        if not item:
+            continue
+        hours, _, minutes = item.partition(":")
+        if not _:
+            raise ConfigError(f"{what}: Stunden:Minuten erwartet, z. B. 24:120")
+        try:
+            steps.append((int(hours), int(minutes)))
+        except ValueError:
+            raise ConfigError(f"{what}: Stunden:Minuten erwartet, z. B. 24:120") from None
+    steps.sort()
+    for hours, minutes in steps:
+        if hours <= 0 or minutes < 0:
+            raise ConfigError(f"{what}: Stunden > 0 und Minuten >= 0 "
+                              "(0 Minuten = nicht mehr senden)")
+    return steps
+
+
 def _float(text: str, what: str) -> float:
     try:
         return float(text)
@@ -121,6 +148,12 @@ def load(path: str | Path) -> Config:
             return cp.getint(section, key, fallback=fallback)
         except ValueError:
             raise ConfigError(f"[{section}] {key}: Ganzzahl erwartet") from None
+
+    def getbool(section: str, key: str, fallback: bool) -> bool:
+        try:
+            return cp.getboolean(section, key, fallback=fallback)
+        except ValueError:
+            raise ConfigError(f"[{section}] {key}: yes oder no erwartet") from None
 
     mode = get("brocastd", "mode", "listener").lower()
     if mode not in MODES:
@@ -181,7 +214,10 @@ def load(path: str | Path) -> Config:
             repeat_minutes=_ints(get("station", "repeat_minutes", "0,2,5,10"),
                                  "[station] repeat_minutes"),
             max_interval_min=getint("station", "max_interval_min", st.max_interval_min),
+            aging=_aging(get("station", "aging", "24:120"), "[station] aging"),
             withdraw_repeats=getint("station", "withdraw_repeats", st.withdraw_repeats),
+            wire_format=getint("station", "wire_format", st.wire_format),
+            compress=getbool("station", "compress", st.compress),
             id_auto_start=getint("station", "id_auto_start", st.id_auto_start),
             max_subpages=getint("station", "max_subpages", st.max_subpages),
             dict_source=get("station", "dict_source")[:80],
@@ -205,6 +241,9 @@ def load(path: str | Path) -> Config:
         raise ConfigError("[station] repeat_minutes darf nicht leer sein")
     if not 0 <= st.dict_broadcast_hours <= 24 * 30:
         raise ConfigError("[station] dict_broadcast_hours muss 0..720 sein")
+    if st.wire_format not in (1, 2):
+        raise ConfigError("[station] wire_format muss 1 (eine Seite je Frame) "
+                          "oder 2 (Fragmente, Standard) sein")
     cfg.station = st
 
     try:

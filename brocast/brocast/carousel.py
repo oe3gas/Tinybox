@@ -1,7 +1,8 @@
 """Carousel: decides which page goes on air when.
 
   * a new revision goes out at once, then with growing gaps
-    (repeat_minutes, then every max_interval_min)
+    (repeat_minutes, then every max_interval_min); an old revision is
+    repeated less often (aging: Alter -> Intervall, 0 = Pause)
   * all subpages of a page are sent in one slot, split into transmissions of
     at most burst_frames frames with burst_gap_s of free channel in between.
     Direwolf keys up once for everything in its queue, so the split has to
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 
 EMERGENCY = 3
 MAX_SLEEP = 30.0
+RESTING = 2 ** 31 - 1   # next_tx einer ruhenden Seite (aging-Intervall 0)
 QUEUE_POLL_S = 0.5      # AGW: how often to ask Direwolf for its transmit queue
 TX_MARGIN_S = 0.5       # AGW: TXTAIL + audio buffer after the queue became empty
 QUEUE_STALE_S = 120.0   # AGW: queue empty and last block older -> long over, no pause
@@ -98,9 +100,21 @@ class Carousel:
     def wake(self) -> None:
         self._wake.set()
 
-    def gap_min(self, sends_done: int) -> int:
+    def gap_min(self, sends_done: int, age_s: float = 0.0) -> int:
+        """Minuten bis zur nächsten Aussendung. 0 = ruhen (nicht mehr senden).
+
+        Zuerst die Staffel repeat_minutes (neue Revision), dann
+        max_interval_min – und je nach Alter der Revision der größere
+        Abstand aus aging (eine Woche alte Seite muss nicht alle 30 min
+        wiederholt werden)."""
         gaps = self.cfg.repeat_minutes[1:]
-        return gaps[sends_done - 1] if sends_done - 1 < len(gaps) else self.cfg.max_interval_min
+        if sends_done - 1 < len(gaps):
+            return gaps[sends_done - 1]
+        gap = self.cfg.max_interval_min
+        for hours, minutes in self.cfg.aging:          # aufsteigend sortiert
+            if age_s >= hours * 3600:
+                gap = minutes
+        return gap
 
     async def _pace(self, frame_len: int) -> None:
         """Before handing one frame to Direwolf: start a new transmission (and
@@ -175,7 +189,7 @@ class Carousel:
             self.store.delete_page(row.pid)
 
         for row in self.store.due_pages(int(now)):
-            frames = [build_frame(self.callsign, data, self.cfg.path)
+            frames = [build_frame(self.callsign, data, self.cfg.path, row.hdr)
                       for data in self.store.frames(row.pid)]
             needed = tx_airtime_s([len(f) for f in frames], self.cfg.baud,
                                   self.cfg.txdelay_ms, self.cfg.burst_frames)
@@ -220,6 +234,15 @@ class Carousel:
             # withdrawals are repeated quickly, at the first regular gap
             gap = self.cfg.repeat_minutes[1] if len(self.cfg.repeat_minutes) > 1 else 1
             self.store.mark_sent(row.pid, now, now + 60 * max(gap, 1), left)
+            return
+        own = self.schedules.get((row.provider, row.pkey))
+        if own is not None:                            # eigener Takt (Dictionary-Daten)
+            minutes = own(sends_done)
         else:
-            gap = self.schedules.get((row.provider, row.pkey), self.gap_min)
-            self.store.mark_sent(row.pid, now, now + 60 * gap(sends_done))
+            minutes = self.gap_min(sends_done, max(now - row.t, 0))
+        if minutes <= 0:                               # ruht, bis eine neue Revision kommt
+            self.store.mark_sent(row.pid, now, RESTING)
+            log.info("Seite %s ruht (Revision älter als %s h)", row.id,
+                     self.cfg.aging[-1][0] if self.cfg.aging else "?")
+            return
+        self.store.mark_sent(row.pid, now, now + 60 * minutes)

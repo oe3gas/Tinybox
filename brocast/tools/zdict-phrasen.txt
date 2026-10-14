@@ -1,0 +1,242 @@
+; Kernwortschatz für das Preset-Wörterbuch (brocast-zdict-<Gen>.bin).
+; Hier stehen die Wörter und Wendungen, die in brocast-Seiten immer wieder
+; vorkommen. deflate findet sie dann schon im ersten Vorkommen einer Seite,
+; ohne sie zu übertragen. Die Datei ist Quelle, nicht Laufzeitdatei:
+; nach einer Änderung  py -3 tools/build_zdict.py  laufen lassen (neue
+; Generation!), sonst passen Station und Listener nicht zusammen.
+; Zeilen mit ; am Anfang kommen nicht in das Wörterbuch.
+;
+; --- Mailbox, Client, Technik ---------------------------------------------
+TinyBox
+TinyBox-Client
+tbclient
+brocast
+brocastd
+Listener
+Station
+Mailbox
+Bulletin
+Rubrik
+Nachricht
+Nachrichten
+Packet Radio
+Direwolf
+Digipeater
+Node
+AX.25
+APRS
+KISS
+AGW
+Frame
+Frames
+Baud
+1200 Bd
+9600 Bd
+MHz
+kHz
+Frequenz
+Antenne
+Transceiver
+Rufzeichen
+Sysop
+Terminal
+Browser
+Oberfläche
+Konfiguration
+Version
+Fehler behoben
+neu:
+geändert:
+behoben:
+Umgesetzt
+Hinweis
+Achtung
+Abgleich
+Verbindung
+Sendezeit
+Kanal
+Empfang
+Aussendung
+; --- Amateurfunk-Betrieb ---------------------------------------------------
+Rundspruch
+Funkrunde
+Ortsstelle
+Ortsgruppe
+Clubabend
+Flohmarkt
+Contest
+Wettbewerb
+Teilnehmer
+QRV
+QSL via
+QSL via LoTW
+ClubLog OQRS
+CW und FT8
+SSB
+FM
+Digital
+SOTA
+POTA
+Satellit
+Bahndaten
+DX-News
+Expedition
+Aktivität
+Die Aktivität dauert
+ab sofort
+ab morgen
+jeden Montag um
+jeden Dienstag um
+jeden Mittwoch um
+jeden Donnerstag um
+Beginn
+Uhr
+UTC
+Ortszeit
+Einladung
+Anmeldung
+Vielen Dank
+Viel Erfolg
+73 und
+vy 73
+Alle Angaben ohne Gewähr
+; --- Wetter ----------------------------------------------------------------
+Wetter
+Wetterbericht
+Wetterlage
+Vorhersage
+Temperatur
+Höchstwert
+Tiefstwert
+Luftfeuchte
+relative Feuchte
+Taupunkt
+Luftdruck
+Windrichtung
+Windgeschwindigkeit
+Böen
+Böe max.
+Niederschlag
+Regen
+Schnee
+Gewitter
+Nebel
+sonnig
+wolkig
+bedeckt
+Warnung
+Unwetterwarnung
+Quelle: GeoSphere Austria, TAWES (CC BY 4.0)
+GeoSphere Austria
+Letzte 24 h in der Region
+Station
+Wind aus
+Wind m/s
+Niederschlag 24h mm
+; --- Region ----------------------------------------------------------------
+Hollabrunn
+Niederösterreich
+Weinviertel
+Waldviertel
+Wien
+Retz
+Laa/Thaya
+Poysdorf
+Schoengrabern
+Schöngrabern
+Mistelbach
+Hohenau
+Leiser Berge
+Wolkersdorf
+Stockerau
+Gaenserndorf
+Marchegg
+Gr.Enzersdorf
+Raabs/Thaya
+Litschau
+Weitra
+Schwarzau/Fw
+Allentsteig
+Stift Zwettl
+Horn
+Gars/Kamp
+Baernkopf
+Jauerling
+Langenlois
+Krems
+OE1
+OE2
+OE3
+OE4
+OE5
+OE6
+OE7
+OE8
+OE9
+OE3GAS
+OE3TEC
+OE3XYZ
+; --- Floskeln der Umsetzung ------------------------------------------------
+Gekürzt. Vollständig in der Mailbox
+: R
+(leer)
+(kein Betreff)
+Weitere Informationen in der Mailbox
+Fortsetzung folgt
+siehe
+zum Beispiel
+und
+oder
+mit
+ohne
+nicht
+auch
+schon
+noch
+nur
+sehr
+mehr
+weniger
+bis
+von
+für
+auf
+aus
+dem
+der
+die
+das
+den
+ein
+eine
+einer
+einem
+einen
+ist
+sind
+war
+wird
+werden
+kann
+können
+muss
+müssen
+soll
+sollen
+hat
+haben
+gibt es
+es gibt
+damit
+dann
+deshalb
+also
+aber
+wenn
+weil
+dass
+wie
+was
+wer
+wann
+wo

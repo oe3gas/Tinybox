@@ -1129,6 +1129,19 @@ async function renderStatus() {
     rows.push(["Eigene Seiten im Karussell", st.pages_station !== undefined ? st.pages_station : ""]);
     rows.push(["Airtime (Fenster)", `${num(st.airtime_used_s)} s von ${num(st.airtime_limit_s)} s`]);
   }
+  if (st.wire) {
+    if (st.mode === "station")
+      rows.push(["Frame-Format", `${st.wire.format}` +
+                 (st.wire.format === 2 ? (st.wire.compress ? " (Inhalt gepackt)" : " (ungepackt)") : " (alt)")]);
+    rows.push(["Preset-Wörterbuch", st.wire.zdict]);
+    rows.push(["Seiten zusammengesetzt", st.wire.assembled]);
+    const w = st.wire.waiting || [];
+    if (w.length)
+      rows.push(["Wartet auf Fragmente", w.map(p => `${p.station} Seite ${p.id}: ` +
+                 `${p.have.length}/${p.total} (seit ${p.age_s} s)`).join(", ")]);
+    if (st.wire.incomplete)
+      rows.push(["Unvollständig verfallen", st.wire.incomplete]);
+  }
   if (st.dictionary && st.dictionary.source) rows.push(["Bezugsquelle", st.dictionary.source.text]);
   if (st.dictionary && st.dictionary.radio)
     rows.push(["Dictionary über Funk", `v${st.dictionary.radio.version} von ${st.dictionary.radio.station}: ` +

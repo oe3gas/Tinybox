@@ -13,7 +13,8 @@ from pathlib import Path
 
 import cbor2
 
-from brocast import agw, ax25, frame, kiss
+from brocast import agw, ax25, frame, kiss, zdict
+from brocast import carousel as carousel_mod
 from brocast.carousel import AirtimeBudget, Carousel
 from brocast.codec import MAX_PAGE_BYTES, BrocastError, Codec
 from brocast.config import Config, DirewolfCfg, StationCfg
@@ -48,13 +49,24 @@ def make_cfg(mode: str = "station", call: str = "OE3GAS-5", **station) -> Config
 
 def make_station(clock: Clock | None = None, **station) -> tuple[Station, Store]:
     store = Store(":memory:")
-    st = Station(make_cfg(**station), Codec(), store, clock or Clock())
+    st = Station(make_cfg(**station), Codec(), store, clock or Clock(), zd=zdict.load())
     return st, store
 
 
 WX = {"typ": "wx", "ti": "Wetter Hollabrunn", "dat": {"temp": 12.5, "hum": 65}}
 BULLETIN = {"typ": "text", "ti": "DX-News KW 40", "cat": ["dx"], "exp": 43200,
             "blk": [{"k": "heading", "x": "DX-News"}, {"k": "para", "x": LONG_TEXT}]}
+def noise(n: int) -> str:
+    """Fester Pseudo-Zufallstext: lässt sich kaum packen, geht über mehrere Frames."""
+    out, x = [], 1
+    for _ in range(n):
+        x = (x * 1103515245 + 12345) % 2 ** 31
+        out.append(chr(33 + x % 90))
+    return "".join(out)
+
+
+NOISE_BULLETIN = {"typ": "text", "ti": "Messseite", "cat": ["tech"], "exp": 60,
+                  "blk": [{"k": "para", "x": noise(900)}]}
 
 
 # ---------------------------------------------------------------------------
@@ -161,11 +173,19 @@ class AX25KissTests(unittest.TestCase):
 
     def test_brocast_frame_filter(self):
         good = frame.build("OE3GAS-5", b"\xa0")
-        self.assertIsNotNone(frame.parse(good))
+        self.assertEqual(frame.parse(good).fmt, frame.FORMAT_PAGE)
+        fragments = frame.build("OE3GAS-5", b"\xa0", None, frame.header(2, 0x3))
+        parsed = frame.parse(fragments)
+        self.assertEqual((parsed.fmt, parsed.packed, parsed.zdict_gen), (2, True, 1))
         aprs = ax25.UIFrame(dest="APDW16", src="OE3GAS-5", info=b"!4812.34N/").encode()
         self.assertIsNone(frame.parse(aprs))
-        wrong_version = ax25.UIFrame(dest="BROCST", src="OE3GAS-5", info=b"\x20\xa0").encode()
-        self.assertIsNone(frame.parse(wrong_version))
+        self.assertIsNone(frame.unknown_format(aprs))
+
+    def test_unknown_frame_format_is_named(self):
+        """Ein künftiges Format soll als brocast erkannt, aber nicht gelesen werden."""
+        future = ax25.UIFrame(dest="BROCST", src="OE3GAS-5", info=b"\x90\xa0").encode()
+        self.assertIsNone(frame.parse(future))
+        self.assertEqual(frame.unknown_format(future), 9)
 
     def test_largest_page_fits_n1(self):
         info_len = 1 + MAX_PAGE_BYTES
@@ -301,13 +321,25 @@ class StationTests(unittest.TestCase):
         self.assertEqual(store.get_page("tinybox", "1_A").state, "withdrawn")
 
     def test_parts_via_station(self):
-        st, _ = make_station()
+        st, _ = make_station(wire_format=1)          # "parts" gibt es nur im Format 1
         magazin = json.loads((ROOT / "test" / "magazin.json").read_text(encoding="utf-8"))
         self.assertEqual(st.put("test", "magazin", magazin)["subpages"], 3)
         with self.assertRaises(BrocastError):
             st.put("test", "x", {**magazin, "blk": []})
         with self.assertRaises(BrocastError):
             st.put("test", "y", {"typ": "text", "parts": [{"k": "para"}]})
+
+    def test_same_page_needs_fewer_frames_in_format_2(self):
+        magazin = json.loads((ROOT / "test" / "magazin.json").read_text(encoding="utf-8"))
+        old, _ = make_station(wire_format=1)
+        new, _ = make_station(wire_format=2)
+        before = old.put("test", "magazin", magazin)
+        after = new.put("test", "magazin", magazin)
+        self.assertEqual((before["wire"], after["wire"]), (1, 2))
+        self.assertTrue(after["packed"])
+        self.assertLess(after["subpages"], before["subpages"])
+        self.assertLess(sum(after["bytes"]), sum(before["bytes"]))
+        self.assertLess(after["airtime_s"], before["airtime_s"])
 
     def test_default_exp_from_typ(self):
         st, store = make_station()
@@ -351,6 +383,36 @@ class CarouselTests(unittest.IsolatedAsyncioTestCase):
             await self.car.step()
         self.assertEqual(len(self.sent), 6)
 
+    def test_gap_grows_with_the_age_of_the_revision(self):
+        cfg = self.st.cfg.station
+        cfg.aging = [(24, 120), (168, 0)]
+        self.assertEqual(self.car.gap_min(1), 2)                  # Staffel repeat_minutes
+        self.assertEqual(self.car.gap_min(5, age_s=0), 30)        # danach max_interval_min
+        self.assertEqual(self.car.gap_min(5, age_s=25 * 3600), 120)      # älter als 24 h
+        self.assertEqual(self.car.gap_min(5, age_s=8 * 86400), 0)        # älter als 7 Tage: Pause
+
+    async def test_old_page_rests_until_a_new_revision(self):
+        cfg = self.st.cfg.station
+        cfg.repeat_minutes, cfg.aging = [0], [(24, 0)]
+        self.st.put("tinybox", "1_A", {**BULLETIN, "exp": 43200})
+        await self.car.step()
+        self.assertEqual(self.sent_pages_count(), 1)
+        self.clock.t += 25 * 3600                                 # Revision ist alt geworden
+        await self.car.step()
+        self.assertEqual(self.sent_pages_count(), 2)              # dieses Mal noch
+        row = self.store.get_page("tinybox", "1_A")
+        self.assertEqual(row.next_tx, carousel_mod.RESTING)
+        self.clock.t += 10 * 86400
+        await self.car.step()
+        self.assertEqual(self.sent_pages_count(), 2)              # ruht, nichts mehr auf Funk
+        self.st.put("tinybox", "1_A", {**BULLETIN, "exp": 43200,
+                                       "blk": [{"k": "para", "x": "Neuer Inhalt"}]})
+        await self.car.step()
+        self.assertEqual(self.sent_pages_count(), 3)              # neue Revision weckt die Seite
+
+    def sent_pages_count(self) -> int:
+        return self.car.sent_pages
+
     async def test_transmission_log(self):
         import tempfile
         from brocast.txlog import TxLog
@@ -380,7 +442,7 @@ class CarouselTests(unittest.IsolatedAsyncioTestCase):
     async def test_split_into_transmissions(self):
         cfg = self.st.cfg.station
         cfg.burst_frames, cfg.burst_gap_s = 2, 3.0
-        n = self.st.put("tinybox", "1_A", BULLETIN)["subpages"]
+        n = self.st.put("tinybox", "1_A", NOISE_BULLETIN)["subpages"]
         self.assertGreater(n, 2)
         await self.car.step()
         self.assertEqual(len(self.sent), n)
@@ -431,7 +493,7 @@ class CarouselTests(unittest.IsolatedAsyncioTestCase):
         cfg = self.st.cfg.station
         cfg.burst_frames, cfg.burst_gap_s = 2, 3.0
         self._agw_queue([2, 1, 0])          # channel busy: Direwolf still holds the block
-        self.st.put("tinybox", "1_A", BULLETIN)
+        self.st.put("tinybox", "1_A", NOISE_BULLETIN)
         await self.car.step()
         # two polls with 0.5 s, then last frame on air + margin + gap
         last = frame.airtime_s(len(self.sent[1]), cfg.baud, 0)
@@ -444,7 +506,7 @@ class CarouselTests(unittest.IsolatedAsyncioTestCase):
         cfg = self.st.cfg.station
         cfg.burst_frames, cfg.burst_gap_s = 2, 3.0
         self._agw_queue([None] * 20)
-        self.st.put("tinybox", "1_A", BULLETIN)
+        self.st.put("tinybox", "1_A", NOISE_BULLETIN)
         await self.car.step()
         block = frame.burst_airtime_s([len(f) for f in self.sent[:2]], cfg.baud, cfg.txdelay_ms)
         self.assertAlmostEqual(self.waits[0], block + 3.0, places=6)
@@ -538,7 +600,8 @@ class IngestTests(unittest.IsolatedAsyncioTestCase):
         await self.server.close()
 
     async def test_put_get_delete(self):
-        status, res = await http(self.port, "PUT", "/api/v1/pages/tinybox/24657_OE3GAS", BULLETIN)
+        status, res = await http(self.port, "PUT", "/api/v1/pages/tinybox/24657_OE3GAS",
+                                 NOISE_BULLETIN)
         self.assertEqual(status, 200)
         self.assertGreater(res["subpages"], 1)
         status, res = await http(self.port, "GET", "/api/v1/pages/tinybox/24657_OE3GAS")
@@ -553,8 +616,8 @@ class IngestTests(unittest.IsolatedAsyncioTestCase):
             ("PATCH", "/api/v1/pages/wx/a", None, {}, 405),
             ("GET", "/api/v1/status", None, {"Host": "evil.example:80"}, 403),
             ("PUT", "/api/v1/pages/wx/a", WX, {"Content-Type": "text/plain"}, 415),
-            ("PUT", "/api/v1/pages/tinybox/x",
-             {**BULLETIN, "blk": [{"k": "para", "x": LONG_TEXT * 8}]}, {}, 413),
+            ("PUT", "/api/v1/pages/tinybox/x",                  # mehr als max_subpages
+             {**BULLETIN, "blk": [{"k": "para", "x": noise(14000)}]}, {}, 413),
         ]
         for method, path, body, headers, expected in cases:
             with self.subTest(method=method, path=path):
@@ -686,16 +749,22 @@ class EndToEndTests(unittest.IsolatedAsyncioTestCase):
         dw = await self._run("kiss", "kiss", burst_frames=0)     # no real pauses here
         self.assertEqual(dw.y_queries, 0)
 
+    async def test_station_to_listener_format_1(self):
+        """Das alte Format (eine Seite je Frame) muss weiter durchgehen."""
+        await self._run("kiss", "kiss", burst_frames=0, wire_format=1)
+
     async def test_station_agw_listener_kiss_with_pauses(self):
-        # fast "radio" so the real pauses stay short: 2 frames per block, 0.1 s gap
-        dw = await self._run("agw", "kiss", burst_frames=2, burst_gap_s=0.1, baud=1_000_000,
-                             dict_broadcast_hours=0)
+        # fast "radio" so the real pauses stay short: 2 frames per block, 0.1 s gap.
+        # NOISE_BULLETIN lässt sich kaum packen, geht also über mehrere Frames.
+        dw = await self._run("agw", "kiss", page=NOISE_BULLETIN, burst_frames=2,
+                             burst_gap_s=0.1, baud=1_000_000, dict_broadcast_hours=0)
         self.assertGreater(dw.y_queries, 0)                       # pauses via Direwolf's queue
 
     async def test_listener_over_agw(self):
         await self._run("kiss", "agw", burst_frames=0)
 
-    async def _run(self, st_iface: str, li_iface: str, **station) -> "FakeDirewolf":
+    async def _run(self, st_iface: str, li_iface: str, page: dict | None = None,
+                   **station) -> "FakeDirewolf":
         dw = FakeDirewolf()
         port = await dw.start()
         st_cfg = make_cfg("station", "OE3GAS-5", **station)
@@ -712,27 +781,38 @@ class EndToEndTests(unittest.IsolatedAsyncioTestCase):
                         and station.ingest.server:
                     break
                 await asyncio.sleep(0.05)
+            sent = page or BULLETIN
             status, res = await http(station.ingest.port, "PUT",
-                                     "/api/v1/pages/tinybox/24657_OE3GAS", BULLETIN)
+                                     "/api/v1/pages/tinybox/24657_OE3GAS", sent)
             self.assertEqual(status, 200)
-            subpages = res["subpages"]
+            # Format 2 setzt die Fragmente beim Empfänger zu einer Seite zusammen,
+            # Format 1 legt jede Unterseite einzeln ab
+            rows_expected = 1 if res["wire"] == 2 else res["subpages"]
+            self.assertGreater(res["subpages"], 1 if page is NOISE_BULLETIN else 0)
             for _ in range(100):
-                if len(listener.store.received()) == subpages:
+                if len(listener.store.received()) == rows_expected:
                     break
                 await asyncio.sleep(0.05)
             rows = listener.store.received()
-            self.assertEqual(len(rows), subpages)
+            self.assertEqual(len(rows), rows_expected)
             self.assertEqual({r["org"] for r in rows}, {"OE3GAS-5"})
-            self.assertEqual(rows[0]["sub_total"], subpages)
-            page = Codec().decode(rows[0]["data"])
-            self.assertEqual(page["ti"], "DX-News KW 40")
+            self.assertEqual(rows[0]["sub_total"], rows_expected)
+            got = Codec().decode(rows[0]["data"])
+            self.assertEqual(got["ti"], sent["ti"])
+            self.assertEqual(got["blk"][0]["x"], sent["blk"][0]["x"])     # Inhalt kam heil an
             # the station shows its own pages in its own listener
-            self.assertEqual(len(station.store.received()), subpages)
+            self.assertEqual(len(station.store.received()), rows_expected)
             self.assertEqual(station.rx_pages, 0)          # but did not "receive" them
             # the listener API shows the assembled page
-            status, page = await http(listener.web.port, "GET", f"/api/v1/pages/OE3GAS-5/{res['id']}")
-            self.assertEqual((status, page["ti"], page["sub_present"]),
-                             (200, "DX-News KW 40", subpages))
+            status, shown = await http(listener.web.port, "GET",
+                                       f"/api/v1/pages/OE3GAS-5/{res['id']}")
+            self.assertEqual((status, shown["ti"], shown["sub_present"]),
+                             (200, sent["ti"], rows_expected))
+            if res["wire"] == 2:
+                # die echte Funkgröße, nicht die der entpackten Seite
+                self.assertEqual(shown["wire_frames"], res["subpages"])
+                self.assertGreaterEqual(shown["wire_bytes"], sum(res["bytes"]))
+                self.assertGreater(shown["airtime_s"], 0)
             # an APRS packet on the same frequency is ignored by the listener
             self.assertEqual(listener.rx_errors, 0)
         finally:

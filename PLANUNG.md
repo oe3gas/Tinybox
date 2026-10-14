@@ -259,6 +259,40 @@ Brocast: {"typ":"wx","dat":{"temp":21.3,"hum":31,"qff":1028.5},"blk":[{"k":"seri
 - **Rückfall:** Lehnt brocastd die Seite ab (z. B. Feld nicht im Dictionary), sendet der Adapter stattdessen die Textseite und schreibt eine Warnung ins Log. Ohne `Brocast:` bleibt alles wie bisher.
 - In der Mailbox ist die Kopfzeile unsichtbar (Funkamateure lesen Betreff und Text).
 
+### 6e. brocast-Aussendungen verkleinert (entschieden und umgesetzt 14.10.2026)
+
+**Befund** (gemessen an den 18 Seiten, die der Listener auf PC1 am 12.10. empfangen hat: 35 Frames, 6 326 Bytes): nur 55 % davon waren Nutztext.
+
+| Verschwendung | Anteil | Beispiel |
+|---|---|---|
+| Umschlag in **jeder** Unterseite (Titel 36 B, `src` 18 B, `to`+`cat`, `t`/`exp`/`dv`/`rev`/`typ`/`id`) | 40 % (2 514 B) | Seite 46 „PR Revival“: 8 × ≈ 90 B Umschlag für 778 B Text |
+| Halb gefüllte Frames (der Splitter packt nur ganze Blöcke) | Füllgrad 74 % | Frames mit 138, 136, 105 B |
+| Text unkomprimiert | 35–50 % | 778 B → 452 B |
+| Karussell-Inhalt: alte Seiten so oft wie neue | 46 % der Frames | 10 Client-News-Seiten = 16 von 35 Frames |
+
+Der AX.25-Kopf selbst (17 B, ≈ 8 %) ist kein Hebel: größere Frames als 256 B sparen kaum Zeit, kosten aber bei einem Bitfehler die ganze Seite und schließen Hardware-TNCs aus.
+
+**Entschieden** (Seiten müssen über ein Terminal *nicht* lesbar sein, 13.10.2026):
+
+1. **Frame-Format 2** (`[station] wire_format = 2`, Standard, `brocast/brocast/fragment.py`): Fragment 1 trägt den Umschlag, die folgenden nur `id`, `rev`, `sub`; der Inhalt (Blockliste) geht als **ein** Blob über Funk und die Frames sind randvoll. Die Formatnummer steht im hohen Nibble des Header-Bytes – ältere Listener lassen die Frames liegen (keine halben Seiten) und melden „neueres Format“.
+2. **Kompression mit Preset-Wörterbuch** (`compress = yes`, `brocast/zdict/brocast-zdict-1.bin`, 32 kB, erzeugt mit `tools/build_zdict.py`): raw deflate, Wörterbuch auf beiden Seiten vorhanden, Generation im Frame, SHA-256 beim Start geprüft. Passt es nicht, wird unkomprimiert gesendet. brotli, zstd und unishox brachten im Vergleich keinen Vorteil, der eine zusätzliche Abhängigkeit rechtfertigt (zlib ist Standardbibliothek und wird für das Dictionary über Funk schon benutzt).
+3. **Alterung im Karussell** (`aging = 24:120`): eine Revision, die älter als 24 h ist, wird nur noch alle 120 min wiederholt; `168:0` lässt sie ruhen, bis der Lieferant sie ändert.
+4. Unvollständige Seiten werden **nur im Arbeitsspeicher** gesammelt (15 min, höchstens 64) – kein Datenbankschreiben je Frame (offener Punkt 9).
+
+**Rechnung** (1200 Bd, TXDELAY 300 ms, 4 Frames je Aussendung, 3 s Pause; „Dauer“ = Kanalbelegung mit Pausen):
+
+| Seite | Format 1 | Format 2 | Format 2 + gepackt |
+|---|---|---|---|
+| 46 „PR Revival“ (778 B Text) | 8 Frames, 1 428 B, 15 s | 5 Frames, 968 B, 11 s | **3 Frames, 573 B, 5 s** |
+| 42 „Was ist KISS Mode?“ | 5 Frames, 923 B, 11 s | 4 Frames, 752 B | **2 Frames, 431 B, 4 s** |
+| Wetter Region (24 Stationen, `table`) | 5 Frames, 920 B, 11 s | 4 Frames, 769 B | **3 Frames, 598 B, 5 s** |
+| Karussell-Lauf (18 Seiten) | 38 Frames, 7 123 B, 68 s | 36 Frames, 6 269 B, 58 s | **27 Frames, 4 585 B, 42 s** |
+| … zusätzlich mit `aging` (alte News ruhen) | – | – | **≈ 13 Frames, ≈ 2,2 kB, ≈ 20 s** |
+
+Dauerzustand vorher 113 s Kanalzeit je Stunde (3,1 %), nachher rund 40 s, mit `aging` unter 20 s. Nachrechnen: `py -3 tools\payload_report.py` (eigene Datenbank oder `test\*.json`).
+
+**Noch offen (eigener Schritt, Dictionary v3):** feste Texte ganz aus den Seiten nehmen – `src` („GeoSphere Austria, TAWES (CC BY 4.0)“ = 40 von 202 B der Wetterseite) als Enum, Serien-Namen aus dem Parameter ableiten, Stations-ID statt `pos`, Regionsüberblick als Zahlenmatrix mit Stationsnummern statt Klartext-Tabelle. Messung dazu: Wetterseite 202 → 110 B, Regionsüberblick 598 → 306 B.
+
 ## 6. MQTT (vorbereitet, Umsetzung später)
 
 **Richtungen**
@@ -393,6 +427,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M3e ✅ | Eingangsordner für Skripte mit `Replace:` und `Valid:` (Abschnitt 6c) | Fertig 02.10.2026, 65 Tests grün |
 | M3f ✅ | Kopfzeile `Brocast:` im Eingang, Seite statt Text an brocastd (Abschnitt 6d) | Fertig 03.10.2026 |
 | M3g ✅ | Chat-Boards mit Aufbewahrung, Befehl `C`, /-Kommandos, Anzeige in Konsole und Web (Abschnitt 2a) | Fertig 04.10.2026 |
+| M3h ✅ | brocast: Frame-Format 2 (Umschlag einmal, Inhalt gepackt), Preset-Wörterbuch, Karussell-Alterung (Abschnitt 6e) | Fertig 14.10.2026, 27 neue Tests grün; rund 45 % weniger Bytes, 42 % weniger Kanalzeit |
 | M4 | Limits, Timeouts, Logging, Tests | Dauerbetrieb |
 | P1 ❗ | **Major Fix** brocastd: kein Datenbank-Schreiben pro Funk-Frame, Sendeprotokoll abschaltbar (offener Punkt 9) | Voraussetzung für Dauerbetrieb auf dem NanoPi (eMMC) |
 | M5 | MQTT-Adapter (Ein-/Ausgang) | Anbindung an Broker |

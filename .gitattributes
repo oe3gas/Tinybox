@@ -7,3 +7,4 @@
 *.odt  binary
 *.db   binary
 *.png  binary
+*.bin  binary

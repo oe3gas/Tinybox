@@ -16,12 +16,13 @@ from typing import Any, Callable
 
 import yaml
 
-from . import config, dictimport, dicttransfer
+from . import config, dictimport, dicttransfer, fragment, zdict
 from .agw import AgwLink
 from .carousel import Carousel
 from .codec import BrocastError, Codec
 from .dictionary import Dictionary
-from .frame import describe_other, parse as parse_frame
+from .frame import (FORMAT_FRAGMENT, describe_other, parse as parse_frame,
+                    unknown_format)
 from .ingest import IngestServer
 from .kiss import KissLink
 from .listener import Listener
@@ -51,6 +52,9 @@ class Daemon:
             self.link = KissLink(dw.host, dw.kiss_port, self.on_frame, dw.reconnect_sec)
         self.rx_pages = 0
         self.rx_errors = 0
+        self.rx_fragments = 0
+        self.zd = zdict.load()
+        self.assembler = fragment.Assembler(self.zd, clock=clock)
         self.listener = Listener(self.store, self.codec, clock,
                                  baud=cfg.station.baud, txdelay_ms=cfg.station.txdelay_ms)
         self.web = ListenerApi(self.listener, cfg.listener.web_host, cfg.listener.web_port,
@@ -73,7 +77,8 @@ class Daemon:
             self.carousel = Carousel(self.store, self._send, cfg.station, cfg.callsign, clock,
                                      txlog=self.txlog, queue_len=queue_len)
             self.carousel.schedules[DICT_DATA] = self._dict_gap
-            self.station = Station(cfg, self.codec, self.store, clock, self.carousel.wake)
+            self.station = Station(cfg, self.codec, self.store, clock, self.carousel.wake,
+                                   zd=self.zd)
             self.ingest = IngestServer(self.station, cfg.station.ingest_host,
                                        cfg.station.ingest_port, cfg.station.token, self.status)
 
@@ -95,15 +100,43 @@ class Daemon:
         parsed = parse_frame(data)
         if parsed is None:                           # not a brocast frame: log it briefly
             src, dest, kind = describe_other(data)
+            fmt = unknown_format(data)
+            if fmt is None:
+                self.store.add_rxlog({"ts": now, "heard_from": src, "dest": dest,
+                                      "ti": f"{kind}-Frame", "result": "foreign",
+                                      "bytes": len(data)})
+                return
+            log.warning("%s sendet brocast-Frames im Format %s – diese Software kennt es "
+                        "nicht (brocastd aktualisieren: git pull)", src, fmt)
             self.store.add_rxlog({"ts": now, "heard_from": src, "dest": dest,
-                                  "ti": f"{kind}-Frame", "result": "foreign",
+                                  "ti": f"Format {fmt}", "result": "newer_format",
                                   "bytes": len(data)})
             return
-        frame, raw = parsed
+        frame, fmt, flags, raw = parsed
         if not own and self.cfg.is_station and frame.src == self.cfg.callsign:
             return                                   # our own frame, digipeated back
         entry = {"ts": now, "heard_from": frame.src, "dest": frame.dest, "bytes": len(data),
                  "own": int(own)}
+        frames_used = 1
+        if fmt == FORMAT_FRAGMENT:
+            fed = self.assembler.feed(frame.src, raw, flags, len(data))
+            if fed.status != "page":
+                if not own:
+                    self.rx_fragments += 1
+                    if fed.status in ("zdict", "bad"):
+                        self.rx_errors += 1
+                        log.warning("Fragment von %s (Seite %s): %s", frame.src,
+                                    fed.id, fed.note)
+                sub, total = fed.sub or (1, 1)
+                self.store.add_rxlog({**entry, "id": fed.id, "rev": fed.rev, "sub": sub,
+                                      "sub_total": total, "ti": fed.note[:80],
+                                      "result": fed.status})
+                return
+            assert fed.page is not None
+            raw, frames_used = fed.page, fed.fragments
+            if not own:
+                self.rx_fragments += 1
+            entry["bytes"] = fed.bytes_on_air or len(data)
         try:
             page = self.codec.decode(raw, ax25_src=frame.src, defaults=False)
         except BrocastError as exc:
@@ -111,17 +144,19 @@ class Daemon:
             log.warning("Seite von %s nicht dekodierbar: %s", frame.src, exc)
             self.store.add_rxlog({**entry, "result": "error", "ti": str(exc)[:80]})
             return
-        result = self.listener.on_page(page, raw, frame.src)
-        sub, total = page.get("sub") or [1, 1]
+        wire = (frames_used, entry["bytes"]) if fmt == FORMAT_FRAGMENT else None
+        result = self.listener.on_page(page, raw, frame.src, wire=wire)
+        sub, total = page.get("sub") or [frames_used, frames_used]
         self.store.add_rxlog({**entry, "org": page.get("org") or frame.src, "id": page["id"],
                               "sub": sub, "sub_total": total, "rev": page.get("rev", 0),
                               "ti": page.get("ti", ""), "result": result})
         if not own:
             self.rx_pages += 1
         if result in ("new", "updated", "subpage", "withdrawn") and not own:
-            log.info("empfangen: %s Seite %s rev %s (%s/%s) %s [%s]",
+            log.info("empfangen: %s Seite %s rev %s (%s/%s%s) %s [%s]",
                      page.get("org") or frame.src, page["id"], page.get("rev", 0),
-                     sub, total, page.get("ti", ""), result)
+                     sub, total, " Fragmente" if fmt == FORMAT_FRAGMENT and total > 1 else "",
+                     page.get("ti", ""), result)
 
     # -- dictionary ---------------------------------------------------------
 
@@ -243,6 +278,12 @@ class Daemon:
             "rx_frames": self.link.rx_frames, "tx_frames": self.link.tx_frames,
             "rx_pages": self.rx_pages, "rx_errors": self.rx_errors,
             "dictionary": {"version": self.codec.d.version, "hash": self.codec.d.hash4.hex()},
+            "wire": {"format": self.cfg.station.wire_format if self.cfg.is_station else None,
+                     "compress": self.cfg.station.compress and self.zd.ok,
+                     "zdict": self.zd.describe(),
+                     "assembled": self.assembler.assembled,
+                     "incomplete": self.assembler.dropped,
+                     "waiting": self.assembler.waiting()},
         }
         if self.carousel:
             b = self.carousel.budget
@@ -257,6 +298,14 @@ class Daemon:
     async def run(self) -> None:
         log.info("brocastd %s, Modus %s, Rufzeichen %s, Direwolf über %s", VERSION,
                  self.cfg.mode, self.cfg.callsign or "-", self.cfg.direwolf.describe())
+        log.info("Preset-Wörterbuch: %s", self.zd.describe())
+        if self.cfg.is_station:
+            st = self.cfg.station
+            log.info("Frame-Format %s%s, Alterung %s", st.wire_format,
+                     ", Blockliste gepackt" if st.wire_format == FORMAT_FRAGMENT
+                     and st.compress and self.zd.ok else "",
+                     ", ".join(f"ab {h} h alle {m} min" if m else f"ab {h} h Pause"
+                               for h, m in st.aging) or "aus")
         if self.cfg.is_station and self.cfg.direwolf.interface == "kiss" \
                 and self.cfg.station.burst_frames > 0:
             log.info("KISS: Sendepausen werden berechnet; bei belegtem Kanal können Blöcke "
