@@ -1,0 +1,2 @@
+- Bild-Dialog aufgeraeumt: die Zahlen stehen in den Groessenknoepfen,
+  die Erklaertexte sind weg.

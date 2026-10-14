@@ -1334,10 +1334,7 @@ async function shrinkForDialog() {
   }
   imgPick = r;
   if (!imgAspect) { imgAspect = r.w / r.h; imgSizeButtons(); }
-  $("imgdlg-text").textContent =
-    `${r.w}×${r.h} px, ${kbText(r.blob.size)}: upload ${secText(imgTime(r.blob.size, true))}, ` +
-    `loading for others ${secText(imgTime(r.blob.size, false))} (at ${S.img.rate} bytes/s). ` +
-    `The chat line itself carries only ${26 + r.bh.length - 16} bytes.`;
+  $("imgdlg-text").textContent = "";      // the numbers are in the buttons (CR36)
   $("imgdlg-ok").disabled = false;
 }
 function closeImageDialog() { $("imgdlg").classList.add("hidden"); imgPick = imgFile = imgAspect = null; $("imgfile").value = ""; }
