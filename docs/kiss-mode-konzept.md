@@ -341,7 +341,7 @@ Fassungen gegen dieselben Testfälle.
 
 | # | Inhalt | Prüfung |
 |---|---|---|
-| K1 | AX.25-Codec (alle Frame-Typen, Modulo 8 und 128), KISS-I/O | Unit-Tests, Mitschnitte von Direwolf |
+| K1 ✅ | AX.25-Codec (alle Frame-Typen, Modulo 8 und 128), KISS-I/O – `tinybox/ax25/frame.py`, `kissio.py` (14.10.2026) | 31 Unit-Tests inkl. von Hand gerechneter Bytes und 5000 Zufalls-/Müll-Frames; UI-Frames byte-gleich mit brocast; Mitschnitte von Direwolf folgen bei K2 |
 | K2 | `Ax25Link` v2.0 eingehend (SABM → Sitzung → DISC), REJ | Simulator mit 0 / 10 / 30 % Verlust |
 | K3 | v2.2: SABME, Modulo 128, SREJ, XID, Rückfall-Logik | Simulator, beide Seiten v2.2 und gemischt |
 | K4 | `KissAdapter` als zweiter `LinkAdapter`, `app.agw` → `app.link`, UI für TBCHAT | alle bestehenden Tests grün mit beiden Adaptern |
