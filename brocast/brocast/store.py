@@ -95,6 +95,24 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS rubrics (              -- station: rubrics declared by providers
+    provider TEXT NOT NULL,
+    pos      INTEGER NOT NULL,                   -- order as the provider sent them
+    name     TEXT NOT NULL,                      -- the provider's name (e.g. bulletin dest)
+    cat      TEXT NOT NULL,                      -- rubric as pages carry it (dict name / own)
+    descr    TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (provider, pos)
+);
+CREATE TABLE IF NOT EXISTS station_rubrics (      -- listener: rubrics a station announced
+    station TEXT NOT NULL,                       -- (its index page, typ index)
+    pos     INTEGER NOT NULL,
+    cat     TEXT NOT NULL,                       -- rubric key (dict name or x:own)
+    name    TEXT NOT NULL,                       -- original spelling of an own rubric
+    descr   TEXT NOT NULL DEFAULT '',
+    rev     INTEGER NOT NULL DEFAULT 0,          -- revision of the index page
+    seen    INTEGER NOT NULL DEFAULT 0,          -- last time the index page was heard
+    PRIMARY KEY (station, pos)
+);
 CREATE TABLE IF NOT EXISTS rxlog (                -- every frame heard (and sent)
     n          INTEGER PRIMARY KEY AUTOINCREMENT,
     ts         INTEGER NOT NULL,
@@ -400,6 +418,51 @@ class Store:
         with self.lock, self.db:
             self.db.execute("DELETE FROM optout")
             self.db.executemany("INSERT OR IGNORE INTO optout VALUES (?, ?)", pairs)
+
+    # -- rubrics ------------------------------------------------------------
+
+    def rubrics(self, provider: str | None = None) -> list[dict]:
+        """Station: rubrics the providers declared, in provider / sent order."""
+        if provider is None:
+            rows = self.db.execute("SELECT * FROM rubrics ORDER BY provider, pos")
+        else:
+            rows = self.db.execute("SELECT * FROM rubrics WHERE provider=? ORDER BY pos",
+                                   (provider,))
+        return [dict(r) for r in rows]
+
+    def set_rubrics(self, provider: str, items: list[dict]) -> None:
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM rubrics WHERE provider=?", (provider,))
+            self.db.executemany(
+                "INSERT INTO rubrics (provider, pos, name, cat, descr) VALUES (?, ?, ?, ?, ?)",
+                [(provider, pos, r["name"], r["cat"], r.get("desc", ""))
+                 for pos, r in enumerate(items)])
+
+    def station_rubrics(self, station: str | None = None) -> list[dict]:
+        """Listener: rubrics the stations announced with their index pages."""
+        if station is None:
+            rows = self.db.execute("SELECT * FROM station_rubrics ORDER BY station, pos")
+        else:
+            rows = self.db.execute("SELECT * FROM station_rubrics WHERE station=? ORDER BY pos",
+                                   (station,))
+        return [dict(r) for r in rows]
+
+    def set_station_rubrics(self, station: str, items: list[dict], rev: int, now: int) -> None:
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM station_rubrics WHERE station=?", (station,))
+            self.db.executemany(
+                "INSERT INTO station_rubrics (station, pos, cat, name, descr, rev, seen) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [(station, pos, r["cat"], r["name"], r["descr"], rev, now)
+                 for pos, r in enumerate(items)])
+
+    def touch_station_rubrics(self, station: str, now: int) -> None:
+        with self.lock, self.db:
+            self.db.execute("UPDATE station_rubrics SET seen=? WHERE station=?", (now, station))
+
+    def delete_optout(self, cat: str) -> None:
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM optout WHERE cat=?", (cat,))
 
     def settings(self) -> dict[str, str]:
         return {r["key"]: r["value"] for r in self.db.execute("SELECT * FROM settings")}

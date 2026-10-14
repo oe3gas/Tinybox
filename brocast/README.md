@@ -223,7 +223,8 @@ Die Rohdaten liefert weiterhin die JSON-API:
 | Adresse | Inhalt |
 | --- | --- |
 | `http://127.0.0.1:7733/api/v1/status` | Status |
-| `http://127.0.0.1:7733/api/v1/categories` | Rubriken mit Anzahl/ungelesen |
+| `http://127.0.0.1:7733/api/v1/categories` | Rubriken mit Anzahl/ungelesen (auch leere, die eine Station ankündigt) |
+| `http://127.0.0.1:7733/api/v1/rubrics` | alle Rubriken für die Abo-Matrix, mit Beschreibung und `stations` |
 | `http://127.0.0.1:7733/api/v1/stations` | gehörte Stationen |
 | `http://127.0.0.1:7733/api/v1/pages?cat=dx` | Seiten einer Rubrik (auch `station=`, `unread=1`, `favorite=1`, `q=`) |
 | `http://127.0.0.1:7733/api/v1/pages/OE3GAS-5/25?raw=1` | eine Seite, mit Rohansicht |
@@ -287,6 +288,17 @@ Die Listener-Oberfläche zeigt Seiten vom typ `wx` als Kacheln (Temperatur mit
 24-h-Spanne, Windrose, Luftdruck mit Tendenz, Feuchte, Verlauf, Niederschlag).
 Felder, die die Ansicht nicht kennt, erscheinen darunter als einfache Werte.
 Offline-Vorschau ohne laufenden brocastd: `mockup\wx-vorschau.html`.
+
+## Rubriken der Station (Indexseite)
+
+Die TinyBox meldet ihre Rubrikenliste (`[rubrics]` in `tinybox.conf`) beim
+vollen Abgleich mit (`PUT /api/v1/pages/tinybox`, Feld `rubrics`). brocastd
+sendet daraus eine Seite `typ index` („Rubriken“, Lieferant `brocastd`) im
+Karussell; neue Revision nur, wenn sich die Liste ändert. Listener zeigen die
+angekündigten Rubriken samt Beschreibung schon, bevor die erste Seite kommt
+(Übersicht, Abo-Matrix), und lassen gestrichene Rubriken fallen, sobald keine
+Seite mehr dazu vorhanden ist. `GET /api/v1/rubrics` (Ingest-Port) zeigt den
+Stand auf der Station. Hintergrund: `PLANUNG.md`, Abschnitt 6f.
 
 ## Dictionary über Funk (gepackt)
 

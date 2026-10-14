@@ -293,6 +293,19 @@ Dauerzustand vorher 113 s Kanalzeit je Stunde (3,1 %), nachher rund 40 s, mit `a
 
 **Noch offen (eigener Schritt, Dictionary v3):** feste Texte ganz aus den Seiten nehmen – `src` („GeoSphere Austria, TAWES (CC BY 4.0)“ = 40 von 202 B der Wetterseite) als Enum, Serien-Namen aus dem Parameter ableiten, Stations-ID statt `pos`, Regionsüberblick als Zahlenmatrix mit Stationsnummern statt Klartext-Tabelle. Messung dazu: Wetterseite 202 → 110 B, Regionsüberblick 598 → 306 B.
 
+### 6f. Rubriken zwischen TinyBox und brocast abgleichen (entschieden und umgesetzt 14.10.2026)
+
+**Befund:** Die Rubriken lebten an drei Stellen, die nichts voneinander wussten: `[rubrics]` in `tinybox.conf` (CR19, Liste mit Beschreibung), die Zuordnung Bulletin-Ziel → Dictionary-Rubrik (`[brocast] rubrics` und `DEFAULT_RUBRICS`) und das Enum `cat` im Dictionary (13 Einträge). Eine neue Rubrik des Sysops (z. B. `FUCHS = Fuchsjagd`) ging als Freitext in jeder Seite mit; der Listener legte sie erst mit der ersten Seite an („FUCHS (eigene)“, ohne Beschreibung), ein Abo vorab war nicht möglich, Opt-out-Zeilen blieben nach dem Ende liegen.
+
+**Entschieden** (Variante 1 + 2a; stationslokale Nummern für die eigenen Rubriken – 2b – vorerst nicht):
+
+1. **TinyBox → brocastd (lokal):** Der volle Abgleich `PUT /api/v1/pages/tinybox` trägt neben `pages` die Liste `rubrics` – `[{"name": "WX", "cat": "wx", "desc": "Wetter und Warnungen"}, …]` – alle **angenommenen** Rubriken aus `[rubrics]` in Conf-Reihenfolge, `ALL` immer zuerst, `cat` nach derselben Zuordnung wie bei den Seiten. brocastd **ersetzt** damit die Liste dieses Lieferanten (Tabelle `rubrics`): was fehlt, ist entfernt. Ohne `[rubrics]` (alles frei) geht eine leere Liste, dann gibt es keine Indexseite. Fehlt das Feld ganz, bleibt die Liste unverändert. Kein Neustart von brocastd; nach dem RESTART der TinyBox kommt alles mit dem ersten Abgleich. `GET /api/v1/rubrics` zeigt den Stand.
+2. **Station → Listener (über Funk): Rubriken-Indexseite.** brocastd sendet die Rubriken aller Lieferanten als eine Seite `typ index` (im Dictionary seit v1 vorgesehen, Lieferant `brocastd`, Schlüssel `rubrics`, Titel „Rubriken“, Gültigkeit 7 Tage) im Karussell: `dat {0: [[Rubrik, Beschreibung], …]}`, Rubrik so wie die Seiten sie tragen (Dictionary-Nummer oder eigener Text), Beschreibung höchstens 60 Zeichen. Rohe Nummern im `dat`, weil das Dictionary für `index` noch keinen Typ definiert (kommt mit v3 unter denselben Nummern). Drei Rubriken ≈ 90 B, ein Frame. Neue Revision nur, wenn sich die Liste ändert; sonst gilt die Karussell-Alterung.
+3. **Listener:** Die Indexseite ist keine lesbare Seite (wie `dict`), sondern füllt die Tabelle `station_rubrics` je Station. Daraus: Rubrikenübersicht und Abo-Matrix zeigen angekündigte Rubriken **mit Beschreibung** schon vor der ersten Seite (Tooltip „angeboten von …“), auch leere; Opt-out vorab möglich. Empfangslog: „Rubrikenliste der Station – übernommen / unverändert“.
+4. **Entfernen:** Rubrik aus `[rubrics]` streichen → RESTART → Abgleich ohne sie → neue Revision der Indexseite. Im Listener lebt eine eigene Rubrik, solange eine Station sie ankündigt **oder** Seiten dazu vorhanden sind; eine zurückgezogene Rubrik mit Restseiten ist als „zurückgezogen“ markiert, die Seiten laufen normal ab (wie CR19 bei Bulletins). Fällt beides weg, verschwindet sie samt Opt-out-Zeile (Aufräumlauf). Stationen ohne Indexseite: wie bisher, Rubrik kommt und geht mit den Seiten.
+
+Tests: `brocast/tests/test_rubrics.py` (Station, Funkweg Format 2, Listener), `tests/test_brocast_adapter.py`.
+
 ## 6. MQTT (vorbereitet, Umsetzung später)
 
 **Richtungen**

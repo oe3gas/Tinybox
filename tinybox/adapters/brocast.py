@@ -10,6 +10,14 @@ and calls brocastd's ingest API on the same PC (standard library only):
 Private messages (type P) are never reported. If brocastd is not running,
 TinyBox logs one warning and goes on; the next full sync catches up.
 
+The full sync also carries the sysop's rubric list ([rubrics], CR19) as
+"rubrics": [{"name": "WX", "cat": "wx", "desc": "Weather and warnings"}, ...]
+in the order of tinybox.conf, ALL always first. brocastd replaces its list of
+this provider's rubrics with it and sends the station's rubric index page
+(typ index) over the air, so listeners know new rubrics (with description)
+before the first page arrives and drop rubrics the sysop removed. Without a
+[rubrics] section (every rubric free) the list is empty: no index page.
+
 Mapping bulletin -> page (agreed 02.10.2026):
     ti   subject (max 40 chars; longer: full subject as heading)
     cat  from the destination via [brocast] rubrics (unknown: own rubric)
@@ -150,6 +158,22 @@ def to_page(msg: Message, app: App) -> dict[str, Any]:
     return delivered_page(msg, app) or text_page(msg, app)
 
 
+def rubric_list(app: App) -> list[dict[str, str]]:
+    """The sysop's rubrics for brocastd: accepted entries of [rubrics] in their
+    order, ALL always first. cat = the same mapping the pages use."""
+    cfg = app.cfg.brocast
+    accepted = [r for r in app.cfg.rubrics if r.accepted]
+    if not accepted:
+        return []                       # no [rubrics]: every rubric is free, no list
+    out: list[dict[str, str]] = []
+    names = ["ALL"] + [r.name for r in accepted if r.name != "ALL"]
+    descs = {r.name: r.description for r in accepted}
+    for name in names:
+        out.append({"name": name, "cat": cfg.rubrics.get(name, name),
+                    "desc": descs.get(name, "")})
+    return out
+
+
 def wanted(msg: Message, app: App) -> bool:
     dests = app.cfg.brocast.destinations
     if msg.origin == "forward" and not app.cfg.forward.publish_to_brocast:
@@ -215,10 +239,12 @@ class BrocastPublisher:
     async def sync(self) -> None:
         msgs = {str(m.id): m for m in self.bulletins()}
         pages = {key: to_page(m, self.app) for key, m in msgs.items()}
-        status, res = await self.request("PUT", f"/pages/{PROVIDER}", {"pages": pages})
+        rubrics = rubric_list(self.app)
+        status, res = await self.request("PUT", f"/pages/{PROVIDER}",
+                                         {"pages": pages, "rubrics": rubrics})
         if status == 200:
-            log.info("brocast: %s bulletins in sync, %s withdrawn", len(pages),
-                     len(res.get("withdrawn", [])))
+            log.info("brocast: %s bulletins in sync, %s withdrawn, %s rubrics", len(pages),
+                     len(res.get("withdrawn", [])), len(rubrics))
             for key, err in (res.get("errors") or {}).items():
                 msg = msgs.get(key)
                 if msg is not None and delivered_page(msg, self.app) is not None:

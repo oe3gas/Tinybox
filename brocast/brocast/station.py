@@ -33,6 +33,19 @@ PROVIDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$")
 MANAGED = ("dv", "rev", "t", "org", "sub")      # set by brocastd, never by providers
 
+# The station's rubric index page (typ index): the rubrics its providers declared
+# (TinyBox [rubrics]), so listeners know them before the first page of a rubric
+# arrives and drop the ones the sysop removed. On the air: dat {0: [[cat, text], ...]}
+# with raw numbers (no dictionary type for "index" yet), cat as pages carry it:
+# dictionary number or own text. Validity a week: the list changes rarely and the
+# page is confirmed with every sync.
+INDEX_PROVIDER = "brocastd"
+INDEX_KEY = "rubrics"
+INDEX_DAT_RUBRICS = 0
+INDEX_EXP_MIN = 7 * 1440
+RUBRIC_NAME_MAX = 20
+RUBRIC_TEXT_MAX = 60
+
 
 class NotFound(BrocastError):
     pass
@@ -201,11 +214,15 @@ class Station:
         self.on_change()
         return self._result(row, frames, changed=True)
 
-    def sync(self, provider: str, pages: Any) -> dict[str, Any]:
-        """Full list of a provider's current pages; missing ones are withdrawn."""
+    def sync(self, provider: str, pages: Any, rubrics: Any = None) -> dict[str, Any]:
+        """Full list of a provider's current pages; missing ones are withdrawn.
+        rubrics (optional): the provider's rubric list replaces the stored one
+        and updates the index page; None = leave the rubrics as they are."""
         self.check_names(provider)
         if not isinstance(pages, dict):
             raise BrocastError("'pages' muss ein Objekt {schlüssel: seite} sein")
+        if provider == INDEX_PROVIDER:
+            raise BrocastError(f"Lieferanten-Name {provider!r} ist für brocastd reserviert")
         results: dict[str, Any] = {}
         errors: dict[str, str] = {}
         for key, content in pages.items():
@@ -218,7 +235,79 @@ class Station:
             if row.pkey not in pages and row.state == "active":
                 self.delete(provider, row.pkey)
                 withdrawn.append(row.pkey)
-        return {"pages": results, "errors": errors, "withdrawn": withdrawn}
+        out: dict[str, Any] = {"pages": results, "errors": errors, "withdrawn": withdrawn}
+        if rubrics is not None:
+            out["rubrics"] = self.set_rubrics(provider, rubrics)
+        return out
+
+    # -- rubric index ---------------------------------------------------------
+
+    def _check_rubrics(self, rubrics: Any) -> list[dict[str, str]]:
+        if not isinstance(rubrics, list):
+            raise BrocastError("'rubrics' muss eine Liste [{name, cat, desc}] sein")
+        table = self.codec.d.enums["cat"].by_name
+        out: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in rubrics:
+            if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+                raise BrocastError("jede Rubrik braucht 'name' (Text)")
+            name = item["name"].strip()
+            cat = item.get("cat", name)
+            if not isinstance(cat, str) or not cat.strip():
+                raise BrocastError(f"Rubrik {name!r}: 'cat' muss ein Text sein")
+            cat = cat.strip()
+            if cat not in table and len(cat) > RUBRIC_NAME_MAX:
+                raise BrocastError(f"Rubrik {name!r}: eigene Rubrik höchstens "
+                                   f"{RUBRIC_NAME_MAX} Zeichen")
+            if not name or len(name) > RUBRIC_NAME_MAX:
+                raise BrocastError(f"Rubrik-Name {name!r}: 1-{RUBRIC_NAME_MAX} Zeichen")
+            desc = item.get("desc", "")
+            if not isinstance(desc, str):
+                raise BrocastError(f"Rubrik {name!r}: 'desc' muss ein Text sein")
+            if cat in seen:
+                continue                            # two names on the same rubric: first wins
+            seen.add(cat)
+            out.append({"name": name, "cat": cat, "desc": desc.strip()[:RUBRIC_TEXT_MAX]})
+        return out
+
+    def set_rubrics(self, provider: str, rubrics: Any) -> dict[str, Any]:
+        """Replace a provider's declared rubrics and rebuild the index page.
+        An empty list from every provider withdraws the index page."""
+        items = self._check_rubrics(rubrics)
+        self.store.set_rubrics(provider, items)
+        return {"count": len(items), "index": self.update_index()}
+
+    def index_content(self) -> dict[str, Any] | None:
+        """The index page as a provider would send it, or None if no rubrics."""
+        rows = self.store.rubrics()
+        if not rows:
+            return None
+        table = self.codec.d.enums["cat"].by_name
+        entries: list[list[Any]] = []
+        seen: set[str] = set()
+        for r in rows:
+            if r["cat"] in seen:
+                continue
+            seen.add(r["cat"])
+            on_air: Any = table[r["cat"]].num if r["cat"] in table else r["cat"]
+            entries.append([on_air, r["descr"]] if r["descr"] else [on_air])
+        return {"typ": "index", "ti": "Rubriken", "exp": INDEX_EXP_MIN,
+                "dat": {INDEX_DAT_RUBRICS: entries}}
+
+    def update_index(self) -> dict[str, Any] | None:
+        content = self.index_content()
+        if content is None:
+            try:
+                self.delete(INDEX_PROVIDER, INDEX_KEY)
+            except NotFound:
+                pass
+            return None
+        return self.put(INDEX_PROVIDER, INDEX_KEY, content)
+
+    def rubrics(self) -> list[dict[str, Any]]:
+        """Declared rubrics for the status API, in provider / sent order."""
+        return [{"provider": r["provider"], "name": r["name"], "cat": r["cat"],
+                 "desc": r["descr"]} for r in self.store.rubrics()]
 
     def get(self, provider: str, key: str) -> dict[str, Any]:
         self.check_names(provider, key)

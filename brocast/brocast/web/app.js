@@ -265,6 +265,8 @@ async function renderNav() {
       b.type = "button";
       const n = el("span", "name", c.name);
       if (c.custom) n.append(el("span", "own", "eigene"));
+      if (c.withdrawn) n.append(el("span", "off", "zurückgezogen"));
+      if (c.desc) b.title = c.desc;                 // from the station's rubric index
       b.append(n, countNode(c.unread, c.total));
       b.onclick = () => select({ cat: c.key, station: null });
       items.push(b);
@@ -1015,7 +1017,12 @@ async function renderSettings() {
   const t = el("table", "abo");
   const head = el("tr");
   head.append(el("th", null, "Station"), el("th", null, "alle Rubriken"));
-  for (const r of rubrics) head.append(el("th", null, r.name));
+  for (const r of rubrics) {
+    const th = el("th", null, r.name);
+    if (r.desc) th.title = r.desc;
+    if (r.stations && r.stations.length) th.title = (r.desc ? r.desc + " – " : "") + "angeboten von " + r.stations.join(", ");
+    head.append(th);
+  }
   t.append(head);
   const boxes = [];
   for (const call of calls) {

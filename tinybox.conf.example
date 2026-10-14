@@ -126,6 +126,9 @@ RUNDE = live  Live round, nothing is stored
 # A partner mailbox offering an unknown rubric: the first bulletin is kept held
 # and the sysop gets a mail, further ones wait; enter the rubric here as
 # accepted or refused and RESTART.
+# The accepted rubrics (with description) also go to brocastd with every full
+# sync; brocastd sends them as the station's rubric index page, so listeners
+# know new rubrics before the first page and drop removed ones (PLANUNG 6f).
 #ALL     = To everybody
 #WX      = Weather and warnings
 #HUMOR   = -  not wanted here

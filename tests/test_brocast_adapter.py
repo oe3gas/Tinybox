@@ -7,7 +7,7 @@ import json
 import unittest
 
 from tinybox.adapters import brocast
-from tinybox.config import DEFAULT_RUBRICS, BrocastCfg
+from tinybox.config import DEFAULT_RUBRICS, BrocastCfg, Rubric
 from tinybox.store import Message
 from tests.test_tinybox import make_app
 
@@ -68,6 +68,18 @@ class MappingTests(unittest.TestCase):
         self.app.cfg.brocast.destinations = ["WX"]
         self.assertFalse(brocast.wanted(msg(), self.app))
         self.assertTrue(brocast.wanted(msg(to_call="WX"), self.app))
+
+    def test_rubric_list_for_brocastd(self):
+        self.assertEqual(brocast.rubric_list(self.app), [])          # no [rubrics]: free
+        self.app.cfg.rubrics = [Rubric("WX", "Weather and warnings"), Rubric("FUCHS", "Fuchsjagd"),
+                                Rubric("HUMOR", "not wanted", False)]
+        self.assertEqual(brocast.rubric_list(self.app), [
+            {"name": "ALL", "cat": "all", "desc": ""},                # ALL always, first
+            {"name": "WX", "cat": "wx", "desc": "Weather and warnings"},
+            {"name": "FUCHS", "cat": "FUCHS", "desc": "Fuchsjagd"},   # own rubric: as text
+        ])
+        self.app.cfg.rubrics.insert(0, Rubric("ALL", "To everybody"))
+        self.assertEqual(brocast.rubric_list(self.app)[0]["desc"], "To everybody")
 
 
 class FakeBrocastd:
@@ -138,6 +150,13 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((method, path), ("PUT", "/api/v1/pages/tinybox"))
         self.assertEqual(list(body["pages"]), ["1"])
         self.assertEqual(body["pages"]["1"]["cat"], ["all"])
+        self.assertEqual(body["rubrics"], [])                     # no [rubrics] configured
+
+    async def test_sync_carries_the_rubric_list(self):
+        self.app.cfg.rubrics = [Rubric("WX", "Weather")]
+        await self.app.brocast.sync()
+        body = self.last()[2]
+        self.assertEqual([r["name"] for r in body["rubrics"]], ["ALL", "WX"])
 
     async def test_bulletin_lifecycle(self):
         msg_id = self.svc.create(from_call="OE3XYZ", to_call="DX", type="B", subject="3B8",

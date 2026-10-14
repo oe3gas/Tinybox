@@ -11,6 +11,11 @@ Rules implemented here:
     oldest read -> oldest unread; favorites are never evicted
   * subscription by opt-out (station x rubric, '*' = all);
     alerts (typ alert or priority emergency) are always kept
+  * a station's rubric index page (typ index) is not shown as a page: it
+    announces the station's rubrics (with description), so they appear in
+    the rubric list and the subscription matrix before their first page
+    arrives; a rubric lives while a station announces it or pages of it
+    exist, then it goes (with its opt-out line)
 """
 
 from __future__ import annotations
@@ -55,6 +60,9 @@ RESULT_TEXT = {
     "dict_ready": "Dictionary über Funk vollständig – wartet auf Freigabe",
     "dict_installed": "Dictionary über Funk vollständig – installiert",
     "dict_bad": "Dictionary über Funk unbrauchbar – verworfen (siehe Log)",
+    "index": "Rubrikenliste der Station – übernommen",
+    "index_same": "Rubrikenliste der Station – unverändert",
+    "index_old": "ältere Rubrikenliste – ignoriert",
 }
 # short chip in the receive log: (label, kind for the colour)
 RESULT_CHIP = {
@@ -71,6 +79,8 @@ RESULT_CHIP = {
     "dict_current": ("Wiederholung", "repeat"), "dict_bad": ("Nicht dekodierbar", "error"),
     "fragment": ("Teil gesammelt", "new"), "zdict": ("Nicht dekodierbar", "error"),
     "bad": ("Nicht dekodierbar", "error"), "newer_format": ("Nicht dekodierbar", "error"),
+    "index": ("Neuer Inhalt", "new"), "index_same": ("Wiederholung", "repeat"),
+    "index_old": ("Nicht angezeigt", "hidden"),
 }
 
 DEFAULT_SETTINGS: dict[str, Any] = {
@@ -85,6 +95,8 @@ DICT_COLLECTIONS = 3                # parallel dictionary transfers kept while c
 ALL = "*"
 GENERAL = "all"                     # dictionary rubric "Allgemein"
 CUSTOM_PREFIX = "x:"
+INDEX_DAT_RUBRICS = 0               # index page: dat {0: [[cat, text], ...]} (station.py)
+INDEX_MAX = 64                      # rubrics taken from one index page
 
 
 class ListenerError(ValueError):
@@ -212,6 +224,8 @@ class Listener:
                 return self._dict_part(part, org, now)
             newer = self._note_announcement(page, org, now)
             return "dictionary_new" if newer else "dictionary"
+        if page.get("typ") == "index":              # the station's rubric list
+            return self._index_page(page, org, now)
         page_id, rev = page["id"], page.get("rev", 0)
         lp = self.store.lpage(org, page_id)
 
@@ -271,6 +285,83 @@ class Listener:
             fields["t"] = page["t"]
         self.store.update_lpage(org, page_id, **fields)
         return "subpage" if stored == "new" else "repeat"
+
+    # -- rubric index of a station -------------------------------------------
+
+    def _index_entries(self, page: dict[str, Any]) -> list[dict[str, Any]]:
+        dat = page.get("dat")
+        if not isinstance(dat, dict):
+            return []
+        raw = dat.get(INDEX_DAT_RUBRICS, dat.get(str(INDEX_DAT_RUBRICS), dat.get("rubrics")))
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for entry in raw if isinstance(raw, list) else []:
+            if isinstance(entry, (int, str)):
+                entry = [entry]
+            if not isinstance(entry, list) or not entry or not isinstance(entry[0], (int, str)) \
+                    or isinstance(entry[0], bool):
+                continue
+            cat = entry[0]
+            key = self.cat_key(cat)
+            if key in seen:
+                continue
+            seen.add(key)
+            descr = entry[1] if len(entry) > 1 and isinstance(entry[1], str) else ""
+            out.append({"cat": key, "name": self.cat_name(key, [cat]), "descr": descr[:120]})
+            if len(out) >= INDEX_MAX:
+                break
+        return out
+
+    def _index_page(self, page: dict[str, Any], org: str, now: int) -> str:
+        rev = page.get("rev", 0)
+        have = self.store.station_rubrics(org)
+        if have and rev < have[0]["rev"]:
+            return "index_old"
+        if "withdrawn" in (page.get("flg") or []):
+            self.store.set_station_rubrics(org, [], rev, now)
+            return "index" if have else "index_same"
+        entries = self._index_entries(page)
+        same = [(r["cat"], r["name"], r["descr"]) for r in have] == \
+            [(r["cat"], r["name"], r["descr"]) for r in entries]
+        if same and have:
+            self.store.touch_station_rubrics(org, now)
+            return "index_same"
+        self.store.set_station_rubrics(org, entries, rev, now)
+        self._prune_optouts()
+        return "index"
+
+    def declared(self, station: str | None = None) -> dict[str, dict[str, Any]]:
+        """Rubrics announced by the stations: key -> {name, desc, stations}."""
+        out: dict[str, dict[str, Any]] = {}
+        for r in self.store.station_rubrics(station):
+            d = out.setdefault(r["cat"], {"key": r["cat"], "name": r["name"],
+                                          "desc": "", "stations": []})
+            d["stations"].append(r["station"])
+            if r["descr"] and not d["desc"]:
+                d["desc"] = r["descr"]
+        return out
+
+    def _withdrawn_keys(self) -> set[str]:
+        """Own rubrics with pages that their station no longer announces."""
+        announcing = {r["station"] for r in self.store.station_rubrics()}
+        declared = {(r["station"], r["cat"]) for r in self.store.station_rubrics()}
+        gone: set[str] = set()
+        for p in self.store.lpages():
+            if p["org"] not in announcing:
+                continue
+            for key in self.cat_keys(json.loads(p["cats"])):
+                if key.startswith(CUSTOM_PREFIX) and (p["org"], key) not in declared:
+                    gone.add(key)
+        return gone
+
+    def _prune_optouts(self) -> None:
+        """Opt-out lines of own rubrics that nobody announces and no page carries."""
+        alive = set(self.declared())
+        for p in self.store.lpages():
+            alive.update(self.cat_keys(json.loads(p["cats"])))
+        for _, key in self.store.optouts():
+            if key.startswith(CUSTOM_PREFIX) and key not in alive:
+                self.store.delete_optout(key)
 
     # -- dictionary version -------------------------------------------------
 
@@ -466,7 +557,7 @@ class Listener:
         removed = 0
         max_age = now - self.settings["max_age_days"] * 86400
         for p in self.store.lpages():
-            if p["typ"] == "dict":           # stored by an older brocastd: not a page
+            if p["typ"] in ("dict", "index"):   # stored by an older brocastd: not a page
                 self.store.delete_lpage(p["org"], p["id"])
                 removed += 1
                 continue
@@ -478,6 +569,7 @@ class Listener:
                 removed += 1
         for p in self.store.lpages_hidden_before(max_age):
             self.store.delete_lpage(p["org"], p["id"])
+        self._prune_optouts()
         return removed + self.enforce_limits()
 
     def enforce_limits(self) -> int:
@@ -546,32 +638,57 @@ class Listener:
         return [self._summary(p) for p in self._filtered(**filters)]
 
     def categories(self, station: str | None = None) -> list[dict[str, Any]]:
+        """Rubrics with pages, plus the ones the stations announce (also empty)."""
+        declared = self.declared(station)
+        withdrawn = self._withdrawn_keys()
         groups: dict[str, dict[str, Any]] = {}
+
+        def group(key: str, name: str) -> dict[str, Any]:
+            return groups.setdefault(key, {
+                "key": key, "name": name, "custom": key.startswith(CUSTOM_PREFIX),
+                "desc": declared.get(key, {}).get("desc", ""),
+                "declared": key in declared, "withdrawn": key in withdrawn,
+                "total": 0, "unread": 0, "alerts": 0})
+
         for p in self._filtered(station=station):
             cats = json.loads(p["cats"])
             for key in self.cat_keys(cats):
-                g = groups.setdefault(key, {"key": key, "name": self.cat_name(key, cats),
-                                            "custom": key.startswith(CUSTOM_PREFIX),
-                                            "total": 0, "unread": 0, "alerts": 0})
+                g = group(key, self.cat_name(key, cats))
                 g["total"] += 1
                 g["unread"] += p["status"] == "unread"
                 g["alerts"] += p["alert"]
+        for key, d in declared.items():
+            if not self.blocked(d["stations"][0], [key]) or key in groups:
+                group(key, d["name"])
         core = {e.name: e.num for e in self.d.enums["cat"].by_num.values()}
         return sorted(groups.values(),
                       key=lambda g: (g["custom"], core.get(g["key"], 999), g["name"].lower()))
 
     def all_rubrics(self) -> list[dict[str, Any]]:
-        """Every rubric for the subscription matrix: dictionary + own ones seen + opted out."""
-        out = [{"key": e.name, "name": e.text(self.settings["lang"]), "custom": False}
+        """Every rubric for the subscription matrix: dictionary + announced by a
+        station + own ones seen in pages + opted out."""
+        declared = self.declared()
+        withdrawn = self._withdrawn_keys()
+
+        def entry(key: str, name: str, custom: bool) -> dict[str, Any]:
+            d = declared.get(key, {})
+            return {"key": key, "name": name, "custom": custom, "desc": d.get("desc", ""),
+                    "stations": d.get("stations", []), "withdrawn": key in withdrawn}
+
+        out = [entry(e.name, e.text(self.settings["lang"]), False)
                for e in self.d.enums["cat"].by_num.values()]
         seen = {r["key"] for r in out}
+        for key, d in declared.items():
+            if key not in seen:
+                out.append(entry(key, d["name"], True))
+                seen.add(key)
         for c in self.categories():
             if c["key"] not in seen:
-                out.append({"key": c["key"], "name": c["name"], "custom": True})
+                out.append(entry(c["key"], c["name"], True))
                 seen.add(c["key"])
         for _, key in self.store.optouts():
             if key != ALL and key not in seen:
-                out.append({"key": key, "name": self.cat_name(key), "custom": True})
+                out.append(entry(key, self.cat_name(key), True))
                 seen.add(key)
         return out
 

@@ -6,7 +6,8 @@ venv/
 
 # --- Betriebsdaten: gehoeren jeder Maschine selbst, nie ins Repo ---------
 data/
-!brocast/tests/data/          # Testmaterial (z. B. Dictionary v1), gehoert ins Repo
+# Testmaterial (z. B. Dictionary v1) gehoert ins Repo (kein Kommentar hinter dem Muster!)
+!brocast/tests/data/
 brocast/data/
 brocast/logs/
 logs/

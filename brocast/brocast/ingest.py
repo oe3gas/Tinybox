@@ -2,7 +2,10 @@
 
     PUT    /api/v1/pages/{provider}/{key}   create or update (idempotent)
     DELETE /api/v1/pages/{provider}/{key}   withdraw
-    PUT    /api/v1/pages/{provider}         full sync {"pages": {key: page}}
+    PUT    /api/v1/pages/{provider}         full sync {"pages": {key: page},
+                                            "rubrics": [{name, cat, desc}]} (optional:
+                                            the provider's rubric list -> index page)
+    GET    /api/v1/rubrics                  rubrics the providers declared
     GET    /api/v1/pages/{provider}/{key}   status of one page
     GET    /api/v1/pages[?provider=x]       list
     POST   /api/v1/validate                 dry run
@@ -47,7 +50,9 @@ class IngestServer(JsonServer):
             if len(parts) == 2 and parts[0] == "pages" and method == "PUT":
                 if not isinstance(body, dict):
                     raise BrocastError("Objekt {\"pages\": {...}} erwartet")
-                return 200, st.sync(parts[1], body.get("pages"))
+                return 200, st.sync(parts[1], body.get("pages"), body.get("rubrics"))
+            if parts == ["rubrics"] and method == "GET":
+                return 200, st.rubrics()
             if len(parts) == 3 and parts[0] == "pages":
                 provider, key = parts[1], parts[2]
                 if method == "PUT":
@@ -56,7 +61,7 @@ class IngestServer(JsonServer):
                     return 200, st.delete(provider, key)
                 if method == "GET":
                     return 200, st.get(provider, key)
-            if parts and parts[0] in ("pages", "status", "dictionary", "validate"):
+            if parts and parts[0] in ("pages", "status", "dictionary", "validate", "rubrics"):
                 raise HttpError(405, f"Methode {method} hier nicht erlaubt")
             raise HttpError(404, "unbekannter Pfad")
         except NotFound as exc:
