@@ -14,7 +14,9 @@ devices there (firmware 30.DEC.88, 01.AUG.91, 13.SEP.95):
       HOST OFF frame), and here also the KISS exit C0 FF C0 - after a hub run
       the TNC may still be in KISS
     - KISS init after TRM section 4.7.1 (pk232py comm/kiss.py), plus VHF ON and
-      HBAUD 1200 (modes/packet_vhf.py): the 1200 Bd Bell 202 modem
+      HBAUD 1200 (modes/packet_vhf.py): the 1200 Bd Bell 202 modem.
+      EXPERT ON first (Gerhard, 14.10.2026): some of the commands are expert
+      commands - without it the PK-232 answers "?EXPERT command" and ignores them
       NOT YET TRIED ON THE AIR with KISS - pk232py only queried the KISS
       parameter (hw_logs 20261006_fw_scan_*). The first PK-232 test (K8)
       confirms or corrects these lines.
@@ -83,6 +85,7 @@ PK232 = Profile(
         Step(CR, (CMD_PROMPT,), 2.0, "CR after leaving Host Mode"),
     ),
     init=(
+        line("EXPERT ON"),                             # RAWHDLC, HPOLL, PPERSIST need it
         line("AWLEN 8"),
         line("PARITY 0"),
         line("RESTART", timeout=6.0),

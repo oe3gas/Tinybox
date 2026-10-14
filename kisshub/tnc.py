@@ -43,6 +43,15 @@ def _show(data: bytes, limit: int = 120) -> str:
     return "".join(out) + ("..." if len(data) > limit else "")
 
 
+def _refused(answer: bytes, sent: bytes) -> bool:
+    """The TNC answered with an error line ('?...'). The echo of what we sent is
+    cut off first, so a '?' typed by us does not count."""
+    echo = sent.strip()
+    if echo and echo in answer:
+        answer = answer.split(echo, 1)[1]
+    return any(part.strip().startswith(b"?") for part in answer.replace(b"\n", b"\r").split(b"\r"))
+
+
 class Tnc:
     def __init__(self, profile: Profile, transport, on_frame: Callable[[int, bytes], None],
                  *, reconnect_sec: float = 10, params: dict[int, int] | None = None,
@@ -172,10 +181,11 @@ class Tnc:
             answer = _show(got)
             if not ok:
                 raise TncError(f"'{step.note}': expected {step.expect}, got '{answer}'")
-            if b"?" in got:                             # ?bad, ?What?, ?EXPERT command ...
-                log.warning("init %-16s -> %s", step.note, answer)
-            else:
-                log.info("init %-16s -> %s", step.note, answer)
+            if step.expect and _refused(got, step.send):
+                # ?bad, ?What?, ?EXPERT command ...: the setting was NOT made - going
+                # on would leave the TNC in KISS with a wrong setup
+                raise TncError(f"'{step.note}' refused by the TNC: '{answer}'")
+            log.info("init %-16s -> %s", step.note, answer)
         await asyncio.sleep(self.profile.settle_sec)
 
     def _send_params(self) -> None:

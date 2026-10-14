@@ -23,6 +23,7 @@ from tinybox.ax25 import frame as ax
 from tinybox.ax25 import kissio
 
 ROOT = Path(__file__).resolve().parent.parent
+EXPERT_ONLY = {"RAWHDLC", "HPOLL", "PPERSIST"}
 BANNER = b"\r\nAEA PK-232M Data Controller\r\nRelease 13.SEP.95\r\ncmd:"
 
 
@@ -46,6 +47,7 @@ class FakePK232:
         self.writer: asyncio.StreamWriter | None = None
         self.connected = asyncio.Event()
         self.reject: set[str] = set()          # commands answered without a prompt
+        self.expert = False
         self._line = bytearray()
         self._host = bytearray()
         self._dec = kissio.Decoder()
@@ -116,6 +118,11 @@ class FakePK232:
         self.lines.append(text)
         if text in self.reject:
             self.out(b"\r\n?bad\r\n")
+            return
+        if text == "EXPERT ON":
+            self.expert = True
+        if text.split()[0] in EXPERT_ONLY and not self.expert:
+            self.out(b"\r\n?EXPERT command\r\ncmd:")     # pk232py hw_logs, T175
             return
         if text == "RESTART":
             self.out(BANNER)
@@ -188,6 +195,7 @@ class TncDialogTests(HubTestBase):
         await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
         self.assertEqual(self.fake.lines, [s.note for s in profiles.PK232.init])
         self.assertIn("VHF ON", self.fake.lines)
+        self.assertEqual(self.fake.lines[0], "EXPERT ON")
         self.assertEqual(self.fake.lines[-2:], ["KISS ON", "HOST ON"])
         await self.wait(lambda: len(self.fake.params) == 2)
         self.assertEqual(self.fake.params, [(kissio.CMD_TXDELAY, bytes((30,))),
@@ -203,12 +211,25 @@ class TncDialogTests(HubTestBase):
 
     async def test_failing_init_line_is_reported_and_retried(self):
         fake = FakePK232("cmd")
-        fake.reject = {"RAWHDLC ON"}
+        fake.reject = {"PACKET"}
         with self.assertLogs("kisshub.tnc", "ERROR") as logs:
             await self.start_hub(fake)
-            await self.wait(lambda: fake.lines.count("RAWHDLC ON") >= 2, 10)
-        self.assertIn("RAWHDLC ON", "\n".join(logs.output))
+            await self.wait(lambda: fake.lines.count("PACKET") >= 2, 10)
+        self.assertIn("PACKET", "\n".join(logs.output))
         self.assertIn("?bad", "\n".join(logs.output))
+        self.assertFalse(self.hub.tnc.ready.is_set())
+
+    async def test_expert_command_refused_stops_the_init(self):
+        """Without EXPERT ON the PK-232 says '?EXPERT command' and still prompts:
+        that must stop the init, not end in a half set-up KISS."""
+        self.profile = dataclasses.replace(
+            self.profile, init=tuple(s for s in self.profile.init if s.note != "EXPERT ON"))
+        fake = FakePK232("cmd")
+        with self.assertLogs("kisshub.tnc", "ERROR") as logs:
+            await self.start_hub(fake)
+            await self.wait(lambda: any("EXPERT command" in o for o in logs.output), 10)
+        self.assertIn("RAWHDLC ON", "\n".join(logs.output))
+        self.assertNotIn("KISS ON", fake.lines)
         self.assertFalse(self.hub.tnc.ready.is_set())
 
     async def test_stop_leaves_kiss_and_switches_it_off(self):
