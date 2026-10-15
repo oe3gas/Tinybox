@@ -1086,6 +1086,7 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - Digipeater/APRS von Direwolf wird nicht genutzt – im KISS-Mode nichts zu ersetzen.
 - **Umgesetzt (K4):** `[radio] interface = kiss` schaltet auf `tinybox/adapters/kiss.py` um; `[kiss]` und `[ax25]` in `tinybox.conf.example`. Ohne `[radio]` bleibt alles bei AGW. Eine verlorene KISS-TCP-Verbindung beendet die AX.25-Verbindungen nicht; Stationen, die SABME mit DM ablehnen, werden bis zum Neustart als v2.0 gemerkt.
 - **Umgesetzt (K7):** `kisshub` (`python -m kisshub -c kisshub.conf`, `kisshub.bat`) besitzt den TNC, Standard-Port **8101** (8001 bleibt Direwolf). PK-232-Profil mit Weckkette und Schnittstellen-Einstellungen aus pk232py (8N1, ohne Flusskontrolle, DTR/RTS high) und Init nach TRM 4.7.1 + `VHF ON`/`HBAUD 1200`; beim Beenden `C0 FF C0` + `KISS OFF`. Sendewarteschlange: Steuer-Frames vor I-Frames vor UI, höchstens 1,5 s Sendezeit im TNC.
+- **Umgesetzt (CR41, 15.10.2026):** Kanalmonitor in der TinyBox (Auslastung, Heard), Status-Abfrage von kisshub (`127.0.0.1:8102/status`), Web-GUI-Karte *Channel* und Kopfzeile mit TNC-Zustand.
 
 ---
 

@@ -40,6 +40,7 @@ port        = 8101             # 8101 = kisshub (TNC), 8001 = Direwolf's KISSPOR
 channel     = 0                # KISS port number of the radio
 air_baud    = 1200             # radio bit rate - TinyBox estimates its own air time
 txdelay_ms  = 300              # as set in the TNC
+status_port = 8102             # kisshub status for the web GUI (CR41), 0 = off
 
 [ax25]                         # only with interface = kiss; missing values: see below
 version      = 2.2             # 2.2: SABME/SREJ/XID, falls back to 2.0 by itself; 2.0: SABM only

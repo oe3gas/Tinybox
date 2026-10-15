@@ -25,6 +25,7 @@ max_lead_ms = 1500         ; at most this much air time queued in the TNC, so
 [server]
 listen = 127.0.0.1         ; loopback only
 port   = 8101              ; not 8001: that is Direwolf's KISS port
+status_port = 8102         ; status for the TinyBox web GUI (JSON, loopback only), 0 = off
 
 [log]
 level = INFO               ; DEBUG shows every byte of the TNC dialog

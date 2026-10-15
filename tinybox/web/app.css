@@ -283,3 +283,30 @@ legend { padding: 0; margin-bottom: 8px; }
   .stats { display: none; }
   .settings-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* channel card (CR41, KISS mode) */
+.chan { padding: 12px 18px 6px; display: flex; flex-direction: column; gap: 10px; }
+.chan .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.chan .tile { border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; background: var(--paper-2); }
+.chan .tile .lbl { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.chan .tile .big { font: 700 22px var(--mono); }
+.chan .tile .sub { font-size: 12px; color: var(--ink-2); }
+.chan .legend-row { display: flex; gap: 14px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.chan .legend-row i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.chan .spark { width: 100%; height: 56px; display: block; }
+.chan .spark .base { stroke: var(--rule); stroke-width: 1; }
+.chan .chan-h { margin: 6px 0 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+.chan .kvs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-size: 13px; }
+.chan .kv2 { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--rule); padding: 3px 0; }
+.chan .kv2 span { color: var(--ink-3); }
+.chan .warnline { color: var(--danger); font-weight: 700; font-size: 13px; }
+.chan .initlog summary { cursor: pointer; font-size: 13px; color: var(--accent); }
+.chan .muted, .card-foot .muted { color: var(--ink-3); font-size: 12px; }
+.chan .pad { padding: 4px 0; }
+.okt { color: var(--ok); }
+.badt { color: var(--danger); }
+@media (max-width: 700px) {
+  .chan .tiles { grid-template-columns: 1fr; }
+  .chan .kvs { grid-template-columns: 1fr; }
+}
+

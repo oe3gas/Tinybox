@@ -431,6 +431,15 @@ Direwolf dient hier nur als Modem („dummer TNC“); AX.25 macht die TinyBox se
    - Ruft Direwolf mit SABM, läuft v2.0 – das ist in Ordnung.
 8. Zurück zu AGW: `interface = agw` (oder `[radio]` löschen), TinyBox neu starten.
 
+## 8a2. Kanal- und kisshub-Werte in der Web-GUI (CR41, 15.10.2026)
+
+Siehe `docs/client-change-requests.md` CR41. Kurz: Die TinyBox misst die Kanalauslastung selbst aus
+dem KISS-Strom (kisshub reicht alle gehörten Frames und die Aussendungen von brocastd weiter);
+kisshub meldet über `GET http://127.0.0.1:8102/status`, ob der TNC im KISS-Mode ist, wie lange
+Frames im Hub warten und wer am Hub hängt. Die Kopfzeile zeigt im KISS-Mode den TNC
+(„PK-232 ready via KISS"), das Dashboard die Karte **Channel**. Die Kanalauslastung fließt nicht in
+die Balken ein.
+
 ## 8b. Funktest K8: PK-232 über kisshub (VHF, 1200 Bd)
 
 Die Init-Zeilen des PK-232 stammen aus TRM 4.7.1 (über pk232py) plus `VHF ON` und

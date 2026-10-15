@@ -151,6 +151,7 @@ class HubTestBase(unittest.IsolatedAsyncioTestCase):
             return Tnc(self.profile, TcpTransport("127.0.0.1", tport), on_frame,
                        reconnect_sec=0.2, params=params)
 
+        hubkw.setdefault("status_port", -1)            # -1 = any free port (tests)
         cfg = HubCfg(port=0, air_baud=hubkw.pop("air_baud", 1_000_000),
                      txdelay_sec=hubkw.pop("txdelay_sec", 0.0), status_every_sec=0, **hubkw)
         self.hub = Hub(cfg, factory)

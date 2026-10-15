@@ -143,6 +143,7 @@ class KissCfg:
     reconnect_sec: int = 5
     air_baud: int = 1200            # radio bit rate (own transmit time, T1)
     txdelay_ms: int = 300
+    status_port: int = 8102         # kisshub's status query (CR41), 0 = off
 
 
 @dataclass(frozen=True)
@@ -451,12 +452,14 @@ def _load_kiss(cp: configparser.ConfigParser,
         reconnect_sec=_get(cp, "kiss", "reconnect_sec", 5, int),
         air_baud=_get(cp, "kiss", "air_baud", 1200, int),
         txdelay_ms=_get(cp, "kiss", "txdelay_ms", 300, int),
+        status_port=_get(cp, "kiss", "status_port", 8102, int),
     )
     _check_port("kiss", "port", kiss.port)
     _check_range("kiss", "channel", kiss.channel, 0, 15)
     _check_range("kiss", "reconnect_sec", kiss.reconnect_sec, 1, 3600)
     _check_range("kiss", "air_baud", kiss.air_baud, 300, 1_000_000)
     _check_range("kiss", "txdelay_ms", kiss.txdelay_ms, 0, 2550)
+    _check_range("kiss", "status_port", kiss.status_port, 0, 65535)
     ax25 = Ax25Cfg(
         version=_get(cp, "ax25", "version", "2.2").strip(),
         # without [ax25] the AGW values apply, so switching interface changes nothing else

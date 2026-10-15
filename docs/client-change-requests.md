@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR40 präzisiert)
+Stand: 15.10.2026 (CR41 umgesetzt)
 
 ## Übersicht
 
@@ -47,6 +47,7 @@ Stand: 15.10.2026 (CR40 präzisiert)
 | 38 | Teletext: Zeilenabstand auf Zeichenhöhe, brocast-Schriftzug nach der Teletext-Titelseite über jeder Seite; Bildkonverter (Bilder als Mosaik-Bulletins, nur station) | ✅ siehe unten |
 | 39 | TinyBox-Web-GUI: „Rubrics“ aufklappbar in der Seitenleiste, Klick zeigt die Bulletins dieser Rubrik | ✅ siehe unten |
 | 40 | Sync beim Anmelden: alle Köpfe (eigene Mails + abonnierte Rubriken), persönliche Mails ≤ 256 Byte gleich mit, sonst Text erst beim Anklicken; geordneter Abort mit Restanzeige und Zeitschätzung; Terminal: Abort statt 10-Zeilen-Seiten (CR29) | offen – siehe unten |
+| 41 | KISS-Mode: Kanal- und kisshub-Werte in der Sysop-Web-GUI (Kanalauslastung, gehörte Stationen, TNC-Zustand, Wartezeit im Hub) für das Qualitäts-Monitoring | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -923,3 +924,68 @@ Texte** (`_texts()` in `tbclient/sync.py`); kurze Texte hängt die TinyBox schon
 - Ablauffrist: reicht die **eine** Frist für alle (`bulletin_expire_days`), oder soll – wie von Gerhard
   beschrieben – **jedes Board/jede Rubrik eine eigene Frist** bekommen (z. B. in `[rubrics]` der
   `tinybox.conf`)?
+
+## CR41 – KISS-Mode: Kanal- und kisshub-Werte in der Web-GUI (✅ 15.10.2026)
+
+**Problem:** Im KISS-Mode kennt die TinyBox nur ihre eigenen AX.25-Verbindungen. Ob der Kanal voll
+ist, ob der TNC hinter kisshub überhaupt arbeitet oder ob Frames im Hub warten, ist nicht sichtbar.
+Das führt zu Fehldeutungen beim Qualitäts-Monitoring (T1-Abläufe durch Kollisionen, hängenden TNC
+oder volle Hub-Warteschlange sehen aus wie eine schlechte Funkstrecke). Außerdem zeigt die
+Kopfzeile grün „connected", solange kisshub läuft – auch wenn der TNC tot ist.
+
+KISS kann grundsätzlich nicht liefern: Trägererkennung (DCD), Signalstärke, verworfene Frames mit
+Prüfsummenfehler, tatsächlicher Sendezeitpunkt. Gemessen wird nur, was als gültiger Frame ankommt
+oder hinausgeht.
+
+**Weg 1 – Kanal (TinyBox rechnet selbst, aus dem KISS-Datenstrom):** kisshub reicht jeden
+empfangenen Frame und die Aussendungen der anderen Clients (brocastd) an die TinyBox weiter.
+
+- Kanalauslastung in % (letzte Minute, letzte 10 Minuten), geschätzt aus Framelänge, Funk-Baudrate
+  und TXDELAY; Anteil eigene Aussendungen / andere.
+- Frames pro Minute der letzten 60 Minuten.
+- Gehörte Stationen (MHEARD): Rufzeichen, Frames, Sendezeit, zuletzt gehört.
+
+**Weg 2 – kisshub (Status-Abfrage `GET http://127.0.0.1:8102/status`, JSON, nur lokal):**
+
+- TNC: Profil, Zustand (down / init / kiss) seit wann, Anzahl Initialisierungen und Portverluste,
+  letzter Fehler, die letzten Init-Zeilen mit Antwort.
+- Sendewarteschlange: Länge je Priorität, Wartezeit im Hub (Mittel/Maximum der letzten 10 min,
+  getrennt für Steuer-Frames und I-Frames), verworfene Frames.
+- Clients: Adresse, verbunden seit, Frames in/out, Sendezeit, Absender-Rufzeichen (daran erkennt
+  man TinyBox und brocastd).
+- Die TinyBox fragt im Takt von `quality_poll_sec` (30 s) ab. `[kiss] status_port` (Standard 8102,
+  0 = aus), in kisshub `[server] status_port`.
+
+**Anzeige (nur Sysop-Web-GUI):**
+
+- Kopfzeile im KISS-Mode: statt „Direwolf connected via KISS" der TNC und sein Zustand, z. B.
+  „PK-232 ready via KISS"; rot bei TNC nicht bereit oder kisshub nicht erreichbar.
+- Dashboard: Karte **Channel** mit Auslastung, Frames/min als Mini-Verlauf, gehörte Stationen,
+  TNC-Zustand und Wartezeit im Hub.
+- Detailansicht eines Users: Kanalauslastung der letzten 10 min neben den Balken.
+- Sysop-Konsole `STATUS`: TNC-Zustand in der Radio-Zeile.
+
+Die Kanalauslastung fließt **nicht** in die Balken ein, sie steht daneben.
+
+Nur TinyBox, kisshub und Sysop-Oberfläche, daher keine neue Client-Version und keine TBNEWS.
+
+**Umgesetzt (15.10.2026):**
+
+- `tinybox/chanmon.py` – Kanalmonitor: jeder Frame aus dem KISS-Strom und jeder eigene;
+  Auslastung 1/10 min (TinyBox / andere), Frames und Belegung je Minute (60 min), gehörte Stationen
+  mit Pfad. Nur im Speicher.
+- kisshub: `GET http://127.0.0.1:8102/status` (`[server] status_port`, 0 = aus) mit TNC-Zustand,
+  Init-/Weck-Dialog (letzte 20 Zeilen mit Antwort, ok/nicht ok), Initialisierungen, Portverlusten,
+  letztem Fehler, Warteschlange je Priorität, Wartezeit im Hub (Mittel/Maximum, 10 min), verworfenen
+  Frames, Clients mit Absender-Rufzeichen und Sendezeit. Neu: Frames, die länger als 30 s warten
+  (TNC nicht bereit), werden verworfen statt verspätet gesendet.
+- TinyBox: `[kiss] status_port` (Standard 8102), Abfrage alle `quality_poll_sec`;
+  `GET /api/channel`; `/api/status` und `/api/sessions/<call>/linkq` um `radio` bzw.
+  `channel_load` ergänzt.
+- Web-GUI: Kopfzeile „PK-232 ready via KISS" (rot: „kisshub not connected", „PK-232 down",
+  „initialising"; Tooltip mit dem Fehler), Dashboard-Karte **Channel** (Kacheln Busy 1 min /
+  10 min / Wartezeit im Hub, Verlauf je Minute TinyBox/andere mit Tooltip, kisshub-Werte,
+  aufklappbarer TNC-Dialog, Heard-Liste), Kanalauslastung in der Detailansicht unter den Balken.
+- `STATUS` in der Sysop-Konsole: „connected (KISS …), TNC PK-232 kiss".
+- 13 neue Tests (`tests/test_chanmon.py`).
+

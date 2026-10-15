@@ -367,6 +367,8 @@ class WebServer:
                 return self._config()
             if parts == ["rubrics"]:
                 return self._rubrics()
+            if parts == ["channel"]:
+                return self._channel()
         else:
             if parts == ["messages"]:
                 msg_id = svc.create(from_call=sysop, to_call=str(data.get("to", "")),
@@ -466,6 +468,8 @@ class WebServer:
             "agw": "connected" if agw is not None and agw.connected.is_set()
                    else ("disconnected" if agw is not None else "not started"),
             "interface": cfg.radio.interface,
+            # KISS mode (CR41): kisshub and the TNC behind it
+            "radio": agw.radio_state() if agw is not None and hasattr(agw, "radio_state") else None,
             "users": len(self.app.registry), "max_users": cfg.mailbox.max_users,
             "messages": len(msgs), "private": sum(m.type == "P" for m in msgs),
             "bulletins": sum(m.type == "B" for m in msgs),
@@ -527,7 +531,8 @@ class WebServer:
                           "min_frames": dw.quality_min_frames, "steps": list(dw.quality_steps),
                           "poll_sec": dw.quality_poll_sec},
                "result": None, "counters": None, "counters_window": None, "poll_age": None,
-               "interface": self.app.cfg.radio.interface}
+               "interface": self.app.cfg.radio.interface,
+               "channel_load": self._channel_load()}
         if r is not None:
             out["result"] = {"bars": r.bars, "t1": r.t1,
                              "outgoing": self._direction(r.out, "TinyBox -> " + call),
@@ -545,6 +550,19 @@ class WebServer:
                 oldest = q.samples[0][1]
                 out["counters_window"] = {k: q.last[k] - oldest.get(k, 0) for k in linkq.FIELDS_INT}
         return out
+
+    def _channel(self) -> dict:
+        """CR41: channel monitor and kisshub status (KISS mode only)."""
+        agw = self.app.agw
+        if agw is None or not hasattr(agw, "channel_snapshot"):
+            raise HttpError(404, "channel monitor only in the KISS mode")
+        return agw.channel_snapshot()
+
+    def _channel_load(self) -> dict | None:
+        agw = self.app.agw
+        if agw is None or not hasattr(agw, "channel"):
+            return None
+        return {"load_10min": agw.channel.load(600), "load_1min": agw.channel.load(60)}
 
     def _disconnect(self, call: str) -> list[str]:
         call = normalize_call(call)

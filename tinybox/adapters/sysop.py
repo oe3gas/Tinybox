@@ -198,6 +198,14 @@ class SysopConsole:
             agw_state = f"connected ({where})"
         else:
             agw_state = f"NOT connected ({where})"
+        if agw is not None and hasattr(agw, "radio_state"):       # KISS mode (CR41)
+            r = agw.radio_state()
+            if r["tnc_state"]:
+                agw_state += f", TNC {r['tnc']} {r['tnc_state']}"
+                if r["tnc_error"] and r["tnc_state"] != "kiss":
+                    agw_state += f" ({r['tnc_error']})"
+            elif r["hub"] == "unreachable":
+                agw_state += ", kisshub status not available"
         values = dict(
             version=VERSION, mailbox=cfg.station.mailbox_call, sysop=cfg.station.sysop_call,
             since=self.app.started[:16].replace("T", " ") + " UTC", agw=agw_state,

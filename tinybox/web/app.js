@@ -101,10 +101,13 @@ async function refreshStatus() {
   const st = S.status;
   $("hdr-mailbox").textContent = st.mailbox;
   $("hdr-sysop").textContent = st.sysop;
-  $("hdr-agw").textContent = st.agw;
   // how TinyBox reaches the radio: Direwolf does AX.25 (AGW) or TinyBox itself (KISS)
+  const [label, value, ok, tip] = radioText(st);
+  $("hdr-radio").textContent = label;
+  $("hdr-agw").textContent = value;
   $("hdr-via").textContent = st.interface ? " via " + st.interface.toUpperCase() : "";
-  $("hdr-dot").className = "dot " + (st.agw === "connected" ? "ok" : "bad");
+  $("hdr-dot").className = "dot " + (ok ? "ok" : "bad");
+  $("hdr-dot").parentElement.title = tip;
   $("hdr-users").textContent = st.users + " / " + st.max_users;
   $("hdr-msgs").textContent = st.messages;
   $("hdr-unread").textContent = st.unread + " unread";
@@ -121,6 +124,20 @@ async function refreshStatus() {
   $("nav-ver").replaceChildren("TinyBox " + st.version, h("br"), st.web + " · local only");
   document.title = "TinyBox " + st.mailbox;
   setShutdown(st.shutdown_in, st.restart_pending);
+}
+
+// Header: AGW -> "Direwolf connected"; KISS (CR41) -> the TNC behind kisshub, e.g.
+// "PK-232 ready", red while kisshub is not connected or the TNC is not in KISS.
+function radioText(st) {
+  const r = st.radio;
+  if (!r) return ["Direwolf", st.agw, st.agw === "connected", ""];
+  if (!r.connected) return ["kisshub", "not connected", false, "TinyBox has no KISS-TCP link to kisshub"];
+  if (!r.tnc_state) {
+    return [r.tnc || "KISS TNC", "connected", true,
+            r.hub === "unreachable" ? "kisshub status query not available - TNC state unknown" : ""];
+  }
+  const words = { kiss: "ready", init: "initialising", down: "down" };
+  return [r.tnc || "TNC", words[r.tnc_state] || r.tnc_state, r.tnc_state === "kiss", r.tnc_error || ""];
 }
 
 async function refreshMessages() {
@@ -210,6 +227,7 @@ function startFeed() {
   };
   es.onerror = () => {
     $("hdr-dot").className = "dot bad";
+    $("hdr-radio").textContent = "";
     $("hdr-agw").textContent = "TinyBox unreachable";
     $("hdr-via").textContent = "";
   };
@@ -433,6 +451,123 @@ function rubricsCard() {
   return { card, update };
 }
 
+// ---- channel (CR41, KISS mode only) ------------------------------------------------
+// From the KISS stream TinyBox estimates how busy the channel is; kisshub tells the
+// state of the TNC and how long frames waited in its queue. A KISS TNC reports no
+// carrier detect, no signal level and no bad frames: only valid frames are counted.
+
+const CH_OWN = "#2A6CB8", CH_OTHER = "#B07A12";     // validated pair (dataviz check)
+const pctTxt = (x) => x === null || x === undefined ? "-" : (x * 100).toFixed(x < 0.1 ? 1 : 0) + " %";
+const msTxt = (x) => x === null || x === undefined ? "-" : x < 1000 ? x + " ms" : (x / 1000).toFixed(1) + " s";
+const clock = (t) => { const d = new Date(t * 1000); return d.toISOString().slice(11, 16); };
+
+function loadSpark(perMin) {
+  // 60 one-minute bars, own and others stacked; hover = the numbers of that minute
+  const W = 360, H = 56, n = perMin.length, bw = W / n;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.setAttribute("class", "spark");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("role", "img");
+  const max = Math.max(0.05, ...perMin.map((m) => m.own + m.other));
+  const base = document.createElementNS(NS, "line");
+  for (const [k, v] of [["x1", 0], ["x2", W], ["y1", H - 0.5], ["y2", H - 0.5], ["class", "base"]]) base.setAttribute(k, v);
+  svg.append(base);
+  perMin.forEach((m, i) => {
+    const x = i * bw + 1, w = Math.max(1, bw - 2);       // 2px gap between bars
+    let y = H - 1;
+    const g = document.createElementNS(NS, "g");
+    const tip = document.createElementNS(NS, "title");
+    const ago = n - 1 - i;
+    tip.textContent = (ago ? ago + " min ago" : "this minute") + ": " + m.frames + " frames, busy " +
+      pctTxt(m.own + m.other) + " (TinyBox " + pctTxt(m.own) + ", others " + pctTxt(m.other) + ")";
+    g.append(tip);
+    const hit = document.createElementNS(NS, "rect");     // hit target: the full column
+    for (const [k, v] of [["x", i * bw], ["y", 0], ["width", bw], ["height", H], ["fill", "transparent"]]) hit.setAttribute(k, v);
+    g.append(hit);
+    for (const [val, col] of [[m.own, CH_OWN], [m.other, CH_OTHER]]) {
+      if (!val) continue;
+      const hgt = Math.max(1.5, val / max * (H - 4));
+      const r = document.createElementNS(NS, "rect");
+      for (const [k, v] of [["x", x], ["y", y - hgt], ["width", w], ["height", hgt], ["fill", col]]) r.setAttribute(k, v);
+      g.append(r);
+      y -= hgt + (hgt > 3 ? 1 : 0);
+    }
+    svg.append(g);
+  });
+  return svg;
+}
+
+function channelCard() {
+  const state = h("span", { class: "mono", style: "font-weight: 700" });
+  const body = h("div", { class: "chan" }, h("div", { class: "empty", text: "Loading ..." }));
+  async function update() {
+    let d;
+    try { d = await api("channel"); }
+    catch (e) { body.replaceChildren(h("div", { class: "empty", text: e.message })); return; }
+    const r = d.radio, hub = d.hub, l1 = d.load_1min, l10 = d.load_10min;
+    const [label, value, ok] = radioText({ radio: r });
+    state.textContent = label + " " + value;
+    state.className = "mono " + (ok ? "okt" : "badt");
+    const tile = (lbl, big, sub) => h("div", { class: "tile" }, h("div", { class: "lbl", text: lbl }),
+      h("div", { class: "big", text: big }), h("div", { class: "sub", text: sub }));
+    const tiles = h("div", { class: "tiles" },
+      tile("Busy 1 min", pctTxt(l1.total), "TinyBox " + pctTxt(l1.own) + " · others " + pctTxt(l1.other)),
+      tile("Busy 10 min", pctTxt(l10.total), l10.frames + " frames" + (l10.span_sec < 600 ? " (since " + Math.round(l10.span_sec / 60) + " min)" : "")),
+      tile("Wait in kisshub", hub ? msTxt(hub.queue.wait_10min.control.max_ms) : "-",
+           hub ? "longest ack wait (10 min) · I frames " + msTxt(hub.queue.wait_10min.i.max_ms)
+               : "no status from kisshub"));
+    const legend = h("div", { class: "legend-row" },
+      h("span", {}, h("i", { style: "background:" + CH_OWN }), "TinyBox"),
+      h("span", { title: "stations heard and the other kisshub clients (brocastd)" },
+        h("i", { style: "background:" + CH_OTHER }), "others"),
+      h("span", { class: "grow" }), h("span", { class: "muted", text: "busy per minute · 60 min" }));
+    const parts = [tiles, legend, loadSpark(d.per_minute)];
+
+    if (hub) {
+      const t = hub.tnc, q = hub.queue;
+      const kv = (k, v) => h("div", { class: "kv2" }, h("span", { text: k }), h("strong", { class: "mono", text: v }));
+      parts.push(h("h3", { class: "chan-h", text: "kisshub" }),
+        h("div", { class: "kvs" },
+          kv("TNC", t.name + " · " + t.state + " since " + clock(t.since) + " UTC"),
+          kv("Port", t.port),
+          kv("Initialised / lost", t.inits + " / " + t.port_losses),
+          kv("Frames rx / tx", t.rx_frames + " / " + t.tx_frames),
+          kv("Queued now", q.queued.control + " ctl · " + q.queued.i + " I · " + q.queued.ui + " UI"),
+          kv("Wait avg (10 min)", "ctl " + msTxt(q.wait_10min.control.avg_ms) + " · I " + msTxt(q.wait_10min.i.avg_ms) +
+                                  " · UI " + msTxt(q.wait_10min.ui.avg_ms)),
+          kv("Dropped", String(q.dropped)),
+          kv("Clients", hub.clients.length ? hub.clients.map((c) => (c.calls[0] || "client") + " (" + c.rx + "/" + c.tx + ")").join(", ") : "none")),
+        ...(t.last_error ? [h("div", { class: "warnline", text: t.last_error })] : []),
+        h("details", { class: "initlog" }, h("summary", { text: "TNC dialog (last " + t.init_log.length + " lines)" }),
+          h("table", { class: "raw" }, h("tbody", {}, ...t.init_log.map((x) =>
+            h("tr", { class: x.ok ? "" : "dim" }, h("td", { class: "mono", text: clock(x.t) }),
+              h("td", { class: "mono", text: x.send }), h("td", { class: "mono desc", text: x.answer }),
+              h("td", { text: x.ok ? "ok" : "-" })))))));
+    } else {
+      parts.push(h("div", { class: "muted pad", text: "No status from kisshub" + (d.hub_error ? ": " + d.hub_error : "") +
+        " - TNC state, queue and clients unknown ([kiss] status_port)." }));
+    }
+
+    parts.push(h("h3", { class: "chan-h", text: "Heard" }),
+      d.heard.length ? h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Call", "Frames", "On air", "Last", "Via"].map((x) => h("th", { text: x })))),
+        h("tbody", {}, ...d.heard.slice(0, 12).map((x) => h("tr", {},
+          h("td", { class: "mono", style: "font-weight:700", text: x.call + (x.own ? " (own)" : "") }),
+          h("td", { class: "mono", text: String(x.frames) }), h("td", { class: "mono", text: x.air_sec + " s" }),
+          h("td", { class: "mono", text: clock(x.last) }), h("td", { class: "mono", text: x.via || "direct" })))))
+        : h("div", { class: "muted pad", text: "Nothing heard yet." }));
+    body.replaceChildren(...parts);
+  }
+  const card = h("section", { class: "card", style: "flex-shrink: 0" },
+    h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Channel" }), state), body,
+    h("div", { class: "card-foot" }, h("span", { class: "muted",
+      text: "KISS: only valid frames are counted - no carrier detect, no signal level. Air time is estimated." })));
+  update();
+  return { card, update };
+}
+
 function monitorCard() {
   const body = h("div", { class: "monitor" + (S.mon ? "" : " hide-mon") });
   for (const item of S.feed) body.append(feedLine(item));
@@ -513,8 +648,12 @@ function viewDashboard() {
   const sess = sessionsCard();
   const rub = rubricsCard();
   const mon = monitorCard();
+  const kiss = S.status && S.status.interface === "kiss";
+  const chan = kiss ? channelCard() : null;
   main().className = "two";
-  main().replaceChildren(msgs.card, h("div", { class: "col" }, sess.card, rub.card, mon.card));
+  main().replaceChildren(msgs.card, h("div", { class: "col" }, sess.card,
+                                      ...(chan ? [chan.card] : []), rub.card, mon.card));
+  if (chan) live(chan.update, 10);
   return { updateMessages: () => { msgs.update(); rub.update(); }, updateSessions: sess.update,
            monitorBody: mon.body };
 }
@@ -773,7 +912,11 @@ function renderUser(card, d) {
         dirs),
       h("div", { class: "section" },
         h("h3", {}, "Bars ", h("span", { text: "from the worst direction, minus one bar per T1 timeout in the window" })),
-        steps, calc),
+        steps, calc,
+        ...(d.channel_load ? [h("div", { class: "legend", text: "Channel busy, last 10 min: " +
+          pctTxt(d.channel_load.load_10min.total) + " (TinyBox " + pctTxt(d.channel_load.load_10min.own) +
+          ", others " + pctTxt(d.channel_load.load_10min.other) + ") - not part of the bars; many T1 timeouts on a " +
+          "busy channel point to collisions, on a quiet one to the radio path." })] : [])),
       h("div", { class: "section" },
         h("h3", {}, src + " counters ", h("span", { text: pollNote })),
         raw,

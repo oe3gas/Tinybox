@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from collections import deque
 from typing import Callable
 
 from tinybox.ax25 import kissio
@@ -69,11 +71,19 @@ class Tnc:
         self._term_event = asyncio.Event()
         self._decoder = kissio.Decoder()
         self._stopping = False
+        # for the status query (CR41)
+        self.state_since = time.time()
+        self.inits = 0                               # times the TNC reached KISS
+        self.port_losses = 0                         # port lost while in KISS
+        self.last_error: str | None = None
+        self.init_log: deque[dict] = deque(maxlen=40)  # last wake/init lines with answers
 
     def describe(self) -> str:
         return f"{self.profile.name} on {self.transport.describe()}"
 
     def _set_state(self, state: str) -> None:
+        if state != self.state:
+            self.state_since = time.time()
         self.state = state
         if state == "kiss":
             self.ready.set()
@@ -105,13 +115,19 @@ class Tnc:
                 self._decoder = kissio.Decoder()
                 self._term.clear()
                 self._set_state("kiss")
+                self.inits += 1
+                self.last_error = None
                 self._send_params()
                 log.info("TNC in KISS mode - ready")
                 await reader                             # until the port is lost
             except TncError as exc:
                 log.error("TNC init failed: %s", exc)
+                self.last_error = f"init failed: {exc}"
             except ConnectionError as exc:
                 log.warning("TNC lost: %s", exc)
+                if self.state == "kiss":
+                    self.port_losses += 1
+                self.last_error = f"lost: {exc}"
             except asyncio.CancelledError:
                 reader.cancel()
                 raise
@@ -169,6 +185,7 @@ class Tnc:
         for step in self.profile.wake:
             ok, got = await self._step(step)
             log.debug("wake %-26s -> %s", step.note or _show(step.send), _show(got))
+            self._note("wake", step.note or _show(step.send), got, ok and bool(step.expect))
             if ok and step.expect:
                 log.info("TNC answers (%s)", step.note or _show(step.send))
                 return
@@ -179,14 +196,28 @@ class Tnc:
         for step in self.profile.init:
             ok, got = await self._step(step)
             answer = _show(got)
+            refused = bool(step.expect) and _refused(got, step.send)
+            self._note("init", step.note, got, ok and not refused)
             if not ok:
                 raise TncError(f"'{step.note}': expected {step.expect}, got '{answer}'")
-            if step.expect and _refused(got, step.send):
+            if refused:
                 # ?bad, ?What?, ?EXPERT command ...: the setting was NOT made - going
                 # on would leave the TNC in KISS with a wrong setup
                 raise TncError(f"'{step.note}' refused by the TNC: '{answer}'")
             log.info("init %-16s -> %s", step.note, answer)
         await asyncio.sleep(self.profile.settle_sec)
+
+    def _note(self, phase: str, what: str, answer: bytes, ok: bool) -> None:
+        self.init_log.append({"t": time.time(), "phase": phase, "send": what,
+                              "answer": _show(answer, 80), "ok": ok})
+
+    def status(self) -> dict:
+        return {"name": self.profile.display or self.profile.name, "profile": self.profile.name,
+                "port": self.transport.describe(), "state": self.state,
+                "since": self.state_since, "inits": self.inits,
+                "port_losses": self.port_losses, "last_error": self.last_error,
+                "rx_frames": self.rx_frames, "tx_frames": self.tx_frames,
+                "init_log": list(self.init_log)[-20:]}
 
     def _send_params(self) -> None:
         for cmd, value in self.params.items():

@@ -33,10 +33,11 @@ Differences to AGW:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 
-from .. import logsetup
+from .. import chanmon, logsetup
 from ..app import App
 from ..ax25 import frame as ax
 from ..ax25.frame import AX25Error, Frame
@@ -120,6 +121,11 @@ class KissAdapter(AgwAdapter):
                                   reconnect_sec=k.reconnect_sec, kiss_port=k.channel)
         self.connected = self.kiss.connected
         self._kick = asyncio.Event()
+        # CR41: channel monitor (from the KISS stream) and kisshub's status
+        self.channel = chanmon.ChannelMonitor(self.mycall, k.air_baud, k.txdelay_ms / 1000)
+        self.hub_status: dict | None = None     # last answer of kisshub's /status
+        self.hub_status_at: float | None = None  # time.monotonic() of that answer
+        self.hub_error: str | None = None       # why the last query failed
 
     def describe(self) -> str:
         return f"KISS {self.cfg.kiss.host}:{self.cfg.kiss.port}"
@@ -135,7 +141,8 @@ class KissAdapter(AgwAdapter):
                  self.link_cfg.version, self.cfg.kiss.host, self.cfg.kiss.port)
         tasks = [asyncio.create_task(self._timer_loop()),
                  asyncio.create_task(self._idle_watchdog()),
-                 asyncio.create_task(self._quality_poll())]
+                 asyncio.create_task(self._quality_poll()),
+                 asyncio.create_task(self._hub_poll())]
         try:
             await self.kiss.run()
         finally:
@@ -176,6 +183,7 @@ class KissAdapter(AgwAdapter):
             log.debug("KISS down, frame lost: %s", f)
         logsetup.counters.frames_out += 1
         log.debug(">> %s", f)
+        self.channel.record(self.mycall, len(raw), path=f.path)
         # one transmitter for all: our other links could not be answered meanwhile
         air = self._airtime(len(raw))
         now = self.now()
@@ -214,6 +222,8 @@ class KissAdapter(AgwAdapter):
         except AX25Error as exc:
             log.debug("undecodable frame ignored: %s", exc)
             return
+        self.channel.record(src, len(data),
+                            path=[c + ("*" if h else "") for c, h in zip(path, repeated)])
         target = self.links.get(src) if dest == self.mycall else None
         air = self._airtime(len(data))
         for link in self.links.values():
@@ -325,3 +335,67 @@ class KissAdapter(AgwAdapter):
         if link is not None and conn is not None:
             conn.quality.add(link.counters(self.now()))
         self._q_reply.set()
+
+    # --- kisshub status (CR41, Weg 2) ---------------------------------------------------------
+
+    async def _hub_poll(self) -> None:
+        """Ask kisshub for the state of the TNC every quality_poll_sec (30 s)."""
+        port = self.cfg.kiss.status_port
+        every = self.cfg.direwolf.quality_poll_sec or 30
+        if port <= 0:
+            return
+        while True:
+            try:
+                self.hub_status = await fetch_hub_status(self.cfg.kiss.host, port)
+                self.hub_status_at = time.monotonic()
+                self.hub_error = None
+            except (OSError, asyncio.TimeoutError, ValueError) as exc:
+                if self.hub_error is None:
+                    log.info("kisshub status %s:%d not available (%s)", self.cfg.kiss.host,
+                             port, exc or type(exc).__name__)
+                self.hub_error = str(exc) or type(exc).__name__
+                self.hub_status = None
+            self.app.bus.publish("link.quality")          # web GUI: refresh
+            await asyncio.sleep(every)
+
+    def radio_state(self) -> dict:
+        """What the header and STATUS show: link to kisshub plus the TNC behind it."""
+        st = self.hub_status or {}
+        tnc = st.get("tnc") or {}
+        hub_ok = self.cfg.kiss.status_port <= 0 or self.hub_status is not None
+        tnc_state = tnc.get("state")
+        ready = self.connected.is_set() and (tnc_state in (None, "kiss"))
+        return {"interface": "kiss", "connected": self.connected.is_set(),
+                "hub": "off" if self.cfg.kiss.status_port <= 0
+                       else ("ok" if hub_ok else "unreachable"),
+                "tnc": tnc.get("name") or None, "tnc_state": tnc_state,
+                "tnc_error": tnc.get("last_error"), "ready": ready}
+
+    def channel_snapshot(self) -> dict:
+        out = self.channel.snapshot()
+        out["hub"] = self.hub_status
+        out["hub_age"] = (None if self.hub_status_at is None
+                          else round(time.monotonic() - self.hub_status_at))
+        out["hub_error"] = self.hub_error
+        out["radio"] = self.radio_state()
+        return out
+
+
+async def fetch_hub_status(host: str, port: int, timeout: float = 3.0) -> dict:
+    """GET /status from kisshub (tiny HTTP/1.0, loopback only)."""
+    async def _get() -> bytes:
+        reader, writer = await asyncio.open_connection(host, port)
+        try:
+            writer.write(f"GET /status HTTP/1.0\r\nHost: {host}:{port}\r\n\r\n".encode())
+            await writer.drain()
+            return await reader.read(256 * 1024)
+        finally:
+            writer.close()
+    raw = await asyncio.wait_for(_get(), timeout)
+    head, _, body = raw.partition(b"\r\n\r\n")
+    if not head.startswith(b"HTTP/1.") or b" 200 " not in head.split(b"\r\n", 1)[0]:
+        raise ValueError("unexpected answer from kisshub")
+    data = json.loads(body.decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("unexpected answer from kisshub")
+    return data

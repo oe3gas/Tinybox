@@ -70,10 +70,11 @@ class Profile:
     exit_lines: tuple[Step, ...] = ()  # sent after leaving KISS
     settle_sec: float = 1.0            # after the last init line, before KISS frames
     notes: str = ""
+    display: str = ""                  # name for status displays, e.g. "PK-232"
 
 
 PK232 = Profile(
-    name="pk232",
+    name="pk232", display="PK-232",
     serial_baud=9600,
     wake=(
         Step(b"*", (CMD_PROMPT, b"AEA", b"PK-232", b"Copyright"), 2.0, "autobaud '*'"),
@@ -111,7 +112,7 @@ PK232 = Profile(
 )
 
 TM_D710 = Profile(
-    name="tm-d710",
+    name="tm-d710", display="TM-D710",
     serial_baud=9600,
     wake=(Step(CR, (CMD_PROMPT,), 2.0, "CR"),
           Step(KISS_EXIT + CR, (CMD_PROMPT,), 3.0, "leave KISS")),
@@ -120,13 +121,13 @@ TM_D710 = Profile(
     notes="Kenwood TM-D710: TNC key -> packet mode first",
 )
 
-TH_D74 = Profile(name="th-d74", serial_baud=9600, exit_kiss=False,
+TH_D74 = Profile(name="th-d74", display="TH-D74", serial_baud=9600, exit_kiss=False,
                  notes="Kenwood TH-D74: KISS on in the menu")
-TH_D75 = Profile(name="th-d75", serial_baud=9600, exit_kiss=False,
+TH_D75 = Profile(name="th-d75", display="TH-D75", serial_baud=9600, exit_kiss=False,
                  notes="Kenwood TH-D75: KISS on in the menu")
-TNC2_KISS = Profile(name="tnc2-kiss", serial_baud=9600, exit_kiss=False,
+TNC2_KISS = Profile(name="tnc2-kiss", display="TNC2", serial_baud=9600, exit_kiss=False,
                     notes="TNC2 with pure KISS EPROM")
-GENERIC = Profile(name="generic", exit_kiss=False, notes="already in KISS")
+GENERIC = Profile(name="generic", display="KISS TNC", exit_kiss=False, notes="already in KISS")
 
 PROFILES = {p.name: p for p in (PK232, TM_D710, TH_D74, TH_D75, TNC2_KISS, GENERIC)}
 
