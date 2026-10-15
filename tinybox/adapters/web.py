@@ -344,6 +344,10 @@ class WebServer:
             return self._json(writer, 200, {"csrf": csrf})
         if method == "GET" and parts == ["feed"]:
             return await self._feed(writer)
+        if method == "GET" and parts == ["messages"] and query.get("q"):     # CR49 search
+            sysop = self.app.cfg.station.sysop_call
+            found = self.app.service.search(sysop, True, query["q"][0][:100])
+            return self._json(writer, 200, [self._msg(m) for m in found])
         if method == "GET" and parts in (["connlog.csv"], ["connlog.adi"]):   # CR44 export
             return self._connlog_file(writer, parts[0], query)
         result = self._api(method, parts, data)

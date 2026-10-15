@@ -117,6 +117,21 @@ def cmd_qso(s: Session, arg: str) -> None:
     s.out(texts.QSO_HEADER, *lines, *([texts.QSO_MORE.format(next=nxt)] if more else []))
 
 
+def cmd_find(s: Session, arg: str) -> None:
+    """CR49: F text - messages (personal ones of your own, bulletins) that contain text
+    in the subject, the text, a call or the @address."""
+    text = arg.strip()
+    if len(text) < s.service.SEARCH_MIN:
+        s.out(texts.USAGE_FIND)
+        return
+    msgs = s.service.search(s.call, s.sysop, text)
+    if not msgs:
+        s.out(texts.FIND_NONE.format(text=text))
+        return
+    s.out(texts.FIND_COUNT.format(n=len(msgs), text=text))
+    _list(s, msgs)
+
+
 def cmd_kill(s: Session, arg: str) -> None:
     ids = _numbers(arg)
     if ids is None:
@@ -298,6 +313,8 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "CHAT": chatcmd.cmd_chat,
     "DICT": cmd_dict,
     "E": cmd_edit,
+    "F": cmd_find,
+    "FIND": cmd_find,
     "H": cmd_help,
     "?": cmd_help,
     "HELP": cmd_help,

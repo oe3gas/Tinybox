@@ -233,6 +233,8 @@ class MailStore:
                "subject, seen, body IS NOT NULL AS has_body"
         if name == "outbox":
             return [dict(r) for r in self.db.execute("SELECT * FROM outbox ORDER BY oid")]
+        if name.startswith("s:"):
+            return self.search(name[2:])
         rows = self.db.execute(f"SELECT {cols} FROM messages WHERE {hidden} ORDER BY id DESC")
         out = []
         for r in rows:
@@ -244,6 +246,34 @@ class MailStore:
                 out.append(r)
             elif name.startswith("b:") and r["type"] == "B" and r["to_call"] == name[2:]:
                 out.append(r)
+        return out
+
+    def search(self, text: str) -> list[dict]:
+        """CR49: personal mail and bulletins here whose subject, text, sender,
+        addressee or @address contain text (case does not matter), newest
+        first. Texts not fetched yet (CR40) can only be found by their header;
+        hit = "text" or "header" says where it was found."""
+        q = text.strip().casefold()
+        if len(q) < 2:
+            return []
+        hidden = "id NOT IN (SELECT id FROM todo WHERE kind='kill')"
+        cols = "id, type, status, fwd, size, from_call, to_call, at_addr, bid, created, " \
+               "subject, seen, body IS NOT NULL AS has_body, body"
+        out = []
+        for r in self.db.execute(f"SELECT {cols} FROM messages WHERE {hidden} ORDER BY id DESC"):
+            r = dict(r)
+            body = r.pop("body") or ""
+            head = " ".join((r["subject"], r["from_call"], r["to_call"], r["at_addr"])).casefold()
+            if q in head:
+                r["hit"] = "header"
+            elif q in body.casefold():
+                r["hit"] = "text"
+                i = body.casefold().index(q)
+                snip = body[max(0, i - 30):i + len(q) + 50].replace("\n", " ")
+                r["snippet"] = ("…" if i > 30 else "") + snip
+            else:
+                continue
+            out.append(r)
         return out
 
     def summary(self) -> dict:

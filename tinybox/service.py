@@ -387,6 +387,19 @@ class MessageService:
             msgs = [m for m in msgs if self._is_addressee(m, call)]
         return msgs
 
+    SEARCH_MIN = 2
+
+    def search(self, call: str, sysop: bool, text: str) -> list[Message]:
+        """CR49: the messages this station may see whose subject, text, sender,
+        addressee or @address contain text (case does not matter)."""
+        q = text.strip().casefold()
+        if len(q) < self.SEARCH_MIN:
+            return []
+        return [m for m in self.list_for(call, sysop)
+                if q in m.subject.casefold() or q in m.body.casefold()
+                or q in m.from_call.casefold() or q in m.to_call.casefold()
+                or q in (m.at_addr or "").casefold()]
+
     def unread_for(self, call: str) -> list[Message]:
         return [m for m in self.store.list_messages()
                 if m.type == "P" and m.status == "N" and self._is_addressee(m, call)]

@@ -10,6 +10,11 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Suche (CR49): Suchfeld ueber der Nachrichtenliste der Mailbox. Ab 2
+  Zeichen zeigt der Client alle Mails und Bulletins hier, deren Betreff,
+  Text, Absender, Empfaenger oder @-Adresse den Text enthalten (Gross-/
+  Kleinschreibung egal), mit Fundstelle. Texte, die noch nicht geholt sind,
+  werden nur ueber den Kopf gefunden. In der TinyBox: Befehl F text (FIND).
 - Post sofort aussenden (CR47): eine Mail, die in die Outbox kommt, geht
   gleich hinaus - ueber die Verbindung zur eigenen TinyBox, sonst baut der
   Client sie dafuer kurz selbst auf (Sync "send", holt nichts ab). Laeuft

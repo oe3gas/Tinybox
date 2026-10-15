@@ -1388,6 +1388,7 @@ function setLevel(l) {
 }
 
 function openFolder(f) {
+  if (!f.startsWith("s:") && $("mv-search").value) $("mv-search").value = "";
   if (folder !== f) { folder = f; selId = null; cur = null; draft = null; items = []; itemsFor = ""; }
   setView("mail");
   setLevel("list");
@@ -1396,6 +1397,7 @@ function openFolder(f) {
 }
 
 function folderName(f) {
+  if (f.startsWith("s:")) return `Search "${f.slice(2)}"`;       // CR49
   if (f === "inbox") return "Inbox";
   if (f === "outbox") return "Outbox";
   if (f === "sent") return "Sent";
@@ -1537,7 +1539,9 @@ function renderItems() {
   if (folder === "rubrics") { renderRubrics(ul); empty.classList.add("hidden"); return; }
   for (const m of items) ul.append(folder === "outbox" ? outItem(m) : msgItem(m));
   empty.classList.toggle("hidden", items.length > 0);
-  empty.textContent = folder === "outbox" ? "Nothing waiting to be sent."
+  empty.textContent = folder.startsWith("s:")
+    ? "Nothing found here. Texts not fetched yet are searched by their header only."
+    : folder === "outbox" ? "Nothing waiting to be sent."
     : folder.startsWith("b:") ? "No bulletins here yet - they come with the next sync."
     : "No messages. Sync to fetch new mail.";
 }
@@ -1552,6 +1556,7 @@ function msgItem(m) {
   l1.append(c, el("span", "d", dateStr(m.created)));
   const l2 = el("div", "l2", m.subject);
   txt.append(l1, l2);
+  if (m.snippet) txt.append(el("div", "snip", m.snippet));          // CR49: where it was found
   const tags = el("div", "l1");
   const left = el("span");
   left.append(el("span", "muted small", "#" + m.id + " "));
@@ -1561,6 +1566,9 @@ function msgItem(m) {
     left.append(t);
   }
   if (m.type === "P" && m.status === "Y" && sent) left.append(el("span", "tag", "read"));
+  if (folder.startsWith("s:")) {
+    left.append(el("span", "tag", m.type === "B" ? "bulletin " + m.to_call : "personal"));
+  }
   tags.append(left);
   txt.append(tags);
   li.append(el("span", "dotu"), avatar(who, symOf(who), true), txt);
@@ -1850,6 +1858,18 @@ function initMail() {
   document.querySelectorAll(".mv-tochat").forEach((b) => { b.onclick = () => setView("chat"); });
   $("mv-back-folders").onclick = () => setLevel("folders");
   $("mv-back-list").onclick = () => { draft = null; setLevel("list"); showReader(); };
+  // CR49: search in the mail and bulletins here (as you type, from 2 characters)
+  let searchTimer = 0, beforeSearch = "inbox";
+  $("mv-search").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    const q = e.target.value.trim();
+    searchTimer = setTimeout(() => {
+      if (q.length >= 2) {
+        if (!folder.startsWith("s:")) beforeSearch = folder;
+        openFolder("s:" + q);
+      } else if (folder.startsWith("s:")) openFolder(beforeSearch);
+    }, 250);
+  });
   $("mv-new").onclick = () => openCompose({ type: folder.startsWith("b:") ? "B" : "P",
                                             to_call: folder.startsWith("b:") ? folder.slice(2) : "" });
   $("mb-sync").onclick = () => { api("mail/sync", { scope: "mail" }); openFolder("inbox"); };

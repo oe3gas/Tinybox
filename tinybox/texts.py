@@ -10,7 +10,7 @@ HELLO = "Welcome to TinyBox {mailbox}, hello {call}."
 NEW_MSGS = "You have {n} new message(s)."
 NO_NEW_MSGS = "No new messages."
 
-PROMPT = "TinyBox (A,B,C,H,J,K,L,R,S,V,?) > "
+PROMPT = "TinyBox (A,B,C,F,H,J,K,L,R,S,V,?) > "
 PROMPT_SYSOP = "TinyBox SYSOP (A,B,C,E,H,J,K,L,R,S,V,?) > "
 
 HELP = [
@@ -20,6 +20,7 @@ HELP = [
     "  C          Chat: list the chat boards",
     "  C board    Chat: join a board (name or number)",
     "  DICT       Download the brocast dictionary (text, for the listener import)",
+    "  F text     Find messages with text in subject, text or calls (FIND text)",
     "  H or ?     This help",
     "  J          Recently connected stations",
     "  K n        Kill message n (K n n ... for several)",
@@ -161,6 +162,9 @@ STAT_USAGE = "Usage: STAT or STAT ALL"
 JLOG_HEADER = "Call       Last seen (UTC)   Count"
 JLOG_ROW = "{call:<10} {last:<17} {count:>5}"
 JLOG_EMPTY = "No stations logged yet."
+USAGE_FIND = "Usage: F text  (at least 2 characters)"
+FIND_NONE = "Nothing found for '{text}'."
+FIND_COUNT = "{n} message(s) with '{text}':"
 QSO_HEADER = "Connect (UTC)     Time   Call       Via     In/out bytes"
 QSO_ROW = "{start:<16}  {dur:>6} {call:<10} {via:<7} {rx}/{tx}{ended}"
 QSO_EMPTY = "No connects logged."

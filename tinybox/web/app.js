@@ -283,8 +283,25 @@ function filteredMessages() {
     if (S.filter === "N" && m.status !== "N") return false;
     if (S.rubric && (m.type !== "B" || m.to !== S.rubric)) return false;
     if (!q) return true;
-    return m.to.includes(q) || m.from.includes(q) || m.subject.toUpperCase().includes(q);
+    return m.to.includes(q) || m.from.includes(q) || m.subject.toUpperCase().includes(q)
+      || (S.textHits && S.textHitsFor === S.search.trim() && S.textHits.has(m.id));   // CR49
   });
+}
+
+// CR49: the text of the messages is searched in TinyBox (the list has no texts)
+let textSearchTimer = 0;
+function searchTexts(update) {
+  clearTimeout(textSearchTimer);
+  const q = S.search.trim();
+  if (q.length < 2) { S.textHits = null; S.textHitsFor = ""; return; }
+  textSearchTimer = setTimeout(() => {
+    api("messages?q=" + encodeURIComponent(q)).then((rows) => {
+      if (S.search.trim() !== q) return;
+      S.textHits = new Set(rows.map((m) => m.id));
+      S.textHitsFor = q;
+      update();
+    }).catch(() => {});
+  }, 300);
 }
 
 function messagesCard(opts) {
@@ -299,8 +316,8 @@ function messagesCard(opts) {
       onclick: () => { S.filter = key; update(); },
     }, label))));
   const search = h("input", {
-    type: "search", placeholder: "Search call or subject", value: S.search,
-    oninput: (e) => { S.search = e.target.value; update(); },
+    type: "search", placeholder: "Search call, subject or text", value: S.search,
+    oninput: (e) => { S.search = e.target.value; update(); searchTexts(update); },
   });
   const chip = h("button", { class: "btn sm", type: "button", title: "Show all again",
                              onclick: () => { S.rubric = ""; update(); renderRubricNav(); } });

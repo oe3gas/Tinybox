@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR48 umgesetzt)
+Stand: 15.10.2026 (CR49 umgesetzt)
 
 ## Übersicht
 
@@ -55,6 +55,7 @@ Stand: 15.10.2026 (CR48 umgesetzt)
 | 46 | Client über kisshub (`link = kiss`) mit eigenem AX.25 – vollwertiges PR-Programm ohne Direwolf und ohne TinyBox; eingehende Connects | ✅ siehe unten |
 | 47 | Mail in der Outbox sofort aussenden, nicht erst beim nächsten Sync | ✅ siehe unten |
 | 48 | TinyBox-Bake: Text und Intervall in `[beacon]`, neue Post als „Mail for:“-Liste in der Bake | ✅ siehe unten |
+| 49 | Suche in Mails und Bulletins: Client (Suchfeld), TinyBox (Befehl `F`), Sysop-Weboberfläche | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1313,4 +1314,29 @@ Bakenaussendung hinein.
   `enabled = no`, zum Testen). Die Werte stehen in der Sysop-Weboberfläche unter Settings.
 - Nur TinyBox, daher keine neue Client-Version und keine TBNEWS.
 - Tests: `tests/test_beacon.py`.
+
+## CR49 – Suche in Mails und Bulletins (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+Suchfunktion im Client und in der TinyBox, um in den Mails und Bulletins zu suchen:
+String im Suchfeld eingeben → der Client zeigt die Mails bzw. Bulletins, die den String
+enthalten.
+
+### Umsetzung
+
+- **Client:** Suchfeld über der Nachrichtenliste der Mailbox; ab 2 Zeichen sucht er beim
+  Tippen (250 ms Pause) in allen Mails und Bulletins hier – Betreff, Text, Absender,
+  Empfänger (bei Bulletins die Rubrik), @-Adresse; Groß-/Kleinschreibung egal. Treffer
+  als eigene Liste „Search "…"“, neueste zuerst, mit Kennzeichen persönlich / Bulletin
+  und Rubrik, bei Treffern im Text mit Ausschnitt. Leeres Feld → zurück zum Ordner davor.
+  Gesucht wird nur, was hier liegt: Texte, die noch nicht geholt sind (CR40), nur über den
+  Kopf; nicht abonnierte Rubriken gar nicht. `GET /api/mail?folder=s:<text>`,
+  `MailStore.search()`.
+- **TinyBox:** Befehl **`F text`** (auch `FIND text`): Liste wie `L`, nur Nachrichten, die
+  der User sehen darf (eigene persönliche Post, alle Bulletins; Sysop alles). In der
+  Hilfe und im Prompt. `MessageService.search()`.
+- **Sysop-Weboberfläche:** Das Suchfeld bei Messages findet jetzt auch im Text
+  (`GET /api/messages?q=…`), bisher nur Rufzeichen und Betreff.
+- Tests: `tests/test_search.py`.
 

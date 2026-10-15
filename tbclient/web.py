@@ -156,7 +156,7 @@ class WebServer:
                 return self._connlog_file(path)
             if method == "GET" and path == "/api/mail":
                 folder = (query.get("folder") or ["inbox"])[0]
-                if folder not in ("inbox", "sent", "outbox") and not folder.startswith("b:"):
+                if folder not in ("inbox", "sent", "outbox") and not folder.startswith(("b:", "s:")):
                     return 400, {"error": "folder"}, None
                 return 200, {"folder": folder, "items": core.mailbox.folder(folder)}, None
             if method != "POST":
