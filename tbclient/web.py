@@ -10,8 +10,10 @@ What stays protected:
 
 API:
   GET  /api/state?since=<version>   snapshot; waits up to 25 s for a change
-  POST /api/connect {"target": "CALL"} (optional, CR42) | /api/disconnect | /api/leave
-  POST /api/term   {"text": "..."}   a raw line from the terminal view (CR43)
+  GET  /api/state?since=<version>&ch=<n>   ch = channel shown (its terminal lines; 0 = monitor)
+  POST /api/connect {"target": "CALL", "ch": n} (both optional, CR42/CR45)
+  POST /api/disconnect {"ch": n} | /api/leave | /api/channel/close {"ch": n}
+  POST /api/term   {"text": "...", "ch": n}   a raw line from the terminal view (CR43)
   POST /api/join   {"board": n}
   POST /api/say    {"text": "..."}
   POST /api/react  {"seq": n, "emoji": ":+1"}
@@ -145,8 +147,9 @@ class WebServer:
         if path.startswith("/api/"):
             if method == "GET" and path == "/api/state":
                 since = int((query.get("since") or ["-1"])[0] or -1)
+                ch = (query.get("ch") or [""])[0]            # CR45: the channel shown
                 await core.wait_change(since, POLL_SEC)
-                return 200, core.snapshot(), None
+                return 200, core.snapshot(int(ch) if ch.isdigit() else None), None
             if method == "GET" and path == "/api/connlog":          # CR44
                 return 200, core.logbook.rows(200), None
             if method == "GET" and path in ("/api/connlog.csv", "/api/connlog.adi"):
@@ -169,11 +172,16 @@ class WebServer:
             except ValueError:
                 return 400, {"error": "bad json"}, None
             ok = True
-            if path == "/api/connect":           # {"target": "OE3XYZ-8"} (CR42), none = last
-                t = data.get("target")
-                ok = await core.connect(None if t is None else str(t))
-            elif path == "/api/disconnect":
-                core.disconnect()
+            if path == "/api/connect":           # {"target": "OE3XBS-8", "ch": 2} (CR42/45)
+                t, ch = data.get("target"), data.get("ch")
+                ok = await core.connect(None if t is None else str(t),
+                                        ch if isinstance(ch, int) else None)
+            elif path == "/api/disconnect":      # {"ch": 2}; none = the chat channel
+                ch = data.get("ch")
+                core.disconnect(ch if isinstance(ch, int) else None)
+            elif path == "/api/channel/close":   # CR45: an offline channel goes away
+                ch = data.get("ch")
+                ok = core.close_channel(ch if isinstance(ch, int) else 0)
             elif path == "/api/leave":
                 core.leave()
             elif path == "/api/join":
@@ -181,7 +189,8 @@ class WebServer:
             elif path == "/api/freq":              # CR44: frequency of this session (MHz)
                 ok = core.set_freq(str(data.get("freq", "")))
             elif path == "/api/term":              # CR43: a raw line from the terminal
-                ok = core.send_raw(str(data.get("text", "")))
+                ch = data.get("ch")
+                ok = core.send_raw(str(data.get("text", "")), ch if isinstance(ch, int) else None)
             elif path == "/api/say":
                 ok = core.say(str(data.get("text", "")))
             elif path == "/api/react":

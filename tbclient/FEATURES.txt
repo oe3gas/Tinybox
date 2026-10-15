@@ -10,6 +10,14 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Multi-Connect (CR45): bis zu 5 Verbindungen gleichzeitig ueber Funk, jede
+  in einem eigenen Kanal. Die Kanalleiste unter der Titelleiste schaltet um
+  (Klick oder Alt+1 ... Alt+5); "+ new" oeffnet einen freien Kanal, das
+  Kreuz schliesst einen getrennten. Kanal 0 = Monitor (alles Gehoerte,
+  dazu die Frames, die je Kanal noch bei Direwolf warten). Ein Chip blinkt,
+  wenn im Hintergrund etwas hereinkam, rot, wenn dort eine Verbindung
+  abbrach. Nur eine TinyBox im Chat-Modus, jede weitere Station als
+  Terminal. Telnet-Testport: ein Kanal.
 - Verbindungslogbuch (CR44): jede Verbindung mit Gegenstation, Weg, Connect,
   Disconnect, Dauer und Bytes rein/raus (Nutzdaten), auch Fehlversuche
   ("no answer"). Unter Settings > Connection log, Export als CSV (alles)

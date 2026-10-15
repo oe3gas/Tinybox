@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR44 umgesetzt, CR45 in Planung)
+Stand: 15.10.2026 (CR45 umgesetzt)
 
 ## Übersicht
 
@@ -51,7 +51,7 @@ Stand: 15.10.2026 (CR44 umgesetzt, CR45 in Planung)
 | 42 | Freier Connect: „Connect to:“ in der Titelleiste statt fest verdrahtetem OE3GAS-1, Verlauf der letzten Ziele, Titelleiste einzeilig mit Zustands-Icons (connecting mit Zähler, connected, disconnecting, no answer / disconnected by) | ✅ siehe unten |
 | 43 | Terminalmodus: Gegenstelle ist keine TinyBox → Terminal statt Chat, kein `//CLIENT`; bei einer TinyBox per Menü | ✅ siehe unten |
 | 44 | Verbindungslogbuch in TinyBox und Client: Gegenstation, Connect, Disconnect, Dauer, Bytes; unbegrenzt, Export CSV und ADIF; jeder User sieht seine Connects (`QSO`) | ✅ siehe unten |
-| 45 | Multi-Connect im Client: bis 5 Verbindungen, umschaltbar (Kanäle), Monitor-Kanal | offen – Entscheidungen siehe unten |
+| 45 | Multi-Connect im Client: bis 5 Verbindungen, umschaltbar (Kanäle), Monitor-Kanal | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1160,7 +1160,7 @@ SSID (Logbuchprogramme erwarten ein Rufzeichen); das volle Rufzeichen, Weg, Daue
 stehen im `COMMENT`. Gemeinsamer Code: `tinybox/connlog.py`. Tests: `tests/test_connlog.py`,
 `FreeConnectTests` in `tests/test_tbclient.py`.
 
-## CR45 – Multi-Connect im Client (offen)
+## CR45 – Multi-Connect im Client (✅ 15.10.2026)
 
 ### Erfassung (OE3GAS, 15.10.2026)
 
@@ -1184,6 +1184,37 @@ nur abwechselnd).
 - Zu 4: **Chip blinkt**, wenn im Hintergrund neuer Input kam; **rot blinkend**, wenn im
   Hintergrund ein Disconnect erfolgte.
 - Nur **eine** TinyBox im Chat-Modus gleichzeitig; eine weitere TinyBox öffnet als Terminal.
-- Offen: was mit dem Telnet-Link geschieht (er erreicht nur den Testport der eigenen
-  TinyBox).
+- Telnet-Link: erreicht nur den Testport der eigenen TinyBox (nur auf `127.0.0.1`, also nur
+  am TinyBox-PC – praktisch der Zugang des Sysops). Er bleibt **Einkanal-Betrieb**;
+  Multi-Connect gibt es nur über Funk (`link = agw`).
+
+### Umsetzung
+
+- **Links:** `AgwPort` hält die eine TCP-Verbindung zu Direwolf (Registrierung, Monitor `k`)
+  und verteilt die AGW-Frames nach Gegenstation an die `AgwLink`s – einer je AX.25-
+  Verbindung. Ein neuer Connect beginnt mit frischem Zeilenpuffer und Zählern.
+- **Kanäle** (`tbclient/channels.py`): Kanal 1–5, je ein Link mit eigenem Zustand
+  (connecting … disconnecting), Ende, Terminalzeilen (500), Logbuch-Eintrag und einem
+  Aktivitätszähler für das Blinken. Kanal 1 gibt es immer; weitere entstehen beim Connect
+  und verschwinden mit dem Kreuz (nur getrennt). Die gleiche Station nur in einem Kanal.
+- **Chat-Kanal:** Meldet sich eine TinyBox („Welcome to TinyBox“, oder nach 6 s eine
+  bekannte), wird ihr Kanal der Chat-Kanal – sofern nicht schon ein anderer Kanal mit einer
+  TinyBox im Client-Modus läuft; dann bleibt er Terminal. Boards, Mailbox, Bilder und Sync
+  arbeiten immer mit dem Chat-Kanal. Der Mail-Abgleich ohne Verbindung öffnet einen eigenen
+  Kanal zur Heim-TinyBox, der danach wieder verschwindet.
+- **Monitor (Kanal 0):** jeder gehörte Frame als Zeile im Stil der klassischen Monitore
+  (`fm OE3XYZ to APRS via OE1XAR <UI>: …`, `<I 3,2>`, `<SABM+>`, `<RR 4>`); in der
+  Kopfzeile, wie viele Frames je Kanal noch bei Direwolf warten (AGW `Y`, alle 3 s).
+- **Oberfläche:** Kanalleiste unter der Titelleiste (Chips mit Nummer, Zustandspunkt,
+  Rufzeichen, „chat“ beim Chat-Kanal), „+ new“, Kreuz zum Schließen, Alt+0 … Alt+5. Die
+  Titelleiste (CR42) zeigt immer den aktiven Kanal. Chat-Kanal → Chat/Mailbox, jeder
+  andere Kanal → Terminal. Der Browser holt mit `/api/state?ch=n` nur die Zeilen des
+  gezeigten Kanals; beim Umschalten wird die wartende Abfrage abgebrochen.
+- **Blinken:** blau blinkend bei neuem Input im Hintergrund (Terminalzeile oder Chat),
+  rot blinkend, wenn dort eine Verbindung von der Gegenseite getrennt wurde oder nicht
+  zustande kam; selbst getrennte blinken nicht. Aufrufen des Kanals beendet das Blinken.
+- API: `POST /api/connect {"target", "ch"}`, `/api/disconnect {"ch"}`,
+  `/api/channel/close {"ch"}`, `/api/term {"text", "ch"}`.
+- Tests: `FreeConnectTests` (TinyBox-Chat und BBS-Terminal parallel, zweite Station gleich
+  nicht doppelt, nur eine TinyBox im Client-Modus, Kanäle schließen, Monitorzeilen).
 

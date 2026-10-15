@@ -1,0 +1,194 @@
+"""Channels of the client (CR45): up to 5 connections at once, one window each,
+shown one at a time. A channel owns one link and its life: state, how it ended,
+the terminal lines, the logbook row. At most one channel talks to a TinyBox in
+client mode - the chat channel (ClientCore.chan); every other channel is a
+terminal (CR43). A channel 0 does not exist: the monitor lives in the core."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from collections import deque
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .core import ClientCore
+
+log = logging.getLogger(__name__)
+
+MAX_CHANNELS = 5
+TERM_MAX = 500            # CR43: lines kept per channel for the terminal view
+TERM_SNAPSHOT = 300       # ... and sent to the GUI
+DISC_TIMEOUT_SEC = 90     # CR42: "disconnecting" without an answer: offline anyway
+
+
+def utc_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+class Channel:
+    def __init__(self, core: "ClientCore", n: int, link) -> None:
+        self.core = core
+        self.n = n                  # 1..5; 0 = the placeholder "no chat channel"
+        self.link = link
+        link.on_state = self._on_state
+        link.on_line = self._on_line
+        self.target = ""
+        self.state = "offline"
+        self.state_at = time.time()
+        self.reason = ""
+        self.ended: dict | None = None            # how the last connection ended (CR42)
+        # "tinybox" (client protocol, the chat channel) | "terminal" | "" = not known yet
+        self.mode = ""
+        self.view = "term"                        # "chat" once it was the chat channel
+        self.term: deque[tuple[int, str, str]] = deque(maxlen=TERM_MAX)  # (n, rx|tx|sys, text)
+        self.term_n = 0
+        self.act_n = 0                            # activity: the GUI blinks the chip on change
+        self.auto = False                         # opened by the mail sync: gone when offline
+        self.outstanding: int | None = None       # frames waiting in Direwolf (AGW 'Y')
+        self._user_disc = False
+        self._disc_timer: asyncio.TimerHandle | None = None
+        self._detect_task: asyncio.Task | None = None
+        self._t0 = 0.0
+        self._start = ""
+
+    # --- actions -----------------------------------------------------------------
+
+    async def connect(self, target: str) -> None:
+        self.target = target
+        self.link.target = target
+        self._user_disc = False
+        await self.link.connect()
+
+    def disconnect(self) -> None:
+        if self.state in ("offline", "disconnecting"):
+            return
+        self._user_disc = True
+        self.link.disconnect()
+
+    def send_raw(self, text: str) -> bool:
+        """A line typed in the terminal: goes out as it is (an empty line too)."""
+        if self.state != "online":
+            return False
+        text = text.replace("\r", " ").replace("\n", " ")[:250]
+        self.term_line("tx", text)
+        if self.core.chan is self:
+            self.core._send(text)             # an image upload may hold lines back
+        else:
+            self.core.console.append(f"[{self.n}]> {text}")
+            self.link.send_line(text)
+        self.core._touch()
+        return True
+
+    def term_line(self, kind: str, text: str) -> None:
+        self.term_n += 1
+        self.term.append((self.term_n, kind, text))
+        if kind == "rx":
+            self.act_n += 1
+
+    # --- link callbacks ---------------------------------------------------------------
+
+    def _on_state(self, state: str, reason: str) -> None:
+        prev = self.state
+        self.state, self.reason = state, reason
+        self.state_at = time.time()
+        if self._disc_timer is not None:
+            self._disc_timer.cancel()
+            self._disc_timer = None
+        if state == "connecting":
+            self.ended = None
+            self.mode = ""
+            self._mark()
+        if state == "online" and prev != "online":
+            self._mark()                           # the connection counts from here
+            if self.link.kind == "telnet":         # the test port is always the own TinyBox
+                self.core.attach(self)
+            else:
+                self._detect_task = asyncio.ensure_future(self._detect())
+        if state == "disconnecting":
+            self._disc_timer = asyncio.get_event_loop().call_later(
+                DISC_TIMEOUT_SEC, self.link.drop, "no answer to the disconnect")
+        if state == "offline":
+            # CR42: how it ended - by us, never came up, or by the other side
+            kind = "user" if self._user_disc else "failed" if prev == "connecting" else "remote"
+            self.ended = {"kind": kind, "at": int(time.time()), "call": self.target}
+            self._user_disc = False
+            self.outstanding = None
+            if self._detect_task:
+                self._detect_task.cancel()
+            if prev != "offline":
+                self._log(prev, kind)
+        self.term_line("sys", f"*** {state} {self.target}" + (f" ({reason})" if reason else ""))
+        if self.core.chan is self:
+            self.core._chat_state(state, prev, reason)
+        else:
+            self.core.console.append(f"[{self.n}] *** {state} {self.target}"
+                                     + (f" ({reason})" if reason else ""))
+        if state == "offline" and self.auto:     # the sync's own connection: away again
+            self.core.drop_channel(self)
+        self.core._touch()
+
+    def _on_line(self, line: str) -> None:
+        if self.core.chan is self and self.mode == "tinybox":
+            self.core._on_line(line)               # the chat engine
+            return
+        line = line.rstrip()
+        # CR43: not (yet) a TinyBox in client mode: every line goes to the terminal
+        self.term_line("rx", line)
+        if line:
+            self.core.console.append(f"[{self.n}] {line}")
+        if self.mode == "" and line.startswith("Welcome to TinyBox"):
+            if self.core.can_attach(self):
+                self.core.attach(self, line)
+                return
+            self.mode = "terminal"              # only one TinyBox in client mode (CR45)
+        self.core._touch()
+
+    async def _detect(self) -> None:
+        """No "Welcome to TinyBox" seen: a TinyBox we know gets the handshake
+        anyway (the line may have been missed); any other station is not
+        bothered with //CLIENT - the channel is a terminal (CR43)."""
+        from . import core as core_mod          # tests change the delay there
+        await asyncio.sleep(core_mod.HANDSHAKE_FALLBACK_SEC)
+        if self.state != "online" or self.mode:
+            return
+        if self.core.known_tinybox(self.target) and self.core.can_attach(self):
+            self.core.attach(self, handshake=True)
+        else:
+            self.to_terminal()
+
+    def to_terminal(self) -> None:
+        self.mode = "terminal"
+        self.core.console.append(f"[{self.n}] *** {self.target}: terminal")
+        if self.core.chan is self:
+            self.core.detach()
+        self.core._touch()
+
+    # --- logbook (CR44) ------------------------------------------------------------------
+
+    def _mark(self) -> None:
+        self._t0 = time.monotonic()
+        self._start = utc_iso()
+
+    def _log(self, prev: str, kind: str) -> None:
+        """One row per connection; one that never came up as "failed" (duration 0)."""
+        failed = prev == "connecting"
+        try:
+            self.core.logbook.add({
+                "call": self.target, "via": self.link.kind, "start": self._start or utc_iso(),
+                "end": utc_iso(), "secs": 0 if failed else int(time.monotonic() - self._t0),
+                "rx": None if failed else self.link.rx_bytes,
+                "tx": None if failed else self.link.tx_bytes,
+                "ended": ("cancelled" if kind == "user" else "failed") if failed else kind,
+                "freq": self.core.freq})
+        except Exception:                    # the logbook must never break the client
+            log.exception("connection log: row not written")
+
+    # --- for the GUI ------------------------------------------------------------------
+
+    def summary(self, now: float) -> dict:
+        return {"n": self.n, "target": self.target, "state": self.state, "reason": self.reason,
+                "state_age": round(now - self.state_at, 1), "ended": self.ended,
+                "mode": self.mode, "view": self.view, "chat": self.core.chan is self,
+                "act": self.act_n, "term_n": self.term_n, "outstanding": self.outstanding}

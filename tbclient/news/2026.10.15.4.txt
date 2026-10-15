@@ -1,0 +1,4 @@
+- Up to 5 connections at once, one channel each.
+  Switch with the chips or Alt+1..5, Alt+0 = monitor.
+- Chip blinks on new input, red when a link dropped.
+- Only one TinyBox in chat mode, others as terminal.

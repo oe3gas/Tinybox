@@ -431,7 +431,9 @@ class Syncer:
                 if scope == "fetch":                # CR40: a click never connects
                     raise SyncError("not connected")
                 own_connect = self.own_connect = True
-                await self.core.connect(self.core.home)     # CR42: always the own TinyBox
+                # CR42/CR45: always the own TinyBox, in a free channel of its own
+                if not await self.core.connect(self.core.home, auto=True):
+                    raise SyncError("no free channel for the mailbox")
             await self._wait_ready()
             if scope == "fetch":
                 for msg_id in list(self._ids):

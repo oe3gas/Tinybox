@@ -1358,8 +1358,7 @@ async function sendImage() {
 // ---------------------------------------------------------------- mailbox (C3)
 /* Everything here is local in the client; only "Sync" goes on air.
  * Mail texts are untrusted as well: textContent only. */
-let view = "chat";            // chat | mail | term (CR43)
-const backView = () => (S && S.state === "online" && S.mode === "terminal" ? "term" : "chat");
+let view = "chat";            // chat | mail | term (CR43); channel 0 = monitor (CR45)
 let folder = "inbox";         // inbox | outbox | sent | b:<RUBRIC> | rubrics
 let items = [];               // list of the current folder
 let itemsFor = "";            // folder + mailbox version the list belongs to
@@ -1865,6 +1864,92 @@ function initMail() {
   showReader();
 }
 
+// ---------------------------------------------------------------- channels (CR45)
+// Up to 5 connections, one window each, shown one at a time; channel 0 is the
+// monitor. The top bar always shows the active channel; a chip blinks when
+// something came in behind the scenes, red when a connection went away there.
+let activeCh = 1;
+try { activeCh = Math.max(0, Math.min(5, parseInt(localStorage.getItem("tbc-ch") || "1", 10) || 0)); } catch (e) { /* ok */ }
+let pollCtl = null;           // aborts the waiting long poll when the channel changes
+const seenAct = {}, seenEnd = {};
+let manualTerm = false;       // the terminal of the TinyBox, opened by hand
+
+function chanOf(n) {
+  const c = S && S.channels ? S.channels.find((x) => x.n === n) : null;
+  return c || { n, target: "", state: "offline", reason: "", state_age: 0, ended: null,
+                mode: "", view: "term", chat: false, act: 0, term_n: 0, outstanding: null, virtual: true };
+}
+const curCh = () => chanOf(activeCh);
+
+function baseView() {
+  if (activeCh === 0) return "term";
+  return curCh().chat ? "chat" : "term";
+}
+const backView = () => (manualTerm && curCh().chat ? "term" : baseView());
+
+function switchCh(n) {
+  if (n === activeCh || n < 0 || n > (S ? S.max_ch : 5)) return;
+  activeCh = n;
+  manualTerm = false;
+  try { localStorage.setItem("tbc-ch", String(n)); } catch (e) { /* ok */ }
+  termShown = -1;                                  // the terminal shows another channel now
+  setView(baseView());
+  if (pollCtl) pollCtl.abort();                    // fetch the lines of that channel now
+  if (S) render();
+}
+
+function newChannel() {
+  const used = new Set((S.channels || []).map((c) => c.n));
+  const n = [1, 2, 3, 4, 5].find((x) => !used.has(x));
+  if (n) { switchCh(n); setTimeout(() => $("to-call").focus(), 0); }
+}
+
+function renderStrip() {
+  const strip = $("chstrip");
+  const chans = S.channels || [];
+  const items = [];
+  const mon = el("button", "ch" + (activeCh === 0 ? " act" : ""));
+  mon.append(el("span", "chn", "0"), el("span", "", "Monitor"));
+  mon.title = "Monitor: everything heard (Alt+0)";
+  mon.onclick = () => switchCh(0);
+  items.push(mon);
+  const list = chans.slice();
+  if (activeCh && !chans.some((c) => c.n === activeCh)) list.push(chanOf(activeCh));   // the new one
+  list.sort((a, b) => a.n - b.n);
+  for (const c of list) {
+    const act = c.n === activeCh;
+    if (seenAct[c.n] === undefined || act) seenAct[c.n] = c.act;
+    const endAt = c.ended && (c.ended.kind === "remote" || c.ended.kind === "failed") ? c.ended.at : 0;
+    if (seenEnd[c.n] === undefined || act) seenEnd[c.n] = endAt;
+    const disc = !act && endAt > seenEnd[c.n];
+    const news = !act && !disc && c.act > seenAct[c.n];
+    const b = el("button", "ch" + (act ? " act" : "") + (disc ? " blink-disc" : news ? " blink" : ""));
+    const dot = el("span", "dot " + (c.ended && c.state === "offline" && c.ended.kind === "failed" ? "failed" : c.state));
+    b.append(el("span", "chn", String(c.n)), dot, el("span", "", c.target || "new"));
+    if (c.chat && c.state !== "offline") b.append(el("span", "chtag", "chat"));
+    b.title = `Channel ${c.n} (Alt+${c.n})` + (c.target ? `: ${c.target}, ${c.state}` : "");
+    b.onclick = () => switchCh(c.n);
+    if (c.state === "offline" && !c.virtual && chans.length > 1) {
+      const x = el("span", "chx", "✕");
+      x.title = "Close channel " + c.n;
+      x.onclick = (e) => {
+        e.stopPropagation();
+        api("channel/close", { ch: c.n }).then(() => { if (activeCh === c.n) switchCh(0); });
+      };
+      b.append(x);
+    }
+    items.push(b);
+  }
+  if (list.length < (S.max_ch || 5) && S.link !== "telnet" && (activeCh === 0 || !chanOf(activeCh).virtual)) {
+    const plus = el("button", "ch chnew", "+ new");
+    plus.title = "New connection in a free channel";
+    plus.onclick = newChannel;
+    items.push(plus);
+  }
+  strip.replaceChildren(...items);
+  strip.classList.toggle("hidden", S.link === "telnet");
+}
+
 // ---------------------------------------------------------------- top bar (CR42)
 // One line: own call, icon, the "Connect to" field (offline) or the other call,
 // the status; on the right Disconnect, Mailbox/Chat and the menu.
@@ -1880,100 +1965,118 @@ function setConnIcon(name, cls) {
   ic.className = "conn-ic" + (cls ? " " + cls : "");
 }
 
-// how the last connection ended, in words ("" = nothing to tell)
-function endedText() {
-  const e = S.ended;
-  if (S.state !== "offline" || !e || e.kind === "user") return "";
+// how the last connection of channel c ended, in words ("" = nothing to tell)
+function endedText(c) {
+  c = c || curCh();
+  const e = c.ended;
+  if (c.state !== "offline" || !e || e.kind === "user") return "";
   if (e.kind === "failed") {
-    return S.reason && S.reason !== "disconnected" ? `connect failed: ${S.reason}`
+    return c.reason && c.reason !== "disconnected" ? `connect failed: ${c.reason}`
       : `no answer from ${e.call}`;
   }
-  return (S.reason && S.reason !== "disconnected" ? S.reason : `disconnected by ${e.call}`)
+  return (c.reason && c.reason !== "disconnected" ? c.reason : `disconnected by ${e.call}`)
     + " · " + hhmm(e.at);
 }
 
 function topStatus() {
-  if (S.state === "connecting") {
-    const secs = Math.round(S.state_age + (performance.now() - stateRecv) / 1000);
+  const c = curCh();
+  if (activeCh === 0) {
+    const q = (S.channels || []).filter((x) => x.outstanding !== null && x.state === "online")
+      .map((x) => `${x.n}: ${x.outstanding}`);
+    return `${S.monitor_n} frames heard` + (q.length ? ` · waiting in Direwolf ${q.join(", ")}` : "");
+  }
+  if (c.state === "connecting") {
+    const secs = Math.round(c.state_age + (performance.now() - stateRecv) / 1000);
     return `connecting · ${secs} s`;
   }
-  if (S.state === "disconnecting") return "disconnecting…";
-  if (S.state === "online") {
-    if (S.mode === "terminal") return "connected · terminal";
-    if (S.mode !== "tinybox") return "connected";
+  if (c.state === "disconnecting") return "disconnecting…";
+  if (c.state === "online") {
+    if (c.mode === "terminal") return "connected · terminal";
+    if (!c.chat || c.mode !== "tinybox") return "connected";
     return (S.board ? `${S.board.name} · ${S.members.length} here` : "connected")
       + (S.ui ? " · UI" : " · I-frames");
   }
-  return endedText() || "offline";
+  return endedText(c) || "offline";
 }
 
 function renderTop() {
-  const st = S.state, off = st === "offline";
-  const kind = off && S.ended ? S.ended.kind : "";
+  renderStrip();
+  const c = curCh(), mon = activeCh === 0;
+  const st = c.state, off = st === "offline" && !mon;
+  const kind = off && c.ended ? c.ended.kind : "";
   $("me-call").textContent = S.mycall;
   $("to-form").classList.toggle("hidden", !off);
   $("tb-call").classList.toggle("hidden", off);
-  $("tb-call").textContent = S.tinybox;
-  $("tb-call").classList.toggle("dim", st === "disconnecting");
-  $("btn-disc").classList.toggle("hidden", off || st === "disconnecting");
+  $("tb-call").textContent = mon ? "Monitor" : c.target;
+  $("tb-call").classList.toggle("dim", st === "disconnecting" || mon);
+  $("btn-disc").classList.toggle("hidden", mon || st === "offline" || st === "disconnecting");
   $("btn-disc").title = st === "connecting" ? "Stop connecting" : "Disconnect";
   const inp = $("to-call");
-  inp.placeholder = S.tinybox;
+  const last = c.target || (S.recent || [])[0] || S.home;
+  inp.placeholder = last;
   inp.readOnly = S.link === "telnet";          // the test port is always the own TinyBox
   inp.title = S.link === "telnet" ? "Telnet test port: always " + S.home
-    : "Call of the station (Enter = connect). Empty = " + S.tinybox;
+    : "Call of the station (Enter = connect). Empty = " + last;
   const rec = (S.recent || []).join(",");
   if (rec !== recentShown) {
     recentShown = rec;
-    $("to-recent").replaceChildren(...(S.recent || []).map((c) => { const o = el("option"); o.value = c; return o; }));
+    $("to-recent").replaceChildren(...(S.recent || []).map((x) => { const o = el("option"); o.value = x; return o; }));
   }
+  $("conn-ic").classList.toggle("hidden", mon);
   if (st === "connecting") setConnIcon("connecting", "wide pulse");
   else if (st === "online") setConnIcon("connected");
   else if (st === "disconnecting") setConnIcon("disconnected", "pulse");
   else setConnIcon(kind === "failed" ? "failed" : kind === "remote" ? "disconnected" : "connect");
-  $("status-dot").className = "dot " + (kind === "failed" ? "failed" : st);
+  $("status-dot").className = "dot " + (mon ? "online" : kind === "failed" ? "failed" : st);
   $("status-text").textContent = topStatus();
 }
-setInterval(() => { if (S && S.state === "connecting") $("status-text").textContent = topStatus(); }, 1000);
+setInterval(() => { if (S && curCh().state === "connecting") $("status-text").textContent = topStatus(); }, 1000);
 
 function connectTo(e) {
   e.preventDefault();
   const inp = $("to-call");
-  const t = (inp.value.trim() || S.tinybox).toUpperCase();
+  const t = (inp.value.trim() || inp.placeholder).toUpperCase();
   if (!CALL_OK.test(t) || t === S.mycall) {
     inp.classList.add("bad");
     inp.title = t === S.mycall ? "That is your own call" : "Call with SSID, e.g. OE3XYZ-8";
     return;
   }
+  const busy = (S.channels || []).find((x) => x.target === t && x.state !== "offline");
+  if (busy) { inp.classList.add("bad"); inp.title = `${t} is connected in channel ${busy.n}`; switchCh(busy.n); return; }
   inp.value = "";
   inp.blur();
-  api("connect", { target: t });
+  api("connect", { target: t, ch: activeCh || undefined });
 }
 
 // ---------------------------------------------------------------- terminal (CR43)
 // Any station that is no TinyBox: lines in, lines out. On a TinyBox it can be
 // opened by hand (Settings / navigation) - typed lines go to it as they are.
-let termShown = 0;            // number of the last line in the view
-let termAuto = false;         // the view was opened by itself (no TinyBox)
-let termWasTerm = false;
+// Channel 0 shows the monitor here, read only.
+let termShown = 0;            // number of the last line in the view (-1 = start over)
 const termHist = [];
 let termHistPos = 0;
 
 function autoTerm() {
-  const isTerm = S.state === "online" && S.mode === "terminal";
-  if (isTerm && !termWasTerm && view !== "term") { termAuto = true; setView("term"); }
-  if (!isTerm && termWasTerm && termAuto && view === "term") { termAuto = false; setView("chat"); }
-  termWasTerm = isTerm;
+  if (view === "mail") return;
+  const want = backView();
+  if (view !== want) setView(want);
 }
 
 function renderTerm() {
   const out = $("term-out");
-  const lines = S.term || [];
-  $("term-to").textContent = S.state === "online" ? `${S.mycall} ↔ ${S.tinybox}`
-    + (S.mode === "tinybox" ? " (TinyBox: lines go to it as typed)" : "") : "not connected";
-  $("term-input").disabled = S.state !== "online";
-  if (S.term_n < termShown || (lines.length && lines[0][0] > termShown + 1)) {
-    out.replaceChildren();                       // client restarted, or lines missed
+  const lines = S.ch === activeCh ? (S.term || []) : [];
+  const c = curCh(), mon = activeCh === 0;
+  $("term-title").textContent = mon ? "Monitor" : "Terminal";
+  $("term-to").textContent = mon ? "everything heard on the channel"
+    : c.state === "online" ? `${S.mycall} ↔ ${c.target}`
+      + (c.chat ? " (TinyBox: lines go to it as typed)" : "")
+    : c.target ? `${c.target} - not connected` : "not connected - enter a call in the top bar";
+  $("term-close").classList.toggle("hidden", !c.chat || mon);
+  $("term-form").classList.toggle("hidden", mon);
+  $("term-input").disabled = c.state !== "online";
+  if (S.ch !== activeCh) return;                   // lines of another channel: wait
+  if (termShown < 0 || S.term_n < termShown || (lines.length && lines[0][0] > termShown + 1)) {
+    out.replaceChildren();                       // other channel, restart, or lines missed
     termShown = lines.length ? lines[0][0] - 1 : 0;
   }
   const atBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 40;
@@ -1990,12 +2093,12 @@ async function termSend(e) {
   e.preventDefault();
   const inp = $("term-input");
   const text = inp.value;
-  if (!S || S.state !== "online") return;
+  if (!S || curCh().state !== "online" || !activeCh) return;
   if (text && termHist[termHist.length - 1] !== text) termHist.push(text);
   termHist.splice(0, Math.max(0, termHist.length - 50));
   termHistPos = termHist.length;
   inp.value = "";
-  await api("term", { text });
+  await api("term", { text, ch: activeCh });
 }
 
 function termKey(e) {
@@ -2050,8 +2153,9 @@ async function saveFreq(e) {
 }
 
 function openTerm() {
-  termAuto = false;
   $("sheet").classList.add("hidden");
+  if (!curCh().chat && S.chat_ch) switchCh(S.chat_ch);
+  manualTerm = true;
   setView("term");
 }
 
@@ -2060,17 +2164,21 @@ async function poll() {
   let since = -1;
   for (;;) {
     try {
-      const r = await fetch("/api/state?since=" + since, { cache: "no-store" });
+      pollCtl = new AbortController();
+      const r = await fetch(`/api/state?since=${since}&ch=${activeCh}`,
+                            { cache: "no-store", signal: pollCtl.signal });
       if (!r.ok) throw new Error(r.status);
       S = await r.json();
+      if (S.ch !== activeCh) { since = -1; continue; }   // switched meanwhile
       stateRecv = performance.now();
-      const endAt = S.ended ? S.ended.at : 0;            // CR44: a connection ended -> new row
+      const endAt = Math.max(0, ...(S.channels || []).map((c) => (c.ended ? c.ended.at : 0)));   // CR44
       if (endAt !== lastEndAt) { lastEndAt = endAt; if (!$("sheet").classList.contains("hidden")) loadConnlog(); }
       since = S.version;
       render();
       if (!$("sheet").classList.contains("hidden")) renderSymbols();
       if (linkCall) renderLink();
     } catch (e) {
+      if (e.name === "AbortError") { since = -1; continue; }   // channel switched (CR45)
       $("status-text").textContent = "client not reachable";
       $("status-dot").className = "dot";
       await new Promise((ok) => setTimeout(ok, 3000));
@@ -2104,14 +2212,21 @@ async function start() {
     await api("mail/news");              // subscribe TBNEWS and fetch the bulletins
   };
   $("sys-close").onclick = () => { sysDismissed = S && S.sysmsg ? S.sysmsg.at : 0; renderSys(); };
-  $("btn-connect").onclick = $("btn-connect2").onclick = () => api("connect");
+  $("btn-connect").onclick = $("btn-connect2").onclick = () => api("connect", { ch: activeCh || undefined });
   $("btn-disconnect").onclick = () => api("disconnect");
-  $("btn-disc").onclick = () => api("disconnect");
+  $("btn-disc").onclick = () => api("disconnect", { ch: activeCh });
   $("to-form").onsubmit = connectTo;
   $("to-call").oninput = (e) => { e.target.classList.remove("bad"); };
   $("term-form").onsubmit = termSend;
   $("term-input").addEventListener("keydown", termKey);
-  $("term-close").onclick = () => { termAuto = false; setView(view === "term" ? "chat" : view); };
+  $("term-close").onclick = () => { manualTerm = false; setView("chat"); };
+  document.addEventListener("keydown", (e) => {               // CR45: Alt+0 ... Alt+5
+    if (e.altKey && !e.ctrlKey && !e.metaKey && /^[0-5]$/.test(e.key)) {
+      e.preventDefault();
+      const n = Number(e.key);
+      if (n === 0 || (S && (S.channels.some((c) => c.n === n) || S.channels.length < S.max_ch))) switchCh(n);
+    }
+  });
   $("btn-term").onclick = openTerm;
   $("freq-form").onsubmit = saveFreq;
   $("freq-skip").onclick = async () => { await api("freq", { freq: "" }); $("freqdlg").classList.add("hidden"); };

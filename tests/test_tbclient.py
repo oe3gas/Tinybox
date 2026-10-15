@@ -14,6 +14,7 @@ from pathlib import Path
 
 from tbclient import config as ccfg
 from tbclient import proto, radio
+from tbclient import channels as channels_mod
 from tbclient import core as core_mod
 from tbclient.core import ClientCore
 from tbclient.web import WebServer
@@ -421,7 +422,15 @@ class ForeignBbs:
 
 
 class FreeConnectTests(unittest.TestCase):
-    """CR42 (Connect to any station) and CR43 (terminal for a station that is no TinyBox)."""
+    """CR42 (Connect to any station), CR43 (terminal for a station that is no
+    TinyBox), CR44 (logbook) and CR45 (channels)."""
+
+    def setUp(self):
+        self._old = core_mod.HANDSHAKE_FALLBACK_SEC
+        core_mod.HANDSHAKE_FALLBACK_SEC = 0.3
+
+    def tearDown(self):
+        core_mod.HANDSHAKE_FALLBACK_SEC = self._old
 
     def test_foreign_bbs_terminal_and_states(self):
         async def scenario():
@@ -432,7 +441,7 @@ class FreeConnectTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 core = ClientCore(client_cfg(tmp, agw_port=port))
                 t = asyncio.create_task(core.run())
-                await asyncio.wait_for(core.link.agw_up.wait(), 5)
+                await asyncio.wait_for(core.port.agw_up.wait(), 5)
                 await until(lambda: any(c["calls"] == {"OE3XBS-8"} for c in dw.clients))
                 # CR44: the frequency of the session is asked once
                 self.assertTrue(core.snapshot()["freq_ask"])
@@ -442,37 +451,39 @@ class FreeConnectTests(unittest.TestCase):
                 # bad targets are refused
                 self.assertFalse(await core.connect("OE3XBS-99"))
                 self.assertFalse(await core.connect("oe3gas"))           # own call
+                self.assertFalse(await core.connect("OE3XYZ", ch=6))     # max. 5 channels
                 # nobody answers: failed
-                self.assertTrue(await core.connect("oe3nix-1"))
-                await until(lambda: core.state == "offline" and core.ended)
-                self.assertEqual(core.ended["kind"], "failed")
-                self.assertEqual(core.target, "OE3NIX-1")
+                self.assertTrue(await core.connect("oe3nix-1", ch=1))
+                ch1 = core.channels[1]
+                await until(lambda: ch1.state == "offline" and ch1.ended)
+                self.assertEqual((ch1.ended["kind"], ch1.target), ("failed", "OE3NIX-1"))
                 # the foreign BBS: terminal, never a //CLIENT line
-                core_mod.HANDSHAKE_FALLBACK_SEC = 0.3
-                self.assertTrue(await core.connect("OE3XBS-8"))
-                await until(lambda: core.mode == "terminal")
-                self.assertTrue(core.at_home is False)
-                self.assertFalse(core.handshake_done)
+                self.assertTrue(await core.connect("OE3XBS-8", ch=1))
+                await until(lambda: ch1.mode == "terminal")
+                self.assertEqual(core.state, "offline")        # no chat channel
+                self.assertEqual(core.chan.n, 0)
                 self.assertFalse(any(b"//CLIENT" in d for d in bbs.got))
-                texts = [x for _, k, x in core.term if k == "rx"]
+                texts = [x for _, k, x in ch1.term if k == "rx"]
                 self.assertIn("#Stations heard", texts)          # not taken as a chat event
                 self.assertIn("//nonsense", texts)               # nor as a control line
-                self.assertFalse(core.sync.start("mail"))        # the mailbox is the home's
-                self.assertTrue(core.send_raw("N"))
-                await until(lambda: any(x == "Nodes: OE1XAR OE3XNR" for _, _, x in core.term))
+                self.assertTrue(core.send_raw("N", ch=1))
+                await until(lambda: any(x == "Nodes: OE1XAR OE3XNR" for _, _, x in ch1.term))
                 self.assertIn(b"N\r", bbs.got)
-                snap = core.snapshot()
-                self.assertEqual((snap["tinybox"], snap["home"], snap["mode"]),
-                                 ("OE3XBS-8", "OE3GAS-1", "terminal"))
+                self.assertFalse(await core.connect("OE3XBS-8", ch=2))   # the same station twice
+                snap = core.snapshot(1)
+                self.assertEqual(snap["home"], "OE3GAS-1")
+                self.assertEqual(snap["channels"][0]["mode"], "terminal")
+                self.assertIn("Nodes: OE1XAR OE3XNR", [x for _, _, x in snap["term"]])
                 self.assertEqual(snap["recent"][:2], ["OE3XBS-8", "OE3NIX-1"])
+                self.assertTrue(core.snapshot(0)["term"])        # the monitor heard frames
                 # disconnect: "disconnecting" until Direwolf says it is down
                 states = []
-                orig = core._on_state
-                core.link.on_state = lambda st, r: (states.append(st), orig(st, r))
-                core.disconnect()
-                await until(lambda: core.state == "offline")
+                orig = ch1._on_state
+                ch1.link.on_state = lambda st, r: (states.append(st), orig(st, r))
+                core.disconnect(1)
+                await until(lambda: ch1.state == "offline")
                 self.assertEqual(states, ["disconnecting", "offline"])
-                self.assertEqual(core.ended["kind"], "user")
+                self.assertEqual(ch1.ended["kind"], "user")
                 # CR44: the logbook - the failed connect and the connection with bytes
                 rows = core.logbook.rows()
                 self.assertEqual([(r["call"], r["ended"]) for r in rows],
@@ -482,29 +493,89 @@ class FreeConnectTests(unittest.TestCase):
                 self.assertIsNone(rows[1]["rx"])
                 self.assertEqual(len(core.logbook.rows(connected_only=True)), 1)
                 self.assertEqual(rows[0]["freq"], "144.800")
-                # the last target and the list survive a restart of the client
+                # the list survives a restart of the client, the frequency is asked again
                 core2 = ClientCore(client_cfg(tmp, agw_port=port))
-                self.assertEqual(core2.target, "OE3XBS-8")
-                snap2 = core2.snapshot()          # a new run asks again, offers the last one
-                self.assertEqual((snap2["freq_ask"], snap2["freq_last"]), (True, "144.800"))
                 self.assertEqual(core2.recent[:2], ["OE3XBS-8", "OE3NIX-1"])
+                snap2 = core2.snapshot()
+                self.assertEqual((snap2["freq_ask"], snap2["freq_last"]), (True, "144.800"))
                 t.cancel()
             tb.cancel()
             dw.server.close()
-        old = core_mod.HANDSHAKE_FALLBACK_SEC
-        try:
-            asyncio.run(scenario())
-        finally:
-            core_mod.HANDSHAKE_FALLBACK_SEC = old
+        asyncio.run(scenario())
+
+    def test_channels_tinybox_and_terminal(self):
+        """CR45: TinyBox chat in one channel, a BBS terminal in another, a
+        second TinyBox only as terminal; channels close only when offline."""
+        async def scenario():
+            dw = FakeDirewolf()
+            port = await dw.start()
+            app = chat_app()
+            app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, agw_port=port,
+                                                   reconnect_sec=1)
+            adapter = tb_agw.AgwAdapter(app)
+            app.agw = adapter
+            t1 = asyncio.create_task(adapter.run())
+            await asyncio.wait_for(adapter.connected.wait(), 5)
+            bbs = ForeignBbs("OE3XBS-8", port)
+            tb = asyncio.create_task(bbs.run())
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, agw_port=port, sync_on_login=False))
+                t2 = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.port.agw_up.wait(), 5)
+                await until(lambda: any(c["calls"] == {"OE3XBS-8"} for c in dw.clients))
+                self.assertTrue(await core.connect("OE3XBS-8"))        # first free: 1
+                self.assertTrue(await core.connect("OE3GAS-1"))        # next free: 2
+                await until(lambda: core.boards, 10)
+                self.assertEqual((core.chan.n, core.chan.mode), (2, "tinybox"))
+                await until(lambda: core.channels[1].mode == "terminal")
+                self.assertTrue(core.join(1))
+                await until(lambda: core.board is not None)
+                # both at once: a line in the BBS channel, the chat goes on
+                self.assertTrue(core.send_raw("N", ch=1))
+                await until(lambda: any(x == "Nodes: OE1XAR OE3XNR"
+                                        for _, _, x in core.channels[1].term))
+                core.say("parallel")
+                await until(lambda: any(m.get("text") == "parallel" for m in core.messages))
+                snap = core.snapshot(2)
+                self.assertEqual([c["n"] for c in snap["channels"]], [1, 2])
+                self.assertEqual(snap["chat_ch"], 2)
+                self.assertTrue(snap["channels"][1]["chat"])
+                self.assertGreater(snap["channels"][0]["act"], 0)
+                self.assertFalse(core.close_channel(1))                 # still connected
+                # the BBS goes; its channel stays with its lines until closed
+                core.disconnect(1)
+                await until(lambda: core.channels[1].state == "offline")
+                self.assertEqual(core.state, "online")                 # chat untouched
+                self.assertTrue(core.close_channel(1))
+                self.assertEqual(list(core.channels), [2])
+                core.disconnect()                                       # the chat channel
+                await until(lambda: core.state == "offline")
+                self.assertIsNone(core.board)
+                t2.cancel()
+            tb.cancel()
+            t1.cancel()
+            dw.server.close()
+        asyncio.run(scenario())
+
+    def test_only_one_tinybox_in_client_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = ClientCore(client_cfg(tmp))
+            a, b = core.open_channel(1), core.open_channel(2)
+            a.state, a.mode = "online", "tinybox"
+            core.chan = a
+            self.assertFalse(core.can_attach(b))
+            a.state = "offline"
+            self.assertTrue(core.can_attach(b))
 
     def test_settings_per_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             core = ClientCore(client_cfg(tmp))
+            core.chan.target = "OE3GAS-1"
             core.tset["board"] = 2
-            core._set_target("OE3XYZ-1")
+            core.chan.target = "OE3XYZ-1"
             self.assertIsNone(core.tset.get("board"))         # another TinyBox, other boards
             core.tset["board"] = 5
-            core._set_target("OE3GAS-1")
+            core.chan.target = "OE3GAS-1"
             self.assertEqual(core.tset["board"], 2)
             self.assertEqual(core.settings["targets"]["OE3XYZ-1"]["board"], 5)
 
@@ -512,19 +583,28 @@ class FreeConnectTests(unittest.TestCase):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 core = ClientCore(client_cfg(tmp))
-                old = core_mod.DISC_TIMEOUT_SEC
-                core_mod.DISC_TIMEOUT_SEC = 0.2
+                old = channels_mod.DISC_TIMEOUT_SEC
+                channels_mod.DISC_TIMEOUT_SEC = 0.2
                 try:
-                    core.link.agw_up.set()
-                    core.link._set("online")
-                    core.link._writer = None             # Direwolf never answers
-                    core.disconnect()
-                    self.assertEqual(core.state, "disconnecting")
-                    await until(lambda: core.state == "offline", 2)
-                    self.assertEqual(core.reason, "no answer to the disconnect")
+                    core.port.agw_up.set()
+                    ch = core.channels[1]
+                    ch.target = ch.link.target = "OE3GAS-1"
+                    ch.link._set("online")
+                    core.disconnect(1)                   # nobody answers ('d' never comes)
+                    self.assertEqual(ch.state, "disconnecting")
+                    await until(lambda: ch.state == "offline", 2)
+                    self.assertEqual(ch.reason, "no answer to the disconnect")
                 finally:
-                    core_mod.DISC_TIMEOUT_SEC = old
+                    channels_mod.DISC_TIMEOUT_SEC = old
         asyncio.run(scenario())
+
+    def test_monitor_lines(self):
+        f = radio.decode(raw_frame("APRS", "OE3XYZ-9", 0x03, b"!4833.07N/01606.22E-x", ["OE1XAR"]))
+        self.assertEqual(radio.describe(f), "fm OE3XYZ-9 to APRS via OE1XAR <UI>: "
+                                            "!4833.07N/01606.22E-x")
+        self.assertEqual(radio.frame_type(0x3F), "SABM+")
+        self.assertEqual(radio.frame_type(0x41), "RR 2")
+        self.assertEqual(radio.frame_type(0x46), "I 3,2")
 
 
 if __name__ == "__main__":

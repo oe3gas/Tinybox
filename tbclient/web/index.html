@@ -31,6 +31,7 @@
     <button id="btn-view" class="icon-btn view-btn" aria-label="Mailbox" title="Mailbox"><span id="view-icon">✉</span><span id="view-cnt" class="cnt hidden"></span></button>
     <button id="btn-menu" class="icon-btn" aria-label="Settings">☰</button>
   </header>
+  <nav id="chstrip" class="chstrip" aria-label="Channels"></nav>
 
   <div id="upd-banner" class="upd-banner hidden" role="status">
     <span id="upd-text"></span>
@@ -134,7 +135,7 @@
   </section>
 
   <section id="termview" class="termview hidden" aria-label="Terminal">
-    <div class="term-bar"><b>Terminal</b> <span id="term-to" class="muted small"></span><span class="sp"></span><button id="term-close" class="sm">Back to chat</button></div>
+    <div class="term-bar"><b id="term-title">Terminal</b> <span id="term-to" class="muted small"></span><span class="sp"></span><button id="term-close" class="sm">Back to chat</button></div>
     <pre id="term-out" class="term-out" aria-live="polite"></pre>
     <form id="term-form" class="term-in" autocomplete="off">
       <input id="term-input" type="text" maxlength="250" spellcheck="false" autocapitalize="off" enterkeyhint="send" placeholder="Command (Enter = send)">

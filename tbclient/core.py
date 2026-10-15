@@ -9,17 +9,17 @@ import logging
 import re
 import time
 from collections import deque
-from pathlib import Path
 
 from tinybox import chatimg               # the image reference in a chat line (CR12)
 
 from . import VERSION, proto
 from .config import CALL_RE, Config
 from .images import Images, ImageStore
-from .links import AgwLink, TelnetLink
+from .channels import MAX_CHANNELS, TERM_SNAPSHOT, Channel
+from .links import AgwLink, AgwPort, TelnetLink
 from .logbook import Logbook
 from .mailstore import MailStore
-from .radio import RawFrame, aprs_symbol
+from .radio import RawFrame, aprs_symbol, describe
 from .sync import Syncer
 
 log = logging.getLogger(__name__)
@@ -31,40 +31,32 @@ DIRECT_VALID_SEC = 30 * 60
 MAX_MESSAGES = 300
 MAX_GAP = 32
 RECENT_MAX = 10           # CR42: targets remembered for the "Connect to" field
-DISC_TIMEOUT_SEC = 90     # CR42: "disconnecting" without an answer: offline anyway
-TERM_MAX = 500            # CR43: lines kept for the terminal view
-TERM_SNAPSHOT = 300       # ... and sent to the GUI
+MONITOR_MAX = 500         # CR45: frames kept for the monitor (channel 0)
+OUTSTANDING_SEC = 3       # CR45: how often the send queues of the channels are asked
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 
 
 class ClientCore:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
-        cls = AgwLink if cfg.link == "agw" else TelnetLink
-        self.link = cls(cfg, self._on_state, self._on_line, self._on_frame)
         self.settings_path = cfg.data_dir / "settings.json"
         self.settings = self._load_settings()
-        # CR42: free target. home = the TinyBox of tbclient.conf, the mailbox
-        # belongs to it; target = the station of the current (or last) connection
+        # CR42: free target. home = the TinyBox of tbclient.conf, the mailbox belongs to it
         self.home = cfg.tinybox_call
+        # CR45: up to 5 channels over one AGW port (telnet: one channel). chan is
+        # the chat channel - the one TinyBox in client mode; without one it is
+        # the placeholder channel 0, always offline.
+        self.port = AgwPort(cfg, self._on_frame) if cfg.link == "agw" else None
+        self.channels: dict[int, Channel] = {}
+        self.nochat = Channel(self, 0, self._new_link())
         last = self.settings.get("target", "")
-        self.target = last if CALL_RE.match(last or "") and last != cfg.mycall else self.home
-        self.link.target = self.target
-        self.state = "offline"
-        self.state_at = time.time()
-        self.reason = ""
-        self.ended: dict | None = None            # how the last connection ended (CR42)
-        self._user_disc = False
-        self._disc_timer: asyncio.TimerHandle | None = None
-        # CR43: "tinybox" (client protocol) or "terminal" (any other station);
-        # "" while it is not known yet
-        self.mode = ""
-        self.term: deque[tuple[int, str, str]] = deque(maxlen=TERM_MAX)  # (n, rx|tx|sys, text)
-        self.term_n = 0
+        first = self.open_channel(1)
+        first.target = last if CALL_RE.match(last or "") and last != cfg.mycall else self.home
+        self.chan: Channel = first
+        self.monitor: deque[tuple[int, str]] = deque(maxlen=MONITOR_MAX)   # (n, line)
+        self.monitor_n = 0
         # CR44: connection logbook
         self.logbook = Logbook(cfg.data_dir / "connlog.db")
-        self._conn_t0 = 0.0                       # monotonic: connecting / online since
-        self._conn_start = ""                     # UTC ISO of that moment
         # the frequency is asked once per run of the client (the last one is offered)
         self.freq = ""
         self.freq_asked = False
@@ -200,9 +192,98 @@ class ClientCore:
 
     # --- actions from the GUI -------------------------------------------------
 
+    # --- channels (CR45) -------------------------------------------------------
+
+    def _new_link(self):
+        if self.port is not None:
+            return AgwLink(self.port, self.cfg, None, None)
+        return TelnetLink(self.cfg, None, None)
+
+    def open_channel(self, n: int) -> Channel:
+        ch = self.channels.get(n)
+        if ch is None:
+            ch = self.channels[n] = Channel(self, n, self._new_link())
+        return ch
+
+    def drop_channel(self, ch: Channel) -> None:
+        """A channel goes away (closed, or the sync's own connection is over)."""
+        if ch.state != "offline" or self.channels.get(ch.n) is not ch:
+            return
+        if len(self.channels) == 1:
+            ch.auto = False                       # the last one stays as channel 1
+            return
+        del self.channels[ch.n]
+        if self.chan is ch:
+            self.chan = self.nochat
+
+    def close_channel(self, n: int) -> bool:
+        ch = self.channels.get(n)
+        if ch is None or ch.state != "offline" or len(self.channels) == 1:
+            return False
+        self.drop_channel(ch)
+        self._touch()
+        return True
+
+    def can_attach(self, ch: Channel) -> bool:
+        """Only one TinyBox in client mode at a time (CR45)."""
+        return self.chan is ch or self.chan.state == "offline" or self.chan.mode != "tinybox"
+
+    def attach(self, ch: Channel, welcome: str | None = None, handshake: bool = False) -> None:
+        """ch talks to a TinyBox: it becomes the chat channel."""
+        if self.chan is not ch and self.chan.mode != "tinybox":
+            self.chan = ch
+        elif self.chan is not ch:
+            self.chan = ch                        # the old chat channel is offline
+        ch.mode, ch.view = "tinybox", "chat"
+        self.handshake_done = False
+        self.caps = set()
+        if self.target != self.settings.get("target"):
+            self.settings["target"] = self.target
+            self._save_settings()
+        if welcome is not None:
+            self._on_line(welcome)                # schedules the handshake
+        elif handshake:
+            self._handshake()
+        else:                                     # telnet: Welcome follows, else after 6 s
+            self._hs_task = asyncio.ensure_future(self._handshake_fallback())
+        self._touch()
+
+    def detach(self) -> None:
+        """The chat channel is no TinyBox after all (or went away)."""
+        self._clear_chat()
+        self.chan = self.nochat
+
+    def known_tinybox(self, call: str) -> bool:
+        return call == self.home or call in self.settings.get("tinyboxes", [])
+
+    # the chat engine reads these from the chat channel
+    @property
+    def link(self):
+        return self.chan.link
+
+    @property
+    def state(self) -> str:
+        return self.chan.state
+
+    @state.setter
+    def state(self, value: str) -> None:          # tests and the chat engine (offline)
+        self.chan.state = value
+
+    @property
+    def reason(self) -> str:
+        return self.chan.reason
+
+    @property
+    def target(self) -> str:
+        return self.chan.target or self.settings.get("target") or self.home
+
+    @property
+    def mode(self) -> str:
+        return self.chan.mode
+
     @property
     def at_home(self) -> bool:
-        """Connected (or about to connect) to the TinyBox the mailbox belongs to."""
+        """The chat channel is (or would be) the TinyBox the mailbox belongs to."""
         return self.target == self.home
 
     @property
@@ -210,53 +291,64 @@ class ClientCore:
         r = [c for c in self.settings.get("recent", []) if isinstance(c, str) and CALL_RE.match(c)]
         return r or [self.home]
 
-    async def connect(self, target: str | None = None) -> bool:
-        """Connect to target (CR42: any station; None = the last one). Only
-        from offline; the telnet link always goes to the own TinyBox."""
-        if self.state != "offline":
-            return False
-        if target is not None:
-            t = str(target).strip().upper()
-            if not CALL_RE.match(t) or t == self.cfg.mycall:
-                return False
-            if self.link.kind == "telnet":
-                t = self.home
-            self._set_target(t)
-        self._user_disc = False
-        await self.link.connect()
-        return True
+    def free_channel(self) -> int | None:
+        """The first offline channel, else the first unused number."""
+        for n in sorted(self.channels):
+            if self.channels[n].state == "offline":
+                return n
+        return next((n for n in range(1, MAX_CHANNELS + 1) if n not in self.channels), None)
 
-    def _set_target(self, t: str) -> None:
-        if t != self.target:
-            self.target = t
-            self.boards = []                     # they belong to the other station
-        self.link.target = t
+    async def connect(self, target: str | None = None, ch: int | None = None,
+                      auto: bool = False) -> bool:
+        """Connect to target in channel ch (CR45; None = the first free one).
+        target None = the last station of that channel. The same station only
+        once at a time. Telnet: one channel, always the own TinyBox."""
+        if self.cfg.link == "telnet":
+            ch, target = 1, self.home
+        if ch is None:
+            ch = self.free_channel()
+        if ch is None or not 1 <= ch <= MAX_CHANNELS:
+            return False
+        chan = self.channels.get(ch)
+        if chan is not None and chan.state != "offline":
+            return False
+        t = str(target if target is not None else
+                (chan.target if chan and chan.target else self.recent[0])).strip().upper()
+        if not CALL_RE.match(t) or t == self.cfg.mycall:
+            return False
+        if any(c.target == t and c.state != "offline" for c in self.channels.values()):
+            return False
+        chan = self.open_channel(ch)
+        chan.auto = auto and chan.state == "offline" and not chan.term_n
+        if chan.target != t:
+            chan.view = "term"                   # its window starts as a terminal
         recent = [t] + [c for c in self.settings.get("recent", []) if c != t]
         self.settings["recent"] = recent[:RECENT_MAX]
-        self.settings["target"] = t
         self._save_settings()
-
-    def disconnect(self) -> None:
-        if self.state in ("offline", "disconnecting"):
-            return
-        self._user_disc = True
-        self.link.disconnect()
-
-    # --- terminal (CR43) ----------------------------------------------------------
-
-    def _term(self, kind: str, text: str) -> None:
-        self.term_n += 1
-        self.term.append((self.term_n, kind, text))
-
-    def send_raw(self, text: str) -> bool:
-        """A line typed in the terminal: goes out as it is (an empty line too)."""
-        if self.state != "online":
-            return False
-        text = text.replace("\r", " ").replace("\n", " ")[:250]
-        self._term("tx", text)
-        self._send(text)
-        self._touch()
+        await chan.connect(t)
         return True
+
+    def disconnect(self, ch: int | None = None) -> None:
+        """Disconnect channel ch (None = the chat channel)."""
+        chan = self.chan if ch is None else self.channels.get(ch)
+        if chan is not None:
+            chan.disconnect()
+
+    def send_raw(self, text: str, ch: int | None = None) -> bool:
+        chan = self.chan if ch is None else self.channels.get(ch)
+        return chan.send_raw(text) if chan is not None else False
+
+    async def _poll_outstanding(self) -> None:
+        """CR45: frames waiting in Direwolf per channel - all channels share the
+        frequency, a picture on one slows the others down (shown in the monitor)."""
+        while True:
+            await asyncio.sleep(OUTSTANDING_SEC)
+            for c in list(self.channels.values()):
+                if c.state == "online" and c.link.kind == "agw" and c.n:
+                    try:
+                        c.outstanding = await c.link.outstanding()
+                    except Exception:
+                        c.outstanding = None
 
     def join(self, n: int) -> bool:
         if not self.handshake_done or not any(b["n"] == n for b in self.boards):
@@ -417,46 +509,29 @@ class ClientCore:
     # --- link callbacks ---------------------------------------------------------
 
     def _on_state(self, state: str, reason: str) -> None:
-        prev = self.state
-        self.state, self.reason = state, reason
-        self.state_at = time.time()
-        if self._disc_timer is not None:
-            self._disc_timer.cancel()
-            self._disc_timer = None
-        if state == "connecting":
-            self.ended = None
-            self.mode = ""
-            self._mark_start()
-        if state == "online" and prev != "online":
-            self._mark_start()                     # the connection counts from here
-        if state == "online":
-            self.handshake_done = False
-            self.mode = "tinybox" if self.link.kind == "telnet" else ""
-            self._hs_task = asyncio.ensure_future(self._handshake_fallback())
-        if state == "disconnecting":
-            self._disc_timer = asyncio.get_event_loop().call_later(
-                DISC_TIMEOUT_SEC, self.link.drop, "no answer to the disconnect")
+        """Link state of the chat channel (kept for the tests and old callers)."""
+        self.chan._on_state(state, reason)
+
+    def _chat_state(self, state: str, prev: str, reason: str) -> None:
+        """The chat channel changed its state (called by the channel)."""
         if state == "offline":
-            # CR42: how it ended - by us, never came up, or by the other side
-            kind = "user" if self._user_disc else "failed" if prev == "connecting" else "remote"
-            self.ended = {"kind": kind, "at": int(time.time()), "call": self.target}
-            self._user_disc = False
-            if prev != "offline":
-                self._log_connection(prev, kind)
-            self.handshake_done = False
-            self.caps = set()
-            self._clear_board()
-            self.pending.clear()
-            self.sync.link_lost()
-            self.images.link_lost()
-            if self._hold is not None:       # held lines are gone with the link
-                self._hold = []
-            self.sysmsg = None                   # a shutdown warning is over now
-            if self._hs_task:
-                self._hs_task.cancel()
+            self._clear_chat()
+            if self.chan.mode == "tinybox":
+                self.chan.mode = ""
         self.console.append(f"*** {state}" + (f" ({reason})" if reason else ""))
-        self._term("sys", f"*** {state} {self.target}" + (f" ({reason})" if reason else ""))
-        self._touch()
+
+    def _clear_chat(self) -> None:
+        self.handshake_done = False
+        self.caps = set()
+        self._clear_board()
+        self.pending.clear()
+        self.sync.link_lost()
+        self.images.link_lost()
+        if self._hold is not None:           # held lines are gone with the link
+            self._hold = []
+        self.sysmsg = None                   # a shutdown warning is over now
+        if self._hs_task:
+            self._hs_task.cancel()
 
     def set_freq(self, freq: str) -> bool:
         """Frequency (MHz) for this run of the client; '' = none. Goes into
@@ -477,44 +552,11 @@ class ClientCore:
         self._touch()
         return True
 
-    def _mark_start(self) -> None:
-        self._conn_t0 = time.monotonic()
-        self._conn_start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
-    def _log_connection(self, prev: str, kind: str) -> None:
-        """CR44: one row per connection; one that never came up as "failed"
-        (duration 0). The bytes are the payload counted on the link."""
-        failed = prev == "connecting"
-        try:
-            self.logbook.add({
-                "call": self.target, "via": self.link.kind,
-                "start": self._conn_start or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "end": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "secs": 0 if failed else int(time.monotonic() - self._conn_t0),
-                "rx": None if failed else self.link.rx_bytes,
-                "tx": None if failed else self.link.tx_bytes,
-                "ended": ("cancelled" if kind == "user" else "failed") if failed else kind,
-                "freq": self.freq})
-        except Exception:                    # the logbook must never break the client
-            log.exception("connection log: row not written")
-
-    def _known_tinybox(self) -> bool:
-        return (self.link.kind == "telnet" or self.at_home
-                or self.target in self.settings.get("tinyboxes", []))
-
     async def _handshake_fallback(self) -> None:
-        """No "Welcome to TinyBox" seen: a TinyBox we know gets the handshake
-        anyway (the line may have been missed); any other station is not
-        bothered with //CLIENT - the client becomes a terminal (CR43)."""
+        """Telnet test port: no "Welcome to TinyBox" seen - the handshake anyway."""
         await asyncio.sleep(HANDSHAKE_FALLBACK_SEC)
-        if self.state != "online" or self.handshake_done:
-            return
-        if self._known_tinybox():
+        if self.state == "online" and not self.handshake_done:
             self._handshake()
-        else:
-            self.mode = "terminal"
-            self.console.append(f"*** {self.target} is no TinyBox: terminal mode")
-            self._touch()
 
     def _want_ui(self) -> bool:
         if self.link.kind != "agw" or self.cfg.ui == "no":
@@ -527,7 +569,7 @@ class ClientCore:
         if self.handshake_done:
             return
         self.handshake_done = True          # sent; //OK confirms the caps
-        self.mode = "tinybox"
+        self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
         caps += ",SYNC,SYNC2,SHORT,NUM" + (",Z,IMG" if self.link.kind == "agw" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
@@ -540,20 +582,7 @@ class ClientCore:
             self.console.append(line.rstrip())
             return
         line = line.rstrip()
-        if self.mode != "tinybox":
-            # CR43: as long as it is not a TinyBox talking to the client, every
-            # line (an empty one too) goes to the terminal as it came
-            self._term("rx", line)
-        if self.mode == "terminal":
-            if line:
-                self.console.append(line)
-            if not self.handshake_done and line.startswith("Welcome to TinyBox"):
-                asyncio.get_event_loop().call_later(1.0, self._handshake)
-            self._touch()
-            return
         if not line:
-            if self.mode != "tinybox":
-                self._touch()
             return
         if line.startswith("//"):
             self._control(line)
@@ -563,8 +592,7 @@ class ClientCore:
             self._qstat(line)
         else:
             self.console.append(line)
-            if self.mode == "tinybox":
-                self._term("rx", line)
+            self.chan.term_line("rx", line)        # the manual terminal of the TinyBox
             m = re.match(r"^You have (\d+) new message", line)
             if m or line.startswith("No new messages"):
                 self._set_mail(int(m.group(1)) if m else 0)
@@ -573,6 +601,8 @@ class ClientCore:
         self._touch()
 
     def _on_frame(self, f: RawFrame) -> None:
+        self.monitor_n += 1                      # CR45: channel 0, everything heard
+        self.monitor.append((self.monitor_n, time.strftime("%H:%M:%S ") + describe(f)))
         tb = self.target
         if f.direct:
             self.direct_at[f.src] = time.time()
@@ -855,6 +885,7 @@ class ClientCore:
         self._touch()
 
     def _add(self, msg: dict) -> None:
+        self.chan.act_n += 1                     # CR45: the chip blinks in the background
         self.messages.append(msg)
         self.messages.sort(key=lambda m: m["id"])
         del self.messages[:-MAX_MESSAGES]
@@ -881,7 +912,9 @@ class ClientCore:
             return self.my_symbol
         return self.members.get(call) or self.heard.get(call, "")
 
-    def snapshot(self) -> dict:
+    def snapshot(self, ch: int | None = None) -> dict:
+        """ch = the channel shown in the GUI: its terminal lines come along
+        (0 = the monitor). The top level describes the chat channel."""
         calls = {self.cfg.mycall, *self.members}
         calls.update(m["call"] for m in self.messages if m.get("call"))
         now = time.time()
@@ -894,12 +927,16 @@ class ClientCore:
             "version": self.version, "client_version": VERSION,
             "mycall": self.cfg.mycall, "tinybox": self.target,
             "home": self.home, "recent": self.recent,                  # CR42
-            "link": self.link.kind, "state": self.state, "reason": self.reason,
-            "state_age": round(now - self.state_at, 1), "ended": self.ended,
+            "link": self.cfg.link, "state": self.state, "reason": self.reason,
+            "state_age": round(now - self.chan.state_at, 1), "ended": self.chan.ended,
             "mode": self.mode,                                          # CR43
             "freq": self.freq, "freq_ask": not self.freq_asked,         # CR44
             "freq_last": self.settings.get("freq", ""),
-            "term": list(self.term)[-TERM_SNAPSHOT:], "term_n": self.term_n,
+            # CR45: the channels, the chat channel (0 = none) and the shown one
+            "channels": [c.summary(now) for _, c in sorted(self.channels.items())],
+            "chat_ch": self.chan.n, "max_ch": MAX_CHANNELS, "monitor_n": self.monitor_n,
+            "ch": ch,
+            "term": self._term_of(ch), "term_n": self._term_n_of(ch),
             "client": self.handshake_done and bool(self.caps or self.boards),
             "ui": "UI" in self.caps,
             "boards": self.boards, "board": self.board,
@@ -961,8 +998,27 @@ class ClientCore:
             return False
         return self.images.fetch(hash)
 
+    def _term_of(self, ch: int | None) -> list:
+        if ch == 0:
+            return [(n, "rx", line) for n, line in list(self.monitor)[-TERM_SNAPSHOT:]]
+        c = self.channels.get(ch) if ch is not None else self.chan
+        return list(c.term)[-TERM_SNAPSHOT:] if c is not None else []
+
+    def _term_n_of(self, ch: int | None) -> int:
+        if ch == 0:
+            return self.monitor_n
+        c = self.channels.get(ch) if ch is not None else self.chan
+        return c.term_n if c is not None else 0
+
     async def run(self) -> None:
-        if self.cfg.auto_connect:            # always to the own TinyBox
+        if self.cfg.auto_connect:            # always to the own TinyBox, channel 1
             asyncio.get_event_loop().call_later(
-                2, lambda: asyncio.ensure_future(self.connect(self.home)))
-        await self.link.run()
+                2, lambda: asyncio.ensure_future(self.connect(self.home, ch=1)))
+        if self.port is None:
+            await asyncio.Event().wait()     # telnet: nothing to keep open between sessions
+            return
+        poller = asyncio.ensure_future(self._poll_outstanding())
+        try:
+            await self.port.run()
+        finally:
+            poller.cancel()

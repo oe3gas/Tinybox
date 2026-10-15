@@ -9,7 +9,7 @@ TelnetLink the TinyBox telnet test port on the same PC (no radio, no UI).
 Both call back into the client core:
     on_state(state, reason)   state: offline | connecting | online | disconnecting
     on_line(text)             one line from the TinyBox
-    on_frame(RawFrame)        a frame heard on the channel (AGW only)
+    on_frame(RawFrame)        a frame heard on the channel (AgwPort, shared by all)
 """
 
 from __future__ import annotations
@@ -96,15 +96,14 @@ class LineSplitter:
 class BaseLink:
     paclen = PACLEN                 # bytes per frame handed over (progress estimate)
 
-    def __init__(self, cfg: Config, on_state, on_line, on_frame) -> None:
+    def __init__(self, cfg: Config, on_state, on_line) -> None:
         self.cfg = cfg
-        self.on_state = on_state
+        self.on_state = on_state          # both may be re-pointed (CR45: channel -> chat)
         self.on_line = on_line
-        self.on_frame = on_frame
         self.splitter = LineSplitter(self._line)
         self.online = False
         self.active = False               # anything but offline (connecting ... disconnecting)
-        self.target = cfg.tinybox_call    # the station to connect to (set by the core)
+        self.target = cfg.tinybox_call    # the station to connect to (set by the channel)
         self.rx_bytes = 0                 # CR44: payload of the current connection
         self.tx_bytes = 0
 
@@ -116,6 +115,11 @@ class BaseLink:
         self.active = state != "offline"
         self.on_state(state, reason)
 
+    def _fresh(self) -> None:
+        """A new connection: counters and line state start over."""
+        self.rx_bytes = self.tx_bytes = 0
+        self.splitter = LineSplitter(self._line)
+
     def drop(self, reason: str) -> None:
         """Offline now, without waiting for the other side (a disconnect that
         never got an answer). A late answer is then ignored."""
@@ -123,19 +127,20 @@ class BaseLink:
             self._set("offline", reason)
 
 
-class AgwLink(BaseLink):
-    kind = "agw"
+class AgwPort:
+    """The TCP link to Direwolf's AGW port, shared by all connections (CR45: up
+    to 5 at once). Registers mycall, switches the raw monitor on and hands every
+    frame to the AgwLink of that station; raw frames go to on_frame."""
 
-    def __init__(self, *a) -> None:
-        super().__init__(*a)
+    def __init__(self, cfg: Config, on_frame) -> None:
+        self.cfg = cfg
+        self.on_frame = on_frame
         self._writer: asyncio.StreamWriter | None = None
         self.agw_up = asyncio.Event()
-        self.connecting = False
-        self._outstanding = 0
-        self._y_reply = asyncio.Event()
+        self.links: dict[str, "AgwLink"] = {}      # remote call -> its connection
 
-    def _send(self, kind: str, call_from: str = "", call_to: str = "",
-              data: bytes = b"", pid: int = 0) -> None:
+    def send(self, kind: str, call_from: str = "", call_to: str = "",
+             data: bytes = b"", pid: int = 0) -> None:
         w = self._writer
         if w is not None and not w.is_closing():
             w.write(HEADER.pack(self.cfg.radio_port, kind.encode(), pid, call_from.encode(),
@@ -158,9 +163,9 @@ class AgwLink(BaseLink):
             warned = False
             self._writer = writer
             log.info("connected to Direwolf AGW %s:%s", self.cfg.agw_host, self.cfg.agw_port)
-            self._send("R")
-            self._send("X", self.cfg.mycall)
-            self._send("k")
+            self.send("R")
+            self.send("X", self.cfg.mycall)
+            self.send("k")
             self.agw_up.set()
             try:
                 while True:
@@ -179,30 +184,55 @@ class AgwLink(BaseLink):
                 self.agw_up.clear()
                 self._writer = None
                 writer.close()
-                if self.active:
-                    self.connecting = False
-                    self._set("offline", "Direwolf connection lost")
+                for link in list(self.links.values()):
+                    link.connecting = False
+                    link.drop("Direwolf connection lost")
             await asyncio.sleep(5)
 
     def _dispatch(self, kind: str, cfrom: str, cto: str, data: bytes) -> None:
-        tb = self.target
         if kind == "K" and len(data) > 1:
             frame = radio.decode(data[1:])
             if frame is not None:
                 self.on_frame(frame)
-        elif kind == "X":
+            return
+        if kind == "X":
             if data[:1] != b"\x01":
                 log.error("Direwolf refused to register %s", self.cfg.mycall)
-        elif kind == "C" and tb in (cfrom, cto):
+            return
+        remote = cto if cfrom == self.cfg.mycall else cfrom
+        link = self.links.get(remote) or self.links.get(cfrom) or self.links.get(cto)
+        if link is not None:
+            link.on_agw(kind, data)
+
+
+class AgwLink(BaseLink):
+    """One AX.25 connection through the shared AgwPort."""
+    kind = "agw"
+
+    def __init__(self, port: AgwPort, cfg: Config, on_state, on_line) -> None:
+        super().__init__(cfg, on_state, on_line)
+        self.port = port
+        self.agw_up = port.agw_up
+        self.connecting = False
+        self._outstanding = 0
+        self._y_reply = asyncio.Event()
+
+    def _set(self, state: str, reason: str = "") -> None:
+        if state == "offline" and self.port.links.get(self.target) is self:
+            del self.port.links[self.target]        # free for the next connection
+        super()._set(state, reason)
+
+    def on_agw(self, kind: str, data: bytes) -> None:
+        if kind == "C":
             self.connecting = False
             self._set("online")
-        elif kind == "D" and tb in (cfrom, cto):
+        elif kind == "D":
             self.rx_bytes += len(data)
             self.splitter.feed(data)
-        elif kind == "Y" and tb in (cfrom, cto) and len(data) >= 4:
+        elif kind == "Y" and len(data) >= 4:
             self._outstanding = struct.unpack("<I", data[:4])[0]
             self._y_reply.set()
-        elif kind == "d" and tb in (cfrom, cto):
+        elif kind == "d":
             self.connecting = False
             if self.active:
                 self._set("offline", "disconnected")
@@ -211,10 +241,15 @@ class AgwLink(BaseLink):
         if not self.agw_up.is_set():
             self._set("offline", "Direwolf not reachable")
             return
+        other = self.port.links.get(self.target)
+        if other is not None and other is not self:
+            self._set("offline", f"already connected to {self.target}")
+            return
+        self.port.links[self.target] = self
         self.connecting = True
-        self.rx_bytes = self.tx_bytes = 0
+        self._fresh()
         self._set("connecting")
-        self._send("C", self.cfg.mycall, self.target, pid=PID_NO_L3)
+        self.port.send("C", self.cfg.mycall, self.target, pid=PID_NO_L3)
 
     def send_line(self, text: str) -> None:
         self.send_bytes((text + "\r").encode("utf-8"))
@@ -223,13 +258,12 @@ class AgwLink(BaseLink):
         """Raw bytes (a line, or image data after //IMGGO)."""
         self.tx_bytes += len(data)
         for i in range(0, len(data), PACLEN):
-            self._send("D", self.cfg.mycall, self.target, data[i:i + PACLEN],
-                       PID_NO_L3)
+            self.port.send("D", self.cfg.mycall, self.target, data[i:i + PACLEN], PID_NO_L3)
 
     async def outstanding(self) -> int:
         """Frames of our connection still waiting in Direwolf (AGW 'Y')."""
         self._y_reply.clear()
-        self._send("Y", self.cfg.mycall, self.target)
+        self.port.send("Y", self.cfg.mycall, self.target)
         try:
             await asyncio.wait_for(self._y_reply.wait(), 5)
         except asyncio.TimeoutError:
@@ -241,7 +275,7 @@ class AgwLink(BaseLink):
         its retries); until then the state is "disconnecting"."""
         if self.active and self.agw_up.is_set():
             self._set("disconnecting")
-            self._send("d", self.cfg.mycall, self.target)
+            self.port.send("d", self.cfg.mycall, self.target)
         elif self.active:
             self.connecting = False
             self._set("offline", "Direwolf not reachable")
@@ -271,7 +305,7 @@ class TelnetLink(BaseLink):
         self.on_line(line)
 
     async def connect(self) -> None:
-        self.rx_bytes = self.tx_bytes = 0
+        self._fresh()
         self._set("connecting")
         try:
             reader, writer = await asyncio.open_connection(self.cfg.telnet_host,

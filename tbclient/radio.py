@@ -91,3 +91,29 @@ def aprs_symbol(info: bytes) -> str | None:
     if (table in "/\\" or table.isdigit() or "A" <= table <= "Z") and "!" <= code <= "~":
         return sym
     return None
+
+
+U_NAMES = {0x2F: "SABM", 0x6F: "SABME", 0x43: "DISC", 0x0F: "DM", 0x63: "UA", 0x87: "FRMR",
+           0x03: "UI", 0xAF: "XID", 0xE3: "TEST"}
+S_NAMES = {0x01: "RR", 0x05: "RNR", 0x09: "REJ", 0x0D: "SREJ"}
+
+
+def frame_type(control: int) -> str:
+    """Control field in the style of the classic monitors (modulo 8): 'I 3,2',
+    'RR 4', 'SABM', 'UI'; a '+' / '-' marks the poll/final bit."""
+    pf = "+" if control & 0x10 else ""
+    if control & 0x01 == 0:
+        return f"I {(control >> 1) & 7},{(control >> 5) & 7}{pf}"
+    if control & 0x03 == 0x01:
+        return f"{S_NAMES.get(control & 0x0F, 'S?')} {(control >> 5) & 7}{pf}"
+    return U_NAMES.get(control & 0xEF, f"U{control:02X}") + pf
+
+
+def describe(f: RawFrame) -> str:
+    """One monitor line (CR45 channel 0): 'fm OE3XYZ to APRS via OE1XAR <UI>: text'."""
+    head = f"fm {f.src} to {f.dest}" + (f" via {','.join(f.path)}" if f.path else "")
+    text = ""
+    if f.info:
+        raw = f.info.decode("utf-8", "replace").replace("\r", " ").replace("\n", " ")
+        text = ": " + "".join(c if c.isprintable() else "." for c in raw)[:200]
+    return f"{head} <{frame_type(f.control)}>{text}"

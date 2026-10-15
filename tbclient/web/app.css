@@ -159,6 +159,27 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .clog td.end { color: var(--muted); font-family: inherit; }
 .clog tr.failed td { color: var(--muted); }
 
+/* --- channels (CR45): chips under the top bar -------------------------- */
+.chstrip { display: flex; gap: 6px; padding: 5px 10px; background: #26384a; overflow-x: auto;
+  scrollbar-width: none; flex-shrink: 0; }
+.chstrip .ch { flex: none; display: inline-flex; align-items: center; gap: 6px; border: none;
+  border-radius: 14px; padding: 3px 10px; font: 12px ui-monospace, Consolas, monospace;
+  background: #1d2b3a; color: #dfe6ec; }
+.chstrip .ch.act { background: #e6f1fb; color: #0c447c; }
+.chstrip .chn { font-family: system-ui, sans-serif; font-size: 11px; opacity: .7; }
+.chstrip .chtag { font-family: system-ui, sans-serif; font-size: 10px; opacity: .7; }
+.chstrip .chx { margin-left: 2px; opacity: .6; font-family: system-ui, sans-serif; }
+.chstrip .chx:hover { opacity: 1; }
+.chstrip .chnew { background: transparent; border: 1px dashed #5f7385; }
+.chstrip .ch.blink { animation: chblink 1s ease-in-out infinite; }
+.chstrip .ch.blink-disc { animation: chblinkdisc .8s ease-in-out infinite; }
+@keyframes chblink { 50% { background: #5aa2ff; color: #fff; } }
+@keyframes chblinkdisc { 50% { background: var(--bad); color: #fff; } }
+@media (prefers-reduced-motion: reduce) {
+  .chstrip .ch.blink { animation: none; background: #5aa2ff; color: #fff; }
+  .chstrip .ch.blink-disc { animation: none; background: var(--bad); color: #fff; }
+}
+
 /* --- terminal (CR43) --------------------------------------------------- */
 .termview { flex: 1; display: none; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
 #app.view-term .main-col, #app.view-term .people, #app.view-term .mailview { display: none !important; }
