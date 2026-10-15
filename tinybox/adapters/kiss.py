@@ -204,10 +204,10 @@ class KissAdapter(AgwAdapter):
                 log.exception("%s: error handling link event %s", link.remote, name)
         self._kick.set()
 
-    def send_ui(self, dest: str, text: str) -> None:
+    def send_ui(self, dest: str, text: str, path: list[str] | None = None) -> None:
         """One UI frame (unproto) from the mailbox call, e.g. to TBCHAT-1."""
         try:
-            f = ax.ui_frame(dest, self.mycall, text.encode("utf-8"))
+            f = ax.ui_frame(dest, self.mycall, text.encode("utf-8"), path=path or None)
         except AX25Error as exc:
             log.warning("UI frame to %s not sent: %s", dest, exc)
             return

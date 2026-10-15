@@ -604,7 +604,7 @@ class WebServer:
         cfg = self.app.cfg
         out = {}
         for section in ("station", "direwolf", "mailbox", "telnet", "web", "console",
-                        "storage", "logging", "mqtt"):
+                        "storage", "logging", "mqtt", "beacon"):
             values = {k: (str(v) if isinstance(v, Path) else v)
                       for k, v in asdict(getattr(cfg, section)).items()}
             out[section] = values

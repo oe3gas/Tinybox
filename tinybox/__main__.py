@@ -8,7 +8,7 @@ import logging
 import os
 import sys
 
-from . import VERSION, config, logsetup, notify, texts
+from . import VERSION, beacon, config, logsetup, notify, texts
 from .adapters import agw, brocast, inbox, sysop, telnet, web
 from .app import App
 
@@ -74,8 +74,11 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
     else:
         app.agw = agw.AgwAdapter(app)
     notify.MailNotifier(app)
+    app.beacon = beacon.Beacon(app)               # CR48: console BEACON works without [beacon]
     tasks = [asyncio.create_task(app.agw.run()),
              asyncio.create_task(housekeeping(app))]
+    if cfg.beacon.enabled:
+        tasks.append(asyncio.create_task(app.beacon.run()))
     if cfg.brocast.publish:
         tasks.append(await brocast.start(app))
     if cfg.inbox.enabled:

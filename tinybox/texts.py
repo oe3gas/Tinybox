@@ -191,6 +191,7 @@ HELP_CONSOLE = [
     "  LOG BUNDLE      One file with log, version and config, to hand over",
     "  DISC call  Disconnect a user",
     "  STATUS     Mailbox status",
+    "  BEACON     Send the beacon now and show it",
     "  WEB        Show the web GUI login link",
     "  FWD        Forward status of all partners",
     "  FWD call   Connect to a partner mailbox now",
@@ -203,6 +204,10 @@ HELP_CONSOLE = [
     "  RESTART [s]    Restart TinyBox (e.g. after changing tinybox.conf) in s",
     "                 seconds (default 60), users are warned; NOW, CANCEL as above",
 ]
+BEACON_SENT = "Beacon to {dest}: {text}"
+BEACON_EMPTY = "Beacon: nothing to send ([beacon] text is empty, no new mail)."
+BEACON_NO_RADIO = "Beacon not sent: the radio (Direwolf / KISS) is not connected."
+BEACON_STATE = "Beacon {state}, {n} sent since the start."
 CONSOLE_NO_BYE = "This is the local console. Use SHUTDOWN to stop or RESTART to restart TinyBox."
 WHO_HEADER = "Call       Via     Since (UTC)       State"
 WHO_ROW = "{call:<10} {via:<7} {since:<17} {state}"

@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR47 umgesetzt)
+Stand: 15.10.2026 (CR48 umgesetzt)
 
 ## Übersicht
 
@@ -54,6 +54,7 @@ Stand: 15.10.2026 (CR47 umgesetzt)
 | 45 | Multi-Connect im Client: bis 5 Verbindungen, umschaltbar (Kanäle), Monitor-Kanal | ✅ siehe unten |
 | 46 | Client über kisshub (`link = kiss`) mit eigenem AX.25 – vollwertiges PR-Programm ohne Direwolf und ohne TinyBox; eingehende Connects | ✅ siehe unten |
 | 47 | Mail in der Outbox sofort aussenden, nicht erst beim nächsten Sync | ✅ siehe unten |
+| 48 | TinyBox-Bake: Text und Intervall in `[beacon]`, neue Post als „Mail for:“-Liste in der Bake | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1282,4 +1283,29 @@ ausgesendet werden.
   Mailbox. Sie geht mit dem nächsten Sync (auch dem nach dem Anmelden) hinaus.
 - Hinweis im Composer: „Goes out right away to your TinyBox“.
 - Tests: `SendAtOnceTests` in `tests/test_mailsync.py`.
+
+## CR48 – Bake der TinyBox (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+Eine Bake für die TinyBox-BBS: in der Konfiguration unter `[beacon]` steht, welcher Text
+in welchem Intervall gesendet wird. Liegen neue Mails für User vor, kommt das in die
+Bakenaussendung hinein.
+
+### Umsetzung
+
+- `tinybox.conf` `[beacon]`: `enabled` (Standard no), `interval_min` (5–1440), `dest`
+  (Ziel des UI-Frames, Standard BEACON), `path` (bis 2 Digis, z. B. WIDE1-1), `text`
+  (`{call}` = mailbox_call, `{qth}`), `mail_list` (yes), `first_after_sec` (60).
+- `tinybox/beacon.py`: ein UI-Frame vom Mailbox-Rufzeichen, z. B.
+  `TinyBox OE3GAS-1 - connect for mail and chat - Mail for: OE1ABC OE3TEC`. In die Liste
+  kommen die Rufzeichen (ohne SSID, alphabetisch) mit **ungelesener persönlicher Post**
+  hier – nur lokale Post, nicht wartende Forward-Post oder gehaltene. Gelesen → fällt aus
+  der Liste. Mehr als in einen Frame passt (256 Byte): Rest als „+n“. Leerer Text und
+  keine neue Post → keine Aussendung.
+- AGW: mit Digi-Pfad als `V`-Frame, sonst wie bisher `M`; KISS: UI-Frame mit Pfad.
+- Sysop-Konsole: **`BEACON`** sendet sofort und zeigt den Text (auch bei
+  `enabled = no`, zum Testen). Die Werte stehen in der Sysop-Weboberfläche unter Settings.
+- Nur TinyBox, daher keine neue Client-Version und keine TBNEWS.
+- Tests: `tests/test_beacon.py`.
 

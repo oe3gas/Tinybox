@@ -113,6 +113,18 @@ enabled  = yes                 # scripts drop *.txt here, TinyBox makes bulletin
 dir      = eingang             # processed: eingang/erledigt, rejected: eingang/fehler
 poll_sec = 10
 
+[beacon]
+# CR48: a UI frame from the mailbox call every interval_min minutes. With
+# mail_list = yes the calls with new private mail are appended:
+#   TinyBox OE3GAS-1 - connect for mail and chat - Mail for: OE1ABC OE3TEC
+enabled      = no
+interval_min = 30              # 5 ... 1440
+dest         = BEACON          # destination call of the UI frame (e.g. BEACON, ID, MAIL)
+path         =                 # up to 2 digipeaters, e.g. WIDE1-1 (empty = direct)
+text         = TinyBox {call} - connect for mail and chat   # {call} = mailbox_call, {qth}; no # or ;
+mail_list    = yes             # append "Mail for: CALL CALL ..." when there is new mail
+first_after_sec = 60           # the first beacon this long after the start
+
 [client]
 mail_notify   = yes            # TinyBox clients: a UI frame to TBMAIL ("OE3ABC 2 new")
                                # tells the addressee about new private mail, without connecting

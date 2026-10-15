@@ -295,6 +295,19 @@ class ClientCfg:
 
 
 @dataclass
+class BeaconCfg:
+    """[beacon] a UI frame from the mailbox call every interval_min minutes; with
+    mail_list the calls with new private mail are appended (CR48)."""
+    enabled: bool = False
+    interval_min: int = 30
+    dest: str = "BEACON"
+    path: list[str] = field(default_factory=list)   # digipeaters, e.g. WIDE1-1
+    text: str = "TinyBox {call} - connect for mail and chat"
+    mail_list: bool = True
+    first_after_sec: int = 60     # the first one this long after the start
+
+
+@dataclass
 class ChatCfg:
     enabled: bool = False
     history_lines: int = 20     # max lines per history request (/H n, //HIST)
@@ -366,6 +379,7 @@ class Config:
     rubrics: list[Rubric] = field(default_factory=list)
     forward: ForwardCfg = field(default_factory=ForwardCfg)
     client: ClientCfg = field(default_factory=ClientCfg)
+    beacon: BeaconCfg = field(default_factory=BeaconCfg)
     radio: RadioCfg = field(default_factory=RadioCfg)
     kiss: KissCfg = field(default_factory=KissCfg)
     ax25: Ax25Cfg = field(default_factory=Ax25Cfg)
@@ -692,7 +706,30 @@ def load(path: str | Path) -> Config:
                   telnet=telnet, web=web, console=console, storage=storage, logging=logging_cfg,
                   mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp), rubrics=_load_rubrics(cp),
                   forward=forward, radio=radio, kiss=kiss, ax25=ax25,
-                  client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)))
+                  client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)),
+                  beacon=_load_beacon(cp))
+
+
+def _load_beacon(cp: configparser.ConfigParser) -> BeaconCfg:
+    """[beacon] (CR48)."""
+    b = BeaconCfg(enabled=_get(cp, "beacon", "enabled", False, bool),
+                  interval_min=_get(cp, "beacon", "interval_min", 30, int),
+                  dest=normalize_call(_get(cp, "beacon", "dest", "BEACON") or "BEACON"),
+                  path=[normalize_call(c) for c in
+                        _get(cp, "beacon", "path", "").replace(",", " ").split()],
+                  text=_get(cp, "beacon", "text", BeaconCfg.text).strip(),
+                  mail_list=_get(cp, "beacon", "mail_list", True, bool),
+                  first_after_sec=_get(cp, "beacon", "first_after_sec", 60, int))
+    _check_range("beacon", "interval_min", b.interval_min, 5, 1440)
+    _check_range("beacon", "first_after_sec", b.first_after_sec, 0, 3600)
+    if len(b.path) > 2:
+        raise ConfigError("[beacon] path: at most 2 digipeaters")
+    for c in [b.dest, *b.path]:             # AX.25 addresses: BEACON, WIDE1-1 are fine
+        if not re.match(r"^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$", c):
+            raise ConfigError(f"[beacon] invalid call {c!r}")
+    if not b.text and not b.mail_list:
+        raise ConfigError("[beacon] text is empty and mail_list = no: nothing to send")
+    return b
 
 
 def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:

@@ -339,6 +339,23 @@ class SysopConsole:
                              restart=True)
         self.out(texts.RESTART_SCHEDULED.format(sec=sec, n=users))
 
+    def cmd_beacon(self, arg: str) -> None:
+        """BEACON: send the beacon now and show it (CR48)."""
+        from ..beacon import Beacon, beacon_text
+        b = getattr(self.app, "beacon", None) or Beacon(self.app)
+        self.app.beacon = b
+        text = b.send_now()
+        cfg = self.app.cfg.beacon
+        if text:
+            self.out(texts.BEACON_SENT.format(dest=cfg.dest, text=text))
+        elif not beacon_text(self.app.cfg, self.app.service):
+            self.out(texts.BEACON_EMPTY)
+        else:
+            self.out(texts.BEACON_NO_RADIO)
+        self.out(texts.BEACON_STATE.format(
+            state=f"every {cfg.interval_min} min" if cfg.enabled else "off ([beacon] enabled = no)",
+            n=b.sent))
+
     COMMANDS: dict[str, Callable[["SysopConsole", str], None]] = {
         "H": cmd_help, "?": cmd_help, "HELP": cmd_help,
         "B": cmd_bye, "BYE": cmd_bye,
@@ -347,6 +364,7 @@ class SysopConsole:
         "LOG": cmd_log,
         "DISC": cmd_disc,
         "STATUS": cmd_status,
+        "BEACON": cmd_beacon,
         "WEB": cmd_web,
         "FWD": cmd_fwd,
         "FWQ": cmd_fwq,

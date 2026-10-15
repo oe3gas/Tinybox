@@ -259,10 +259,17 @@ class AgwAdapter:
             log.debug(">> %s len=%d to %s", frame.kind, len(frame.data),
                       frame.call_to or "-")
 
-    def send_ui(self, dest: str, text: str) -> None:
-        """One UI frame (unproto) from the mailbox call, e.g. to TBCHAT-1."""
-        self.send(Frame("M", self.radio_port, PID_NO_L3, self.mycall, dest,
-                        text.encode("utf-8")))
+    def send_ui(self, dest: str, text: str, path: list[str] | None = None) -> None:
+        """One UI frame (unproto) from the mailbox call, e.g. to TBCHAT-1; with
+        path through digipeaters (AGW 'V': count, 10 bytes per call, data)."""
+        if path:
+            data = bytes([len(path)]) + b"".join(
+                normalize_call(c).encode("ascii").ljust(10, b"\0") for c in path)
+            self.send(Frame("V", self.radio_port, PID_NO_L3, self.mycall, dest,
+                            data + text.encode("utf-8")))
+        else:
+            self.send(Frame("M", self.radio_port, PID_NO_L3, self.mycall, dest,
+                            text.encode("utf-8")))
         logging.getLogger("tinybox.monitor.agw").info("UI %s > %s", dest, text)
 
     # --- main loop --------------------------------------------------------
