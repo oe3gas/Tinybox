@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR45 umgesetzt)
+Stand: 15.10.2026 (CR46 umgesetzt)
 
 ## Übersicht
 
@@ -52,6 +52,7 @@ Stand: 15.10.2026 (CR45 umgesetzt)
 | 43 | Terminalmodus: Gegenstelle ist keine TinyBox → Terminal statt Chat, kein `//CLIENT`; bei einer TinyBox per Menü | ✅ siehe unten |
 | 44 | Verbindungslogbuch in TinyBox und Client: Gegenstation, Connect, Disconnect, Dauer, Bytes; unbegrenzt, Export CSV und ADIF; jeder User sieht seine Connects (`QSO`) | ✅ siehe unten |
 | 45 | Multi-Connect im Client: bis 5 Verbindungen, umschaltbar (Kanäle), Monitor-Kanal | ✅ siehe unten |
+| 46 | Client über kisshub (`link = kiss`) mit eigenem AX.25 – vollwertiges PR-Programm ohne Direwolf und ohne TinyBox; eingehende Connects | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1217,4 +1218,45 @@ nur abwechselnd).
   `/api/channel/close {"ch"}`, `/api/term {"text", "ch"}`.
 - Tests: `FreeConnectTests` (TinyBox-Chat und BBS-Terminal parallel, zweite Station gleich
   nicht doppelt, nur eine TinyBox im Client-Modus, Kanäle schließen, Monitorzeilen).
+
+## CR46 – Client über kisshub (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+Der Client soll auch mit dem kisshub arbeiten, wenn ein KISS-TNC am PC hängt – damit ist er
+allein, ohne TinyBox, ein vollwertiges Packet-Radio-Programm. Ohne Eintrag bleibt
+`link = agw` (Direwolf).
+
+### Umsetzung
+
+- `tbclient.conf`: `[tinybox] link = kiss`, dazu `[kiss]` (host, port 8101, status_port
+  8102, channel, air_baud, txdelay_ms) und `[ax25]` (version, paclen, maxframe,
+  maxframe_ext, srej, n2, T1/T2/T3) – dieselben Werte wie `[ax25]` der TinyBox.
+- `tbclient/kisslink.py`: `KissPort` (KISS-TCP zum kisshub über `tinybox.ax25.kissio`,
+  Router Frame → Verbindung, Timer aller Verbindungen, Monitor) und `KissLink` (eine
+  `Ax25Link` aus `tinybox/ax25` je Kanal, gleiche Schnittstelle wie `AgwLink`). Gesendete
+  Frames halten die Timer der anderen Verbindungen an (ein Sender für alle), gehörte
+  ebenso (Halbduplex). Stationen, die SABME mit DM beantworten, werden gemerkt (nächstes
+  Mal SABM).
+- **Gründe beim Trennen:** normal/Zeitüberschreitung → „disconnected“ (beim Connecten
+  „no answer from …“), DM → „refused (DM)“, Retries aus → „link lost (no answer)“.
+- **kisshub-Status:** alle 30 s `GET /status` (welcher TNC, im KISS-Modus?). Monitor-Kopf
+  z. B. „PK-232 ready via KISS · 22 frames · waiting to send 1: 0, 2: 0“; ist der kisshub
+  (oder bei AGW Direwolf) nicht erreichbar, zeigt das die Titelleiste rot.
+- **Eingehende Connects** (KISS und AGW): ruft eine Station uns an, nimmt sie der erste
+  freie Kanal als Terminal; der Chip blinkt. Kein Kanal frei oder die Station schon
+  verbunden → DM (KISS) bzw. sofortiges Trennen (AGW).
+- **Monitor:** zeigt mit KISS auch die eigenen Frames; Paare, die nach SABME mit
+  Modulo 128 arbeiten, werden mit zwei Steuerbytes richtig gelesen (`<I 1,5>`).
+- Mit KISS gilt die Verbindung als Funk wie AGW: Bilder (IMG), UI-Frames, Sync-Pausen.
+- Tests: `tests/test_tbclient_kiss.py` (Chat mit der TinyBox über deren KISS-Adapter,
+  Client zu Client mit eingehendem Connect, Fehl-Connect), AGW-Gegenstück in
+  `FreeConnectTests.test_incoming_connect_over_agw`.
+
+### Betrieb
+
+kisshub lauscht nur auf `127.0.0.1`: Client und kisshub laufen auf dem PC mit dem TNC.
+Start: `kisshub.bat`, dann `tbclient.bat`. TinyBox und Client können sich denselben
+kisshub teilen (unterschiedliche Rufzeichen); kisshub gibt gesendete Frames auch an die
+anderen Clients weiter.
 

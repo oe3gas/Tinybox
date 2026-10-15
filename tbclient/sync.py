@@ -540,7 +540,7 @@ class Syncer:
 
     @property
     def radio(self) -> bool:
-        return self.core.link.kind == "agw"
+        return self.core.link.kind != "telnet"
 
     async def _send(self, *lines: str) -> None:
         """One request. On radio with a pause before it (not before the first),

@@ -16,6 +16,7 @@ from . import VERSION, proto
 from .config import CALL_RE, Config
 from .images import Images, ImageStore
 from .channels import MAX_CHANNELS, TERM_SNAPSHOT, Channel
+from .kisslink import KissLink, KissPort
 from .links import AgwLink, AgwPort, TelnetLink
 from .logbook import Logbook
 from .mailstore import MailStore
@@ -46,7 +47,9 @@ class ClientCore:
         # CR45: up to 5 channels over one AGW port (telnet: one channel). chan is
         # the chat channel - the one TinyBox in client mode; without one it is
         # the placeholder channel 0, always offline.
-        self.port = AgwPort(cfg, self._on_frame) if cfg.link == "agw" else None
+        self.port = (AgwPort(cfg, self._on_frame, self._incoming) if cfg.link == "agw"
+                     else KissPort(cfg, self._on_frame, self._incoming) if cfg.link == "kiss"
+                     else None)
         self.channels: dict[int, Channel] = {}
         self.nochat = Channel(self, 0, self._new_link())
         last = self.settings.get("target", "")
@@ -55,6 +58,7 @@ class ClientCore:
         self.chan: Channel = first
         self.monitor: deque[tuple[int, str]] = deque(maxlen=MONITOR_MAX)   # (n, line)
         self.monitor_n = 0
+        self._mod128: set[frozenset] = set()      # pairs that talk modulo 128 (monitor)
         # CR44: connection logbook
         self.logbook = Logbook(cfg.data_dir / "connlog.db")
         # the frequency is asked once per run of the client (the last one is offered)
@@ -195,9 +199,27 @@ class ClientCore:
     # --- channels (CR45) -------------------------------------------------------
 
     def _new_link(self):
+        if isinstance(self.port, KissPort):
+            return KissLink(self.port, self.cfg, None, None)
         if self.port is not None:
             return AgwLink(self.port, self.cfg, None, None)
         return TelnetLink(self.cfg, None, None)
+
+    def _incoming(self, remote: str):
+        """CR46: somebody connected to us - the first free channel takes it as a
+        terminal. None = no channel free (or that station is already connected)."""
+        if any(c.target == remote and c.state != "offline" for c in self.channels.values()):
+            return None
+        n = self.free_channel()
+        if n is None:
+            return None
+        ch = self.open_channel(n)
+        if ch.state != "offline":
+            return None
+        ch.target = ch.link.target = remote
+        ch.incoming, ch.view, ch.auto, ch._user_disc = True, "term", False, False
+        self.console.append(f"[{n}] *** {remote} connected to us")
+        return ch.link
 
     def open_channel(self, n: int) -> Channel:
         ch = self.channels.get(n)
@@ -344,7 +366,7 @@ class ClientCore:
         while True:
             await asyncio.sleep(OUTSTANDING_SEC)
             for c in list(self.channels.values()):
-                if c.state == "online" and c.link.kind == "agw" and c.n:
+                if c.state == "online" and c.link.kind != "telnet" and c.n:
                     try:
                         c.outstanding = await c.link.outstanding()
                     except Exception:
@@ -559,7 +581,7 @@ class ClientCore:
             self._handshake()
 
     def _want_ui(self) -> bool:
-        if self.link.kind != "agw" or self.cfg.ui == "no":
+        if self.link.kind == "telnet" or self.cfg.ui == "no":
             return False
         if self.cfg.ui == "yes":
             return True
@@ -571,7 +593,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM" + (",Z,IMG" if self.link.kind == "agw" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM" + (",Z,IMG" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -601,8 +623,15 @@ class ClientCore:
         self._touch()
 
     def _on_frame(self, f: RawFrame) -> None:
-        self.monitor_n += 1                      # CR45: channel 0, everything heard
-        self.monitor.append((self.monitor_n, time.strftime("%H:%M:%S ") + describe(f)))
+        pair = frozenset((f.src, f.dest))        # CR45: channel 0, everything heard
+        u = f.control & 0xEF if f.control & 0x03 == 0x03 else None
+        if u == 0x6F:                            # SABME: this pair uses modulo 128
+            self._mod128.add(pair)
+        elif u in (0x2F, 0x43, 0x0F):            # SABM, DISC, DM: modulo 8 again
+            self._mod128.discard(pair)
+        self.monitor_n += 1
+        self.monitor.append((self.monitor_n, time.strftime("%H:%M:%S ")
+                             + describe(f, pair in self._mod128)))
         tb = self.target
         if f.direct:
             self.direct_at[f.src] = time.time()
@@ -935,6 +964,7 @@ class ClientCore:
             # CR45: the channels, the chat channel (0 = none) and the shown one
             "channels": [c.summary(now) for _, c in sorted(self.channels.items())],
             "chat_ch": self.chan.n, "max_ch": MAX_CHANNELS, "monitor_n": self.monitor_n,
+            "radio": self.radio_state(),                                # CR46
             "ch": ch,
             "term": self._term_of(ch), "term_n": self._term_n_of(ch),
             "client": self.handshake_done and bool(self.caps or self.boards),
@@ -997,6 +1027,14 @@ class ClientCore:
         if self.state != "online" or "IMG" not in self.caps:
             return False
         return self.images.fetch(hash)
+
+    def radio_state(self) -> dict:
+        """The way to the radio: Direwolf (AGW), kisshub (KISS, with the TNC) or telnet."""
+        if isinstance(self.port, KissPort):
+            return self.port.radio_state()
+        if self.port is not None:
+            return {"via": "agw", "up": self.port.agw_up.is_set()}
+        return {"via": "telnet", "up": True}
 
     def _term_of(self, ch: int | None) -> list:
         if ch == 0:

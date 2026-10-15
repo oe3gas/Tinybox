@@ -557,6 +557,33 @@ class FreeConnectTests(unittest.TestCase):
             dw.server.close()
         asyncio.run(scenario())
 
+    def test_incoming_connect_over_agw(self):
+        """CR46: another station connects to us - a free channel takes it."""
+        async def scenario():
+            dw = FakeDirewolf()
+            port = await dw.start()
+            with tempfile.TemporaryDirectory() as ta, tempfile.TemporaryDirectory() as tb:
+                a = ClientCore(client_cfg(ta, agw_port=port))
+                b = ClientCore(dataclasses.replace(client_cfg(tb, agw_port=port), mycall="OE3TEC"))
+                tasks = [asyncio.create_task(a.run()), asyncio.create_task(b.run())]
+                await asyncio.wait_for(a.port.agw_up.wait(), 5)
+                await asyncio.wait_for(b.port.agw_up.wait(), 5)
+                await until(lambda: len([c for c in dw.clients if c["calls"]]) == 2)
+                self.assertTrue(await b.connect("OE3GAS", ch=1))
+                await until(lambda: any(c.incoming and c.state == "online"
+                                        for c in a.channels.values()))
+                ca = a.channels[1]
+                self.assertEqual((ca.target, ca.mode), ("OE3TEC", "terminal"))
+                self.assertTrue(b.send_raw("Servus", ch=1))
+                await until(lambda: any(x == "Servus" for _, k, x in ca.term if k == "rx"))
+                b.disconnect(1)
+                await until(lambda: ca.state == "offline")
+                self.assertEqual(ca.ended["kind"], "remote")
+                for t in tasks:
+                    t.cancel()
+            dw.server.close()
+        asyncio.run(scenario())
+
     def test_only_one_tinybox_in_client_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             core = ClientCore(client_cfg(tmp))
@@ -605,6 +632,9 @@ class FreeConnectTests(unittest.TestCase):
         self.assertEqual(radio.frame_type(0x3F), "SABM+")
         self.assertEqual(radio.frame_type(0x41), "RR 2")
         self.assertEqual(radio.frame_type(0x46), "I 3,2")
+        # modulo 128 (after SABME): two control bytes, then the PID
+        f = radio.decode(raw_frame("OE3GAS", "OE1ABC", 0x02) + bytes([0x0A, 0xF0]) + b"Hallo")
+        self.assertEqual(radio.describe(f, mod128=True), "fm OE1ABC to OE3GAS <I 1,5>: Hallo")
 
 
 if __name__ == "__main__":

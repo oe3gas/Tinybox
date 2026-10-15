@@ -1,0 +1,4 @@
+- KISS TNC via kisshub: link = kiss, own AX.25 2.2,
+  no Direwolf needed (see tbclient.conf.example).
+- Incoming connects open a free channel.
+- Monitor shows own frames and modulo 128 right.

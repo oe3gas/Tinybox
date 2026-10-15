@@ -46,6 +46,7 @@ class Channel:
         self.term_n = 0
         self.act_n = 0                            # activity: the GUI blinks the chip on change
         self.auto = False                         # opened by the mail sync: gone when offline
+        self.incoming = False                     # the other station connected to us (CR46)
         self.outstanding: int | None = None       # frames waiting in Direwolf (AGW 'Y')
         self._user_disc = False
         self._disc_timer: asyncio.TimerHandle | None = None
@@ -59,6 +60,7 @@ class Channel:
         self.target = target
         self.link.target = target
         self._user_disc = False
+        self.incoming = False
         await self.link.connect()
 
     def disconnect(self) -> None:
@@ -104,6 +106,10 @@ class Channel:
             self._mark()                           # the connection counts from here
             if self.link.kind == "telnet":         # the test port is always the own TinyBox
                 self.core.attach(self)
+            elif self.incoming:                     # they called us: a terminal (CR46)
+                self.ended = None
+                self.mode = "terminal"
+                self.act_n += 1                     # the chip blinks
             else:
                 self._detect_task = asyncio.ensure_future(self._detect())
         if state == "disconnecting":

@@ -19,7 +19,7 @@ class Config:
     mycall: str = ""
     locator: str = ""                 # Maidenhead locator, ADIF MY_GRIDSQUARE (CR44)
     tinybox_call: str = "OE3GAS-1"
-    link: str = "agw"                 # agw = radio via Direwolf, telnet = TinyBox test port
+    link: str = "agw"                 # agw = Direwolf, kiss = kisshub (CR46), telnet = test port
     ui: str = "auto"                  # auto | yes | no  (chat events as UI frames)
     auto_connect: bool = False
     telnet_host: str = "127.0.0.1"
@@ -36,6 +36,23 @@ class Config:
     sync_on_login: bool = True        # sync the headers after every login (CR40)
     img_rate: int = 100               # net bytes/s of the link, for the time estimate
     img_target: int = 4096            # the picture is shrunk to about this many bytes ("normal")
+    # CR46: link = kiss - kisshub and the client's own AX.25 layer 2
+    kiss_host: str = "127.0.0.1"
+    kiss_port: int = 8101
+    kiss_channel: int = 0
+    kiss_status_port: int = 8102      # kisshub's status (which TNC), 0 = off
+    kiss_air_baud: int = 1200
+    kiss_txdelay_ms: int = 300
+    ax25_version: str = "2.2"
+    ax25_paclen: int = 128
+    ax25_maxframe: int = 4
+    ax25_maxframe_ext: int = 7
+    ax25_srej: bool = True
+    ax25_n2: int = 10
+    ax25_t1_min: float = 3.0
+    ax25_t1_max: float = 30.0
+    ax25_t2: float = 1.5
+    ax25_t3: float = 300.0
 
 
 def _strip(value: str) -> str:
@@ -88,11 +105,36 @@ def load(path: str | Path) -> Config:
     if not 1024 <= cfg.img_target <= 16320:
         raise ConfigError("[images] target_bytes must be 1024 ... 16320")
 
+    cfg.kiss_host = get("kiss", "host", cfg.kiss_host)
+    cfg.kiss_port = int(get("kiss", "port", str(cfg.kiss_port)))
+    cfg.kiss_channel = int(get("kiss", "channel", str(cfg.kiss_channel)))
+    cfg.kiss_status_port = int(get("kiss", "status_port", str(cfg.kiss_status_port)))
+    cfg.kiss_air_baud = int(get("kiss", "air_baud", str(cfg.kiss_air_baud)))
+    cfg.kiss_txdelay_ms = int(get("kiss", "txdelay_ms", str(cfg.kiss_txdelay_ms)))
+    cfg.ax25_version = get("ax25", "version", cfg.ax25_version)
+    cfg.ax25_paclen = int(get("ax25", "paclen", str(cfg.ax25_paclen)))
+    cfg.ax25_maxframe = int(get("ax25", "maxframe", str(cfg.ax25_maxframe)))
+    cfg.ax25_maxframe_ext = int(get("ax25", "maxframe_ext", str(cfg.ax25_maxframe_ext)))
+    cfg.ax25_srej = get("ax25", "srej", "yes").lower() in ("yes", "true", "1", "on")
+    cfg.ax25_n2 = int(get("ax25", "n2", str(cfg.ax25_n2)))
+    cfg.ax25_t1_min = float(get("ax25", "t1_min_sec", str(cfg.ax25_t1_min)))
+    cfg.ax25_t1_max = float(get("ax25", "t1_max_sec", str(cfg.ax25_t1_max)))
+    cfg.ax25_t2 = float(get("ax25", "t2_sec", str(cfg.ax25_t2)))
+    cfg.ax25_t3 = float(get("ax25", "t3_sec", str(cfg.ax25_t3)))
+    if cfg.ax25_version not in ("2.0", "2.2"):
+        raise ConfigError("[ax25] version must be 2.0 or 2.2")
+    if not 16 <= cfg.ax25_paclen <= 256:
+        raise ConfigError("[ax25] paclen must be 16 ... 256")
+    if not 1 <= cfg.ax25_maxframe <= 7 or not 1 <= cfg.ax25_maxframe_ext <= 127:
+        raise ConfigError("[ax25] maxframe must be 1 ... 7, maxframe_ext 1 ... 127")
+    if not 300 <= cfg.kiss_air_baud <= 115200:
+        raise ConfigError("[kiss] air_baud must be 300 ... 115200")
+
     for name, call in (("[station] mycall", cfg.mycall), ("[tinybox] call", cfg.tinybox_call)):
         if not CALL_RE.match(call):
             raise ConfigError(f"{name}: invalid call {call!r}")
-    if cfg.link not in ("agw", "telnet"):
-        raise ConfigError("[tinybox] link must be agw or telnet")
+    if cfg.link not in ("agw", "kiss", "telnet"):
+        raise ConfigError("[tinybox] link must be agw, kiss or telnet")
     if cfg.ui not in ("auto", "yes", "no"):
         raise ConfigError("[tinybox] ui must be auto, yes or no")
     return cfg

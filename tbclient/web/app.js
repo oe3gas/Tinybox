@@ -1983,7 +1983,7 @@ function topStatus() {
   if (activeCh === 0) {
     const q = (S.channels || []).filter((x) => x.outstanding !== null && x.state === "online")
       .map((x) => `${x.n}: ${x.outstanding}`);
-    return `${S.monitor_n} frames heard` + (q.length ? ` · waiting in Direwolf ${q.join(", ")}` : "");
+    return radioText() + ` · ${S.monitor_n} frames` + (q.length ? ` · waiting to send ${q.join(", ")}` : "");
   }
   if (c.state === "connecting") {
     const secs = Math.round(c.state_age + (performance.now() - stateRecv) / 1000);
@@ -1996,7 +1996,18 @@ function topStatus() {
     return (S.board ? `${S.board.name} · ${S.members.length} here` : "connected")
       + (S.ui ? " · UI" : " · I-frames");
   }
-  return endedText(c) || "offline";
+  return endedText(c) || (radioUp() ? "offline" : radioText());
+}
+
+// CR46: the way to the radio - Direwolf (AGW) or kisshub with its TNC (KISS)
+const radioUp = () => !S.radio || S.radio.up;
+function radioText() {
+  const r = S.radio || {};
+  if (r.via === "telnet") return "telnet test port";
+  if (r.via === "agw") return r.up ? "Direwolf" : "Direwolf not reachable";
+  if (!r.up) return "kisshub not reachable";
+  if (!r.tnc) return "kisshub";
+  return `${r.tnc} ${r.tnc_state === "kiss" || !r.tnc_state ? "ready" : r.tnc_state} via KISS`;
 }
 
 function renderTop() {
@@ -2027,7 +2038,7 @@ function renderTop() {
   else if (st === "online") setConnIcon("connected");
   else if (st === "disconnecting") setConnIcon("disconnected", "pulse");
   else setConnIcon(kind === "failed" ? "failed" : kind === "remote" ? "disconnected" : "connect");
-  $("status-dot").className = "dot " + (mon ? "online" : kind === "failed" ? "failed" : st);
+  $("status-dot").className = "dot " + (!radioUp() ? "failed" : mon ? "online" : kind === "failed" ? "failed" : st);
   $("status-text").textContent = topStatus();
 }
 setInterval(() => { if (S && curCh().state === "connecting") $("status-text").textContent = topStatus(); }, 1000);

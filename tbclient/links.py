@@ -132,9 +132,10 @@ class AgwPort:
     to 5 at once). Registers mycall, switches the raw monitor on and hands every
     frame to the AgwLink of that station; raw frames go to on_frame."""
 
-    def __init__(self, cfg: Config, on_frame) -> None:
+    def __init__(self, cfg: Config, on_frame, on_incoming=None) -> None:
         self.cfg = cfg
         self.on_frame = on_frame
+        self.on_incoming = on_incoming            # remote -> AgwLink of a free channel, or None
         self._writer: asyncio.StreamWriter | None = None
         self.agw_up = asyncio.Event()
         self.links: dict[str, "AgwLink"] = {}      # remote call -> its connection
@@ -201,6 +202,14 @@ class AgwPort:
             return
         remote = cto if cfrom == self.cfg.mycall else cfrom
         link = self.links.get(remote) or self.links.get(cfrom) or self.links.get(cto)
+        if link is None and kind == "C" and self.on_incoming is not None:
+            # somebody connected to us (CR46): a free channel, or the link goes down again
+            link = self.on_incoming(remote)
+            if link is None:
+                self.send("d", self.cfg.mycall, remote)
+                return
+            self.links[remote] = link
+            link._fresh()
         if link is not None:
             link.on_agw(kind, data)
 

@@ -18,6 +18,7 @@ class RawFrame:
     path: list[str] = field(default_factory=list)
     control: int = 0
     info: bytes = b""
+    rest: bytes = b""          # everything after the address field (monitor, modulo 128)
 
     @property
     def is_ui(self) -> bool:
@@ -57,7 +58,7 @@ def decode(data: bytes) -> RawFrame | None:
     if len(calls) < 2 or pos >= len(data):
         return None
     control = data[pos]
-    frame = RawFrame(calls[0], calls[1], calls[2:], control)
+    frame = RawFrame(calls[0], calls[1], calls[2:], control, rest=bytes(data[pos:]))
     if frame.is_ui or frame.is_i:
         frame.info = bytes(data[pos + 2:])      # skip the PID
     return frame
@@ -98,22 +99,35 @@ U_NAMES = {0x2F: "SABM", 0x6F: "SABME", 0x43: "DISC", 0x0F: "DM", 0x63: "UA", 0x
 S_NAMES = {0x01: "RR", 0x05: "RNR", 0x09: "REJ", 0x0D: "SREJ"}
 
 
-def frame_type(control: int) -> str:
-    """Control field in the style of the classic monitors (modulo 8): 'I 3,2',
-    'RR 4', 'SABM', 'UI'; a '+' / '-' marks the poll/final bit."""
+def frame_type(control: int, ext: int | None = None) -> str:
+    """Control field in the style of the classic monitors: 'I 3,2', 'RR 4',
+    'SABM', 'UI'; a '+' marks the poll/final bit. ext = the second control byte
+    of an I or S frame with modulo 128 (AX.25 v2.2 after SABME)."""
+    if control & 0x03 == 0x03:                     # U frames: always one byte
+        return U_NAMES.get(control & 0xEF, f"U{control:02X}") + ("+" if control & 0x10 else "")
+    if ext is not None:                            # modulo 128
+        pf, nr = ("+" if ext & 0x01 else ""), ext >> 1
+        if control & 0x01 == 0:
+            return f"I {control >> 1},{nr}{pf}"
+        return f"{S_NAMES.get(control & 0x0F, 'S?')} {nr}{pf}"
     pf = "+" if control & 0x10 else ""
     if control & 0x01 == 0:
         return f"I {(control >> 1) & 7},{(control >> 5) & 7}{pf}"
-    if control & 0x03 == 0x01:
-        return f"{S_NAMES.get(control & 0x0F, 'S?')} {(control >> 5) & 7}{pf}"
-    return U_NAMES.get(control & 0xEF, f"U{control:02X}") + pf
+    return f"{S_NAMES.get(control & 0x0F, 'S?')} {(control >> 5) & 7}{pf}"
 
 
-def describe(f: RawFrame) -> str:
-    """One monitor line (CR45 channel 0): 'fm OE3XYZ to APRS via OE1XAR <UI>: text'."""
+def describe(f: RawFrame, mod128: bool = False) -> str:
+    """One monitor line (CR45 channel 0): 'fm OE3XYZ to APRS via OE1XAR <UI>: text'.
+    mod128: this pair talks AX.25 v2.2 with modulo 128 (SABME seen): I and S
+    frames have two control bytes."""
     head = f"fm {f.src} to {f.dest}" + (f" via {','.join(f.path)}" if f.path else "")
+    ext = None
+    info = f.info
+    if mod128 and f.control & 0x03 != 0x03 and len(f.rest) >= 2:
+        ext = f.rest[1]
+        info = f.rest[3:] if f.control & 0x01 == 0 else b""   # I: two control bytes + PID
     text = ""
-    if f.info:
-        raw = f.info.decode("utf-8", "replace").replace("\r", " ").replace("\n", " ")
+    if info:
+        raw = info.decode("utf-8", "replace").replace("\r", " ").replace("\n", " ")
         text = ": " + "".join(c if c.isprintable() else "." for c in raw)[:200]
-    return f"{head} <{frame_type(f.control)}>{text}"
+    return f"{head} <{frame_type(f.control, ext)}>{text}"

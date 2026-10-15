@@ -8,7 +8,8 @@ locator      =                 # your locator for the ADIF export of the connect
 
 [tinybox]
 call         = OE3GAS-1        # your TinyBox (mailbox); other stations: "Connect to" in the top bar
-link         = agw             # agw = radio via Direwolf, telnet = TinyBox test port (same PC)
+link         = agw             # agw = radio via Direwolf; kiss = KISS TNC via kisshub, the client's
+                               # own AX.25 (no Direwolf needed); telnet = TinyBox test port (same PC)
 ui           = auto            # chat events as UI frames: auto = if the TinyBox is heard directly
 auto_connect = no              # connect when the client starts
 telnet_host  = 127.0.0.1
@@ -18,6 +19,29 @@ telnet_port  = 6300
 agw_host     = 127.0.0.1
 agw_port     = 8000            # AGWPORT in direwolf.conf
 radio_port   = 0               # Direwolf channel
+
+[kiss]
+# only with link = kiss (CR46): kisshub owns the TNC, the client runs its own AX.25.
+# kisshub listens on loopback only: client and kisshub on the PC with the TNC.
+host         = 127.0.0.1
+port         = 8101            # [server] port in kisshub.conf
+status_port  = 8102            # kisshub status: which TNC, ready or not (0 = off)
+channel      = 0               # KISS port number in the stream
+air_baud     = 1200            # radio bit rate (own transmit time, T1)
+txdelay_ms   = 300             # as set in kisshub.conf
+
+[ax25]
+# only with link = kiss - the same values as [ax25] of the TinyBox
+version      = 2.2             # 2.2: SABME/SREJ/XID, falls back to 2.0 by itself; 2.0: SABM only
+paclen       = 128             # info bytes per I frame
+maxframe     = 4               # window modulo 8 (1..7)
+maxframe_ext = 7               # window modulo 128 (v2.2)
+srej         = yes
+n2           = 10              # retries
+t1_min_sec   = 3               # T1 adapts itself between these limits
+t1_max_sec   = 30
+t2_sec       = 1.5             # acknowledge after the other station's burst
+t3_sec       = 300             # check an idle link after n seconds
 
 [web]
 host         = 0.0.0.0         # 0.0.0.0 = reachable in the LAN (no login! see PLANUNG.md 11/5)
