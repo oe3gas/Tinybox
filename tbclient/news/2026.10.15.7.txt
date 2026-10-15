@@ -1,0 +1,2 @@
+- Mail to several calls: separate them with blank,
+  comma or semicolon (up to 10). Was refused before.

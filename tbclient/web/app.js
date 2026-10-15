@@ -1759,7 +1759,9 @@ function setType(t) {
 }
 
 function composeTo() {
-  let to = $("cp-to").value.trim().toUpperCase().replace(/\s+/g, "");
+  // several recipients (CR27): comma, semicolon or blank between the calls -> "A,B"
+  let to = $("cp-to").value.trim().toUpperCase()
+    .replace(/\s*@\s*/g, "@").replace(/[\s,;]+/g, ",").replace(/^,|,$/g, "");
   if (draft.type === "B" && rubricList().length) {
     to = to.replace(/^@/, "");
     return $("cp-rub").value + (to ? "@" + to : "");
@@ -1807,10 +1809,10 @@ async function saveCompose(ev) {
   ev.preventDefault();
   const to = composeTo();
   const err = $("cp-err");
-  const ok = draft.type === "P" ? /^[A-Z0-9]{1,6}(-\d{1,2})?(@[A-Z0-9#.-]{1,40})?$/.test(to)
+  const ok = draft.type === "P" ? /^[A-Z0-9]{1,6}(-\d{1,2})?(,[A-Z0-9]{1,6}(-\d{1,2})?){0,9}(@[A-Z0-9#.-]{1,40})?$/.test(to)
                                 : /^[A-Z0-9]{1,6}(@[A-Z0-9#.-]{1,40})?$/.test(to);
   if (!ok) {
-    err.textContent = draft.type === "P" ? "Please enter a call, e.g. OE3ABC or OE3ABC@OE3XYZ."
+    err.textContent = draft.type === "P" ? "Please enter calls, e.g. OE3ABC, OE3ABC@OE3XYZ or OE3ABC OE3XYZ (up to 10)."
                      : draft.pick ? "Please check the area, e.g. WW or AUT (or leave it empty)."
                                          : "Please enter a rubric, e.g. ALL or ALL@WW.";
     err.classList.remove("hidden");

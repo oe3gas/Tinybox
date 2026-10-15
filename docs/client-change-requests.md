@@ -446,6 +446,11 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 
 **Umgesetzt 12.10.2026:** `MessageService.check_send_list()` (Liste prüfen, Doppelte falten, max. 10; Bulletins und `$BID` nur ein Ziel), Terminal `S OE3TEC,OE1ABC` → `Msg 12, 13 saved.`, `//SEND` → `//SENT 12 13` (msgid `tbc-<mid>-<Call>`, ein Empfänger wie bisher `tbc-<mid>`), Client legt je Nummer einen „Sent"-Eintrag an, Composer nimmt `OE3ABC,OE3XYZ[@…]`. Jede Kopie beginnt mit der Zeile `To: OE3TEC, OE1ABC`, damit jeder Leser sieht, wer sie noch bekommen hat (Ergänzung 12.10.2026 abends; auch im Sent-Ordner des Clients). Client-Version 2026.10.12.4, To-Zeile 2026.10.12.5. Tests: `test_mailsync.py` (`MultiRecipientTests`).
 
+
+**Korrektur 15.10.2026:** Die Eingabeprüfung im Composer ließ nur ein Rufzeichen zu – Listen
+wurden mit „Please enter a call“ abgelehnt, Leerzeichen einfach entfernt. Jetzt trennen
+Leerzeichen, Komma oder Strichpunkt (bis 10 Empfänger, z. B. `OE3TEC OE3NDC`); der Client
+schickt sie als `OE3TEC,OE3NDC`. Client 2026.10.15.7.
 ## CR28 – Emoticons und Emojis in beide Richtungen (✅ 12.10.2026)
 
 **Beobachtet (Funktest 12.10.2026):** Vom Terminal kam `das funktioniert ;-)` – der Client zeigte `;-)` als Text, weil nur die nasenlosen Formen (`;)`) bekannt sind. Vom Client ging `sehr nett!~0B` – 🙂 aus dem Picker hat keine Emoticon-Form, also der Code; dazu klebte er am `!`. Am Terminal liest sich das als `~0B`.
