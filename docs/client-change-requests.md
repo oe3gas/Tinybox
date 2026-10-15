@@ -46,7 +46,7 @@ Stand: 15.10.2026 (CR40 präzisiert)
 | 37 | brocast-Listener: Ansicht „Mit Trennlinien“ raus, Teile-Knöpfe nur im Teletext, Teletext in echter Teletext-Optik (Pixelschrift, großer Zeilenabstand) | ✅ siehe unten |
 | 38 | Teletext: Zeilenabstand auf Zeichenhöhe, brocast-Schriftzug nach der Teletext-Titelseite über jeder Seite; Bildkonverter (Bilder als Mosaik-Bulletins, nur station) | ✅ siehe unten |
 | 39 | TinyBox-Web-GUI: „Rubrics“ aufklappbar in der Seitenleiste, Klick zeigt die Bulletins dieser Rubrik | ✅ siehe unten |
-| 40 | Sync beim Anmelden: Köpfe (eigene Mails + abonnierte Rubriken), kurze persönliche Mails gleich mit, sonst Text erst beim Anklicken; geordneter Abort mit Restanzeige und Zeitschätzung | offen – siehe unten |
+| 40 | Sync beim Anmelden: alle Köpfe (eigene Mails + abonnierte Rubriken), persönliche Mails ≤ 256 Byte gleich mit, sonst Text erst beim Anklicken; geordneter Abort mit Restanzeige und Zeitschätzung; Terminal: Abort statt 10-Zeilen-Seiten (CR29) | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -833,35 +833,37 @@ Texte** (`_texts()` in `tbclient/sync.py`); kurze Texte hängt die TinyBox schon
 |---|---|---|
 | E1 | Kurze persönliche Mails gleich mitnehmen? | **Ja.** Bulletins nie – nur Köpfe. |
 | E2 | Wann abgleichen? | **Bei jeder Anmeldung** automatisch (Mail + abonnierte Rubriken). Knopf „Sync“ bleibt für zwischendurch. |
-| E3 | Erstes Anmelden (leere Mailbox) | **Alle Köpfe der persönlichen Mails** herunterladen – abbrechbar über „Abort“ (E4). |
+| E3 | Erstes Anmelden (leere Mailbox) | 1) **alle Köpfe der persönlichen Mails**, 2) **alle Köpfe der abonnierten Rubriken** – **kein Limit**, keine „Weiter“-Abfrage. Der User entscheidet selbst mit „Abort“ (E4), wann Schluss ist. Die Menge ist ohnehin durch die Ablauffrist der Bulletins begrenzt. |
 | E4 | Abbruch | **Abort-Knopf** für einen **geordneten** Abbruch (siehe unten). |
 | E5 | Restanzeige | Beim **Start** des Transfers (nach dem Anmelden) und beim **Abort** eine Meldung: was ist noch ausständig + **geschätzte Zeit**. |
 | E6 | Klick auf einen Kopf ohne Verbindung (kein Connect) | Meldung **„not connected“**, Anforderung **verwerfen** – nicht für das nächste Mal vormerken. |
+| E7 | Was ist „kurz“? | **`short_bytes` = 256 Byte** als Vorgabe; steht ein Eintrag in `[sync]` der `tbclient.conf`, gilt dieser. Richtwert: „kurz“ ≈ **2 s** Sendezeit. |
+| E8 | Hinweis auf Abort | **Zu Beginn** des Downloads wird der User auf die Abort-Möglichkeit hingewiesen, danach laufen **alle** Köpfe komplett durch. |
+| E9 | Terminal (CR29) | Abort auch im Terminalbetrieb; damit **entfällt** die Seitenteilung zu 10 Zeilen mit „continue/abort“ (siehe unten). |
 
-### Was ist „kurz“? (Vorschlag, zu bestätigen)
+### „Kurz“ = 256 Byte (E7)
 
-**Kurz = Text bis 512 Byte** (eigene Einstellung `[sync] short_bytes = 512` in der `tbclient.conf`,
-0 = nie Texte mitnehmen).
-
-Begründung:
-- 512 Byte = **2 Frames** zu 256 Byte (PACLEN des Clients), das sind ca. 6–8 Zeilen Text – eine typische
-  „Antwort/kurze Info“-Mail. Bei 1200 Bd rund **5 s** Sendezeit.
-- Passt mit den Köpfen in **denselben Wechsel**: `chunk_bytes` 1024 minus Platz für ~3 Köpfe
-  (3 × 90 Byte) lässt ~750 Byte für Texte (`want=`). Mit `Z` (LZHUF) passen eher mehr hinein.
-- Umsetzung: `want=` bleibt wie heute, die TinyBox hängt aber nur Texte persönlicher Mails
-  ≤ `short=` an (neuer Parameter `short=<n>` im `//SYNC`; bei `//BSYNC` immer `want=0`).
-  Ohne neuen Parameter (alte TinyBox) schickt der Client `want=0` → nur Köpfe, Texte auf Klick.
-- Längere persönliche Mails: nur Kopf, Text beim Anklicken.
+- Neue Einstellung `[sync] short_bytes` in der `tbclient.conf` (und `tbclient.conf.example`),
+  **Vorgabe 256**, 0 = nie Texte mitnehmen. Steht der Eintrag in der conf, gilt dieser.
+- 256 Byte = **1 Frame** (PACLEN 256), ca. 3–4 Zeilen Text. Bei 1200 Bd (~100–120 Byte/s netto)
+  rund **2 s** Sendezeit – das ist Gerhards Maßstab für „kurz“.
+- Passt mit den Köpfen in denselben Wechsel (`chunk_bytes` 1024, `want=`).
+- Umsetzung: neuer Parameter `short=<n>` im `//SYNC`, die TinyBox hängt nur Texte persönlicher Mails
+  ≤ `short` an; bei `//BSYNC` immer `want=0`. Alte TinyBox ohne `short=` → Client schickt `want=0`
+  (nur Köpfe, Texte auf Klick).
+- Längere persönliche Mails und alle Bulletins: nur Kopf, Text beim Anklicken.
 
 ### Ablauf beim Anmelden
 
 1. Verbindung steht → Client startet von sich aus den Abgleich: zuerst persönliche Post (`//SYNC`),
    dann abonnierte Rubriken (`//BSYNC`), nur Köpfe (+ kurze persönliche Texte, siehe oben).
-2. **Startmeldung** (E5), sobald die erste Antwort da ist – erst dann ist der Umfang bekannt
+2. **Hinweis auf Abort** (E8) gleich beim Start, z. B. „Downloading headers – press Abort to stop at any time“.
+   Danach laufen **alle** Köpfe ohne Limit und ohne Rückfrage durch (persönliche Post, dann jede abonnierte Rubrik).
+3. **Startmeldung** (E5), sobald die erste Antwort da ist – erst dann ist der Umfang bekannt
   (`//SYNCEND <more>` liefert die Zahl der noch ausstehenden Köpfe), z. B.:
    > Sync started: 37 mail headers + 4 short texts, bulletins (3 rubrics) pending – approx. 1 min 40 s
-3. Fortschritt in der Statuszeile wie heute (Schritt, n von m).
-4. Liste zeigt die Köpfe sofort; Einträge ohne Text erkennbar (Symbol „nicht geladen“ + Größe in Byte).
+4. Fortschritt in der Statuszeile wie heute (Schritt, n von m).
+5. Liste zeigt die Köpfe sofort; Einträge ohne Text erkennbar (Symbol „nicht geladen“ + Größe in Byte).
 
 ### Geordneter Abort (E4)
 
@@ -896,8 +898,28 @@ Begründung:
 - **Keine Verbindung** → „not connected“, Anforderung verworfen (E6). Kein eigener Connect nur für den Klick.
 - Gelesen-Meldung (`r=` im nächsten `//SYNC`) erst, wenn der Text wirklich angezeigt wurde.
 
+### Ablauffrist der Bulletins
+
+- Bulletins werden nach einer Frist gelöscht; das begrenzt, wie viele Köpfe ein neuer Client überhaupt
+  bekommen kann – deshalb ist kein Limit nötig.
+- **Heute** gibt es dafür nur **eine** Frist für alle Rubriken: `bulletin_expire_days` (Vorgabe 30) in
+  `[mailbox]` der `tinybox.conf`; `purge_expired()` löscht, der Client sieht es über die Tombstones (`//D`).
+
+### Terminal: Abort statt Seitenteilung (E9, ersetzt CR29)
+
+- Heute (CR29): Ausgaben über 10 Zeilen kommen seitenweise (`PAGE_LINES = 10` in `session.py`) mit
+  `--More (10/37)-- Enter = continue, A = abort:`.
+- Neu: **zu Beginn** einer langen Ausgabe (> 10 Zeilen) ein Hinweis, z. B.
+  `37 lines follow - send A to abort`, dann läuft die Ausgabe **komplett** durch, ohne Rückfrage.
+- Abort: Eingabe `A` / `Q` / `/AB` während der Ausgabe → die TinyBox schickt nichts mehr nach, Abschluss
+  `*** aborted, 21 lines skipped`.
+- Technische Grenze: Was schon an Direwolf/AGW übergeben ist, geht noch hinaus. Damit der Abort greift,
+  gibt die TinyBox die Ausgabe **portionsweise** an Direwolf (z. B. ~2 Frames vorgehalten, Rest erst wenn
+  diese bestätigt sind – AGW `y`/Outstanding-Frames) und prüft dazwischen auf Eingaben.
+- Ergibt einen TBNEWS-Hinweis (Bedienung im Terminal ändert sich).
+
 ### Noch offen
 
-- Bestätigung „kurz = 512 Byte“ bzw. anderer Wert.
-- Erstes Anmelden, Punkt 2: Bulletins der abonnierten Rubriken – auch **alle** Köpfe oder nur die
-  letzten n / letzten x Tage?
+- Ablauffrist: reicht die **eine** Frist für alle (`bulletin_expire_days`), oder soll – wie von Gerhard
+  beschrieben – **jedes Board/jede Rubrik eine eigene Frist** bekommen (z. B. in `[rubrics]` der
+  `tinybox.conf`)?
