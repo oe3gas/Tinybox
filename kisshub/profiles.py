@@ -19,9 +19,8 @@ devices there (firmware 30.DEC.88, 01.AUG.91, 13.SEP.95):
       commands - without it the PK-232 answers "?EXPERT command" and ignores them.
       Order checked by Gerhard on the device; RESTART after AWLEN/PARITY (TRM) is
       not needed
-      NOT YET TRIED ON THE AIR with KISS - pk232py only queried the KISS
-      parameter (hw_logs 20261006_fw_scan_*). The first PK-232 test (K8)
-      confirms or corrects these lines.
+      Tested on the air 14.10.2026 with device A, firmware Release 13.SEP.95
+      (VHF, 1200 Bd). Other devices / firmware not yet.
 
 Kenwood TM-D710: the TNC must be in packet mode (TNC key on the panel), then
 "KISS ON" + "RESTART" in terminal mode. TH-D74 / TH-D75: KISS is switched on in

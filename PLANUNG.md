@@ -480,7 +480,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
 | F0–F7 | Forwarding-Modul (Abschnitt 13) | F1–F5 fertig (06.–08.10.2026), mit LinBPQ getestet; F0 teilweise. Als Nächstes F6 |
 | C0–C3 | TinyBox-Client (Abschnitt 12) | Grundgerüst, Post-Hinweis, Chat-Broadcast (08.10.2026), Offline-Mailbox (10.10.2026). Funktest C3 offen |
-| K1–K10 | KISS-Mode: eigener AX.25-Automat (v2.2) + `kisshub` (Abschnitt 15) | K1–K4 ✅, K5 ✅ (Tests laut Gerhard erfolgreich), K7 ✅ `kisshub` mit PK-232-Profil (14.10.2026). Als Nächstes K8: Funktest PK-232 (`docs/kiss-mode-konzept.md` 8b), danach K6, K9 (Kenwood), K10 |
+| K1–K10 | KISS-Mode: eigener AX.25-Automat (v2.2) + `kisshub` (Abschnitt 15) | K1–K5 ✅, K7 ✅; Funktest PK-232 erfolgreich (14.10.2026, Gerät A, FW 13.SEP.95). K6, K8–K10 ruhen (15.10.2026): Tests und Zugriff auf weitere TNCs stehen aus |
 
 ---
 
