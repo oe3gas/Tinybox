@@ -85,6 +85,10 @@ main { flex-grow: 1; padding: 20px; min-width: 0; min-height: 0; overflow: auto;
 main.two { display: grid; grid-template-columns: minmax(0, 1fr) 470px; gap: 20px; }
 main.two.wide-right { grid-template-columns: minmax(0, 1fr) 520px; }
 main.one { display: flex; flex-direction: column; gap: 20px; }
+/* CR51: message list on top, reader below */
+main.split { display: flex; flex-direction: column; gap: 20px; overflow: hidden; }
+main.split .list-pane { flex: 0 0 38% !important; }
+main.split .reader-pane { flex: 1 1 0; min-height: 200px; }
 .col { display: flex; flex-direction: column; gap: 20px; min-height: 0; }
 
 /* cards */

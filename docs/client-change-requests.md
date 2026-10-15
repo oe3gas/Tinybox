@@ -1383,3 +1383,28 @@ enthalten.
 - Tests: `RadioTests`/`FreeConnectTests.test_monitor_lines` in `tests/test_tbclient.py`,
   `tests/test_tbclient_kiss.py`.
 
+
+## CR51 – TinyBox-Web-GUI: Liste bleibt beim Lesen sichtbar (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+Betrifft die Sysop-Web-GUI der TinyBox (http://127.0.0.1:8080/), nicht den Client.
+
+1. Beim Öffnen einer Nachricht verschwindet die Liste, die Nachricht füllt die Seite, rechts
+   steht immer das Formular „New message“. Die Übersicht soll sichtbar bleiben, der Text
+   darunter angezeigt werden.
+2. Das Formular „New message“ nur zeigen, wenn der Knopf „New message“ gedrückt wird – das
+   ist ein eigener Vorgang. Beim Lesen fällt es weg; der Knopf „New message“ steht im Kopf
+   der Liste.
+
+### Umsetzung
+
+1. `#/message/<Nr>`: oben die Nachrichtenliste (alle Spalten, Filter, Suche, Rubrik bleiben
+   erhalten, ca. 38 % der Höhe), darunter die Nachricht mit Reply / Edit header / Kill. Die
+   offene Zeile ist markiert. Ein Klick auf eine andere Zeile tauscht nur die Nachricht
+   unten aus – die Liste behält ihre Scroll-Position.
+2. Das Formular rechts beim Lesen ist entfernt. „New message“ (im Listenkopf) öffnet wie
+   bisher `#/compose`. **Reply** führt jetzt ebenfalls dorthin, mit vorausgefülltem
+   Empfänger und Betreff; „Cancel“ geht zurück zur Nachricht.
+- Dateien: `tinybox/web/app.js` (`viewMessage`, `viewCompose`, `route`),
+  `tinybox/web/app.css` (`main.split`). Nur die TinyBox, kein neuer Client.

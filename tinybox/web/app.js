@@ -17,6 +17,7 @@ const S = {
   mon: true,
   view: null,        // references to live parts of the current view
   currentId: null,
+  prefill: null,     // CR51: Reply -> #/compose with this
 };
 
 const ERRORS = {
@@ -690,32 +691,43 @@ function viewMessages() {
 
 function viewCompose() {
   const msgs = messagesCard({ compact: true });
-  const comp = composeCard();
+  const comp = composeCard(S.prefill);              // CR51: Reply comes here with a prefill
+  S.prefill = null;
   main().className = "two wide-right";
   main().replaceChildren(msgs.card, comp.card);
   comp.focus();
   return { updateMessages: msgs.update };
 }
 
+// CR51: list on top, the open message below it - the overview stays visible. Writing
+// (New message, Reply) is its own view (#/compose), not a panel beside the reader.
 function viewMessage(id) {
-  S.currentId = id;
-  const article = h("article", { class: "card", text: "Loading ..." });
-  let compose = composeCard();
-  const right = h("div", { class: "col" }, compose.card);
-  main().className = "two wide-right";
-  main().replaceChildren(article, right);
+  const msgs = messagesCard();
+  msgs.card.classList.add("list-pane");
+  const article = h("article", { class: "card reader-pane" });
+  main().className = "split";
+  main().replaceChildren(msgs.card, article);
 
-  api("messages/" + id).then((m) => {
-    renderReader(article, m, (prefill) => {
-      compose = composeCard(prefill);
-      right.replaceChildren(compose.card);
-      compose.focus();
+  function show(id) {
+    S.currentId = id;
+    msgs.update();                                   // mark the row
+    const row = msgs.card.querySelector("tr.current");
+    if (row) row.scrollIntoView({ block: "nearest" });
+    article.replaceChildren(h("div", { class: "empty", text: "Loading ..." }));
+    api("messages/" + id).then((m) => {
+      if (S.currentId !== id) return;                // already clicked further
+      renderReader(article, m, (prefill) => {
+        S.prefill = prefill;
+        location.hash = "#/compose";
+      });
+      scheduleRefresh("status", "messages");
+    }).catch((e) => {
+      article.replaceChildren(h("div", { class: "empty", text: e.message }));
     });
-    scheduleRefresh("status", "messages");
-  }).catch((e) => {
-    article.replaceChildren(h("div", { class: "empty", text: e.message }));
-  });
-  return {};
+  }
+  show(id);
+  // another message from the list: only the reader changes, the list keeps its scroll
+  return { updateMessages: msgs.update, showMessage: show };
 }
 
 function renderReader(article, m, onReply) {
@@ -1052,7 +1064,10 @@ function route() {
   const views = { dashboard: viewDashboard, messages: viewMessages, compose: viewCompose,
                   users: viewUsers, monitor: viewMonitor, jlog: viewJlog,
                   connlog: viewConnlog, settings: viewSettings };
-  if (name === "message" && /^\d+$/.test(parts[1] || "")) S.view = viewMessage(Number(parts[1]));
+  if (name === "message" && /^\d+$/.test(parts[1] || "")) {
+    if (S.view && S.view.showMessage) { S.view.showMessage(Number(parts[1])); return; }   // CR51
+    S.view = viewMessage(Number(parts[1]));
+  }
   else if (name === "user" && parts[1]) S.view = viewUser(decodeURIComponent(parts[1]));
   else S.view = (views[name] || viewDashboard)();
   main().scrollTop = 0;
