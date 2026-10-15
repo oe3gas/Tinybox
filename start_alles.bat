@@ -1,6 +1,7 @@
 @echo off
 rem ======================================================================
-rem  Dauerbetrieb PC2: Direwolf, brocastd (Station) und TinyBox starten.
+rem  Dauerbetrieb PC2: Direwolf, brocastd (Station), TinyBox und den
+rem  DX-Cluster-Sammler (dxfeed) starten.
 rem  Jedes Programm laeuft in einem eigenen Fenster. Beendet sich brocastd
 rem  oder TinyBox unerwartet, wird es nach 15 Sekunden neu gestartet.
 rem  Stoppen: im jeweiligen Fenster Strg+C druecken und mit J bestaetigen,
@@ -11,6 +12,8 @@ rem ---- bitte einmal anpassen -------------------------------------------
 set START_DIREWOLF=1
 set DIREWOLF_DIR=C:\direwolf
 set DIREWOLF_CONF=direwolf.conf
+rem 1 = DX-Cluster-Sammler starten (braucht dxfeed.conf, siehe dxfeed.conf.example)
+set START_DXFEED=1
 rem ----------------------------------------------------------------------
 
 cd /d "%~dp0"
@@ -35,6 +38,15 @@ timeout /t 3 /nobreak >nul
 
 echo Starte TinyBox ...
 start "[tinyb] TinyBox" /D "%~dp0" cmd /c "%~dp0tinybox_dauerbetrieb.bat"
+
+if "%START_DXFEED%"=="1" (
+    if exist "%~dp0dxfeed.conf" (
+        echo Starte DX-Cluster-Sammler ...
+        start "[dxfeed] DX-Cluster-Sammler" /D "%~dp0" cmd /c "%~dp0dxfeed_dauerbetrieb.bat"
+    ) else (
+        echo dxfeed.conf fehlt - DX-Cluster-Sammler nicht gestartet.
+    )
+)
 
 echo Alle Programme gestartet. Dieses Fenster schliesst sich in 10 Sekunden.
 timeout /t 10 >nul

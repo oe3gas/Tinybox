@@ -1,0 +1,15 @@
+[Unit]
+Description=TinyBox dxfeed: daily DX digest into the TinyBox inbox
+
+[Service]
+Type=oneshot
+User=tinybox
+Group=tinybox
+WorkingDirectory=/opt/tinybox
+# inbox in RAM (/run/tinybox/eingang, see tmpfiles-tinybox.conf); messages go to the journal
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m dxfeed -c /opt/tinybox/dxfeed.conf digest --tinybox /run/tinybox/eingang
+TimeoutStartSec=120
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes

@@ -1,9 +1,9 @@
 #!/bin/sh
-# Install or update TinyBox + brocastd + GeoSphere scripts on the NanoPi.
+# Install or update TinyBox + brocastd + GeoSphere scripts + dxfeed on the NanoPi.
 # Run as root from the copied production folder:   sudo sh deploy/install.sh
 #
 # Program files are replaced on every run. Never overwritten (machine data):
-#   tinybox.conf, brocast/brocastd.conf, brocast/brocast-core.yaml,
+#   tinybox.conf, dxfeed.conf, brocast/brocastd.conf, brocast/brocast-core.yaml,
 #   data/, brocast/data/, .geosphere_warnungen_*.json
 # Transient files (inbox, Sendeprotokoll, journal) live in RAM, see PRODUCTION.md.
 set -eu
@@ -11,7 +11,9 @@ set -eu
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 DEST=/opt/tinybox
 SVC_USER=tinybox
-UNITS="tinybox.service brocastd.service geosphere-wetter.service geosphere-wetter.timer geosphere-warnungen.service geosphere-warnungen.timer"
+UNITS="tinybox.service brocastd.service geosphere-wetter.service geosphere-wetter.timer geosphere-warnungen.service geosphere-warnungen.timer dxfeed.service dxfeed-digest.service dxfeed-digest.timer"
+# dxfeed is optional: enabled only once dxfeed.conf exists (see the end)
+DXFEED="dxfeed.service dxfeed-digest.timer"
 ENABLE="brocastd.service tinybox.service geosphere-wetter.timer geosphere-warnungen.timer"
 
 [ "$(id -u)" -eq 0 ] || { echo "Please run as root: sudo sh $0"; exit 1; }
@@ -32,14 +34,15 @@ if ! id "$SVC_USER" >/dev/null 2>&1; then
 fi
 
 # --- stop running services before replacing the code ------------------------
-for u in $ENABLE; do systemctl stop "$u" 2>/dev/null || true; done
+for u in $ENABLE $DXFEED; do systemctl stop "$u" 2>/dev/null || true; done
 
 # --- program files (always replaced) -----------------------------------------
 mkdir -p "$DEST/brocast"
-rm -rf "$DEST/tinybox" "$DEST/brocast/brocast"
+rm -rf "$DEST/tinybox" "$DEST/dxfeed" "$DEST/brocast/brocast"
 cp -R "$SRC/tinybox" "$DEST/tinybox"
+cp -R "$SRC/dxfeed" "$DEST/dxfeed"
 cp -R "$SRC/brocast/brocast" "$DEST/brocast/brocast"
-cp "$SRC/geosphere_station.py" "$SRC/geosphere_warnungen.py" "$SRC/tinybox.conf.example" "$SRC/VERSION" "$DEST/"
+cp "$SRC/geosphere_station.py" "$SRC/geosphere_warnungen.py" "$SRC/tinybox.conf.example" "$SRC/dxfeed.conf.example" "$SRC/VERSION" "$DEST/"
 cp "$SRC/brocast/brocastd.conf.example" "$SRC/brocast/requirements.txt" "$DEST/brocast/"
 
 # --- machine files (only on first install) -----------------------------------
@@ -59,7 +62,7 @@ fi
 [ -f "$DEST/brocast/brocast-core.yaml" ] || cp "$SRC/brocast/brocast-core.yaml" "$DEST/brocast/"
 
 # precompile once: faster first start on the small CPU
-python3 -m compileall -q "$DEST/tinybox" "$DEST/brocast/brocast" "$DEST"/geosphere_*.py >/dev/null || true
+python3 -m compileall -q "$DEST/tinybox" "$DEST/dxfeed" "$DEST/brocast/brocast" "$DEST"/geosphere_*.py >/dev/null || true
 chown -R "$SVC_USER:$SVC_USER" "$DEST"
 
 # --- systemd -----------------------------------------------------------------
@@ -95,4 +98,15 @@ if [ "$FIRST" -eq 1 ]; then
 else
     for u in $ENABLE; do systemctl start "$u"; done
     echo "Services restarted. Status: systemctl status tinybox brocastd"
+fi
+
+# --- dxfeed (optional DX cluster digest) ---------------------------------------
+if [ -f "$DEST/dxfeed.conf" ]; then
+    systemctl enable $DXFEED
+    for u in $DXFEED; do systemctl start "$u"; done
+    echo "dxfeed restarted (DX digest daily 05:00 to DX)."
+else
+    echo
+    echo "Optional DX digest: cp $DEST/dxfeed.conf.example $DEST/dxfeed.conf,"
+    echo "enter the callsign ([cluster] login), then run this script again."
 fi

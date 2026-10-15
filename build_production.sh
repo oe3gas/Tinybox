@@ -18,6 +18,8 @@ brocast/brocast-core.yaml
 brocast/brocastd.conf.example
 brocast/requirements.txt
 brocast/zdict
+dxfeed
+dxfeed.conf.example
 geosphere_station.py
 geosphere_warnungen.py
 tbclient/__init__.py
@@ -38,6 +40,7 @@ test
 tests
 production
 build_production.sh
+dxfeed_start.py
 fwdsim
 fwdsim.conf.example
 brocast/brocast-core.v*

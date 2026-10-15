@@ -1,0 +1,44 @@
+; dxfeed - DX cluster spots -> daily DX digest bulletin (PLANUNG.md section 16)
+; Copy to dxfeed.conf and enter your callsign. Never put dxfeed.conf into git.
+;
+;   collector:  dxfeed.bat collect   (or start_alles.bat with START_DXFEED=1)
+;   digest:     daily at 05:00 by dxfeed_aufgabe_einrichten.bat
+;   check:      dxfeed.bat status  |  dxfeed.bat show  |  dxfeed.bat digest
+
+[cluster]
+nodes         = dxc.hamserve.uk:7300   ; DXSpider; more nodes separated by spaces,
+                                       ; tried in turn when one fails
+login         =                        ; your callsign (without SSID)
+skimmer       = no                     ; no: "unset/skimmer" and skimmer spots (RBN) dropped
+init          =                        ; extra commands after login, separated by |
+idle_timeout_sec  = 900                ; no data this long -> reconnect
+reconnect_sec     = 30                 ; first pause, doubled up to reconnect_max_sec
+reconnect_max_sec = 600
+
+[data]
+db              = data/dxfeed.db       ; spots, kept keep_days days
+cty             = data/cty.dat         ; AD1C country file, fetched automatically
+cty_url         = https://www.country-files.com/cty/cty.dat
+cty_update_days = 14                   ; refresh when older
+ssl_verify      = yes                  ; certificate check for the cty.dat download
+keep_days       = 7
+
+[digest]
+to       = DX                          ; rubric; no @ address = this mailbox only.
+                                       ; With a [rubrics] section in tinybox.conf the
+                                       ; rubric must be listed there as accepted.
+hours    = 24
+spotter_continents = EU                ; only spots heard on these continents (empty = all)
+bands    = 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m
+; DXCC entities that are left out (primary prefix as in cty.dat)
+exclude  = DL F G GM GW GI EI I EA CT ON PA LX HB OE OK OM SP HA S5 9A E7 YU Z3 LZ YO
+           ER SV OZ SM LA OH ES YL LY UR EU UA UA2 K VE JA UA9
+min_spotters = 2                       ; fewer different spotters: only counted (busted calls)
+max_lines    = 30
+max_bytes    = 3000                    ; bulletin text; brocast cuts at [brocast] max_bytes
+valid        = 7d                      ; deleted after this time (empty = rubric default)
+inbox        = eingang                 ; TinyBox [inbox] dir
+
+[log]
+level = INFO
+file  = logs/dxfeed.log

@@ -141,6 +141,23 @@ Zeilen oder auf Knopfdruck). Ältere Zeilen löscht TinyBox automatisch. Im Chat
 der Mailbox wieder `idle_timeout_min`. Änderungen an den Boards wirken nach einem Neustart. Konsole (`W`)
 und Weboberfläche zeigen, wer in welchem Board ist; mitchatten nur über die Mailbox.
 
+## DX-Zusammenfassung (dxfeed)
+
+Sammelt die Spots eines DX-Clusters und legt jeden Tag um 05:00 eine
+Zusammenfassung der letzten 24 Stunden als Bulletin an **DX** in den
+Eingangsordner – nur lokal, keine Live-Spots über Funk (`PLANUNG.md`, Abschnitt 16).
+
+1. `dxfeed.conf.example` nach `dxfeed.conf` kopieren, unter `[cluster]` das
+   Rufzeichen bei `login` eintragen. Hat `tinybox.conf` einen Abschnitt
+   `[rubrics]`, dort `DX = DX news` als angenommene Rubrik eintragen.
+2. `start_alles.bat` startet den Sammler mit (Fenster `[dxfeed]`), einzeln:
+   `dxfeed_dauerbetrieb.bat`. Die Ländertabelle `cty.dat` holt er selbst.
+3. Einmal `dxfeed_aufgabe_einrichten.bat` ausführen: Aufgabe 05:00 in der
+   Aufgabenplanung (Ordner *TinyBox*).
+
+Prüfen: `dxfeed status`, `dxfeed show`, `dxfeed digest` (zeigt die
+Zusammenfassung nur an). Meldungen in `logs\dxfeed.log`.
+
 ## Tests
 
 Doppelklick auf `runtests.bat`.
@@ -155,6 +172,7 @@ Doppelklick auf `runtests.bat`.
 - Chat-Boards (Befehl C): fertig
 - Forwarding (optionales Modul): F1–F5 fertig (Empfangen, Senden, B1 komprimiert, Zeitplan, HOLD/REL), mit LinBPQ getestet; als Nächstes F6 (Anschluss ans Netz)
 - M4 (Limits, Rate-Limit, Dauerbetrieb): offen
+- DX-Zusammenfassung (dxfeed): umgesetzt – Sammler, Tages-Digest an DX um 05:00
 - TinyBox-Client (C0–C3): umgesetzt – Post-Hinweis, Chat per UI-Broadcast, Offline-Mailbox mit Abgleich (`tbclient.bat`)
 
 Details und Meilensteine: `PLANUNG.md` (Rev. 4).

@@ -440,6 +440,7 @@ C:\Tinybox\                PC2 (Entwicklung); PC1: E:\Tinybox, per git pull
   fwdsim\                   Forward-Testpartner, eigenständig (Abschnitt 13)
   brocast\                  brocast (eigenes Projekt, siehe brocast\README.md)
   geosphere_*.py            Wetter- und Warnungs-Skripte für den Eingangsordner
+  dxfeed\                  DX-Cluster-Sammler und Tages-Digest (Abschnitt 16), dxfeed.conf.example
   tests\
   docs\                     W0RLI-Spezifikation, Fachartikel
   data\  logs\  eingang\     Betriebsdaten, nicht im Repo
@@ -1096,6 +1097,19 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - **Umgesetzt (K7):** `kisshub` (`python -m kisshub -c kisshub.conf`, `kisshub.bat`) besitzt den TNC, Standard-Port **8101** (8001 bleibt Direwolf). PK-232-Profil mit Weckkette und Schnittstellen-Einstellungen aus pk232py (8N1, ohne Flusskontrolle, DTR/RTS high) und Init nach TRM 4.7.1 + `VHF ON`/`HBAUD 1200`; beim Beenden `C0 FF C0` + `KISS OFF`. Sendewarteschlange: Steuer-Frames vor I-Frames vor UI, höchstens 1,5 s Sendezeit im TNC.
 - **Umgesetzt (CR41, 15.10.2026):** Kanalmonitor in der TinyBox (Auslastung, Heard), Status-Abfrage von kisshub (`127.0.0.1:8102/status`), Web-GUI-Karte *Channel* und Kopfzeile mit TNC-Zustand.
 
+## 16. DX-Cluster-Feed `dxfeed` (entschieden 15.10.2026)
+
+- **Keine Live-Spots über Funk**, keine Dauerbeschallung: Der Spot-Strom wird gesammelt und **einmal täglich verdichtet**.
+- **Eigener Prozess** `python -m dxfeed collect` (Telnet zum DX-Cluster, DXSpider/CC-Cluster), unabhängig von der TinyBox; ein Cluster-Ausfall stört die Mailbox nicht. Neuverbindung mit wachsender Pause, Knotenliste reihum. Standardknoten `dxc.hamserve.uk:7300` (kein Favorit bei OE3GAS, in `dxfeed.conf` änderbar).
+- Spots in eigener SQLite-DB `data/dxfeed.db` (7 Tage), dazu die Verbindungszeiten: Der Digest sagt, wenn er nicht den ganzen Tag abdeckt.
+- **Ländertabelle** AD1C `cty.dat` (country-files.com), wird automatisch geholt und alle 14 Tage erneuert. WAE-Einträge (`*`) werden übersprungen, z. B. IT9 → Italien.
+- **Tages-Digest um 05:00 Lokalzeit** über die letzten 24 Stunden, als Bulletin an **DX** in den Eingangsordner (`Replace: dxfeed-JJJJMMTT`, `Valid: 7d`). **Nur lokal** (keine @-Adresse), da es (noch) keine Forward-Partner gibt.
+- **Relevanz:** nur Spotter in EU, nur 160 m – 4 m, häufige DXCC-Gebiete ausgeschlossen (Liste in `dxfeed.conf`), eine Zeile pro DX-Call (Gebiet, Bänder, Modes, erster/letzter Spot, Anzahl verschiedener Spotter). Calls mit nur einem Spotter werden nur gezählt (oft Tippfehler). Dazu Bandaktivität aller EU-Spots mit Spitzenstunde.
+- Höchstens 3000 Bytes Text (geht per brocast über Funk), ASCII, Zeilen unter 80 Spalten.
+- **Sicherheit:** Cluster-Daten sind fremde Eingabe aus dem Internet: Steuerzeichen und Telnet-Befehle werden entfernt, Kommentare auf druckbares ASCII und 40 Zeichen gekürzt, Rufzeichen geprüft, überlange Zeilen verworfen. Einzige Außenverbindungen: Telnet zum Cluster (Klartext, nur das Rufzeichen) und HTTPS für `cty.dat` (Zertifikatsprüfung an, `ssl_verify`).
+- **Betrieb PC2:** `start_alles.bat` startet den Sammler (`START_DXFEED=1`, nur wenn `dxfeed.conf` existiert); `dxfeed_aufgabe_einrichten.bat` legt die 05:00-Aufgabe an. NanoPi: `dxfeed.service`, `dxfeed-digest.timer` (aktiv, sobald `dxfeed.conf` existiert).
+- **Später (offen):** BBS-Befehl `DX` (letzte gefilterte Spots auf Abruf), persönliche Watchlist (Mail nur bei Treffer, opt-in).
+
 ---
 
 ## Quellen
@@ -1104,3 +1118,5 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - W0RLI-BBS-Spezifikation vom 12.10.1998: `docs/w0rli/w0rli-bbs-spec-12oct1998.pdf`
 - AEA PK-232MBX Operating Manual, Kap. 5 (nur Orientierung): https://www.dl0bn.de/dc7xj/Anleitungen/AEA%20PK-232MBX_Manual.pdf
 - Direwolf-Dokumentation (AGW-Interface): https://github.com/wb2osz/direwolf/tree/master/doc
+- DXSpider-Wiki, Verbinden mit einem Knoten: https://wiki.dxcluster.org/wiki/How_to_connect
+- AD1C Country Files (cty.dat): https://www.country-files.com

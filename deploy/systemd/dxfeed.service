@@ -1,0 +1,24 @@
+[Unit]
+Description=TinyBox dxfeed: DX cluster spot collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tinybox
+Group=tinybox
+WorkingDirectory=/opt/tinybox
+# needs /opt/tinybox/dxfeed.conf (copy dxfeed.conf.example, enter the callsign).
+# Spots in /opt/tinybox/data/dxfeed.db, written about once a minute.
+ExecStart=/usr/bin/python3 -m dxfeed -c /opt/tinybox/dxfeed.conf collect
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=always
+RestartSec=30
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

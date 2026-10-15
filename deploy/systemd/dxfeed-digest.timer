@@ -1,0 +1,9 @@
+[Unit]
+Description=TinyBox dxfeed: DX digest daily at 05:00 local time
+
+[Timer]
+OnCalendar=*-*-* 05:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
