@@ -1,0 +1,3 @@
+- Monitor: calls in colours, filter by text and by
+  TinyBox frame type (chat, %Q, mail, beacon, //), Clear.
+- Monitor in the settings is gone: Alt+0.

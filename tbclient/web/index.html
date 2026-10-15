@@ -48,7 +48,7 @@
     <div id="nav-boards"></div>
     <div id="nav-mailbox"></div>
     <div class="nav-h">Station</div>
-    <button id="nav-terminal" class="nav-item"><span>▸ Terminal</span></button>
+    <button id="nav-terminal" class="nav-item" title="Type TinyBox commands (L, R, F, QSO ...) directly - the TinyBox of the chat channel"><span>▸ TinyBox terminal</span></button>
     <button id="nav-monitor" class="nav-item"><span>▸ Monitor</span></button>
     <button id="nav-settings" class="nav-item"><span>⚙ Settings</span></button>
   </aside>
@@ -137,7 +137,21 @@
   </section>
 
   <section id="termview" class="termview hidden" aria-label="Terminal">
-    <div class="term-bar"><b id="term-title">Terminal</b> <span id="term-to" class="muted small"></span><span class="sp"></span><button id="term-close" class="sm">Back to chat</button></div>
+    <div class="term-bar"><b id="term-title">Terminal</b> <span id="term-to" class="muted small"></span><span class="sp"></span>
+      <span id="mon-tools" class="mon-tools hidden">
+        <input id="mon-q" type="search" placeholder="Filter" aria-label="Show only lines with this text" autocomplete="off" spellcheck="false">
+        <select id="mon-kind" aria-label="Which frames">
+          <option value="">All frames</option>
+          <option value="tb">TinyBox: all special frames</option>
+          <option value="chat">TinyBox: chat events (UI TBCHAT)</option>
+          <option value="quality">TinyBox: link quality (%Q)</option>
+          <option value="mail">TinyBox: mail notice (UI TBMAIL)</option>
+          <option value="beacon">TinyBox: beacon</option>
+          <option value="proto">TinyBox: client protocol (//)</option>
+        </select>
+        <button id="mon-clear" class="sm">Clear</button>
+      </span>
+      <button id="term-close" class="sm">Back to chat</button></div>
     <pre id="term-out" class="term-out" aria-live="polite"></pre>
     <form id="term-form" class="term-in" autocomplete="off">
       <input id="term-input" type="text" maxlength="250" spellcheck="false" autocapitalize="off" enterkeyhint="send" placeholder="Command (Enter = send)">
@@ -219,9 +233,6 @@
 
     <h3>Mailbox</h3>
     <p id="mb-info" class="muted"></p>
-
-    <h3>Monitor</h3>
-    <pre id="console" class="console"></pre>
 
     <h3>About</h3>
     <p class="muted small">TinyBox client <span id="version"></span>. APRS symbols: aprs.fi symbol set by OH7LZB, <a href="https://github.com/hessu/aprs-symbols" rel="noopener" target="_blank">github.com/hessu/aprs-symbols</a>.</p>

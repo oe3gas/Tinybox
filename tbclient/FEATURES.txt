@@ -10,6 +10,11 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Monitor neu (CR50): ohne "fm", jedes Rufzeichen in einer eigenen,
+  gleichbleibenden Farbe; Filter nach Text (gilt auch fuer neu
+  hereinkommende Frames), Auswahl der TinyBox-Sonderframes (Chat-Ereignisse,
+  Qualitaet %Q, Post-Hinweis TBMAIL, Bake, Client-Protokoll //), Knopf Clear.
+  Der alte Monitor in den Settings ist weg (Kanal 0 / Alt+0).
 - Suche (CR49): Suchfeld ueber der Nachrichtenliste der Mailbox. Ab 2
   Zeichen zeigt der Client alle Mails und Bulletins hier, deren Betreff,
   Text, Absender, Empfaenger oder @-Adresse den Text enthalten (Gross-/

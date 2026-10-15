@@ -635,6 +635,24 @@ class FreeConnectTests(unittest.TestCase):
         # modulo 128 (after SABME): two control bytes, then the PID
         f = radio.decode(raw_frame("OE3GAS", "OE1ABC", 0x02) + bytes([0x0A, 0xF0]) + b"Hallo")
         self.assertEqual(radio.describe(f, mod128=True), "fm OE1ABC to OE3GAS <I 1,5>: Hallo")
+        # CR50: modulo 128 recognised without the SABME (our own is not always heard)
+        self.assertTrue(radio.guess_mod128(f))
+        f8 = radio.decode(raw_frame("OE3GAS", "OE1ABC", 0x00, b"Hallo"))
+        self.assertFalse(radio.guess_mod128(f8))
+        rr128 = radio.decode(raw_frame("OE3GAS", "OE1ABC", 0x01) + bytes([0x0B]))
+        self.assertTrue(radio.guess_mod128(rr128))
+        e = radio.monitor_entry(f, True)
+        self.assertEqual((e["src"], e["dst"], e["typ"], e["text"], e["kind"]),
+                         ("OE1ABC", "OE3GAS", "I 1,5", "Hallo", ""))
+        ui = radio.decode(raw_frame("TBCHAT-1", "OE3GAS-1", 0x03, b"%Q 1 5 23"))
+        self.assertEqual(radio.monitor_entry(ui)["kind"], "quality")
+        ui = radio.decode(raw_frame("TBMAIL", "OE3GAS-1", 0x03, b"OE3TEC 2 new"))
+        self.assertEqual(radio.monitor_entry(ui)["kind"], "mail")
+        ui = radio.decode(raw_frame("BEACON", "OE3GAS-1", 0x03, b"TinyBox"))
+        self.assertEqual(radio.monitor_entry(ui, tinyboxes=frozenset({"OE3GAS-1"}))["kind"],
+                         "beacon")
+        pr = radio.decode(raw_frame("OE3GAS", "OE3GAS-1", 0x00, b"//IN 1 TREFF"))
+        self.assertEqual(radio.monitor_entry(pr)["kind"], "proto")
 
 
 if __name__ == "__main__":

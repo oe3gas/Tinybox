@@ -190,6 +190,24 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .term-out { flex: 1; margin: 0; overflow: auto; padding: 8px 10px; background: #0c1218; color: #d3e6d3;
   font: 13px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
 .term-out .tx { color: #85b7eb; }
+/* monitor (CR50) */
+.mon-tools { display: inline-flex; gap: 6px; align-items: center; }
+.mon-tools input { width: 11em; border-radius: 8px; padding: 4px 8px; font-size: 13px; }
+.mon-tools select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.term-out .mt { color: #6f7b86; }
+.term-out .mc { font-weight: 600; }
+.term-out .mty { color: #8b959e; }
+.term-out .mk { font-size: 11px; padding: 0 5px; border-radius: 6px; margin-left: 4px;
+  background: #26384a; color: #dfe6ec; }
+.term-out .mk.chat { background: #1c4a3a; } .term-out .mk.quality { background: #4a3a12; }
+.term-out .mk.mail { background: #4a1c3b; } .term-out .mk.beacon { background: #1c3b5c; }
+.term-out .mk.proto { background: #3a3a3a; }
+@media (max-width: 699px) {
+  .term-bar { flex-wrap: wrap; }
+  .mon-tools { order: 5; width: 100%; }
+  .mon-tools input { flex: 1; width: auto; }
+}
 .term-out .sys { color: #8b959e; }
 .term-in { display: flex; gap: 8px; padding: 8px; background: var(--surface); border-top: 1px solid var(--line); }
 .term-in input { flex: 1; border-radius: 8px; font-family: ui-monospace, Consolas, monospace; }

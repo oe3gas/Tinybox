@@ -179,6 +179,8 @@ class WebServer:
             elif path == "/api/disconnect":      # {"ch": 2}; none = the chat channel
                 ch = data.get("ch")
                 core.disconnect(ch if isinstance(ch, int) else None)
+            elif path == "/api/monitor/clear":    # CR50
+                core.clear_monitor()
             elif path == "/api/channel/close":   # CR45: an offline channel goes away
                 ch = data.get("ch")
                 ok = core.close_channel(ch if isinstance(ch, int) else 0)

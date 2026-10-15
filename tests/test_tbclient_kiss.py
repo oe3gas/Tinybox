@@ -110,9 +110,14 @@ class KissClientTests(unittest.TestCase):
                 type_lines(term, "Antwort")
                 await until(lambda: any(m.get("text") == "Antwort" for m in core.messages))
                 # the monitor shows our own frames too
-                mon = [x for _, _, x in core.snapshot(0)["term"]]
-                self.assertTrue(any("fm OE3TEC to OE3GAS-1" in x for x in mon))
-                self.assertTrue(any("<SABME" in x or "<SABM" in x for x in mon))
+                mon = [e for _, _, e in core.snapshot(0)["term"]]
+                self.assertTrue(any(e["src"] == "OE3TEC" and e["dst"] == "OE3GAS-1" for e in mon))
+                self.assertTrue(any(e["typ"].startswith("SABM") for e in mon))
+                # CR50: what the TinyBox sends besides text is marked
+                kinds = {e["kind"] for e in mon}
+                self.assertIn("proto", kinds)                 # //OK, //BOARDS ...
+                self.assertIn("chat", kinds)                  # UI to TBCHAT-1
+                self.assertFalse(any(e["text"].startswith("\ufffd") for e in mon))
                 core.disconnect()
                 await until(lambda: core.state == "offline", 10)
                 row = core.logbook.rows()[0]

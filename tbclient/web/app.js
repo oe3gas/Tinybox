@@ -285,10 +285,6 @@ function render() {
       (S.board.keep === "live" ? "live, nothing stored" : `history ${S.board.keep}`);
   }
   renderMessages();
-  const con = $("console");
-  const atEnd = con.scrollTop + con.clientHeight >= con.scrollHeight - 4;
-  con.textContent = S.console.join("\n");
-  if (atEnd) con.scrollTop = con.scrollHeight;
 }
 
 /* Joining a board (CR24): the tapped board stays coloured until the TinyBox
@@ -1915,6 +1911,7 @@ function switchCh(n) {
   manualTerm = false;
   try { localStorage.setItem("tbc-ch", String(n)); } catch (e) { /* ok */ }
   termShown = -1;                                  // the terminal shows another channel now
+  monDirty = true;
   setView(baseView());
   if (pollCtl) pollCtl.abort();                    // fetch the lines of that channel now
   if (S) render();
@@ -2106,8 +2103,10 @@ function renderTerm() {
     : c.target ? `${c.target} - not connected` : "not connected - enter a call in the top bar";
   $("term-close").classList.toggle("hidden", !c.chat || mon);
   $("term-form").classList.toggle("hidden", mon);
+  $("mon-tools").classList.toggle("hidden", !mon);
   $("term-input").disabled = c.state !== "online";
   if (S.ch !== activeCh) return;                   // lines of another channel: wait
+  if (mon) { renderMonitor(); return; }
   if (termShown < 0 || S.term_n < termShown || (lines.length && lines[0][0] > termShown + 1)) {
     out.replaceChildren();                       // other channel, restart, or lines missed
     termShown = lines.length ? lines[0][0] - 1 : 0;
@@ -2119,6 +2118,69 @@ function renderTerm() {
   }
   termShown = Math.max(termShown, S.term_n || 0);
   while (out.childNodes.length > 600) out.firstChild.remove();
+  if (atBottom) out.scrollTop = out.scrollHeight;
+}
+
+// ---------------------------------------------------------------- monitor (CR50)
+// Channel 0: every frame heard, the calls in colours of their own (the same call
+// always the same colour), a filter by text and by kind of TinyBox frame, Clear.
+let monLines = [];            // [n, entry] as they came, max. 600
+let monShown = 0;             // highest n taken into monLines
+let monDirty = true;          // filter changed: draw everything again
+
+function callColor(call) {
+  let h = 2166136261;
+  for (const ch of call) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  return `hsl(${h % 360}, 70%, ${62 + (h >> 9) % 12}%)`;
+}
+function callSpan(call) {
+  const s = el("span", "mc", call);
+  s.style.color = callColor(call);
+  return s;
+}
+function monText(e) {
+  return `${e.t} ${e.src} ${e.dst} ${(e.via || []).join(",")} <${e.typ}> ${e.kind} ${e.text}`.toLowerCase();
+}
+function monMatch(e) {
+  const q = $("mon-q").value.trim().toLowerCase();
+  const k = $("mon-kind").value;
+  if (k === "tb" ? !e.kind : k && e.kind !== k) return false;
+  return !q || monText(e).includes(q);
+}
+function monLine(e) {
+  const line = el("span", "ml");
+  line.append(el("span", "mt", e.t + " "), callSpan(e.src), " → ", callSpan(e.dst));
+  if (e.via && e.via.length) {
+    line.append(" via ");
+    e.via.forEach((v, i) => { if (i) line.append(","); line.append(callSpan(v)); });
+  }
+  line.append(el("span", "mty", ` <${e.typ}>`));
+  if (e.kind) line.append(el("span", "mk " + e.kind, e.kind));
+  if (e.text) line.append(": " + e.text);
+  line.append("\n");
+  return line;
+}
+function renderMonitor() {
+  const out = $("term-out");
+  const lines = S.term || [];
+  if (lines.length && lines[0][0] > monShown + 1 && monShown) monDirty = true;   // missed some
+  if (!lines.length || (lines.length && S.term_n < monShown)) {                    // cleared / restart
+    if (monLines.length) monDirty = true;
+    monLines = [];
+    monShown = S.term_n || 0;
+  }
+  const fresh = lines.filter(([n]) => n > monShown).map(([n, , e]) => [n, e]);
+  monLines = monLines.concat(fresh).slice(-600);
+  monShown = Math.max(monShown, S.term_n || 0);
+  const atBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 40;
+  termShown = -1;                               // a terminal shown later starts over
+  if (monDirty) {                               // filter changed, or just switched here
+    out.replaceChildren(...monLines.filter(([, e]) => monMatch(e)).map(([, e]) => monLine(e)));
+    monDirty = false;
+  } else {
+    for (const [, e] of fresh) if (monMatch(e)) out.append(monLine(e));
+    while (out.childNodes.length > 600) out.firstChild.remove();
+  }
   if (atBottom) out.scrollTop = out.scrollHeight;
 }
 
@@ -2261,6 +2323,10 @@ async function start() {
     }
   });
   $("btn-term").onclick = openTerm;
+  const monRedraw = () => { monDirty = true; if (S && activeCh === 0) { renderMonitor(); $("term-out").scrollTop = $("term-out").scrollHeight; } };
+  $("mon-q").addEventListener("input", monRedraw);
+  $("mon-kind").addEventListener("change", monRedraw);
+  $("mon-clear").onclick = async () => { await api("monitor/clear"); monLines = []; monRedraw(); };
   $("freq-form").onsubmit = saveFreq;
   $("freq-skip").onclick = async () => { await api("freq", { freq: "" }); $("freqdlg").classList.add("hidden"); };
   $("freq-change").onclick = () => { $("sheet").classList.add("hidden"); openFreq(); };
@@ -2272,7 +2338,7 @@ async function start() {
   };
   $("btn-menu").onclick = () => openSheet();
   $("nav-settings").onclick = () => openSheet();
-  $("nav-monitor").onclick = () => openSheet("console");
+  $("nav-monitor").onclick = () => switchCh(0);              // CR50: the monitor channel
   $("status-text").onclick = () => $("app").classList.toggle("show-people");
   $("people-close").onclick = () => $("app").classList.remove("show-people");
   $("linkdlg-close").onclick = closeLink;

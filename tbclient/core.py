@@ -20,7 +20,7 @@ from .kisslink import KissLink, KissPort
 from .links import AgwLink, AgwPort, TelnetLink
 from .logbook import Logbook
 from .mailstore import MailStore
-from .radio import RawFrame, aprs_symbol, describe
+from .radio import RawFrame, aprs_symbol, guess_mod128, monitor_entry
 from .sync import Syncer
 
 log = logging.getLogger(__name__)
@@ -629,9 +629,17 @@ class ClientCore:
             self._mod128.add(pair)
         elif u in (0x2F, 0x43, 0x0F):            # SABM, DISC, DM: modulo 8 again
             self._mod128.discard(pair)
+        else:                                    # CR50: our own SABME is not always heard
+            guess = guess_mod128(f)
+            if guess is True:
+                self._mod128.add(pair)
+            elif guess is False:
+                self._mod128.discard(pair)
         self.monitor_n += 1
-        self.monitor.append((self.monitor_n, time.strftime("%H:%M:%S ")
-                             + describe(f, pair in self._mod128)))
+        entry = monitor_entry(f, pair in self._mod128,
+                              frozenset([self.home, *self.settings.get("tinyboxes", [])]))
+        entry["t"] = time.strftime("%H:%M:%S")
+        self.monitor.append((self.monitor_n, entry))
         tb = self.target
         if f.direct:
             self.direct_at[f.src] = time.time()
@@ -1003,7 +1011,6 @@ class ClientCore:
             "messages": self.messages, "pending": [p["text"] for p in self.pending],
             "clock_off": self.clock_off,     # TinyBox time - own time (quotes, CR14)
             "pending_reacts": [f"{seq}:{e}" for seq, e in self.pending_reacts],
-            "console": list(self.console)[-80:],
             "mailbox": self.mailbox.summary(),
             "sync": self.sync.status,
             "update": self.update,
@@ -1048,6 +1055,11 @@ class ClientCore:
             return False
         return self.images.fetch(hash)
 
+    def clear_monitor(self) -> None:
+        """CR50: the Clear button of the monitor (the counter goes on)."""
+        self.monitor.clear()
+        self._touch()
+
     def radio_state(self) -> dict:
         """The way to the radio: Direwolf (AGW), kisshub (KISS, with the TNC) or telnet."""
         if isinstance(self.port, KissPort):
@@ -1058,7 +1070,7 @@ class ClientCore:
 
     def _term_of(self, ch: int | None) -> list:
         if ch == 0:
-            return [(n, "rx", line) for n, line in list(self.monitor)[-TERM_SNAPSHOT:]]
+            return [(n, "mon", e) for n, e in list(self.monitor)[-TERM_SNAPSHOT:]]
         c = self.channels.get(ch) if ch is not None else self.chan
         return list(c.term)[-TERM_SNAPSHOT:] if c is not None else []
 

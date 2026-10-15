@@ -140,15 +140,15 @@ class Channel:
             self.core._on_line(line)               # the chat engine
             return
         line = line.rstrip()
+        if self.mode == "" and line.startswith("Welcome to TinyBox"):
+            if self.core.can_attach(self):
+                self.core.attach(self, line)    # the chat engine puts it into the terminal
+                return
+            self.mode = "terminal"              # only one TinyBox in client mode (CR45)
         # CR43: not (yet) a TinyBox in client mode: every line goes to the terminal
         self.term_line("rx", line)
         if line:
             self.core.console.append(f"[{self.n}] {line}")
-        if self.mode == "" and line.startswith("Welcome to TinyBox"):
-            if self.core.can_attach(self):
-                self.core.attach(self, line)
-                return
-            self.mode = "terminal"              # only one TinyBox in client mode (CR45)
         self.core._touch()
 
     async def _detect(self) -> None:

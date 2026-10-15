@@ -116,6 +116,63 @@ def frame_type(control: int, ext: int | None = None) -> str:
     return f"{S_NAMES.get(control & 0x0F, 'S?')} {(control >> 5) & 7}{pf}"
 
 
+def guess_mod128(f: RawFrame) -> bool | None:
+    """Modulo 128 without having seen the SABME (Direwolf does not show our own
+    frames): an I frame has the PID (0xF0) right after one control byte (mod 8)
+    or after two (mod 128); an S frame is one byte long (mod 8) or two (mod 128).
+    None = cannot tell (U frames)."""
+    r = f.rest
+    if not r or f.control & 0x03 == 0x03:
+        return None
+    if f.control & 0x01 == 0:                      # I frame
+        if len(r) >= 2 and r[1] == 0xF0:
+            return False
+        if len(r) >= 3 and r[2] == 0xF0:
+            return True
+        return None
+    return len(r) == 2                             # S frame
+
+
+def payload(f: RawFrame, mod128: bool = False) -> bytes:
+    """The info field, with modulo 128 after two control bytes and the PID."""
+    if mod128 and f.control & 0x03 != 0x03:
+        return f.rest[3:] if f.control & 0x01 == 0 else b""
+    return f.info
+
+
+def text_of(info: bytes) -> str:
+    raw = info.decode("utf-8", "replace").replace("\r", " ").replace("\n", " ")
+    return "".join(c if c.isprintable() else "." for c in raw)[:200]
+
+
+def monitor_entry(f: RawFrame, mod128: bool = False, tinyboxes: frozenset = frozenset()) -> dict:
+    """One monitor line as parts (CR50): the GUI colours the calls and filters.
+    kind = what the TinyBox sends besides normal text (empty for anything else):
+        chat     UI to TBCHAT-n: chat events (#seq ...)
+        quality  %Q lines: the numbers behind the link quality bars
+        mail     UI to TBMAIL: "OE3ABC 2 new" (new private mail)
+        beacon   any other UI frame from a TinyBox (the beacon, CR48)
+        proto    I frame with client protocol lines (//IN, //WHO, //SYNC ...)"""
+    ext = f.rest[1] if mod128 and f.control & 0x03 != 0x03 and len(f.rest) >= 2 else None
+    info = payload(f, mod128)
+    text = text_of(info) if info else ""
+    kind = ""
+    if f.is_ui:
+        if f.dest.startswith("TBCHAT"):
+            kind = "quality" if text.startswith("%Q ") else "chat"
+        elif f.dest == "TBMAIL":
+            kind = "mail"
+        elif f.src in tinyboxes:
+            kind = "beacon"
+    elif f.control & 0x01 == 0 and text:
+        if text.lstrip().startswith("//"):
+            kind = "proto"
+        elif text.startswith("%Q "):
+            kind = "quality"
+    return {"src": f.src, "dst": f.dest, "via": list(f.path),
+            "typ": frame_type(f.control, ext), "text": text, "kind": kind}
+
+
 def describe(f: RawFrame, mod128: bool = False) -> str:
     """One monitor line (CR45 channel 0): 'fm OE3XYZ to APRS via OE1XAR <UI>: text'.
     mod128: this pair talks AX.25 v2.2 with modulo 128 (SABME seen): I and S

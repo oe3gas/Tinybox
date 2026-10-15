@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR49 umgesetzt)
+Stand: 15.10.2026 (CR50 umgesetzt)
 
 ## Übersicht
 
@@ -56,6 +56,7 @@ Stand: 15.10.2026 (CR49 umgesetzt)
 | 47 | Mail in der Outbox sofort aussenden, nicht erst beim nächsten Sync | ✅ siehe unten |
 | 48 | TinyBox-Bake: Text und Intervall in `[beacon]`, neue Post als „Mail for:“-Liste in der Bake | ✅ siehe unten |
 | 49 | Suche in Mails und Bulletins: Client (Suchfeld), TinyBox (Befehl `F`), Sysop-Weboberfläche | ✅ siehe unten |
+| 50 | Monitor: alter Monitor aus den Settings raus, ohne „fm“, Rufzeichen farbig, Filter nach Text und nach TinyBox-Sonderframes, Clear | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1339,4 +1340,46 @@ enthalten.
 - **Sysop-Weboberfläche:** Das Suchfeld bei Messages findet jetzt auch im Text
   (`GET /api/messages?q=…`), bisher nur Rufzeichen und Betreff.
 - Tests: `tests/test_search.py`.
+
+## CR50 – Monitor überarbeitet (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+1. Den Monitor unter „Settings“ entfernen – brauchen wir nicht mehr.
+2. Wozu ist das „Terminal“ in der Seitenleiste, brauchen wir das noch?
+3. Im Monitor das „fm“ entfernen, die Rufzeichen farblich unterscheiden – jedes durchgehend
+   in derselben Farbe.
+4. Suchfeld im Monitor: nur Zeilen mit dem Suchstring, auch bei neu hereinkommenden Frames.
+5. Knopf „Clear“.
+6. Welche speziellen Frames sendet die TinyBox? Filter, der nur diese zeigt.
+
+### Umsetzung
+
+1. Abschnitt „Monitor“ (die alte Protokollzeilen-Konsole) aus den Settings entfernt; der
+   Eintrag „Monitor“ in der Seitenleiste schaltet jetzt auf Kanal 0. Die Konsole wird nicht
+   mehr mit jedem Snapshot übertragen (spart Bandbreite im LAN).
+2. „Terminal“ in der Seitenleiste bleibt, heißt jetzt **„TinyBox terminal“**: Es ist der
+   einzige Weg, der TinyBox im Chat-Kanal klassische Befehle zu schicken (`L`, `R`, `F`,
+   `QSO`, `J` …) – ein zweiter Kanal zur selben Station geht nicht (eine AX.25-Verbindung
+   je Rufzeichenpaar). Für alle anderen Stationen ist das Terminal ohnehin die
+   Kanalansicht.
+3. Zeilen `20:59:00 OE1ABC → OE3GAS <I 0,0>: Hallo`; jedes Rufzeichen (mit SSID) bekommt
+   aus einem Hash eine feste Farbe – dieselbe in jeder Sitzung.
+4. Feld **Filter**: zeigt nur Zeilen mit dem Text (Zeit, Rufzeichen, Typ, Art, Inhalt;
+   Groß-/Kleinschreibung egal); neue Frames werden beim Eintreffen gefiltert.
+5. **Clear** leert den Monitor im Client (`POST /api/monitor/clear`).
+6. Auswahl der **TinyBox-Sonderframes** (Kennzeichen am Ende der Kopfzeile):
+   - `chat` – UI an `TBCHAT-n`: Chat-Ereignisse (`#seq` …) für Clients im UI-Modus
+   - `quality` – `%Q`-Zeilen: die Zahlen hinter den Qualitätsbalken (UI an `TBCHAT-n`)
+   - `mail` – UI an `TBMAIL`: Post-Hinweis „OE3ABC 2 new“
+   - `beacon` – jede andere UI-Aussendung einer TinyBox (die Bake, CR48)
+   - `proto` – I-Frames mit Client-Protokoll (`//CLIENT`, `//OK`, `//IN`, `//SYNC` …)
+   Wählbar einzeln oder „all special frames“.
+- **Nebenbei behoben:** I- und S-Frames mit Modulo 128 (AX.25 v2.2) wurden im Monitor
+  falsch gelesen (Zeichen „�“ vor dem Text, falsche Zähler), wenn das eigene SABME nicht
+  zu hören war (Direwolf zeigt die eigenen Frames nicht). Jetzt erkennt der Monitor
+  Modulo 128 auch an der Lage der PID bzw. der Länge des S-Frames. Und „Welcome to
+  TinyBox“ stand im TinyBox-Terminal doppelt.
+- Tests: `RadioTests`/`FreeConnectTests.test_monitor_lines` in `tests/test_tbclient.py`,
+  `tests/test_tbclient_kiss.py`.
 
