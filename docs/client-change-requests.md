@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 14.10.2026 (CR39 umgesetzt)
+Stand: 15.10.2026 (CR40 erfasst)
 
 ## Übersicht
 
@@ -46,6 +46,7 @@ Stand: 14.10.2026 (CR39 umgesetzt)
 | 37 | brocast-Listener: Ansicht „Mit Trennlinien“ raus, Teile-Knöpfe nur im Teletext, Teletext in echter Teletext-Optik (Pixelschrift, großer Zeilenabstand) | ✅ siehe unten |
 | 38 | Teletext: Zeilenabstand auf Zeichenhöhe, brocast-Schriftzug nach der Teletext-Titelseite über jeder Seite; Bildkonverter (Bilder als Mosaik-Bulletins, nur station) | ✅ siehe unten |
 | 39 | TinyBox-Web-GUI: „Rubrics“ aufklappbar in der Seitenleiste, Klick zeigt die Bulletins dieser Rubrik | ✅ siehe unten |
+| 40 | Sync beim Anmelden nur Köpfe (eigene Mails + abonnierte Rubriken), Text erst beim Anklicken | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -811,3 +812,43 @@ Zahl der Rubriken).
   Zwischenspeicher nutzt (ein Abruf je Aktualisierung statt zwei). Keine Änderung am Server.
 
 Nur Sysop-Oberfläche, daher keine neue Client-Version und keine TBNEWS.
+
+## CR40 – Sync beim Anmelden: nur Köpfe, Text auf Abruf (erfasst 15.10.2026, offen)
+
+**Wunsch (OE3GAS):** Meldet sich ein Client bei der TinyBox an, dann soll er
+
+1. die **Köpfe aller Mails** bekommen – die eigene persönliche Post und die Bulletins der Rubriken,
+   die er abonniert hat;
+2. erst wenn er auf einen Kopf **klickt**, wird diese Mail bzw. dieses Bulletin (der Text) abgerufen.
+
+**Heute:** Der Abgleich startet nur per Knopf, getrennt für *mail* und *bulletins*
+(`POST /api/mail/sync`). Er holt die Köpfe (`//SYNC` / `//BSYNC`, CR26) und danach **alle fehlenden
+Texte** (`_texts()` in `tbclient/sync.py`); kurze Texte hängt die TinyBox schon an die Delta-Antwort
+(`want=`, PLANUNG 12.9 Stufe 2). Bei vielen Bulletins laufen so Texte über Funk, die nie jemand liest.
+
+**Gewünschtes Verhalten:**
+- Nach dem Anmelden (Verbindung zur TinyBox steht) startet der Client von sich aus **einen**
+  Kopf-Abgleich für Mail **und** abonnierte Rubriken – ohne Texte.
+- Die Liste zeigt die Köpfe sofort; Einträge ohne Text sind erkennbar (z. B. Symbol „nicht geladen“,
+  Größe in Byte).
+- Klick auf einen Kopf → der Client holt genau diesen Text (`//GET <id>`, lange Texte über Funk
+  mit `//PART`), zeigt einen Lade-Hinweis/Fortschritt und dann den Text. Einmal geholte Texte bleiben
+  lokal, ein zweiter Klick geht nicht mehr über Funk.
+- Der bisherige Knopf „Sync“ bleibt für einen Abgleich zwischendurch.
+
+**Umsetzungsideen (zu klären):**
+- Delta-Anfragen mit `want=0`, damit die TinyBox keine Texte anhängt; `_texts()` beim
+  Kopf-Abgleich auslassen. Protokoll der TinyBox bleibt dabei unverändert.
+- Neue Web-API im Client, z. B. `POST /api/mail/fetch {"id": n}`, die einen einzelnen Text holt
+  (läuft über denselben Syncer, damit nicht zwei Abrufe gleichzeitig auf dem Kanal sind).
+- Gelesen-Meldung (`//READ` bzw. `r=` im nächsten `//SYNC`) erst, wenn der Text wirklich angezeigt wurde.
+
+**Offene Fragen:**
+- Kurze Mails trotzdem gleich mitnehmen (z. B. persönliche Post bis x Byte, weil sie fast immer
+  gelesen wird) – oder strikt nur Köpfe? Ggf. Einstellung in `[sync]` der `tbclient.conf`.
+- Wie viele Köpfe je Rubrik beim ersten Anmelden (neuer Client, leere Mailbox) – alle oder nur die
+  letzten n bzw. die letzten x Tage?
+- Auto-Abgleich bei **jeder** Anmeldung oder nur, wenn seit dem letzten Abgleich eine Mindestzeit
+  vergangen ist? (Bei „nichts Neues“ kostet ein Delta-Abgleich nur ~45 Byte in einem Wechsel.)
+- Klick ohne Verbindung zur TinyBox: Abruf vormerken und beim nächsten Anmelden holen, oder Hinweis
+  „nicht verbunden“?
