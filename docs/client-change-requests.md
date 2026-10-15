@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR40 erfasst)
+Stand: 15.10.2026 (CR40 präzisiert)
 
 ## Übersicht
 
@@ -46,7 +46,7 @@ Stand: 15.10.2026 (CR40 erfasst)
 | 37 | brocast-Listener: Ansicht „Mit Trennlinien“ raus, Teile-Knöpfe nur im Teletext, Teletext in echter Teletext-Optik (Pixelschrift, großer Zeilenabstand) | ✅ siehe unten |
 | 38 | Teletext: Zeilenabstand auf Zeichenhöhe, brocast-Schriftzug nach der Teletext-Titelseite über jeder Seite; Bildkonverter (Bilder als Mosaik-Bulletins, nur station) | ✅ siehe unten |
 | 39 | TinyBox-Web-GUI: „Rubrics“ aufklappbar in der Seitenleiste, Klick zeigt die Bulletins dieser Rubrik | ✅ siehe unten |
-| 40 | Sync beim Anmelden nur Köpfe (eigene Mails + abonnierte Rubriken), Text erst beim Anklicken | offen – siehe unten |
+| 40 | Sync beim Anmelden: Köpfe (eigene Mails + abonnierte Rubriken), kurze persönliche Mails gleich mit, sonst Text erst beim Anklicken; geordneter Abort mit Restanzeige und Zeitschätzung | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -825,30 +825,79 @@ Nur Sysop-Oberfläche, daher keine neue Client-Version und keine TBNEWS.
 (`POST /api/mail/sync`). Er holt die Köpfe (`//SYNC` / `//BSYNC`, CR26) und danach **alle fehlenden
 Texte** (`_texts()` in `tbclient/sync.py`); kurze Texte hängt die TinyBox schon an die Delta-Antwort
 (`want=`, PLANUNG 12.9 Stufe 2). Bei vielen Bulletins laufen so Texte über Funk, die nie jemand liest.
+„Cancel“ (`/api/mail/cancel`) bricht heute hart ab (`task.cancel()` mitten im Wechsel).
 
-**Gewünschtes Verhalten:**
-- Nach dem Anmelden (Verbindung zur TinyBox steht) startet der Client von sich aus **einen**
-  Kopf-Abgleich für Mail **und** abonnierte Rubriken – ohne Texte.
-- Die Liste zeigt die Köpfe sofort; Einträge ohne Text sind erkennbar (z. B. Symbol „nicht geladen“,
-  Größe in Byte).
-- Klick auf einen Kopf → der Client holt genau diesen Text (`//GET <id>`, lange Texte über Funk
-  mit `//PART`), zeigt einen Lade-Hinweis/Fortschritt und dann den Text. Einmal geholte Texte bleiben
-  lokal, ein zweiter Klick geht nicht mehr über Funk.
-- Der bisherige Knopf „Sync“ bleibt für einen Abgleich zwischendurch.
+### Entscheidungen (OE3GAS, 15.10.2026)
 
-**Umsetzungsideen (zu klären):**
-- Delta-Anfragen mit `want=0`, damit die TinyBox keine Texte anhängt; `_texts()` beim
-  Kopf-Abgleich auslassen. Protokoll der TinyBox bleibt dabei unverändert.
-- Neue Web-API im Client, z. B. `POST /api/mail/fetch {"id": n}`, die einen einzelnen Text holt
-  (läuft über denselben Syncer, damit nicht zwei Abrufe gleichzeitig auf dem Kanal sind).
-- Gelesen-Meldung (`//READ` bzw. `r=` im nächsten `//SYNC`) erst, wenn der Text wirklich angezeigt wurde.
+| # | Frage | Entscheidung |
+|---|---|---|
+| E1 | Kurze persönliche Mails gleich mitnehmen? | **Ja.** Bulletins nie – nur Köpfe. |
+| E2 | Wann abgleichen? | **Bei jeder Anmeldung** automatisch (Mail + abonnierte Rubriken). Knopf „Sync“ bleibt für zwischendurch. |
+| E3 | Erstes Anmelden (leere Mailbox) | **Alle Köpfe der persönlichen Mails** herunterladen – abbrechbar über „Abort“ (E4). |
+| E4 | Abbruch | **Abort-Knopf** für einen **geordneten** Abbruch (siehe unten). |
+| E5 | Restanzeige | Beim **Start** des Transfers (nach dem Anmelden) und beim **Abort** eine Meldung: was ist noch ausständig + **geschätzte Zeit**. |
+| E6 | Klick auf einen Kopf ohne Verbindung (kein Connect) | Meldung **„not connected“**, Anforderung **verwerfen** – nicht für das nächste Mal vormerken. |
 
-**Offene Fragen:**
-- Kurze Mails trotzdem gleich mitnehmen (z. B. persönliche Post bis x Byte, weil sie fast immer
-  gelesen wird) – oder strikt nur Köpfe? Ggf. Einstellung in `[sync]` der `tbclient.conf`.
-- Wie viele Köpfe je Rubrik beim ersten Anmelden (neuer Client, leere Mailbox) – alle oder nur die
-  letzten n bzw. die letzten x Tage?
-- Auto-Abgleich bei **jeder** Anmeldung oder nur, wenn seit dem letzten Abgleich eine Mindestzeit
-  vergangen ist? (Bei „nichts Neues“ kostet ein Delta-Abgleich nur ~45 Byte in einem Wechsel.)
-- Klick ohne Verbindung zur TinyBox: Abruf vormerken und beim nächsten Anmelden holen, oder Hinweis
-  „nicht verbunden“?
+### Was ist „kurz“? (Vorschlag, zu bestätigen)
+
+**Kurz = Text bis 512 Byte** (eigene Einstellung `[sync] short_bytes = 512` in der `tbclient.conf`,
+0 = nie Texte mitnehmen).
+
+Begründung:
+- 512 Byte = **2 Frames** zu 256 Byte (PACLEN des Clients), das sind ca. 6–8 Zeilen Text – eine typische
+  „Antwort/kurze Info“-Mail. Bei 1200 Bd rund **5 s** Sendezeit.
+- Passt mit den Köpfen in **denselben Wechsel**: `chunk_bytes` 1024 minus Platz für ~3 Köpfe
+  (3 × 90 Byte) lässt ~750 Byte für Texte (`want=`). Mit `Z` (LZHUF) passen eher mehr hinein.
+- Umsetzung: `want=` bleibt wie heute, die TinyBox hängt aber nur Texte persönlicher Mails
+  ≤ `short=` an (neuer Parameter `short=<n>` im `//SYNC`; bei `//BSYNC` immer `want=0`).
+  Ohne neuen Parameter (alte TinyBox) schickt der Client `want=0` → nur Köpfe, Texte auf Klick.
+- Längere persönliche Mails: nur Kopf, Text beim Anklicken.
+
+### Ablauf beim Anmelden
+
+1. Verbindung steht → Client startet von sich aus den Abgleich: zuerst persönliche Post (`//SYNC`),
+   dann abonnierte Rubriken (`//BSYNC`), nur Köpfe (+ kurze persönliche Texte, siehe oben).
+2. **Startmeldung** (E5), sobald die erste Antwort da ist – erst dann ist der Umfang bekannt
+  (`//SYNCEND <more>` liefert die Zahl der noch ausstehenden Köpfe), z. B.:
+   > Sync started: 37 mail headers + 4 short texts, bulletins (3 rubrics) pending – approx. 1 min 40 s
+3. Fortschritt in der Statuszeile wie heute (Schritt, n von m).
+4. Liste zeigt die Köpfe sofort; Einträge ohne Text erkennbar (Symbol „nicht geladen“ + Größe in Byte).
+
+### Geordneter Abort (E4)
+
+- Knopf **„Abort“** sichtbar, solange ein Abgleich oder Textabruf läuft (ersetzt das bisherige harte Cancel).
+- Geordnet heißt: der **laufende Wechsel wird noch fertig empfangen und gespeichert**, dann keine neue
+  Anfrage mehr. Kein Abbruch mitten in einem Frame/Text, `seq` bleibt konsistent → der nächste Abgleich
+  macht genau dort weiter.
+- Wird der Abort gedrückt, während auf die Antwort gewartet wird, und kommt sie nicht binnen einer
+  Frist (z. B. 2 × T1-Schätzung bzw. 30 s), dann doch harter Abbruch mit Hinweis.
+- Die Verbindung zur TinyBox bleibt bestehen (Chat geht weiter); nur eine vom Sync selbst aufgebaute
+  Verbindung (`own_connect`) wird getrennt.
+- **Abort-Meldung** (E5), z. B.:
+  > Sync aborted. Still pending: 21 mail headers, bulletins of 3 rubrics – approx. 1 min 05 s. Will continue at next login or with „Sync“.
+
+### Zeitschätzung (Vorschlag)
+
+- Restbytes ≈ ausstehende Köpfe × 90 Byte (`HEADER_BYTES`) + Größe der ausstehenden kurzen Texte;
+  Bulletins: Zahl der Köpfe je Rubrik aus der Rubrikenliste (`max` gegen lokal höchste Nummer),
+  sonst „unbekannt“.
+- Zeit = Restbytes ÷ **gemessener** Durchsatz der laufenden Verbindung (Bytes/s der bisherigen Wechsel)
+  + Anzahl Wechsel × `pause_sec`. Vor dem ersten Wechsel Annahme 1200 Bd ≈ 100 Byte/s netto.
+- Anzeige gerundet („approx. 2 min“), keine Scheingenauigkeit.
+
+### Text auf Klick
+
+- Klick auf einen Kopf → Client holt genau diesen Text (`//GET <id>`, lange Texte über Funk mit
+  `//PART`), zeigt „loading … (x Byte, approx. y s)“ und dann den Text; auch hier Abort möglich.
+  Einmal geholte Texte bleiben lokal, ein zweiter Klick geht nicht über Funk.
+- Neue Web-API, z. B. `POST /api/mail/fetch {"id": n}`, über denselben Syncer (nie zwei Abrufe
+  gleichzeitig auf dem Kanal). Läuft gerade der Anmelde-Abgleich, wird der Klick danach bzw. zwischen
+  zwei Wechseln bedient.
+- **Keine Verbindung** → „not connected“, Anforderung verworfen (E6). Kein eigener Connect nur für den Klick.
+- Gelesen-Meldung (`r=` im nächsten `//SYNC`) erst, wenn der Text wirklich angezeigt wurde.
+
+### Noch offen
+
+- Bestätigung „kurz = 512 Byte“ bzw. anderer Wert.
+- Erstes Anmelden, Punkt 2: Bulletins der abonnierten Rubriken – auch **alle** Köpfe oder nur die
+  letzten n / letzten x Tage?
