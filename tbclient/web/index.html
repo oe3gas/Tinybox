@@ -13,12 +13,21 @@
 <body>
 <div id="app">
   <header class="top">
-    <img class="top-logo" src="/logo.svg" alt="TinyBox" width="40" height="40">
+    <img class="top-logo" src="/logo.svg" alt="TinyBox" width="32" height="32">
     <div id="me-avatar"></div>
-    <div class="top-text">
-      <div class="top-title"><span id="me-call">-</span> <span class="arrow">→</span> <span id="tb-call">-</span></div>
-      <div class="top-status"><span id="status-dot" class="dot"></span><button id="status-text" class="link-btn" aria-label="Who is here">offline</button></div>
-    </div>
+    <span id="me-call" class="tcall">-</span>
+    <img id="conn-ic" class="conn-ic" src="/conn/connect.png" alt="" width="22" height="22">
+    <form id="to-form" class="to-form hidden" autocomplete="off">
+      <label for="to-call" class="to-l">Connect to:</label>
+      <input id="to-call" class="to-call" list="to-recent" maxlength="9" spellcheck="false"
+             autocapitalize="characters" enterkeyhint="go" aria-label="Connect to">
+      <datalist id="to-recent"></datalist>
+      <button id="to-go" type="submit" class="tb-btn" aria-label="Connect" title="Connect"><img src="/conn/connect.png" alt="" width="22" height="22"></button>
+    </form>
+    <span id="tb-call" class="tcall">-</span>
+    <span class="top-status"><span id="status-dot" class="dot"></span><button id="status-text" class="link-btn" aria-label="Who is here">offline</button></span>
+    <span class="sp"></span>
+    <button id="btn-disc" class="tb-btn hidden" aria-label="Disconnect" title="Disconnect"><img src="/conn/disconnect.png" alt="" width="22" height="22"></button>
     <button id="btn-view" class="icon-btn view-btn" aria-label="Mailbox" title="Mailbox"><span id="view-icon">✉</span><span id="view-cnt" class="cnt hidden"></span></button>
     <button id="btn-menu" class="icon-btn" aria-label="Settings">☰</button>
   </header>
@@ -38,6 +47,7 @@
     <div id="nav-boards"></div>
     <div id="nav-mailbox"></div>
     <div class="nav-h">Station</div>
+    <button id="nav-terminal" class="nav-item"><span>▸ Terminal</span></button>
     <button id="nav-monitor" class="nav-item"><span>▸ Monitor</span></button>
     <button id="nav-settings" class="nav-item"><span>⚙ Settings</span></button>
   </aside>
@@ -123,6 +133,15 @@
     </div>
   </section>
 
+  <section id="termview" class="termview hidden" aria-label="Terminal">
+    <div class="term-bar"><b>Terminal</b> <span id="term-to" class="muted small"></span><span class="sp"></span><button id="term-close" class="sm">Back to chat</button></div>
+    <pre id="term-out" class="term-out" aria-live="polite"></pre>
+    <form id="term-form" class="term-in" autocomplete="off">
+      <input id="term-input" type="text" maxlength="250" spellcheck="false" autocapitalize="off" enterkeyhint="send" placeholder="Command (Enter = send)">
+      <button type="submit" class="send" aria-label="Send">➤</button>
+    </form>
+  </section>
+
   <aside id="people" class="people" aria-label="Stations">
     <div class="people-head"><span class="nav-h">In this board</span><button id="people-close" class="icon-btn" aria-label="Close">✕</button></div>
     <ul id="members" class="plist"></ul>
@@ -163,7 +182,7 @@
 
     <h3>Connection</h3>
     <p id="conn-info" class="muted"></p>
-    <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button></div>
+    <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button><button id="btn-term">Terminal</button></div>
 
     <h3>Chat history</h3>
     <p class="muted">What the client fetches when you join a board with history. Older lines can always be loaded with the bar at the top of the chat.</p>

@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR40 umgesetzt)
+Stand: 15.10.2026 (CR42 und CR43 umgesetzt)
 
 ## Übersicht
 
@@ -48,6 +48,8 @@ Stand: 15.10.2026 (CR40 umgesetzt)
 | 39 | TinyBox-Web-GUI: „Rubrics“ aufklappbar in der Seitenleiste, Klick zeigt die Bulletins dieser Rubrik | ✅ siehe unten |
 | 40 | Sync beim Anmelden: alle Köpfe (eigene Mails + abonnierte Rubriken), persönliche Mails ≤ 256 Byte gleich mit, sonst Text erst beim Anklicken; geordneter Abort mit Restanzeige und Zeitschätzung; Terminal: Abort statt 10-Zeilen-Seiten (CR29); Frist je Rubrik | ✅ siehe unten |
 | 41 | KISS-Mode: Kanal- und kisshub-Werte in der Sysop-Web-GUI (Kanalauslastung, gehörte Stationen, TNC-Zustand, Wartezeit im Hub) für das Qualitäts-Monitoring | ✅ siehe unten |
+| 42 | Freier Connect: „Connect to:“ in der Titelleiste statt fest verdrahtetem OE3GAS-1, Verlauf der letzten Ziele, Titelleiste einzeilig mit Zustands-Icons (connecting mit Zähler, connected, disconnecting, no answer / disconnected by) | ✅ siehe unten |
+| 43 | Terminalmodus: Gegenstelle ist keine TinyBox → Terminal statt Chat, kein `//CLIENT`; bei einer TinyBox per Menü | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1021,4 +1023,89 @@ Nur TinyBox, kisshub und Sysop-Oberfläche, daher keine neue Client-Version und 
   aufklappbarer TNC-Dialog, Heard-Liste), Kanalauslastung in der Detailansicht unter den Balken.
 - `STATUS` in der Sysop-Konsole: „connected (KISS …), TNC PK-232 kiss".
 - 13 neue Tests (`tests/test_chanmon.py`).
+
+## CR42 – Freier Connect (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+Bisher war das Ziel fest `[tinybox] call` (OE3GAS-1). Der Client soll jede Station
+connecten können; die Eingabe des Rufzeichens erfolgt in der Titelleiste („Connect to:“).
+Icons: von OE3GAS beigestellt (Connect, Connecting, Connected, Disconnect, Disconnected,
+Connect failed).
+
+### Entscheidungen (OE3GAS, 15.10.2026, nach Entwurf)
+
+1. Titelleiste immer **einzeilig**.
+2. Links das eigene Rufzeichen.
+3. Ganz rechts Disconnect (solange eine Verbindung besteht oder aufgebaut wird),
+   Kuvert bzw. Sprechblase (Mail/Chat) und das Menü.
+4. Nicht verbunden: Eingabefeld, nicht zu breit (9 Zeichen).
+5. Der Connect-Knopf gleich rechts neben dem Eingabefeld.
+6. connecting mit Zähler; die Statusanzeige immer rechts neben dem Rufzeichenpaar.
+7. connected mit I-Frames bzw. UI.
+8. disconnecting nur als Status, bis die Verbindung weg ist; dann wieder das Eingabefeld.
+9. Das Feld merkt sich die letzten Eingaben.
+
+### Umsetzung
+
+- **Ziel:** `ClientCore.target` statt `cfg.tinybox_call`; `POST /api/connect
+  {"target": "OE3XBS-8"}` (ohne `target`: das zuletzt verwendete). Prüfung wie in der
+  Config (Rufzeichen, SSID 0–15), nicht das eigene. Telnet-Link: immer die eigene TinyBox.
+- **Verlauf:** die letzten 10 Ziele, neueste zuerst, in `settings.json` des Clients
+  (`recent`, `target`) – damit am Handy dieselbe Liste wie am PC. Im Feld als Auswahlliste;
+  leeres Feld + Enter = das zuletzt verwendete Ziel (steht als Platzhalter im Feld).
+- **Heim-TinyBox:** `[tinybox] call` bleibt die eigene TinyBox. Die Mailbox gehört zu ihr:
+  Abgleich beim Anmelden, Sync-Knopf und Text auf Klick nur, wenn man mit ihr verbunden ist
+  (oder offline – dann connectet der Sync wie bisher selbst, immer zu ihr). Der Hinweis auf
+  neue Post (UI an TBMAIL) zählt nur von ihr. `auto_connect` geht zu ihr.
+- **Einstellungen je TinyBox:** letztes Board, „gesehen bis“ (History) und MOTD gelten je
+  Ziel (`settings.json` → `targets`); die Heim-TinyBox behält sie wie bisher oben.
+- **Zustände:** neu `disconnecting` (Direwolf meldet sich mit `d`, wenn die Verbindung weg
+  ist; ohne Antwort nach 90 s trotzdem offline). Wie die letzte Verbindung endete, steht in
+  `ended`: `user` (selbst getrennt), `failed` (kam nicht zustande: „no answer from …“),
+  `remote` (von der Gegenstelle oder Direwolf-Verlust: „disconnected by … · hh:mm“).
+- **connecting-Zähler:** Sekunden seit dem Connect. Die SABM-Versuche selbst meldet
+  Direwolf über AGW nicht, daher keine „Versuch n/10“-Anzeige.
+- **Titelleiste:** Logo, Avatar, eigenes Call, Zustands-Icon, dann entweder
+  „Connect to:“ + Feld + Connect-Knopf oder das Ziel-Call, Punkt und Statustext; rechts
+  Disconnect, Mail/Chat, Menü. Am Handy (≤ 520 px) ohne Logo und ohne „Connect to:“-Text,
+  ≤ 400 px auch ohne Avatar. Icons: `tbclient/web/conn/*.png` (aus der Vorlage
+  ausgeschnitten, das Grau für die dunkle Leiste hell gemacht).
+- Tests: `FreeConnectTests` in `tests/test_tbclient.py` (Fehl-Connect, fremde BBS,
+  disconnecting, Verlauf über Neustart, Einstellungen je Ziel, Disconnect ohne Antwort).
+
+## CR43 – Terminalmodus (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+Frage: Wie sieht das aus, wenn man mit dem Client eine andere BBS connectet, die kein
+TinyBox-System ist? Können wir eine Art Terminalmodus bieten?
+
+### Befund vorher
+
+Der Client wartete auf „Welcome to TinyBox“ und schickte nach 6 s **trotzdem**
+`//CLIENT TB1 …`. Bei einer BPQ- oder FBB-Box landete diese Zeile als Befehl in deren
+Prompt, die Oberfläche zeigte leere Boards.
+
+### Umsetzung
+
+- **Erkennung:** Nach dem Connect gilt die Gegenstelle als TinyBox, wenn „Welcome to
+  TinyBox“ kommt. Bleibt das 6 s aus, bekommt nur eine **bekannte** TinyBox den Handshake
+  trotzdem (die Heim-TinyBox, der Telnet-Testport und jede, die schon einmal mit `//OK`
+  geantwortet hat – `settings.json` → `tinyboxes`). Jede andere Station wird nicht mit
+  `//CLIENT` behelligt: der Client geht in den Modus `terminal`.
+- **Terminal:** Solange nicht feststeht, dass es eine TinyBox ist, wird jede empfangene
+  Zeile unverändert ins Terminal gelegt; im Modus `terminal` wird nichts mehr als
+  Steuerzeile (`//`) oder Chat-Ereignis (`#`) gedeutet. Eigene Zeilen gehen mit
+  `POST /api/term {"text": "…"}` roh hinaus (CR, auch eine leere Zeile). Puffer: 500 Zeilen,
+  die Oberfläche bekommt die letzten 300.
+- **Ansicht:** Wird die Station als Terminal erkannt, schaltet die Oberfläche von selbst
+  auf die Terminal-Ansicht (Monospace, eigene Zeilen blau, Zustandszeilen grau, unten
+  Eingabezeile mit Pfeil hoch/runter für die letzten 50 Eingaben). Statustext
+  „connected · terminal“; das Mail-Kuvert führt zur (lokalen) Mailbox, von dort `>_`
+  zurück ins Terminal.
+- **Von Hand:** Menü → „Terminal“ (am PC auch in der linken Spalte) öffnet die Ansicht auch
+  bei einer TinyBox; getippte Zeilen gehen dann direkt an sie.
+- **Zeichensatz:** UTF-8, sonst Latin-1 (wie bisher in `LineSplitter`).
+- **Grenzen:** kein Binärtransfer (YAPP, 7plus), keine Bilder, keine Mailbox der fremden BBS.
 

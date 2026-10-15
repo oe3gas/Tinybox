@@ -1,0 +1,5 @@
+- Connect to: any call in the top bar, last calls in a list.
+- Top bar in one line: state icon, connecting with seconds,
+  disconnecting, no answer / disconnected by.
+- Other BBS (no TinyBox): terminal view, no //CLIENT sent.
+- Terminal also by hand (menu).

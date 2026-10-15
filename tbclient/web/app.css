@@ -106,15 +106,59 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
   box-shadow: -6px 0 18px rgba(0,0,0,.18); }
 
 /* --- top bar ---------------------------------------------------------- */
-.top { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
-  padding-top: max(8px, env(safe-area-inset-top)); background: var(--top); color: var(--top-text); }
-.top-logo { width: 40px; height: 40px; flex-shrink: 0; display: block; }
-.top-text { flex: 1; min-width: 0; }
-.top-title { font-weight: 600; font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
-.arrow { opacity: .6; }
-.top-status { font-size: 12px; opacity: .85; display: flex; align-items: center; gap: 6px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); display: inline-block; }
-.dot.online { background: var(--ok); } .dot.connecting { background: var(--warn); }
+/* CR42: one line - own call, icon, "Connect to" field or the other call, status,
+   then on the right Disconnect, Mailbox/Chat and the menu */
+.top { display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-height: 48px;
+  padding-top: max(6px, env(safe-area-inset-top)); background: var(--top); color: var(--top-text);
+  white-space: nowrap; }
+.top .sp { flex: 1; min-width: 0; }
+.top-logo { width: 32px; height: 32px; flex-shrink: 0; display: block; }
+.tcall { font-weight: 600; font-family: ui-monospace, Consolas, monospace; flex-shrink: 0; }
+.tcall.dim { opacity: .55; }
+.conn-ic { width: 22px; height: 22px; flex-shrink: 0; image-rendering: pixelated; }
+.conn-ic.wide { width: 44px; }
+.conn-ic.pulse { animation: connpulse 1.2s ease-in-out infinite; }
+@keyframes connpulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .conn-ic.pulse { animation: none; } }
+.to-form { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.to-l { font-size: 13px; opacity: .8; }
+.to-call { width: calc(9ch + 20px); height: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid transparent;
+  font: 600 14px ui-monospace, Consolas, monospace; text-transform: uppercase;
+  background: #ffffff; color: #1d2b3a; }
+.to-call::-webkit-calendar-picker-indicator { display: none !important; }
+.to-call::placeholder { color: #8a96a2; text-transform: uppercase; }
+.to-call.bad { border-color: var(--bad); outline: 1px solid var(--bad); }
+.to-call[readonly] { background: #c9d3dd; }
+.tb-btn { background: rgba(255,255,255,.12); border: none; border-radius: 6px; width: 34px; height: 30px;
+  padding: 0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tb-btn:hover { background: rgba(255,255,255,.22); }
+.tb-btn img { width: 22px; height: 22px; image-rendering: pixelated; display: block; }
+.top-status { font-size: 12px; opacity: .85; display: flex; align-items: center; gap: 5px; min-width: 0;
+  overflow: hidden; }
+.top-status .link-btn { overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); display: inline-block;
+  flex-shrink: 0; }
+.dot.online { background: var(--ok); } .dot.connecting, .dot.disconnecting { background: var(--warn); }
+.dot.offline { background: #888780; } .dot.failed { background: var(--bad); }
+@media (max-width: 520px) {
+  .top-logo, .to-l { display: none; }
+  .top { gap: 6px; padding-left: 8px; padding-right: 4px; }
+}
+@media (max-width: 400px) { #me-avatar { display: none; } }
+
+/* --- terminal (CR43) --------------------------------------------------- */
+.termview { flex: 1; display: none; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+#app.view-term .main-col, #app.view-term .people, #app.view-term .mailview { display: none !important; }
+#app.view-term .termview { display: flex; }
+.term-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface);
+  border-bottom: 1px solid var(--line); }
+.term-bar .sp { flex: 1; }
+.term-out { flex: 1; margin: 0; overflow: auto; padding: 8px 10px; background: #0c1218; color: #d3e6d3;
+  font: 13px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+.term-out .tx { color: #85b7eb; }
+.term-out .sys { color: #8b959e; }
+.term-in { display: flex; gap: 8px; padding: 8px; background: var(--surface); border-top: 1px solid var(--line); }
+.term-in input { flex: 1; border-radius: 8px; font-family: ui-monospace, Consolas, monospace; }
 .icon-btn { background: transparent; border: none; font-size: 20px; padding: 4px 8px; color: inherit; }
 
 /* --- boards ----------------------------------------------------------- */

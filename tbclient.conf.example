@@ -5,7 +5,7 @@
 mycall       = OE3GAS          # your call, with SSID if wanted (OE3GAS-9 = mobile)
 
 [tinybox]
-call         = OE3GAS-1        # the TinyBox to connect to
+call         = OE3GAS-1        # your TinyBox (mailbox); other stations: "Connect to" in the top bar
 link         = agw             # agw = radio via Direwolf, telnet = TinyBox test port (same PC)
 ui           = auto            # chat events as UI frames: auto = if the TinyBox is heard directly
 auto_connect = no              # connect when the client starts

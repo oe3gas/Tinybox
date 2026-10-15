@@ -10,7 +10,8 @@ What stays protected:
 
 API:
   GET  /api/state?since=<version>   snapshot; waits up to 25 s for a change
-  POST /api/connect | /api/disconnect | /api/leave
+  POST /api/connect {"target": "CALL"} (optional, CR42) | /api/disconnect | /api/leave
+  POST /api/term   {"text": "..."}   a raw line from the terminal view (CR43)
   POST /api/join   {"board": n}
   POST /api/say    {"text": "..."}
   POST /api/react  {"seq": n, "emoji": ":+1"}
@@ -67,6 +68,8 @@ FILES = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js",
          "/aprs/symbols-1.png": "aprs/aprs-symbols-24-1@2x.png",
          "/aprs/names.json": "aprs/names.json", "/manifest.json": "manifest.json",
          "/logo.svg": "logo.svg"}
+# CR42: the icons of the connection in the top bar
+FILES.update({f"/conn/{p.name}": f"conn/{p.name}" for p in (STATIC / "conn").glob("*.png")})
 # CR11: the sticker set (fixed files in the client, never sent over the air)
 FILES.update({f"/stickers/{p.name}": f"stickers/{p.name}"
               for p in (STATIC / "stickers").glob("*") if p.suffix in (".webp", ".json")})
@@ -159,14 +162,17 @@ class WebServer:
             except ValueError:
                 return 400, {"error": "bad json"}, None
             ok = True
-            if path == "/api/connect":
-                await core.connect()
+            if path == "/api/connect":           # {"target": "OE3XYZ-8"} (CR42), none = last
+                t = data.get("target")
+                ok = await core.connect(None if t is None else str(t))
             elif path == "/api/disconnect":
                 core.disconnect()
             elif path == "/api/leave":
                 core.leave()
             elif path == "/api/join":
                 ok = core.join(int(data.get("board", 0)))
+            elif path == "/api/term":              # CR43: a raw line from the terminal
+                ok = core.send_raw(str(data.get("text", "")))
             elif path == "/api/say":
                 ok = core.say(str(data.get("text", "")))
             elif path == "/api/react":

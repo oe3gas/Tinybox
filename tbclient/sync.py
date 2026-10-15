@@ -254,6 +254,8 @@ class Syncer:
     def start(self, scope: str = "mail") -> bool:
         if self.running or scope not in SCOPES or self.core.images.busy:
             return False                  # one binary transfer at a time (CR12)
+        if self.core.state != "offline" and not self.core.at_home:
+            return False                  # CR42: the mailbox is the own TinyBox's
         self.task = asyncio.ensure_future(self._run(scope))
         return True
 
@@ -268,6 +270,8 @@ class Syncer:
             return ""
         if self.core.state != "online" or not self.core.caps:
             return "not connected"
+        if not self.core.at_home:
+            return f"connected to {self.core.target}, the mailbox is at {self.core.home}"
         if "SYNC" not in self.core.caps:
             return "the TinyBox does not offer the mailbox sync"
         if self.running:
@@ -427,7 +431,7 @@ class Syncer:
                 if scope == "fetch":                # CR40: a click never connects
                     raise SyncError("not connected")
                 own_connect = self.own_connect = True
-                await self.core.connect()
+                await self.core.connect(self.core.home)     # CR42: always the own TinyBox
             await self._wait_ready()
             if scope == "fetch":
                 for msg_id in list(self._ids):

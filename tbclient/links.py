@@ -7,7 +7,7 @@ AgwLink    radio, through Direwolf's AGW port: Direwolf does the AX.25
 TelnetLink the TinyBox telnet test port on the same PC (no radio, no UI).
 
 Both call back into the client core:
-    on_state(state, reason)   state: offline | connecting | online
+    on_state(state, reason)   state: offline | connecting | online | disconnecting
     on_line(text)             one line from the TinyBox
     on_frame(RawFrame)        a frame heard on the channel (AGW only)
 """
@@ -103,13 +103,22 @@ class BaseLink:
         self.on_frame = on_frame
         self.splitter = LineSplitter(self._line)
         self.online = False
+        self.active = False               # anything but offline (connecting ... disconnecting)
+        self.target = cfg.tinybox_call    # the station to connect to (set by the core)
 
     def _line(self, line: str) -> None:
         self.on_line(line)
 
     def _set(self, state: str, reason: str = "") -> None:
         self.online = state == "online"
+        self.active = state != "offline"
         self.on_state(state, reason)
+
+    def drop(self, reason: str) -> None:
+        """Offline now, without waiting for the other side (a disconnect that
+        never got an answer). A late answer is then ignored."""
+        if self.active:
+            self._set("offline", reason)
 
 
 class AgwLink(BaseLink):
@@ -168,13 +177,13 @@ class AgwLink(BaseLink):
                 self.agw_up.clear()
                 self._writer = None
                 writer.close()
-                if self.online or self.connecting:
+                if self.active:
                     self.connecting = False
                     self._set("offline", "Direwolf connection lost")
             await asyncio.sleep(5)
 
     def _dispatch(self, kind: str, cfrom: str, cto: str, data: bytes) -> None:
-        tb = self.cfg.tinybox_call
+        tb = self.target
         if kind == "K" and len(data) > 1:
             frame = radio.decode(data[1:])
             if frame is not None:
@@ -191,9 +200,8 @@ class AgwLink(BaseLink):
             self._outstanding = struct.unpack("<I", data[:4])[0]
             self._y_reply.set()
         elif kind == "d" and tb in (cfrom, cto):
-            was = self.online or self.connecting
             self.connecting = False
-            if was:
+            if self.active:
                 self._set("offline", "disconnected")
 
     async def connect(self) -> None:
@@ -202,7 +210,7 @@ class AgwLink(BaseLink):
             return
         self.connecting = True
         self._set("connecting")
-        self._send("C", self.cfg.mycall, self.cfg.tinybox_call, pid=PID_NO_L3)
+        self._send("C", self.cfg.mycall, self.target, pid=PID_NO_L3)
 
     def send_line(self, text: str) -> None:
         self.send_bytes((text + "\r").encode("utf-8"))
@@ -210,13 +218,13 @@ class AgwLink(BaseLink):
     def send_bytes(self, data: bytes) -> None:
         """Raw bytes (a line, or image data after //IMGGO)."""
         for i in range(0, len(data), PACLEN):
-            self._send("D", self.cfg.mycall, self.cfg.tinybox_call, data[i:i + PACLEN],
+            self._send("D", self.cfg.mycall, self.target, data[i:i + PACLEN],
                        PID_NO_L3)
 
     async def outstanding(self) -> int:
         """Frames of our connection still waiting in Direwolf (AGW 'Y')."""
         self._y_reply.clear()
-        self._send("Y", self.cfg.mycall, self.cfg.tinybox_call)
+        self._send("Y", self.cfg.mycall, self.target)
         try:
             await asyncio.wait_for(self._y_reply.wait(), 5)
         except asyncio.TimeoutError:
@@ -224,7 +232,14 @@ class AgwLink(BaseLink):
         return self._outstanding
 
     def disconnect(self) -> None:
-        self._send("d", self.cfg.mycall, self.cfg.tinybox_call)
+        """Direwolf answers with 'd' once the link is down (DISC/UA, or after
+        its retries); until then the state is "disconnecting"."""
+        if self.active and self.agw_up.is_set():
+            self._set("disconnecting")
+            self._send("d", self.cfg.mycall, self.target)
+        elif self.active:
+            self.connecting = False
+            self._set("offline", "Direwolf not reachable")
 
 
 def _c(raw: bytes) -> str:
@@ -291,6 +306,7 @@ class TelnetLink(BaseLink):
 
     def disconnect(self) -> None:
         if self._writer is not None:
+            self._set("disconnecting")
             self._writer.close()          # the reader then reports "offline"
 
 

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from tbclient import config as ccfg
 from tbclient import proto, radio
+from tbclient import core as core_mod
 from tbclient.core import ClientCore
 from tbclient.web import WebServer
 from tinybox.adapters import agw as tb_agw
@@ -136,6 +137,10 @@ class FakeDirewolf:
                     me["mon"] = True
                 elif kind == "C":
                     other = self._owner(ct)
+                    if other is None:                         # nobody answers (CR42)
+                        self._put(me, "d", ct, cf)
+                        await w.drain()
+                        continue
                     self._put(other, "C", cf, ct)                 # incoming connect
                     self._put(me, "C", ct, cf)                    # connected
                     self._air(me, raw_frame(ct, cf, 0x2F))        # SABM
@@ -383,6 +388,126 @@ class EndToEndTests(unittest.TestCase):
                 await until(lambda: core.state == "offline")
                 web.close()
             server.close()
+        asyncio.run(scenario())
+
+
+class ForeignBbs:
+    """CR43: an AGW client that plays a BBS which is no TinyBox."""
+
+    def __init__(self, call: str, port: int) -> None:
+        self.call, self.port, self.got = call, port, []
+
+    async def run(self) -> None:
+        r, w = await asyncio.open_connection("127.0.0.1", self.port)
+        self.w = w
+        w.write(H.pack(0, b"X", 0, self.call.encode(), b"", 0, 0))
+        try:
+            while True:
+                _p, kind, _pid, cf, ct, n, _ = H.unpack(await r.readexactly(H.size))
+                data = await r.readexactly(n) if n else b""
+                kind, peer = kind.decode(), tb_agw._call(cf)
+                if kind == "C":
+                    self._say(peer, b"[BPQ-6.0.24.1] OE3XBS-8\r#Stations heard\r//nonsense\r"
+                                    b"OE3XBS:OE3XBS-8} BBS CHAT NODES\r")
+                elif kind == "D":
+                    self.got.append(data)
+                    if data.strip() == b"N":
+                        self._say(peer, b"Nodes: OE1XAR OE3XNR\r")
+        except (asyncio.IncompleteReadError, ConnectionError):
+            pass
+
+    def _say(self, peer: str, data: bytes) -> None:
+        self.w.write(H.pack(0, b"D", 0xF0, self.call.encode(), peer.encode(), len(data), 0) + data)
+
+
+class FreeConnectTests(unittest.TestCase):
+    """CR42 (Connect to any station) and CR43 (terminal for a station that is no TinyBox)."""
+
+    def test_foreign_bbs_terminal_and_states(self):
+        async def scenario():
+            dw = FakeDirewolf()
+            port = await dw.start()
+            bbs = ForeignBbs("OE3XBS-8", port)
+            tb = asyncio.create_task(bbs.run())
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, agw_port=port))
+                t = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.link.agw_up.wait(), 5)
+                await until(lambda: any(c["calls"] == {"OE3XBS-8"} for c in dw.clients))
+                # bad targets are refused
+                self.assertFalse(await core.connect("OE3XBS-99"))
+                self.assertFalse(await core.connect("oe3gas"))           # own call
+                # nobody answers: failed
+                self.assertTrue(await core.connect("oe3nix-1"))
+                await until(lambda: core.state == "offline" and core.ended)
+                self.assertEqual(core.ended["kind"], "failed")
+                self.assertEqual(core.target, "OE3NIX-1")
+                # the foreign BBS: terminal, never a //CLIENT line
+                core_mod.HANDSHAKE_FALLBACK_SEC = 0.3
+                self.assertTrue(await core.connect("OE3XBS-8"))
+                await until(lambda: core.mode == "terminal")
+                self.assertTrue(core.at_home is False)
+                self.assertFalse(core.handshake_done)
+                self.assertFalse(any(b"//CLIENT" in d for d in bbs.got))
+                texts = [x for _, k, x in core.term if k == "rx"]
+                self.assertIn("#Stations heard", texts)          # not taken as a chat event
+                self.assertIn("//nonsense", texts)               # nor as a control line
+                self.assertFalse(core.sync.start("mail"))        # the mailbox is the home's
+                self.assertTrue(core.send_raw("N"))
+                await until(lambda: any(x == "Nodes: OE1XAR OE3XNR" for _, _, x in core.term))
+                self.assertIn(b"N\r", bbs.got)
+                snap = core.snapshot()
+                self.assertEqual((snap["tinybox"], snap["home"], snap["mode"]),
+                                 ("OE3XBS-8", "OE3GAS-1", "terminal"))
+                self.assertEqual(snap["recent"][:2], ["OE3XBS-8", "OE3NIX-1"])
+                # disconnect: "disconnecting" until Direwolf says it is down
+                states = []
+                orig = core._on_state
+                core.link.on_state = lambda st, r: (states.append(st), orig(st, r))
+                core.disconnect()
+                await until(lambda: core.state == "offline")
+                self.assertEqual(states, ["disconnecting", "offline"])
+                self.assertEqual(core.ended["kind"], "user")
+                # the last target and the list survive a restart of the client
+                core2 = ClientCore(client_cfg(tmp, agw_port=port))
+                self.assertEqual(core2.target, "OE3XBS-8")
+                self.assertEqual(core2.recent[:2], ["OE3XBS-8", "OE3NIX-1"])
+                t.cancel()
+            tb.cancel()
+            dw.server.close()
+        old = core_mod.HANDSHAKE_FALLBACK_SEC
+        try:
+            asyncio.run(scenario())
+        finally:
+            core_mod.HANDSHAKE_FALLBACK_SEC = old
+
+    def test_settings_per_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = ClientCore(client_cfg(tmp))
+            core.tset["board"] = 2
+            core._set_target("OE3XYZ-1")
+            self.assertIsNone(core.tset.get("board"))         # another TinyBox, other boards
+            core.tset["board"] = 5
+            core._set_target("OE3GAS-1")
+            self.assertEqual(core.tset["board"], 2)
+            self.assertEqual(core.settings["targets"]["OE3XYZ-1"]["board"], 5)
+
+    def test_disconnect_without_answer(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp))
+                old = core_mod.DISC_TIMEOUT_SEC
+                core_mod.DISC_TIMEOUT_SEC = 0.2
+                try:
+                    core.link.agw_up.set()
+                    core.link._set("online")
+                    core.link._writer = None             # Direwolf never answers
+                    core.disconnect()
+                    self.assertEqual(core.state, "disconnecting")
+                    await until(lambda: core.state == "offline", 2)
+                    self.assertEqual(core.reason, "no answer to the disconnect")
+                finally:
+                    core_mod.DISC_TIMEOUT_SEC = old
         asyncio.run(scenario())
 
 

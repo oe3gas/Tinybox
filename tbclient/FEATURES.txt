@@ -10,6 +10,18 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Freier Connect (CR42): das Ziel steht nicht mehr fest. Ist man nicht
+  verbunden, steht in der Titelleiste "Connect to:" mit einem Feld fuer das
+  Rufzeichen (leer = das zuletzt verwendete, Liste der letzten 10), der
+  Connect-Knopf gleich daneben. Verbunden: eigenes Call, Symbol, Ziel,
+  Status; rechts Disconnect, Mail/Chat und Menue. Zustaende: connecting
+  (mit Sekunden), connected (I-Frames/UI), disconnecting, "no answer from"
+  bzw. "disconnected by". Die Mailbox bleibt bei der TinyBox aus
+  tbclient.conf ([tinybox] call); Abgleich nur mit ihr.
+- Terminal (CR43): meldet sich die Gegenstelle nicht als TinyBox, wird der
+  Client zum Terminal (Zeilen rein, Zeilen raus, Pfeil hoch/runter fuer
+  die letzten Eingaben); //CLIENT geht dann nicht mehr hinaus. Auch bei
+  einer TinyBox per Menue "Terminal" zu oeffnen.
 - Abgleich beim Anmelden (CR40): nach jeder Anmeldung holt der Client von
   selbst die Koepfe der eigenen Post und der abonnierten Rubriken. Texte
   kommen erst beim Anklicken (ohne Verbindung: "not connected", die

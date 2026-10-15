@@ -14,7 +14,7 @@ from pathlib import Path
 from tinybox import chatimg               # the image reference in a chat line (CR12)
 
 from . import VERSION, proto
-from .config import Config
+from .config import CALL_RE, Config
 from .images import Images, ImageStore
 from .links import AgwLink, TelnetLink
 from .mailstore import MailStore
@@ -29,6 +29,10 @@ LOGIN_SYNC_SEC = 1.5      # CR40: the sync after the login starts this much afte
 DIRECT_VALID_SEC = 30 * 60
 MAX_MESSAGES = 300
 MAX_GAP = 32
+RECENT_MAX = 10           # CR42: targets remembered for the "Connect to" field
+DISC_TIMEOUT_SEC = 90     # CR42: "disconnecting" without an answer: offline anyway
+TERM_MAX = 500            # CR43: lines kept for the terminal view
+TERM_SNAPSHOT = 300       # ... and sent to the GUI
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 
 
@@ -39,8 +43,23 @@ class ClientCore:
         self.link = cls(cfg, self._on_state, self._on_line, self._on_frame)
         self.settings_path = cfg.data_dir / "settings.json"
         self.settings = self._load_settings()
+        # CR42: free target. home = the TinyBox of tbclient.conf, the mailbox
+        # belongs to it; target = the station of the current (or last) connection
+        self.home = cfg.tinybox_call
+        last = self.settings.get("target", "")
+        self.target = last if CALL_RE.match(last or "") and last != cfg.mycall else self.home
+        self.link.target = self.target
         self.state = "offline"
+        self.state_at = time.time()
         self.reason = ""
+        self.ended: dict | None = None            # how the last connection ended (CR42)
+        self._user_disc = False
+        self._disc_timer: asyncio.TimerHandle | None = None
+        # CR43: "tinybox" (client protocol) or "terminal" (any other station);
+        # "" while it is not known yet
+        self.mode = ""
+        self.term: deque[tuple[int, str, str]] = deque(maxlen=TERM_MAX)  # (n, rx|tx|sys, text)
+        self.term_n = 0
         self.caps: set[str] = set()
         self.handshake_done = False
         self.boards: list[dict] = []
@@ -60,7 +79,7 @@ class ClientCore:
         self.heard_at: dict[str, float] = {}      # call -> last frame heard (any kind)
         self.mail: dict | None = None             # {"count": n, "at": unix} - C1 notice
         self.sysmsg: dict | None = None           # system message (shutdown) from the TinyBox
-        self.tinybox_direct_at = 0.0
+        self.direct_at: dict[str, float] = {}     # call -> last frame heard directly
         self.channel_busy_at = 0.0                # last frame not between us and the TinyBox
         self.unwrap = proto.Unwrapper()
         self.seen: set[int] = set()
@@ -92,6 +111,14 @@ class ClientCore:
             return json.loads(self.settings_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
+
+    @property
+    def tset(self) -> dict:
+        """Settings that belong to the TinyBox of the connection (last board,
+        seen, MOTD): the home TinyBox keeps them at the top level as before."""
+        if self.target == self.home:
+            return self.settings
+        return self.settings.setdefault("targets", {}).setdefault(self.target, {})
 
     def _save_settings(self) -> None:
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -165,13 +192,63 @@ class ClientCore:
 
     # --- actions from the GUI -------------------------------------------------
 
-    async def connect(self) -> None:
-        if self.state == "offline":
-            await self.link.connect()
+    @property
+    def at_home(self) -> bool:
+        """Connected (or about to connect) to the TinyBox the mailbox belongs to."""
+        return self.target == self.home
+
+    @property
+    def recent(self) -> list[str]:
+        r = [c for c in self.settings.get("recent", []) if isinstance(c, str) and CALL_RE.match(c)]
+        return r or [self.home]
+
+    async def connect(self, target: str | None = None) -> bool:
+        """Connect to target (CR42: any station; None = the last one). Only
+        from offline; the telnet link always goes to the own TinyBox."""
+        if self.state != "offline":
+            return False
+        if target is not None:
+            t = str(target).strip().upper()
+            if not CALL_RE.match(t) or t == self.cfg.mycall:
+                return False
+            if self.link.kind == "telnet":
+                t = self.home
+            self._set_target(t)
+        self._user_disc = False
+        await self.link.connect()
+        return True
+
+    def _set_target(self, t: str) -> None:
+        if t != self.target:
+            self.target = t
+            self.boards = []                     # they belong to the other station
+        self.link.target = t
+        recent = [t] + [c for c in self.settings.get("recent", []) if c != t]
+        self.settings["recent"] = recent[:RECENT_MAX]
+        self.settings["target"] = t
+        self._save_settings()
 
     def disconnect(self) -> None:
-        if self.state != "offline":
-            self.link.disconnect()
+        if self.state in ("offline", "disconnecting"):
+            return
+        self._user_disc = True
+        self.link.disconnect()
+
+    # --- terminal (CR43) ----------------------------------------------------------
+
+    def _term(self, kind: str, text: str) -> None:
+        self.term_n += 1
+        self.term.append((self.term_n, kind, text))
+
+    def send_raw(self, text: str) -> bool:
+        """A line typed in the terminal: goes out as it is (an empty line too)."""
+        if self.state != "online":
+            return False
+        text = text.replace("\r", " ").replace("\n", " ")[:250]
+        self._term("tx", text)
+        self._send(text)
+        self._touch()
+        return True
 
     def join(self, n: int) -> bool:
         if not self.handshake_done or not any(b["n"] == n for b in self.boards):
@@ -212,7 +289,7 @@ class ClientCore:
         if not count or mode == "none":
             return
         if mode == "missed":
-            since = self.settings.get("seen", {}).get(self.board["name"])
+            since = self.tset.get("seen", {}).get(self.board["name"])
             if since and last <= since:
                 return                                    # nothing new since the last visit
             self._ask_history(self.HIST_MISSED_MAX, since=since)
@@ -234,7 +311,7 @@ class ClientCore:
         if not m:
             self.board["motd"] = ""
             return
-        known = self.settings.get("motd", {}).get(name)
+        known = self.tset.get("motd", {}).get(name)
         if known and known.get("crc") == m.group(1):
             self.board["motd"] = known.get("text", "")
         else:
@@ -332,11 +409,27 @@ class ClientCore:
     # --- link callbacks ---------------------------------------------------------
 
     def _on_state(self, state: str, reason: str) -> None:
+        prev = self.state
         self.state, self.reason = state, reason
+        self.state_at = time.time()
+        if self._disc_timer is not None:
+            self._disc_timer.cancel()
+            self._disc_timer = None
+        if state == "connecting":
+            self.ended = None
+            self.mode = ""
         if state == "online":
             self.handshake_done = False
+            self.mode = "tinybox" if self.link.kind == "telnet" else ""
             self._hs_task = asyncio.ensure_future(self._handshake_fallback())
+        if state == "disconnecting":
+            self._disc_timer = asyncio.get_event_loop().call_later(
+                DISC_TIMEOUT_SEC, self.link.drop, "no answer to the disconnect")
         if state == "offline":
+            # CR42: how it ended - by us, never came up, or by the other side
+            kind = "user" if self._user_disc else "failed" if prev == "connecting" else "remote"
+            self.ended = {"kind": kind, "at": int(time.time()), "call": self.target}
+            self._user_disc = False
             self.handshake_done = False
             self.caps = set()
             self._clear_board()
@@ -349,24 +442,39 @@ class ClientCore:
             if self._hs_task:
                 self._hs_task.cancel()
         self.console.append(f"*** {state}" + (f" ({reason})" if reason else ""))
+        self._term("sys", f"*** {state} {self.target}" + (f" ({reason})" if reason else ""))
         self._touch()
 
+    def _known_tinybox(self) -> bool:
+        return (self.link.kind == "telnet" or self.at_home
+                or self.target in self.settings.get("tinyboxes", []))
+
     async def _handshake_fallback(self) -> None:
+        """No "Welcome to TinyBox" seen: a TinyBox we know gets the handshake
+        anyway (the line may have been missed); any other station is not
+        bothered with //CLIENT - the client becomes a terminal (CR43)."""
         await asyncio.sleep(HANDSHAKE_FALLBACK_SEC)
-        if self.state == "online" and not self.handshake_done:
+        if self.state != "online" or self.handshake_done:
+            return
+        if self._known_tinybox():
             self._handshake()
+        else:
+            self.mode = "terminal"
+            self.console.append(f"*** {self.target} is no TinyBox: terminal mode")
+            self._touch()
 
     def _want_ui(self) -> bool:
         if self.link.kind != "agw" or self.cfg.ui == "no":
             return False
         if self.cfg.ui == "yes":
             return True
-        return time.time() - self.tinybox_direct_at < DIRECT_VALID_SEC
+        return time.time() - self.direct_at.get(self.target, 0) < DIRECT_VALID_SEC
 
     def _handshake(self) -> None:
         if self.handshake_done:
             return
         self.handshake_done = True          # sent; //OK confirms the caps
+        self.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
         caps += ",SYNC,SYNC2,SHORT,NUM" + (",Z,IMG" if self.link.kind == "agw" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
@@ -379,7 +487,20 @@ class ClientCore:
             self.console.append(line.rstrip())
             return
         line = line.rstrip()
+        if self.mode != "tinybox":
+            # CR43: as long as it is not a TinyBox talking to the client, every
+            # line (an empty one too) goes to the terminal as it came
+            self._term("rx", line)
+        if self.mode == "terminal":
+            if line:
+                self.console.append(line)
+            if not self.handshake_done and line.startswith("Welcome to TinyBox"):
+                asyncio.get_event_loop().call_later(1.0, self._handshake)
+            self._touch()
+            return
         if not line:
+            if self.mode != "tinybox":
+                self._touch()
             return
         if line.startswith("//"):
             self._control(line)
@@ -389,6 +510,8 @@ class ClientCore:
             self._qstat(line)
         else:
             self.console.append(line)
+            if self.mode == "tinybox":
+                self._term("rx", line)
             m = re.match(r"^You have (\d+) new message", line)
             if m or line.startswith("No new messages"):
                 self._set_mail(int(m.group(1)) if m else 0)
@@ -397,14 +520,17 @@ class ClientCore:
         self._touch()
 
     def _on_frame(self, f: RawFrame) -> None:
-        if f.src == self.cfg.tinybox_call and f.direct:
-            self.tinybox_direct_at = time.time()
-        if {f.src, f.dest} != {self.cfg.mycall, self.cfg.tinybox_call}:
+        tb = self.target
+        if f.direct:
+            self.direct_at[f.src] = time.time()
+            if len(self.direct_at) > 200:
+                del self.direct_at[min(self.direct_at, key=self.direct_at.get)]
+        if {f.src, f.dest} != {self.cfg.mycall, tb}:
             self.channel_busy_at = time.monotonic()     # others use the frequency
         # CR30: a picture someone else is sending - count what we hear of it,
         # so the progress bar shows the real state and not an estimate
         u = self.uploads.get(f.src)
-        if u is not None and f.is_i and f.dest == self.cfg.tinybox_call and f.info:
+        if u is not None and f.is_i and f.dest == tb and f.info:
             u["got"] = min(u["size"], u["got"] + len(f.info))
             self._touch()
         if f.src != self.cfg.mycall and not f.src.startswith("TBCHAT"):
@@ -417,10 +543,10 @@ class ClientCore:
         if sym:
             self.heard[f.src] = sym
             self._touch()
-        if f.src == self.cfg.tinybox_call and f.dest == "TBMAIL":
+        if f.src == self.home and f.dest == "TBMAIL":       # the mailbox is the home's
             self._mail_notice(f.info.decode("utf-8", "replace"))
             return
-        if f.src != self.cfg.tinybox_call or "UI" not in self.caps:
+        if f.src != tb or "UI" not in self.caps:
             return
         text = f.info.decode("utf-8", "replace")
         if text.startswith("%Q "):                   # statistics line, no sequence number
@@ -444,6 +570,11 @@ class ClientCore:
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
             self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
+            known = self.settings.setdefault("tinyboxes", [])
+            if self.target != self.home and self.target not in known:
+                known.append(self.target)          # CR43: next time no terminal guess
+                del known[:-20]
+                self._save_settings()
             q = re.search(r"q=(\d+)/(\d+)/(\d+)/([\d.,]+)", rest)      # CR33
             if q:
                 self.qcfg = {"frames": int(q.group(1)), "minutes": int(q.group(2)),
@@ -451,7 +582,8 @@ class ClientCore:
                              "steps": [float(x) for x in q.group(4).split(",") if x]}
             self._update_info(rest)
             self._send("//BOARDS")
-            if self.cfg.sync_on_login and "SYNC" in self.caps and not self.sync.running:
+            if self.cfg.sync_on_login and "SYNC" in self.caps and self.at_home \
+                    and not self.sync.running:
                 # CR40: headers of mail and subscribed rubrics after every login,
                 # a moment later so the board list comes first
                 asyncio.get_event_loop().call_later(LOGIN_SYNC_SEC, self._login_sync)
@@ -466,7 +598,7 @@ class ClientCore:
         elif cmd == "BEND":
             self.boards = self._boards_tmp or []
             self._boards_tmp = None
-            last = self.settings.get("board")
+            last = self.tset.get("board")
             if self.board is None and any(b["n"] == last for b in self.boards) \
                     and not self.sync.own_connect:   # a sync-only connection stays out
                 self.join(last)                  # back into the last board
@@ -484,8 +616,8 @@ class ClientCore:
                 self._joining, self._early = None, []
                 if early:     # after the //H and //WHO lines, which come next
                     asyncio.get_event_loop().call_soon(self._replay_early, early, last)
-                if self.settings.get("board") != self.board["n"]:
-                    self.settings["board"] = self.board["n"]
+                if self.tset.get("board") != self.board["n"]:
+                    self.tset["board"] = self.board["n"]
                     self._save_settings()
         elif cmd == "H":
             m = re.match(r"^(\d+) ([A-Z0-9-]+): ?(.*)$", rest)
@@ -505,7 +637,7 @@ class ClientCore:
         elif cmd == "MOTD":
             crc, _, text = rest.partition(" ")
             if self.board:
-                motds = self.settings.setdefault("motd", {})
+                motds = self.tset.setdefault("motd", {})
                 if crc == "-":
                     motds.pop(self.board["name"], None)
                 else:
@@ -526,7 +658,7 @@ class ClientCore:
                     num = 0
         elif cmd == "OUT":
             self._clear_board()
-            self.settings.pop("board", None)
+            self.tset.pop("board", None)
             self._save_settings()
         elif cmd == "SYS":
             # //SYS <seconds left> <text>  (-1 = shutdown called off)
@@ -546,7 +678,8 @@ class ClientCore:
             self.console.append(f"*** mail notice: {m.group(2)} new")
 
     def _login_sync(self) -> None:
-        if self.state == "online" and "SYNC" in self.caps and not self.sync.running:
+        if self.state == "online" and "SYNC" in self.caps and self.at_home \
+                and not self.sync.running:
             self.sync.start("login")
 
     def after_sync(self) -> None:
@@ -568,7 +701,7 @@ class ClientCore:
 
     def _clear_board(self) -> None:
         if self.board:                       # everything up to now was seen (CR13)
-            seen = self.settings.setdefault("seen", {})
+            seen = self.tset.setdefault("seen", {})
             seen[self.board["name"]] = int(time.time()) + self.clock_off
             self._save_settings()
         self._hist_keys = set()
@@ -706,8 +839,12 @@ class ClientCore:
         self._expire_reacts(now)
         return {
             "version": self.version, "client_version": VERSION,
-            "mycall": self.cfg.mycall, "tinybox": self.cfg.tinybox_call,
+            "mycall": self.cfg.mycall, "tinybox": self.target,
+            "home": self.home, "recent": self.recent,                  # CR42
             "link": self.link.kind, "state": self.state, "reason": self.reason,
+            "state_age": round(now - self.state_at, 1), "ended": self.ended,
+            "mode": self.mode,                                          # CR43
+            "term": list(self.term)[-TERM_SNAPSHOT:], "term_n": self.term_n,
             "client": self.handshake_done and bool(self.caps or self.boards),
             "ui": "UI" in self.caps,
             "boards": self.boards, "board": self.board,
@@ -718,7 +855,7 @@ class ClientCore:
             "sysmsg": self.sysmsg,
             "heard": [{"call": c, "symbol": self.heard.get(c, ""), "ago": int(now - t)}
                       for c, t in sorted(self.heard_at.items(), key=lambda kv: -kv[1])[:30]
-                      if c not in self.members and c != self.cfg.tinybox_call],
+                      if c not in self.members and c != self.target],
             "symbols": {c: self.symbol_of(c) for c in calls if self.symbol_of(c)},
             "my_symbol": self.my_symbol,
             "messages": self.messages, "pending": [p["text"] for p in self.pending],
@@ -770,6 +907,7 @@ class ClientCore:
         return self.images.fetch(hash)
 
     async def run(self) -> None:
-        if self.cfg.auto_connect:
-            asyncio.get_event_loop().call_later(2, lambda: asyncio.ensure_future(self.connect()))
+        if self.cfg.auto_connect:            # always to the own TinyBox
+            asyncio.get_event_loop().call_later(
+                2, lambda: asyncio.ensure_future(self.connect(self.home)))
         await self.link.run()
