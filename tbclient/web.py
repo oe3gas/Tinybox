@@ -26,7 +26,11 @@ Mailbox (C3), all local - only "sync" goes on air:
                            "body": "..."}   -> {"oid": n}  (into the outbox)
   POST /api/mail/discard  {"oid": n}
   POST /api/mail/subscribe {"rubric": "ALL", "on": true}
-  POST /api/mail/sync {"scope": "mail"|"bulletins"} | /api/mail/cancel
+  POST /api/mail/sync {"scope": "mail"|"bulletins"|"login"}
+  POST /api/mail/abort    orderly abort of the running sync or text fetch (CR40;
+                          /api/mail/cancel is the old name)
+  POST /api/mail/fetch {"id": n}   fetch this text now (CR40) -> {"ok": true} or
+                          {"ok": false, "error": "not connected"} (forgotten, not queued)
   POST /api/mail/news   subscribe TBNEWS + fetch bulletins ("Read about new features")
 
 Images in the chat (CR12):
@@ -238,9 +242,13 @@ class WebServer:
                 ok = core.sync.start(str(data.get("scope", "mail")))
             elif action == "news":
                 ok = core.open_news()
-            elif action == "cancel":
-                core.sync.cancel()
+            elif action in ("abort", "cancel"):
+                core.sync.abort()
                 ok = True
+            elif action == "fetch":
+                err = core.sync.fetch(int(data.get("id", 0)))
+                core._touch()
+                return (200, {"ok": True}, None) if not err else (200, {"ok": False, "error": err}, None)
             else:
                 return 404, {"error": "unknown"}, None
         except (TypeError, ValueError):

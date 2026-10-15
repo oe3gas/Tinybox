@@ -270,6 +270,7 @@ function render() {
   renderMail();
   renderSys();
   renderUpdate();
+  checkFetch();
   for (const r of document.querySelectorAll('input[name="histmode"]')) r.checked = r.value === S.history_mode;
   renderMailbox();
   renderBoards();
@@ -1428,23 +1429,28 @@ function navButton(key, label, n, strong, target) {
 }
 
 /* Section head "Mail" / "Bulletins" with its own sync button and, below it,
- * what that sync is doing (or why it failed). */
+ * what that sync is doing (or why it failed). The sync after the login
+ * (scope "login", CR40) covers both: Abort in both heads, the step under the
+ * one it is working on. Abort is orderly: the exchange on the air is finished. */
 function syncHead(target, title, scope) {
   const sy = S.sync || {};
-  const mine = sy.scope === scope;
+  const mine = sy.scope === scope || sy.scope === "login";
   const running = sy.running && mine;
+  const active = sy.scope === "login" ? ((sy.step || "").startsWith("bulletin") ? "bulletins" : "mail")
+                                      : sy.scope;
   const h = el("div", "nav-h sync-h");
-  const b = el("button", "sync-btn" + (running ? " run" : ""), running ? "✕ Cancel" : "⟳ Sync");
-  b.title = running ? "Stop the sync (it goes on from here next time)"
-    : scope === "mail" ? "Send the outbox and fetch new personal mail"
-                       : "Fetch new bulletins of the subscribed rubrics";
-  b.disabled = sy.running && !mine;              // one sync at a time
-  b.onclick = (ev) => { ev.stopPropagation(); api(running ? "mail/cancel" : "mail/sync", { scope }); };
+  const b = el("button", "sync-btn" + (running ? " run" : ""),
+               running ? (sy.aborting ? "Aborting…" : "✕ Abort") : "⟳ Sync");
+  b.title = running ? "Stop after the exchange on the air - the next sync goes on from there"
+    : scope === "mail" ? "Send the outbox and fetch the headers of new personal mail"
+                       : "Fetch the headers of new bulletins of the subscribed rubrics";
+  b.disabled = (sy.running && !mine) || (running && sy.aborting);   // one sync at a time
+  b.onclick = (ev) => { ev.stopPropagation(); api(running ? "mail/abort" : "mail/sync", { scope }); };
   h.append(el("span", "", title), b);
   target.append(h);
   let txt = "", err = false;
-  if (running) txt = sy.step + "…";
-  else if (mine && sy.error) { txt = "Sync failed: " + sy.error; err = true; }
+  if (running && active === scope) txt = sy.step + "…";
+  else if (!sy.running && sy.scope === scope && sy.error) { txt = "Sync failed: " + sy.error; err = true; }
   if (txt) {
     const st = el("div", "sync-st" + (err ? " err" : ""), txt);
     if (running) {
@@ -1459,20 +1465,28 @@ function syncHead(target, title, scope) {
 
 function buildMailNav(target) {
   const { folders, rubrics } = folderEntries();
+  const sy = S.sync || {};
   target.replaceChildren();
+  if (sy.notice) {                               // CR40: what is pending, how long; abort
+    const n = el("div", "sync-st note", sy.notice);
+    const x = el("button", "icon-btn", "✕");
+    x.title = "Dismiss";
+    x.onclick = (ev) => { ev.stopPropagation(); noticeDismissed = sy.notice; render(); };
+    if (noticeDismissed !== sy.notice) { n.prepend(x); target.append(n); }
+  }
   syncHead(target, "Mail", "mail");
   for (const [k, l, n, strong] of folders) navButton(k, l, n, strong, target);
   syncHead(target, "Bulletins", "bulletins");
   for (const [k, l, n, strong] of rubrics) navButton(k, l, n, strong, target);
 }
+let noticeDismissed = "";
 
 function lastSyncText(M) {
   const bul = folder.startsWith("b:") || folder === "rubrics";
   const t = bul ? M.last_bulletins : M.last_mail;
   let txt = t ? `Last sync ${dateStr(t)}` : "Never synced";
   if (!bul && M.outbox + M.todo) txt += ` · ${M.outbox + M.todo} change(s) waiting`;
-  if (!bul && M.missing) txt += ` · ${M.missing} text(s) to fetch`;
-  if (bul && M.missing_b) txt += ` · ${M.missing_b} text(s) to fetch`;
+  if (!bul && M.missing) txt += ` · ${M.missing} text(s) on click`;
   return txt;
 }
 
@@ -1537,7 +1551,11 @@ function msgItem(m) {
   const tags = el("div", "l1");
   const left = el("span");
   left.append(el("span", "muted small", "#" + m.id + " "));
-  if (!m.has_body) left.append(el("span", "tag", "text not fetched"));
+  if (!m.has_body) {                             // CR40: the text comes when clicked
+    const t = el("span", "tag", "not loaded · " + kbText(m.size));
+    t.title = "Click to fetch the text";
+    left.append(t);
+  }
   if (m.type === "P" && m.status === "Y" && sent) left.append(el("span", "tag", "read"));
   tags.append(left);
   txt.append(tags);
@@ -1593,14 +1611,41 @@ async function postJson(path, data) {
   try { return { ok: r.ok, data: await r.json() }; } catch (e) { return { ok: false, data: {} }; }
 }
 
+/* CR40: a message without text -> fetch it now. No connection: say so, and the
+ * request is forgotten. The reader shows the progress and opens the text when
+ * it is here (checkFetch, on every state change). */
+let fetchWanted = null;           // id whose text is on its way
 async function openMessage(id) {
   selId = id; draft = null;
   const r = await postJson("mail/open", { id });
   if (!r.ok) return;
   cur = r.data;
+  if (cur.body === null) await fetchText(id);
   setLevel("read");
   showReader();
   renderItems();
+}
+
+async function fetchText(id) {
+  const f = await postJson("mail/fetch", { id });
+  if (f.ok && f.data.ok) { fetchWanted = id; cur.fetchError = ""; }
+  else { fetchWanted = null; cur.fetchError = (f.data && f.data.error) || "not possible"; }
+}
+
+let fetchSeen = false;            // the fetch was seen running
+async function checkFetch() {
+  if (fetchWanted === null || !cur || cur.id !== fetchWanted) return;
+  const sy = S.sync || {};
+  if (sy.running) { fetchSeen = true; showReader(); return; }
+  const r = await postJson("mail/open", { id: fetchWanted });
+  if (r.ok && r.data.body !== null) {
+    cur = r.data; fetchWanted = null; fetchSeen = false;
+    showReader(); renderItems();
+  } else if (fetchSeen || sy.fetch_error) {
+    cur.fetchError = sy.fetch_error || "aborted";
+    fetchWanted = null; fetchSeen = false;
+    showReader();
+  }
 }
 
 function showReader() {
@@ -1622,7 +1667,23 @@ function showReader() {
   const body = $("rd-body");
   body.replaceChildren();
   body.className = "rd-body" + (m.body === null ? " missing" : "");
-  if (m.body === null) body.textContent = "The text has not been fetched yet - it comes with the next sync.";
+  if (m.body === null) {
+    const sy = S.sync || {};
+    if (fetchWanted === m.id) {
+      body.append(`Loading the text (${kbText(m.size)})` +
+                  (sy.running && sy.fetch === m.id && sy.step.startsWith("text") ? ` - ${sy.step}` : "") + "… ");
+      const a = el("button", "sm", sy.aborting ? "Aborting…" : "Abort");
+      a.disabled = !!sy.aborting;
+      a.onclick = () => api("mail/abort");
+      body.append(a);
+    } else {
+      body.append(m.fetchError === "not connected" ? "Not connected - the text cannot be fetched now. "
+                  : m.fetchError ? `Text not fetched (${m.fetchError}). ` : "The text is not here yet. ");
+      const f = el("button", "sm", "Fetch text");
+      f.onclick = async () => { await fetchText(m.id); showReader(); };
+      body.append(f);
+    }
+  }
   else for (const [i, line] of m.body.split("\n").entries()) {
     if (i) body.append("\n");
     linkify(body, line);

@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR41 umgesetzt)
+Stand: 15.10.2026 (CR40 umgesetzt)
 
 ## Übersicht
 
@@ -35,7 +35,7 @@ Stand: 15.10.2026 (CR41 umgesetzt)
 | 26 | Delta-Abgleich: Mail-/Bulletin-Sync mit minimaler Payload (ein Wechsel, nur Änderungen, kleine Texte gleich mit, Z für Köpfe) | ✅ siehe unten |
 | 27 | Persönliche Post an mehrere Empfänger (`OE3TEC,OE1ABC`): Text einmal über Funk, TinyBox legt je Empfänger eine eigene Nachricht an | ✅ siehe unten |
 | 28 | Emoticons ↔ Emojis: `;-)` beim Tippen sofort als Emoji, Terminal-Eingabe `;-)` im Client als Emoji, Emojis mit ASCII-Form gehen als `:-)` statt `~0B` über Funk | ✅ siehe unten |
-| 29 | Terminal: Ausgaben über 10 Zeilen seitenweise mit „continue/abort“ (`L` und jeder andere Befehl), damit nicht hunderte Titel über die Luft laufen | ✅ siehe unten |
+| 29 | Terminal: Ausgaben über 10 Zeilen seitenweise mit „continue/abort“ (`L` und jeder andere Befehl), damit nicht hunderte Titel über die Luft laufen | ✅ – seit CR40 ersetzt durch Hinweis + Abort |
 | 30 | Bild-Upload eines Teilnehmers sichtbar machen: „OE1ABC uploading picture“ mit Fortschrittsbalken | ✅ siehe unten |
 | 31 | Kommentarbezug eindeutig machen (bisher Rufzeichen + Minute, mehrdeutig) | ✅ siehe unten |
 | 32 | Logfile zum Debuggen mit Claude: eine Datei pro Tag, feste Spalten, Session-Nummer, Startblock, `LOG`-Befehl | ✅ siehe unten |
@@ -46,7 +46,7 @@ Stand: 15.10.2026 (CR41 umgesetzt)
 | 37 | brocast-Listener: Ansicht „Mit Trennlinien“ raus, Teile-Knöpfe nur im Teletext, Teletext in echter Teletext-Optik (Pixelschrift, großer Zeilenabstand) | ✅ siehe unten |
 | 38 | Teletext: Zeilenabstand auf Zeichenhöhe, brocast-Schriftzug nach der Teletext-Titelseite über jeder Seite; Bildkonverter (Bilder als Mosaik-Bulletins, nur station) | ✅ siehe unten |
 | 39 | TinyBox-Web-GUI: „Rubrics“ aufklappbar in der Seitenleiste, Klick zeigt die Bulletins dieser Rubrik | ✅ siehe unten |
-| 40 | Sync beim Anmelden: alle Köpfe (eigene Mails + abonnierte Rubriken), persönliche Mails ≤ 256 Byte gleich mit, sonst Text erst beim Anklicken; geordneter Abort mit Restanzeige und Zeitschätzung; Terminal: Abort statt 10-Zeilen-Seiten (CR29) | offen – siehe unten |
+| 40 | Sync beim Anmelden: alle Köpfe (eigene Mails + abonnierte Rubriken), persönliche Mails ≤ 256 Byte gleich mit, sonst Text erst beim Anklicken; geordneter Abort mit Restanzeige und Zeitschätzung; Terminal: Abort statt 10-Zeilen-Seiten (CR29); Frist je Rubrik | ✅ siehe unten |
 | 41 | KISS-Mode: Kanal- und kisshub-Werte in der Sysop-Web-GUI (Kanalauslastung, gehörte Stationen, TNC-Zustand, Wartezeit im Hub) für das Qualitäts-Monitoring | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
@@ -814,7 +814,42 @@ Zahl der Rubriken).
 
 Nur Sysop-Oberfläche, daher keine neue Client-Version und keine TBNEWS.
 
-## CR40 – Sync beim Anmelden: nur Köpfe, Text auf Abruf (erfasst 15.10.2026, offen)
+## CR40 – Sync beim Anmelden: nur Köpfe, Text auf Abruf (✅ 15.10.2026)
+
+### Umsetzung (15.10.2026)
+
+Client-Version **2026.10.15**. TinyBox und Client müssen beide aktualisiert werden (neue Cap `SHORT`);
+ein alter Client an einer neuen TinyBox und umgekehrt funktionieren weiter (dann ohne `short=`).
+
+- **TinyBox – Frist je Rubrik:** `[rubrics] NAME = Beschreibung | Tage` (auch `7d`), `0` = nie löschen,
+  ohne Angabe gilt `[mailbox] bulletin_expire_days`. `purge_expired()` löscht je Rubrik; die Web-GUI zeigt
+  „kept 7 d" in der Rubrik-Karte und im Tooltip der Seitenleiste (`/api/rubrics` liefert `expire_days`).
+- **TinyBox – `//SYNC … short=<n>`** (Cap `SHORT`): nur Texte persönlicher Mails bis `n` Byte gehen mit.
+- **TinyBox – Terminal:** Ausgaben über 10 Zeilen beginnen mit `*** 37 lines follow - send A to abort` und
+  laufen dann komplett durch; `A` verwirft, was noch in der Warteschlange liegt (was Direwolf schon hat,
+  höchstens `max_outstanding` Frames, geht noch hinaus). Über Telnet wirkt `A` nicht (wird sofort geschrieben).
+  Die Seitenteilung von CR29 (`--More--`) ist weg.
+- **Client – Abgleich nach jeder Anmeldung:** 1,5 s nach `//OK` startet der Scope `login` (Postausgang,
+  Mail-Köpfe, dann Köpfe der abonnierten Rubriken). Abschaltbar mit `[sync] on_login = no`.
+  Auch der Knopf „Sync“ holt nur noch Köpfe.
+- **Client – kurz:** `[sync] short_bytes` (Vorgabe 256, 0 = nie); steht ein Eintrag in der conf, gilt dieser.
+  Ohne Cap `SHORT` (alte TinyBox) holt der Client die kurzen Texte mit einem `//GET`.
+- **Client – Text beim Anklicken:** `POST /api/mail/fetch {"id": n}`. Der Reader zeigt „Loading the text
+  (1.2 KB) – text #12 (1.2 kB, approx. 15 s)… [Abort]“ und dann den Text. Ohne Verbindung:
+  „Not connected – the text cannot be fetched now.“, nichts wird vorgemerkt. Ein Klick während eines
+  Abgleichs geht zwischen zwei Wechseln hinaus. In der Liste steht bei fehlenden Texten „not loaded · 1.2 KB“.
+- **Client – Abort:** Knopf „✕ Abort“ in den Köpfen *Mail*/*Bulletins* (ersetzt „Cancel“), im Reader beim
+  Laden eines Textes. `POST /api/mail/abort` (`/api/mail/cancel` geht weiter). Nach 30 s ohne Antwort
+  harter Abbruch.
+- **Client – Meldungen** (oben in der Ordnerliste, wegklickbar, und in der Konsole), z. B.
+  `Mail: 27 mail header(s) (approx. 55 s) to fetch. Press Abort to stop at any time.`, dann
+  `Bulletins: 40 bulletin header(s) (WX 30, DX 10) (approx. 1 min 10 s) to fetch. …` – nach einem
+  vollständigen Abgleich verschwindet die Meldung wieder. Beim Abort:
+  `Sync aborted. Still pending: 23 mail header(s), … It goes on from here at the next login or with Sync.`
+- Tests: `test_rubrics.py` (`RubricValidity`), `test_mailsync.py` (`ShortTextTests`, `LoginSyncAbortTests`,
+  `EstimateTests`, angepasst), `test_tinybox.py` (`PagingTests`), `test_agw.py`.
+
+### Erfassung
 
 **Wunsch (OE3GAS):** Meldet sich ein Client bei der TinyBox an, dann soll er
 
@@ -919,11 +954,9 @@ Texte** (`_texts()` in `tbclient/sync.py`); kurze Texte hängt die TinyBox schon
   diese bestätigt sind – AGW `y`/Outstanding-Frames) und prüft dazwischen auf Eingaben.
 - Ergibt einen TBNEWS-Hinweis (Bedienung im Terminal ändert sich).
 
-### Noch offen
+### Entschieden zuletzt
 
-- Ablauffrist: reicht die **eine** Frist für alle (`bulletin_expire_days`), oder soll – wie von Gerhard
-  beschrieben – **jedes Board/jede Rubrik eine eigene Frist** bekommen (z. B. in `[rubrics]` der
-  `tinybox.conf`)?
+- Ablauffrist: **jede Rubrik bekommt vom Sysop eine eigene Dauer** (Gerhard, 15.10.2026).
 
 ## CR41 – KISS-Mode: Kanal- und kisshub-Werte in der Web-GUI (✅ 15.10.2026)
 

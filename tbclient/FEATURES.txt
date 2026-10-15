@@ -10,6 +10,14 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Abgleich beim Anmelden (CR40): nach jeder Anmeldung holt der Client von
+  selbst die Koepfe der eigenen Post und der abonnierten Rubriken. Texte
+  kommen erst beim Anklicken (ohne Verbindung: "not connected", die
+  Anforderung wird verworfen); nur eigene Mails bis 256 Byte (ca. 2 s bei
+  1200 Bd, [sync] short_bytes) kommen gleich mit. Ein Knopf "Abort" beendet
+  den Abgleich geordnet: der laufende Wechsel wird fertig empfangen, der
+  naechste Abgleich macht dort weiter. Zu Beginn und beim Abort zeigt der
+  Client, was noch offen ist, und schaetzt die Dauer.
 - Laedt jemand ein Bild hoch, sehen es die anderen sofort im Chat:
   "OE1ABC uploading picture" mit Fortschrittsbalken. Der Balken zaehlt die
   Frames mit, die man von der Station hoert; hoert man sie nicht direkt,

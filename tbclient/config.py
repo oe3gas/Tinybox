@@ -31,6 +31,8 @@ class Config:
     data_dir: Path = Path("data/tbclient")
     sync_chunk: int = 1024            # bytes per request of a mailbox sync (radio)
     sync_pause: float = 5.0           # seconds between two requests (radio)
+    sync_short: int = 256             # personal mail up to this size comes with its text (CR40)
+    sync_on_login: bool = True        # sync the headers after every login (CR40)
     img_rate: int = 100               # net bytes/s of the link, for the time estimate
     img_target: int = 4096            # the picture is shrunk to about this many bytes ("normal")
 
@@ -71,6 +73,10 @@ def load(path: str | Path) -> Config:
         raise ConfigError("[sync] chunk_bytes must be 128 ... 8192")
     if not 0 <= cfg.sync_pause <= 120:
         raise ConfigError("[sync] pause_sec must be 0 ... 120")
+    cfg.sync_short = int(get("sync", "short_bytes", str(cfg.sync_short)))
+    if not 0 <= cfg.sync_short <= 8192:
+        raise ConfigError("[sync] short_bytes must be 0 ... 8192")
+    cfg.sync_on_login = get("sync", "on_login", "yes").lower() in ("yes", "true", "1", "on")
     # piece_bytes / pause_sec of older versions are ignored: the picture goes to
     # Direwolf in one go, the AX.25 window (MAXFRAME/EMAXFRAME) paces it
     cfg.img_rate = int(get("images", "bytes_per_sec", str(cfg.img_rate)))

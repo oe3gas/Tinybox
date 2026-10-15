@@ -95,8 +95,7 @@ EDITED = "Msg {id} updated."
 SUBJECT_PROMPT = "Subject: "
 BODY_PROMPT = "Enter message, end with /EX or ^Z  (/AB = cancel):"
 SAVED = "Msg {id} saved."
-MORE_PROMPT = "--More ({shown}/{total})-- Enter = continue, A = abort: "
-MORE_ABORTED = "*** rest skipped"
+LONG_OUTPUT = "*** {n} lines follow - send A to abort"   # CR40 (replaces the pages of CR29)
 CANCELLED = "Message cancelled."
 INTERNAL_ERROR = "*** Internal error, command not completed. Sysop is informed."
 

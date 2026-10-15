@@ -342,6 +342,8 @@ class Rubric:
     name: str
     description: str = ""
     accepted: bool = True        # "NAME = -" = refused
+    expire_days: int | None = None   # "NAME = desc | 7": own validity in days (CR40),
+                                     # None = [mailbox] bulletin_expire_days, 0 = forever
 
 
 @dataclass
@@ -741,6 +743,7 @@ def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
 
 def _load_rubrics(cp: configparser.ConfigParser) -> list[Rubric]:
     """[rubrics]  NAME = description  (accepted)   NAME = - [note]  (refused).
+    Optional "| days" at the end: own validity of the rubric's bulletins (CR40).
     Lenient: a wrong line is only logged, TinyBox still starts."""
     rubrics: list[Rubric] = []
     if not cp.has_section("rubrics"):
@@ -754,11 +757,20 @@ def _load_rubrics(cp: configparser.ConfigParser) -> list[Rubric]:
                 "[rubrics] %s: a rubric name has 1-6 letters/digits - ignored", key)
             continue
         value = value.strip()
+        days: int | None = None
+        if "|" in value:                         # "NAME = description | 7" (CR40)
+            value, _, tail = value.rpartition("|")
+            value, tail = value.strip(), tail.strip().lower().removesuffix("d").strip()
+            if tail.isdigit() and int(tail) <= 3650:
+                days = int(tail)
+            else:
+                logging.getLogger(__name__).warning(
+                    "[rubrics] %s: '| %s' is no number of days (0-3650) - ignored", key, tail)
         refused = value == "-" or value.startswith("- ") or value.startswith("-\t")
         desc = value[1:].strip() if refused else value
         if any(r.name == name for r in rubrics):
             continue
-        rubrics.append(Rubric(name, desc, not refused))
+        rubrics.append(Rubric(name, desc, not refused, days))
     return rubrics
 
 

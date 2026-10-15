@@ -177,6 +177,12 @@ function setRubricsOpen(open) {
   try { localStorage.setItem("tinybox.rubrics", open ? "1" : "0"); } catch (e) { /* private mode */ }
 }
 
+/* How long the rubric keeps its bulletins (CR40: [rubrics] NAME = desc | days). */
+function keepText(r) {
+  if (r.status === "refused" || r.expire_days === undefined) return "";
+  return r.expire_days ? " · kept " + r.expire_days + " d" : " · kept forever";
+}
+
 function renderRubricNav() {
   const box = $("nav-rubrics-list");
   const rows = S.rubrics || [];
@@ -184,7 +190,7 @@ function renderRubricNav() {
   box.replaceChildren(...rows.map((r) => h("a", {
     href: "#/messages",
     class: (onMessages && S.rubric === r.name ? "active" : "") + (r.status === "refused" ? " off" : ""),
-    title: (r.description || r.name)
+    title: (r.description || r.name) + keepText(r)
            + (r.status === "refused" ? " · refused: no bulletins are taken" : "")
            + (r.status === "unlisted" ? " · not in [rubrics] of tinybox.conf" : ""),
     onclick: (e) => { e.preventDefault(); openRubric(r.name); },
@@ -431,7 +437,7 @@ function rubricsCard() {
       return h("tr", { class: "click", title: "Show the bulletins of " + r.name,
                        onclick: () => openRubric(r.name) },
         h("td", { class: "mono", style: "font-weight: 700", text: r.name }),
-        h("td", { class: "subject", text: r.description || "-" }),
+        h("td", { class: "subject", text: (r.description || "-") + keepText(r) }),
         h("td", { class: "mono", text: r.count ? r.count + (r.unread ? " (" + r.unread + " new)" : "") : "-" }),
         h("td", {}, h("span", { class: "rstat " + cls, text: label })));
     }));

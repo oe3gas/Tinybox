@@ -1,0 +1,4 @@
+- Anmelden: Koepfe von Post und Rubriken kommen von selbst,
+  Texte beim Anklicken (eigene Mails bis 256 Byte gleich mit).
+- Abort: geordneter Abbruch, zeigt Offenes und Dauer.
+- Terminal: lange Listen ohne Seiten, A bricht ab.

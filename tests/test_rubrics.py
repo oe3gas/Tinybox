@@ -269,3 +269,37 @@ class ForwardSessionFbb(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RubricValidity(unittest.TestCase):
+    """CR40: every rubric may keep its bulletins for its own number of days."""
+
+    def test_parse(self):
+        import configparser
+        from tinybox.config import _load_rubrics
+        cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+        cp.read_string("[rubrics]\nALL = To everybody | 14\nWX = Weather | 3d\n"
+                       "DX = DX news\nOLD = Old stuff | 0\nBAD = Bad | x\nHUMOR = - no | 5\n")
+        got = {r.name: (r.description, r.accepted, r.expire_days) for r in _load_rubrics(cp)}
+        self.assertEqual(got, {"ALL": ("To everybody", True, 14), "WX": ("Weather", True, 3),
+                               "DX": ("DX news", True, None), "OLD": ("Old stuff", True, 0),
+                               "BAD": ("Bad", True, None), "HUMOR": ("no", False, 5)})
+
+    def test_purge_per_rubric(self):
+        app = make_app()
+        app.cfg.rubrics = [Rubric("ALL", "x", True, 0), Rubric("WX", "w", True, 3),
+                           Rubric("DX", "d")]
+        app.cfg.mailbox.bulletin_expire_days = 30
+        ids = {}
+        for to, age in (("WX", 2), ("WX", 4), ("DX", 10), ("DX", 40), ("ALL", 400)):
+            m = bulletin(app, to)
+            app.store._db.execute("UPDATE messages SET created = datetime('now', ?) WHERE id = ?",
+                                  (f"-{age} days", m))
+            ids[(to, age)] = m
+        app.store._db.execute("UPDATE messages SET created = replace(created, ' ', 'T') || 'Z'")
+        self.assertEqual(app.service.purge_expired(), 2)
+        left = {m.id for m in app.store.list_messages()}
+        self.assertEqual(left, {ids[("WX", 2)], ids[("DX", 10)], ids[("ALL", 400)]})
+        self.assertEqual(app.service.rubric_expire_days("WX"), 3)
+        self.assertEqual(app.service.rubric_expire_days("DX"), 30)
+        self.assertEqual(app.service.rubric_expire_days("ALL"), 0)

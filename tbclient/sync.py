@@ -25,6 +25,15 @@ request //SYNC seq=<n> k=.. r=.. max= want= - the TinyBox answers with what
 changed since the last sync (new headers //M, status //S, deleted //D) and the
 texts of new short mail right away. Bulletins alike with //BSYNC: the rubric
 list comes only when it changed (hash h=). Without SYNC2 the old steps run.
+
+Headers first, texts on demand (CR40): a sync fetches headers only. Personal
+mail up to [sync] short_bytes comes with its text (cap SHORT: short= in //SYNC,
+else one //GET); everything else is fetched when the user opens it (fetch(),
+never connects by itself). After every login the client syncs by itself
+(scope "login" = mail + bulletins). Abort is orderly: the exchange on the air
+is finished and stored, then no new request goes out; the next sync goes on
+from there. At the start and at an abort the user sees what is still pending
+and about how long it takes.
 """
 
 from __future__ import annotations
@@ -45,6 +54,10 @@ HEADER_BYTES = 90        # about one //M line, to size the header pages
 BUSY_QUIET_SEC = 3       # the channel counts as free after this much silence
 BUSY_MAX_SEC = 30        # never wait longer than this for a free channel
 IDLE_SEC = 120            # no answer for this long: the sync gives up
+ABORT_GRACE_SEC = 30      # orderly abort: wait this long for the answer on the air (CR40)
+SCOPES = ("mail", "bulletins", "login", "fetch")
+END_LINES = ("//SYNCEND", "//BSYNCEND", "//GEND", "//MEND", "//RUEND", "//KEND", "//REND",
+             "//SENT ", "//NOMSG ", "//ERR")
 CONNECT_SEC = 90          # connect + handshake when the sync connects by itself
 MAX_LINE_OUT = 1000       # longer text lines are wrapped (TinyBox line limit 1024)
 CHUNK = 50                # ids per //KILL or //READ
@@ -56,6 +69,27 @@ PREFIXES = ("//M ", "//MEND", "//RU ", "//RUEND", "//MSG ", "//ZMSG ", "//NOMSG 
 
 class SyncError(Exception):
     pass
+
+
+class Aborted(Exception):
+    """Orderly abort (CR40): raised before the next request goes out."""
+
+
+def human_secs(sec: float) -> str:
+    """'approx. 1 min 40 s' - rounded, no false precision."""
+    sec = int(sec)
+    if sec < 10:
+        return "a few seconds"
+    if sec < 60:
+        return f"approx. {round(sec / 5) * 5} s"
+    if sec < 600:
+        m, s = divmod(round(sec / 10) * 10, 60)
+        return f"approx. {m} min" + (f" {s} s" if s else "")
+    return f"approx. {round(sec / 60)} min"
+
+
+def human_bytes(n: int) -> str:
+    return f"{n} bytes" if n < 1000 else f"{n / 1000:.1f} kB"
 
 
 def _no_loop(asked: set[str], req: str) -> None:
@@ -116,12 +150,25 @@ class Syncer:
         self.queue: asyncio.Queue | None = None
         self._body: tuple[int, int, list[str]] | None = None    # (id, lines left, lines)
         self.status = {"running": False, "scope": "", "step": "", "done": 0, "total": 0,
-                       "error": "", "bytes": 0, "saved": 0}
+                       "error": "", "bytes": 0, "saved": 0, "aborting": False,
+                       "notice": "", "fetch": 0, "fetch_error": ""}
         self.parts: dict[int, tuple[str, int, bytearray]] = {}   # id -> (kind, total, data)
         self._last_req = 0.0
         self._rubric_names: list[str] | None = None     # //RL of the last //BSYNC answer
         self._rubric_static: list[str] = []             # //RU lines of it
         self._rubric_counts: dict[str, int] = {}        # //RN
+        # CR40: orderly abort, texts on demand, time estimate
+        self._abort = False
+        self._fetch_q: list[int] = []                   # texts asked for while a sync runs
+        self._in_fetch = False
+        self._ids: list[int] = []                       # scope "fetch"
+        self._req_at = 0.0                              # last request out
+        self._rx_at = 0.0                               # last answer byte in
+        self._rx = 0                                    # bytes in since the request
+        self._air_bytes = 0                             # measured: bytes and seconds of
+        self._air_secs = 0.0                            # finished exchanges
+        self._pend_mail: int | None = None              # rows left in the TinyBox (//SYNCEND)
+        self._pend_bul: dict[str, int] | None = None    # bulletin headers left per rubric
 
     @property
     def running(self) -> bool:
@@ -133,6 +180,8 @@ class Syncer:
         """True if the line belongs to the sync."""
         if self.queue is None:
             return False
+        self._rx += len(line) + 1
+        self._rx_at = time.monotonic()
         if self._body is None:
             line = line.rstrip()
         if self._body is not None:                 # text lines of //MSG, also empty ones
@@ -158,6 +207,7 @@ class Syncer:
             p = line.split()
             if len(p) == 6 and p[1].isdigit() and all(x.isdigit() for x in p[3:]):
                 msg_id, kind, off, total = int(p[1]), p[2], int(p[3]), int(p[4])
+                self._rx += int(p[5])
                 q = self.queue
                 self.core.link.splitter.expect(
                     int(p[5]), lambda data: q.put_nowait(("part", msg_id, kind, off, total, data)))
@@ -165,12 +215,14 @@ class Syncer:
         if line.startswith("//ZSYNC "):
             p = line.split()
             if len(p) == 2 and p[1].isdigit():
+                self._rx += int(p[1])
                 self.core.link.splitter.expect(int(p[1]), self._zsync)
             return True
         if line.startswith("//ZMSG "):
             p = line.split()
             if len(p) == 3 and p[1].isdigit() and p[2].isdigit():
                 msg_id, n = int(p[1]), int(p[2])
+                self._rx += n
                 q = self.queue
                 self.core.link.splitter.expect(n, lambda data: q.put_nowait(("z", msg_id, data)))
             return True
@@ -192,41 +244,219 @@ class Syncer:
         lines = text.split("\r")
         if lines and lines[-1] == "":              # every line ends in \r: nothing after the last
             lines.pop()
+        rx = self._rx                              # the block counted, not what is in it
         for line in lines:                         # empty lines too: they count in //MSG texts
             self.take(line)
+        self._rx = rx
 
     # --- control -----------------------------------------------------------------
 
     def start(self, scope: str = "mail") -> bool:
-        if self.running or scope not in ("mail", "bulletins") or self.core.images.busy:
+        if self.running or scope not in SCOPES or self.core.images.busy:
             return False                  # one binary transfer at a time (CR12)
         self.task = asyncio.ensure_future(self._run(scope))
         return True
 
-    def cancel(self) -> None:
+    def fetch(self, msg_id: int) -> str:
+        """Text of one message on demand (CR40). '' = on its way (or already
+        here), else why not. Never connects by itself, and a request that cannot
+        go out now is forgotten, not kept for later."""
+        m = self.store.message(msg_id)
+        if m is None:
+            return "not found"
+        if m["body"] is not None:
+            return ""
+        if self.core.state != "online" or not self.core.caps:
+            return "not connected"
+        if "SYNC" not in self.core.caps:
+            return "the TinyBox does not offer the mailbox sync"
         if self.running:
-            self.task.cancel()
+            if self.status["scope"] == "fetch" and msg_id in self._ids:
+                return ""
+            if self._abort:
+                return "a sync is being aborted - try again in a moment"
+            if msg_id not in self._fetch_q:
+                self._fetch_q.append(msg_id)      # between two exchanges of the sync
+            self._set(fetch=msg_id, fetch_error="")
+            return ""
+        if self.core.images.busy:
+            return "a picture is being transferred - try again in a moment"
+        self._ids = [msg_id]
+        self._set(fetch=msg_id, fetch_error="")
+        self.task = asyncio.ensure_future(self._run("fetch"))
+        return ""
+
+    def abort(self) -> None:
+        """Orderly abort (CR40): the answer on the air still comes and is stored,
+        then no new request goes out. If it does not come in time: hard stop."""
+        if not self.running or self._abort:
+            return
+        self._abort = True
+        self._fetch_q.clear()
+        self._set(aborting=True, step=self.status["step"].split(" (")[0] + " (aborting)")
+        asyncio.get_event_loop().call_later(ABORT_GRACE_SEC, self._hard_abort, self.task)
+
+    def _hard_abort(self, task: asyncio.Task | None) -> None:
+        if task is self.task and self.running and self._abort:
+            log.info("sync: no answer after abort, stopping hard")
+            task.cancel()
+
+    cancel = abort                        # the old name (web API /api/mail/cancel)
 
     def _set(self, **kw) -> None:
         self.status.update(kw)
         self.core._touch()
 
+    def _notice(self, text: str, console: bool = True) -> None:
+        """Message for the user: in the mail view and in the console (CR40)."""
+        self._set(notice=text)
+        if console and text:
+            self.core.console.append("*** " + text)
+
+    # --- what is left, and how long it takes (CR40) ------------------------------
+
+    def _close_exchange(self) -> None:
+        """The answer to the last request is in: its bytes and air time count for
+        the rate (from the request out to the last byte in)."""
+        if self._req_at and self._rx_at > self._req_at and self._rx:
+            self._air_bytes += self._rx
+            self._air_secs += self._rx_at - self._req_at
+        self._req_at, self._rx = 0.0, 0
+
+    def _rate(self) -> float:
+        """Net bytes per second of this link: measured, else [images] bytes_per_sec
+        (radio) or a fast guess (telnet)."""
+        if self._air_secs >= 2 and self._air_bytes >= 200:
+            return max(10.0, self._air_bytes / self._air_secs)
+        return float(self.core.cfg.img_rate) if self.radio else 5000.0
+
+    def estimate(self, nbytes: int) -> float:
+        """Seconds for nbytes: air time plus, per exchange, the pause (radio) and,
+        while nothing is measured yet, the turnaround."""
+        if nbytes <= 0:
+            return 0.0
+        cfg = self.core.cfg
+        exchanges = max(1, -(-nbytes // cfg.sync_chunk))
+        per = (cfg.sync_pause + (0 if self._air_secs >= 2 else 3)) if self.radio else 0.2
+        return nbytes / self._rate() + exchanges * per
+
+    def pending(self, phase: str = "") -> tuple[list[str], int, bool]:
+        """(parts of the text, bytes, unknown left): what this sync still has to
+        fetch - all of it, or only of one phase ("mail" / "bulletins")."""
+        parts, nbytes, unknown = [], 0, False
+        scope = phase or self.status["scope"]
+        if scope in ("mail", "login"):
+            if self._pend_mail is None:
+                unknown = True
+            elif self._pend_mail:
+                parts.append(f"{self._pend_mail} mail header(s)")
+                nbytes += self._pend_mail * HEADER_BYTES
+            short = self._short_missing()
+            if short:
+                parts.append(f"{len(short)} short text(s)")
+                nbytes += sum(short)
+        if scope in ("bulletins", "login"):
+            if self._pend_bul is None:
+                subs = self.store.get("subscribed", [])
+                if subs:
+                    unknown = True
+                    parts.append("bulletin headers of " + " ".join(subs))
+            elif sum(self._pend_bul.values()):
+                left = {r: n for r, n in self._pend_bul.items() if n}
+                parts.append(f"{sum(left.values())} bulletin header(s) ("
+                             + ", ".join(f"{r} {n}" for r, n in left.items()) + ")")
+                nbytes += sum(left.values()) * HEADER_BYTES
+        if scope == "fetch":
+            for msg_id in self._ids:
+                m = self.store.message(msg_id)
+                if m is not None and m["body"] is None:
+                    parts.append(f"text #{msg_id} ({human_bytes(m['size'])})")
+                    nbytes += m["size"]
+        return parts, nbytes, unknown
+
+    def pending_text(self, phase: str = "") -> str:
+        """'4 mail header(s), 2 short text(s) (approx. 20 s)'"""
+        parts, nbytes, unknown = self.pending(phase)
+        if not parts:
+            return ""
+        txt = ", ".join(parts)
+        if nbytes:
+            txt += f" ({human_secs(self.estimate(nbytes))}" + (" and more)" if unknown else ")")
+        return txt
+
+    def _short_missing(self) -> list[int]:
+        """Sizes of personal texts up to short_bytes still to fetch."""
+        short = self.core.cfg.sync_short
+        out = []
+        for msg_id in self.store.missing_bodies("P"):
+            m = self.store.message(msg_id)
+            if m is not None and 0 < m["size"] <= short:
+                out.append(m["size"])
+        return out
+
+    def _bulletins_left(self) -> dict[str, int]:
+        """Headers per subscribed rubric still in the TinyBox only (from //RN)."""
+        local = {r["name"]: r["local"] for r in self.store.summary()["rubrics"]}
+        return {r: max(0, self._rubric_counts.get(r, 0) - local.get(r, 0))
+                for r in self.store.get("subscribed", []) if r in self._rubric_counts}
+
+    def _start_notice(self, phase: str) -> None:
+        """At the start of a transfer: what is pending, how long, and that Abort
+        stops it. Gone again when the sync is through."""
+        txt = self.pending_text(phase)
+        if txt:
+            self._notice(f"{phase.capitalize()}: {txt} to fetch. Press Abort to stop at any time.")
+
+    # --- the run ----------------------------------------------------------------------
+
     async def _run(self, scope: str) -> None:
         self.queue = asyncio.Queue()
         self._body = None
         self._last_req = 0.0
+        self._abort = False
+        self._req_at, self._rx = 0.0, 0
+        self._pend_mail, self._pend_bul = None, None
+        if scope != "fetch":
+            self._fetch_q.clear()
         self._set(running=True, scope=scope, step="connecting", done=0, total=0, error="",
-                  bytes=0, saved=0)
+                  bytes=0, saved=0, aborting=False,
+                  **({"notice": ""} if scope != "fetch" else {}))
         own_connect = self.own_connect = False
         try:
             if self.core.state != "online":
+                if scope == "fetch":                # CR40: a click never connects
+                    raise SyncError("not connected")
                 own_connect = self.own_connect = True
                 await self.core.connect()
             await self._wait_ready()
-            await (self._sync_mail() if scope == "mail" else self._sync_bulletins())
-            self.store.put(f"last_sync.{scope}", int(time.time()))
+            if scope == "fetch":
+                for msg_id in list(self._ids):
+                    await self._fetch_one(msg_id)
+                if self._fetch_q:                    # another click meanwhile
+                    await self._serve_fetches()
+            else:
+                if scope in ("mail", "login"):
+                    await self._sync_mail()
+                if scope in ("bulletins", "login"):
+                    await self._sync_bulletins()
+                if self._fetch_q:                    # clicked during the last exchange
+                    await self._serve_fetches()
+                for name in (("mail", "bulletins") if scope == "login" else (scope,)):
+                    self.store.put(f"last_sync.{name}", int(time.time()))
+                self._set(notice="")                 # the start notice is done
             self._set(step="done")
+        except Aborted:
+            left = self.pending_text()
+            if scope == "fetch":
+                self._notice("Fetching the text aborted.", console=False)
+            else:
+                self._notice("Sync aborted." + (f" Still pending: {left}." if left else "")
+                             + " It goes on from here at the next login or with Sync.")
+            self._set(step="aborted", error="")
         except asyncio.CancelledError:
+            left = self.pending_text()
+            self._notice("Sync stopped." + (f" Still pending: {left}." if left else ""),
+                         console=scope != "fetch")
             self._set(step="cancelled", error="cancelled")
         except SyncError as exc:
             log.warning("sync: %s", exc)
@@ -234,10 +464,13 @@ class Syncer:
         except Exception as exc:                  # a bug must not kill the client
             log.exception("sync failed")
             self._set(step="failed", error=f"internal error: {exc}")
+        if scope == "fetch" and self.status["error"]:
+            self._set(fetch_error=self.status["error"])
         try:
             self.queue = None
             self._body = None
-            self.core.after_sync()
+            if scope != "fetch":
+                self.core.after_sync()
             if own_connect and self.core.state == "online" and not self.core.board:
                 self.core.disconnect()             # offline again, as before
                 for _ in range(150):               # until it is really down (next sync!)
@@ -249,7 +482,10 @@ class Syncer:
         finally:
             self.queue = None
             self.own_connect = False
+            self._abort = False
+            self._fetch_q.clear()
             self.status["running"] = False
+            self.status["aborting"] = False
             self.core._touch()
 
     async def _wait_ready(self) -> None:
@@ -302,7 +538,15 @@ class Syncer:
 
     async def _send(self, *lines: str) -> None:
         """One request. On radio with a pause before it (not before the first),
-        longer while other stations use the channel."""
+        longer while other stations use the channel. After Abort nothing goes
+        out any more (CR40); texts clicked meanwhile go first."""
+        self._close_exchange()
+        if self._abort:
+            raise Aborted()
+        if self._fetch_q and not self._in_fetch:
+            await self._serve_fetches()
+            if self._abort:
+                raise Aborted()
         if self.radio and self._last_req:
             cfg = self.core.cfg
             wait = self._last_req + cfg.sync_pause - time.monotonic()
@@ -315,9 +559,12 @@ class Syncer:
                     break
                 self._set(step=self.status["step"].split(" (")[0] + " (channel busy)")
                 await asyncio.sleep(BUSY_QUIET_SEC - quiet)
+        if self._abort:
+            raise Aborted()
         if self.core.state != "online":
             raise SyncError("connection lost")
-        self._last_req = time.monotonic()
+        self._last_req = self._req_at = time.monotonic()
+        self._rx = 0
         self.core._send(lines[0])
         for line in lines[1:]:                   # message text: not into the monitor
             self.core.link.send_line(line)
@@ -371,7 +618,7 @@ class Syncer:
             await self._send_one(item)
         if self.delta:
             await self._delta_mail()
-            await self._texts("P")
+            await self._texts("P", short_only=True)
             return
         kills = st.todo("kill")
         for i in range(0, len(kills), CHUNK):
@@ -390,13 +637,13 @@ class Syncer:
             await self._lines_until("//REND")
             st.todo_done("read", reads[i:i + CHUNK])
         await self._headers("//MLIST", "mail list")
-        await self._texts("P")
+        self._pend_mail = 0
+        await self._texts("P", short_only=True)
 
     async def _sync_bulletins(self) -> None:
         st = self.store
         if self.delta:
-            await self._delta_bulletins()
-            await self._texts("B")
+            await self._delta_bulletins()     # headers only: texts on demand (CR40)
             return
         self._set(step="rubrics")
         await self._send("//RUBRICS")
@@ -408,7 +655,7 @@ class Syncer:
                 if next(x["max"] for x in rubrics if x["name"] == r) > st.max_bulletin(r)]
         if want:
             await self._headers("//BLIST " + " ".join(want), "bulletin list")
-        await self._texts("B")
+        self._pend_bul = {}
 
     # --- delta sync (SYNC2) --------------------------------------------------------
 
@@ -416,6 +663,15 @@ class Syncer:
         """Bytes of text the TinyBox may add to a delta answer: the chunk minus
         room for a few headers."""
         return max(0, self.core.cfg.sync_chunk - 3 * HEADER_BYTES)
+
+    def _texts_arg(self) -> str:
+        """CR40: only short personal texts come along (cap SHORT). A TinyBox
+        without it would send any text that fits: then none, they come with
+        one //GET (short ones) or on demand."""
+        short = self.core.cfg.sync_short
+        if "SHORT" in self.core.caps and short > 0:
+            return f"want={self._want()} short={short}"
+        return "want=0"
 
     async def _delta_answer(self, end: str, content: bool) -> list[str]:
         """Takes one delta answer up to the end line (returned as words). Headers,
@@ -480,7 +736,7 @@ class Syncer:
                 req += " k=" + ",".join(map(str, kills))
             if reads:
                 req += " r=" + ",".join(map(str, reads))
-            req += f" max={self.core.cfg.sync_chunk} want={self._want()}"
+            req += f" max={self.core.cfg.sync_chunk} {self._texts_arg()}"
             _no_loop(asked, req)
             self._set(step="mail changes" if seq else "mail list")
             await self._send(req)
@@ -498,6 +754,10 @@ class Syncer:
                 if word.startswith("seq=") and word[4:].isdigit():
                     seq = int(word[4:])
             st.put("seq.mail", seq)
+            first = self._pend_mail is None
+            self._pend_mail = more
+            if first:
+                self._start_notice("mail")
             if not more:
                 return
 
@@ -514,7 +774,7 @@ class Syncer:
             want = " ".join(f"{r}={st.max_bulletin(r)}" for r in subs)
             req = (f"//BSYNC seq={seq} h={st.get('rubrics.h', '0')}"
                    f"{' ' + want if want else ''} max={self.core.cfg.sync_chunk} "
-                   f"want={self._want()}")
+                   f"want=0")                       # headers only (CR40)
             _no_loop(asked, req)
             self._set(step="bulletin changes" if seq else "bulletin list")
             await self._send(req)
@@ -533,6 +793,10 @@ class Syncer:
                     st.put("rubrics.h", word[2:])
             st.put("seq.bulletins", seq)
             self._store_rubrics()
+            first = self._pend_bul is None
+            self._pend_bul = self._bulletins_left() if more else {}
+            if first:
+                self._start_notice("bulletins")
             if not more:
                 return
 
@@ -559,12 +823,42 @@ class Syncer:
                 r["count"] = self._rubric_counts[r["name"]]
         st.put("rubrics", rubrics)
 
-    async def _texts(self, kind: str) -> None:
+    async def _serve_fetches(self) -> None:
+        """Texts the user clicked while a sync ran: between two of its exchanges."""
+        self._in_fetch = True
+        try:
+            while self._fetch_q and not self._abort:
+                await self._fetch_one(self._fetch_q.pop(0))
+        finally:
+            self._in_fetch = False
+
+    async def _fetch_one(self, msg_id: int) -> None:
+        """One text on demand (CR40): //GET, or piece by piece if it is long."""
+        m = self.store.message(msg_id)
+        if m is None or m["body"] is not None:
+            return
+        self._set(fetch=msg_id, fetch_error="")
+        chunk = self.core.cfg.sync_chunk
+        if self.radio and "Z" in self.core.caps and m["size"] > chunk:
+            await self._fetch_parts(msg_id, 1, 1, f"text #{msg_id}")
+            return
+        step = self.status["step"]
+        self._set(step=f"text #{msg_id} ({human_bytes(m['size'])}, "
+                       f"{human_secs(self.estimate(m['size']))})")
+        await self._send(f"//GET {msg_id}")
+        await self._get([msg_id])
+        if self.status["scope"] != "fetch":
+            self._set(step=step)
+
+    async def _texts(self, kind: str, short_only: bool = False) -> None:
         """Missing texts, oldest first: short ones together up to chunk_bytes,
-        long ones (radio) piece by piece."""
+        long ones (radio) piece by piece. short_only: personal texts up to
+        short_bytes (CR40), the rest comes on demand."""
         chunk = self.core.cfg.sync_chunk
         pieces = self.radio and "Z" in self.core.caps
         todo = [(m, self.store.message(m)["size"]) for m in self.store.missing_bodies(kind)]
+        if short_only:
+            todo = [(m, n) for m, n in todo if 0 < n <= self.core.cfg.sync_short]
         self._set(total=len(todo), done=0)
         while todo:
             n = self.status["done"]
@@ -582,12 +876,17 @@ class Syncer:
             await self._send("//GET " + " ".join(map(str, batch)))
             await self._get(batch)
 
-    async def _fetch_parts(self, msg_id: int, nr: int, total: int) -> None:
+    async def _fetch_parts(self, msg_id: int, nr: int, total: int, label: str = "") -> None:
         chunk = self.core.cfg.sync_chunk
         while True:
             kind, size, data = self.parts.get(msg_id, ("", 0, bytearray()))
             pct = f", {100 * len(data) // size} %" if size else ""
-            self._set(step=f"text {nr} of {self.status['total']} in pieces{pct}")
+            if label:
+                m = self.store.message(msg_id)
+                left = (size - len(data)) if size else (m["size"] if m else 0)
+                self._set(step=f"{label} in pieces{pct}, {human_secs(self.estimate(left))}")
+            else:
+                self._set(step=f"text {nr} of {self.status['total']} in pieces{pct}")
             await self._send(f"//PART {msg_id} {len(data)} {chunk}")
             while True:
                 item = await self._next()

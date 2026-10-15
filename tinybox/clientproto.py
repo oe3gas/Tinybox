@@ -51,6 +51,8 @@ Z = message texts may come LZHUF-compressed, IMG = chat images
 (both binary, radio sessions only). NUM = member numbers instead of calls in
 the chat events (+n call, -n, =n, %n b) and the %Q statistics line (CR33);
 //OK then tells q=<frames>/<minutes>/<min frames>/<bar steps>.
+SHORT = //SYNC knows short=<bytes>: only personal mail up to that size comes
+with its text, everything else only as a header (CR40).
 """
 
 from __future__ import annotations
@@ -66,7 +68,7 @@ if TYPE_CHECKING:
     from .session import Session
 
 PROTO = "TB1"
-KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM")
+KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")

@@ -445,7 +445,8 @@ class WebServer:
         def row(name, desc, status):
             seen.add(name)
             st = stats.get(name, {"count": 0, "unread": 0, "newest": ""})
-            rows.append({"name": name, "description": desc, "status": status, **st})
+            rows.append({"name": name, "description": desc, "status": status,
+                         "expire_days": self.app.service.rubric_expire_days(name), **st})
 
         conf = {r.name: r for r in self.app.cfg.rubrics}
         if "ALL" not in conf:

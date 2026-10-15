@@ -142,7 +142,7 @@ class AgwTests(unittest.TestCase):
     def test_abort_drops_queued_output(self):
         async def scenario():
             app = make_app()
-            # small frames and window, so one page (CR29) does not fit into
+            # small frames and window, so the list does not fit into
             # Direwolf at once and something stays queued (CR34 raised both)
             app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, paclen=128,
                                                    max_outstanding=4)
@@ -156,9 +156,7 @@ class AgwTests(unittest.TestCase):
             dw.data("OE5XYZ", "L\r")
             await asyncio.sleep(0.3)
             queued = len(adapter.conns["OE5XYZ"].queue)
-            dw.data("OE5XYZ", "A\r")            # pager (CR29): rest skipped
-            await asyncio.sleep(0.1)
-            dw.data("OE5XYZ", "A\r")            # command A: queued output dropped
+            dw.data("OE5XYZ", "A\r")            # command A: queued output dropped (CR40)
             await asyncio.sleep(0.1)
             dw.outstanding = 0
             dw.data("OE5XYZ", "B\r")
@@ -168,7 +166,8 @@ class AgwTests(unittest.TestCase):
 
         dw, queued = asyncio.run(scenario())
         out = dw.output_for("OE5XYZ")
-        self.assertGreater(queued, 2)                   # one page (CR29) in several frames
+        self.assertGreater(queued, 2)                   # the list in several frames
+        self.assertIn("31 lines follow - send A to abort", out)
         self.assertIn("Output aborted.", out)
         self.assertNotIn("Bulletin number 1\r", out)  # oldest row was never sent
         self.assertIn("73, bye", out)

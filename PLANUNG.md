@@ -134,7 +134,7 @@ Msg 13 saved.
 Fehlermeldungen: `Unknown command. Type H for help.` · `No such message.` · `Not allowed.`
 Alle Texte stehen zentral in `texts.py`.
 
-**Seitenweise Ausgabe (CR29, 12.10.2026):** Jede Antwort auf einen Terminal-Befehl, die länger als 10 Zeilen ist (`L`, `LB`, `H`, `J`, ein langer Text bei `R` …), kommt in Seiten zu 10 Zeilen: `--More (10/37)-- Enter = continue, A = abort: `. Enter (oder irgendetwas anderes) holt die nächste Seite, `A` (auch `Q`, `/AB`) verwirft den Rest (`*** rest skipped`). So gehen nie hunderte Titel ungefragt über Funk. Nicht betroffen: Clients (`//CLIENT`), der Chat, `DICT` (maschinell gelesen) und Befehle, die den Zustand wechseln (`S`, `C`). Technik: `Session.out()` sammelt während eines Befehls, `_page_end()` verteilt (Zustand `MORE`); `PAGE_LINES` in `session.py`.
+**Lange Ausgaben: Abort statt Seiten (CR40, 15.10.2026; ersetzt die Seiten von CR29):** Eine Antwort auf einen Terminal-Befehl, die länger als 10 Zeilen ist, beginnt mit `*** 37 lines follow - send A to abort` und läuft dann **komplett** durch, ohne Rückfrage. `A` verwirft, was noch in der Warteschlange der Verbindung liegt (`abort_output()`); was Direwolf schon hat (höchstens `max_outstanding` Frames), geht noch hinaus. Über Telnet wirkt `A` nicht (dort wird sofort geschrieben). Nicht betroffen: Clients (`//CLIENT`), der Chat, `DICT` und Befehle, die den Zustand wechseln (`S`, `C`). Technik: `Session.out()` sammelt während eines Befehls, `_page_end()` stellt den Hinweis voran; `PAGE_LINES` in `session.py`.
 
 ---
 
@@ -821,6 +821,14 @@ UI-Frames des Chatboards (`OE3GAS-1>TBCHAT-1:#0 …`). Direwolf versucht sie als
 lesen; rein kosmetisch, kein Handlungsbedarf.
 
 ---
+
+### 12.9b Köpfe zuerst, Texte auf Abruf (entschieden und umgesetzt 15.10.2026, CR40)
+
+- **Abgleich nach jeder Anmeldung** (Scope `login` = Mail + abonnierte Rubriken), `[sync] on_login` (Vorgabe yes). Auch der Knopf „Sync“ holt nur noch Köpfe.
+- **Texte:** persönliche Mails bis `[sync] short_bytes` (Vorgabe 256 = 1 Frame ≈ 2 s bei 1200 Bd) kommen gleich mit – neue Cap `SHORT`, `//SYNC … want=<n> short=<n>`; die TinyBox hängt dann nur Texte bis `short` an. TinyBox ohne `SHORT`: `want=0`, kurze Texte mit einem `//GET`. Bulletins: `//BSYNC … want=0`, nie Texte. Alles andere holt der Client beim Anklicken (`POST /api/mail/fetch`, `//GET` bzw. `//PART`); ohne Verbindung „not connected“, die Anforderung wird verworfen. Ein Klick während eines Abgleichs geht zwischen zwei Wechseln hinaus.
+- **Geordneter Abort** (`POST /api/mail/abort`): die Antwort auf die laufende Anfrage wird noch empfangen und gespeichert, dann geht keine Anfrage mehr hinaus (`seq` bleibt stimmig, der nächste Abgleich macht dort weiter). Kommt sie nicht binnen 30 s, harter Abbruch. Die Verbindung bleibt.
+- **Meldung** zu Beginn (nach der ersten Antwort, dann ist der Umfang bekannt: `//SYNCEND <more>`, `//RN`) und beim Abort: was noch offen ist und wie lange es etwa dauert. Rate gemessen (Bytes vom Absenden bis zum letzten Byte der Antwort), vorher `[images] bytes_per_sec`; je Wechsel dazu `pause_sec`.
+- **Frist je Rubrik** (TinyBox): `[rubrics] NAME = Beschreibung | Tage`, 0 = nie löschen, ohne Angabe gilt `[mailbox] bulletin_expire_days`. Damit ist auch die Zahl der Köpfe begrenzt, die ein neuer Client holt – kein Limit nötig.
 
 ### 12.10 Kleine Bilder im Chat (entschieden und umgesetzt 12.10.2026, CR12)
 

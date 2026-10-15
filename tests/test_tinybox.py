@@ -261,7 +261,8 @@ if __name__ == "__main__":
 
 
 class PagingTests(unittest.TestCase):
-    """CR29: terminal output longer than PAGE_LINES waits for the user."""
+    """CR40 (was CR29): long terminal output starts with a hint that A aborts
+    it, then goes out in full - no pages, no question."""
 
     def setUp(self):
         self.app = make_app()
@@ -269,21 +270,13 @@ class PagingTests(unittest.TestCase):
             self.app.service.create(from_call="OE3TEC", to_call="OE1ABC", type="P",
                                     subject=f"Nr {i}", body="x", origin="telnet")
 
-    def test_list_in_pages(self):
+    def test_hint_then_everything(self):
         s, t = login(self.app, "OE1ABC")
         t.take()
         type_lines(s, "L")
         out = t.take()
-        self.assertEqual(out.count("\r"), 10)
-        self.assertTrue(out.endswith("--More (10/24)-- Enter = continue, A = abort: "))
+        self.assertTrue(out.startswith("*** 24 lines follow - send A to abort\r"))
         self.assertIn("Nr 22", out)
-        self.assertNotIn("Nr 12", out)
-        type_lines(s, "")                                    # next page
-        out = t.take()
-        self.assertIn("Nr 12", out)
-        self.assertTrue(out.endswith("--More (20/24)-- Enter = continue, A = abort: "))
-        type_lines(s, "")                                    # last page, then the prompt
-        out = t.take()
         self.assertIn("Nr 0", out)
         self.assertTrue(out.endswith("> "))
         self.assertNotIn("More", out)
@@ -291,13 +284,14 @@ class PagingTests(unittest.TestCase):
     def test_abort_and_short_output(self):
         s, t = login(self.app, "OE1ABC")
         t.take()
+        aborted = []
+        t.abort_output = lambda: aborted.append(1)
         type_lines(s, "L", "A")
         out = t.take()
-        self.assertIn("*** rest skipped", out)
-        self.assertTrue(out.endswith("> "))
-        self.assertNotIn("Nr 5", out)
-        type_lines(s, "J")                                   # short: no paging
-        self.assertNotIn("More", t.take())
+        self.assertEqual(aborted, [1])                       # the queue is dropped
+        self.assertIn("Output aborted.", out)
+        type_lines(s, "J")                                   # short: no hint
+        self.assertNotIn("lines follow", t.take())
         type_lines(s, "B")                                   # bye still arrives
         self.assertIn("73", t.take())
 
@@ -308,4 +302,4 @@ class PagingTests(unittest.TestCase):
         type_lines(s, "L")
         out = t.take()
         self.assertIn("Nr 0", out)
-        self.assertNotIn("More", out)
+        self.assertNotIn("lines follow", out)

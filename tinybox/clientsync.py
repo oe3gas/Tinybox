@@ -42,7 +42,7 @@ instead of storing it twice.
 Delta sync (cap SYNC2, CR26, PLANUNG.md 12.9) - one request for everything,
 only what changed since the client's last sync (change counter seq, store.py):
 
-    //SYNC seq=<n> [k=<id>,..] [r=<id>,..] [max=<bytes>] [want=<bytes>]
+    //SYNC seq=<n> [k=<id>,..] [r=<id>,..] [max=<bytes>] [want=<bytes>] [short=<bytes>]
         -> //K <id> ok|<reason>          for k= (own mail deleted here)
            //M <header>                  new or content changed since n
            //S <id> <N|Y> <fwd|->        only status/flag changed since n
@@ -50,6 +50,8 @@ only what changed since the client's last sync (change counter seq, store.py):
            //MSG <id> <n lines> + lines  texts of new mail, oldest first, up to want= bytes
            //SYNCEND <more> seq=<m>      more = headers left (ask again with seq=<m>)
         r= marks mail read (status Y), no answer line. seq=0 = everything.
+        short= (cap SHORT, CR40): only texts up to that size go with the answer;
+        longer mail is a header only, the client fetches it on demand (//GET).
         //ERR seq: the TinyBox cannot serve this seq (database newer than the
         client, or tombstones purged): the client starts over with seq=0.
     //BSYNC seq=<n> h=<hash> <rubric>=<after> ... [max=<bytes>] [want=<bytes>]
@@ -354,8 +356,8 @@ def _sync_args(parts: list[str]) -> tuple[dict[str, str], list[str]] | None:
     args, rest = {}, []
     for p in parts:
         key, sep, value = p.partition("=")
-        if sep and key in ("seq", "max", "want", "h", "k", "r"):
-            if key in ("seq", "max", "want") and not value.isdigit():
+        if sep and key in ("seq", "max", "want", "short", "h", "k", "r"):
+            if key in ("seq", "max", "want", "short") and not value.isdigit():
                 return None
             args[key] = value
         else:
@@ -380,6 +382,7 @@ class _Answer:
         self.texts: list[Message] = []
         self.limit = int(args["max"]) if "max" in args else None
         self.want = int(args.get("want", "0"))
+        self.short = int(args["short"]) if "short" in args else None   # CR40
         self.z = "Z" in s.client.caps and hasattr(s.transport, "write_bytes")
 
     def push_texts(self, msgs: list[Message]) -> None:
@@ -387,7 +390,8 @@ class _Answer:
         Mail the caller wrote himself is skipped (the client has the text)."""
         left = self.want
         for m in sorted(msgs, key=lambda m: m.id):
-            if m.size > left or m.size == 0 or m.from_call.upper() == self.s.call.upper():
+            if m.size > left or m.size == 0 or m.from_call.upper() == self.s.call.upper() \
+                    or (self.short is not None and m.size > self.short):
                 continue
             self.texts.append(m)
             left -= m.size

@@ -99,6 +99,13 @@ class MessageService:
                if (r.accepted or r.name == "ALL") and r.name != NEWS_RUBRIC]
         return out if "ALL" in out else ["ALL"] + out
 
+    def rubric_expire_days(self, name: str) -> int:
+        """Days a bulletin of this rubric is kept, 0 = forever (CR40)."""
+        for r in self.cfg.rubrics:
+            if r.name == name and r.expire_days is not None:
+                return r.expire_days
+        return self.cfg.mailbox.bulletin_expire_days
+
     def rubric_description(self, name: str) -> str:
         for r in self.cfg.rubrics:
             if r.name == name:
@@ -464,12 +471,17 @@ class MessageService:
         self.bus.publish("session.disconnected", call=call, origin=origin)
 
     def purge_expired(self) -> int:
-        """Delete bulletins past their own validity ("Valid:") or past
+        """Delete bulletins past their own validity ("Valid:"), past the
+        validity of their rubric ([rubrics] NAME = desc | days) or past
         bulletin_expire_days."""
         ids = self.store.delete_expired(utc_now())
+        own = {r.name: r.expire_days for r in self.cfg.rubrics if r.expire_days is not None}
+        for name, d in own.items():             # a rubric's own validity (CR40)
+            if d > 0:
+                ids += self.store.delete_bulletins_older_than(d, only=[name])
         days = self.cfg.mailbox.bulletin_expire_days
         if days > 0:
-            ids += self.store.delete_bulletins_older_than(days)
+            ids += self.store.delete_bulletins_older_than(days, exclude=list(own))
         if ids:
             log.info("expired bulletins deleted: %s", ids)
             self.bus.publish("message.expired", ids=ids)

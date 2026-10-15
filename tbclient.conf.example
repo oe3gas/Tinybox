@@ -26,6 +26,12 @@ port         = 7744
 # chunk_bytes, then the client pauses pause_sec (longer while others are heard).
 chunk_bytes  = 1024
 pause_sec    = 5
+# CR40: after every login the client fetches the headers of your mail and of
+# the subscribed rubrics (on_login = no: only with the Sync button). Texts come
+# when you click a header; only personal mail up to short_bytes comes along at
+# once (256 = one frame, about 2 s at 1200 Bd; 0 = never).
+on_login     = yes
+short_bytes  = 256
 
 [images]
 # Pictures in the chat (CR12) go to Direwolf in one go; the AX.25 window in

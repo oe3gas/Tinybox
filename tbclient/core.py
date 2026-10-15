@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 PROTO = "TB1"
 HANDSHAKE_FALLBACK_SEC = 6
+LOGIN_SYNC_SEC = 1.5      # CR40: the sync after the login starts this much after //OK
 DIRECT_VALID_SEC = 30 * 60
 MAX_MESSAGES = 300
 MAX_GAP = 32
@@ -367,7 +368,7 @@ class ClientCore:
             return
         self.handshake_done = True          # sent; //OK confirms the caps
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,NUM" + (",Z,IMG" if self.link.kind == "agw" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM" + (",Z,IMG" if self.link.kind == "agw" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -450,6 +451,10 @@ class ClientCore:
                              "steps": [float(x) for x in q.group(4).split(",") if x]}
             self._update_info(rest)
             self._send("//BOARDS")
+            if self.cfg.sync_on_login and "SYNC" in self.caps and not self.sync.running:
+                # CR40: headers of mail and subscribed rubrics after every login,
+                # a moment later so the board list comes first
+                asyncio.get_event_loop().call_later(LOGIN_SYNC_SEC, self._login_sync)
         elif cmd == "B":
             parts = rest.split(" ", 4)
             if len(parts) >= 4 and parts[0].isdigit():
@@ -539,6 +544,10 @@ class ClientCore:
         if m and m.group(1) == self.cfg.mycall.split("-")[0]:
             self._set_mail(int(m.group(2)))
             self.console.append(f"*** mail notice: {m.group(2)} new")
+
+    def _login_sync(self) -> None:
+        if self.state == "online" and "SYNC" in self.caps and not self.sync.running:
+            self.sync.start("login")
 
     def after_sync(self) -> None:
         """Everything is fetched now: the notice of new mail is done."""

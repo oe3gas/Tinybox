@@ -40,10 +40,9 @@ class State(Enum):
     CLOSED = 4
     CHAT = 5
     COLLECT = 6     # client protocol: n raw lines for a callback (//SEND)
-    MORE = 7        # terminal: long output waits for Enter (continue) or A (abort), CR29
 
 
-PAGE_LINES = 10     # terminal output longer than this is shown page by page
+PAGE_LINES = 10     # terminal output longer than this starts with the abort hint (CR40)
 
 
 class Session:
@@ -81,11 +80,9 @@ class Session:
         self._collect_lines: list[str] = []
         self._collect_done = None
         self._collect_back = State.COMMAND
-        # terminal paging (CR29): lines of the running command, and what is left
+        # terminal output of the running command (CR29/CR40: abort hint if long)
         self._page_collect = False
         self._page_buf: list[str] = []
-        self._page_rest: list[str] = []
-        self._page_shown = 0
         # client protocol: raw bytes to collect (image upload, CR12 - see collect_raw())
         self.raw_need = 0
         self.raw_since = 0.0        # when the last raw byte came in (timeout)
@@ -117,40 +114,16 @@ class Session:
             self.out(*buf)
 
     def _page_end(self) -> None:
-        """End of a terminal command: up to PAGE_LINES lines go out, the rest
-        waits for the user (state MORE). Not when the command changed the state
-        (chat, sending): then everything goes out at once."""
+        """End of a terminal command. Output longer than PAGE_LINES starts with
+        a hint that A aborts it, then goes out in full (CR40, replaces the pages
+        of CR29). A drops what is still queued for the radio (transport
+        abort_output); what Direwolf already has (max_outstanding) still goes."""
         buf, self._page_buf = self._page_buf, []
         self._page_collect = False
-        if len(buf) <= PAGE_LINES or self.state != State.COMMAND:
-            if buf:
-                self.out(*buf)
-            return
-        self._page_rest, self._page_shown = buf, 0
-        self._page_next()
-
-    def _page_next(self) -> None:
-        page, self._page_rest = self._page_rest[:PAGE_LINES], self._page_rest[PAGE_LINES:]
-        self._page_shown += len(page)
-        self.out(*page)
-        if self._page_rest:
-            self.state = State.MORE
-            more = texts.MORE_PROMPT.format(shown=self._page_shown,
-                                            total=self._page_shown + len(self._page_rest))
-            if self.monitor:
-                with logsetup.session_context(self.log_ctx):
-                    log.info("> %s", more.rstrip())
-            self.transport.write(more)
-        else:
-            self.state = State.COMMAND
-
-    def _on_more(self, line: str) -> None:
-        if line.strip().upper() in ("A", "Q", "/AB", "ABORT"):
-            self._page_rest = []
-            self.state = State.COMMAND
-            self.out(texts.MORE_ABORTED)
-            return
-        self._page_next()
+        if len(buf) > PAGE_LINES and self.state == State.COMMAND:
+            buf = [texts.LONG_OUTPUT.format(n=len(buf)), *buf]
+        if buf:
+            self.out(*buf)
 
     def prompt(self) -> None:
         if self.client is not None:     # a client program needs no prompt
@@ -265,8 +238,6 @@ class Session:
                     commands.dispatch(self, line)
                 finally:
                     self._page_end()
-            elif self.state == State.MORE:
-                self._on_more(line)
             elif self.state == State.SEND_SUBJECT:
                 self._on_subject(line)
             elif self.state == State.SEND_BODY:
@@ -282,7 +253,7 @@ class Session:
                 "internal error handling %r (state %s)", line, self.state.name)
             if self.state != State.CLOSED:
                 self.service.chat.leave(self)
-                self._page_collect, self._page_buf, self._page_rest = False, [], []
+                self._page_collect, self._page_buf = False, []
                 self.state = State.COMMAND
                 self.out(texts.INTERNAL_ERROR)
         else:

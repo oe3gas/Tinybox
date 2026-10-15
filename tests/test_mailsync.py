@@ -268,15 +268,19 @@ class EndToEndTests(unittest.TestCase):
                 self.assertFalse(core.sync.start("bulletins"))       # one at a time
                 await until(lambda: not core.sync.running, 30)
                 self.assertEqual(core.sync.status["error"], "")
-                self.assertIn("*** client mode, caps: CHAT,IMG,NUM,SYNC,SYNC2,UI,Z", core.console)
+                self.assertIn("*** client mode, caps: CHAT,IMG,NUM,SHORT,SYNC,SYNC2,UI,Z", core.console)
                 await until(lambda: core.state == "offline")
                 inbox = box.folder("inbox")
                 self.assertEqual([m["subject"] for m in inbox],
                                  ["Nr 3", "Nr 2", "Nr 1", "Nr 0", "Gross", "Kurz", "Lang"])
-                self.assertEqual(box.message(a)["body"], LONG)
-                self.assertEqual(box.message(big)["body"], noise)
-                self.assertTrue(any(x.startswith(f"> //PART {big} ") for x in core.console))
-                self.assertGreater(core.sync.status["saved"], 1000)       # compression
+                # CR40: short texts came along, long ones only on demand
+                self.assertEqual(box.message(inbox[5]["id"])["body"], "kurz")
+                self.assertIsNone(box.message(a)["body"])
+                self.assertIsNone(box.message(big)["body"])
+                self.assertTrue(any("Press Abort" in x for x in core.console))
+                # a click while not connected: said so and forgotten
+                self.assertEqual(core.sync.fetch(big), "not connected")
+                self.assertFalse(core.sync.running)
                 self.assertEqual(box.folder("b:WX"), [])          # bulletins: own sync
                 self.assertTrue(box.summary()["last_mail"])
                 self.assertFalse(box.summary()["last_bulletins"])
@@ -284,7 +288,23 @@ class EndToEndTests(unittest.TestCase):
                 await until(lambda: not core.sync.running, 30)
                 self.assertEqual(core.sync.status["error"], "")
                 self.assertEqual([m["subject"] for m in box.folder("b:WX")], ["Wetter"])
+                wx = box.folder("b:WX")[0]["id"]
+                self.assertIsNone(box.message(wx)["body"])        # bulletins: headers only
                 self.assertEqual(box.folder("b:ALL"), [])
+                # online: texts on click - the long one piece by piece, compressed
+                await core.connect()
+                await until(lambda: core.state == "online" and core.caps, 10)
+                for msg_id in (big, a, wx):
+                    self.assertEqual(core.sync.fetch(msg_id), "")
+                    await until(lambda: not core.sync.running, 30)
+                    self.assertEqual(core.sync.status["error"], "")
+                self.assertEqual(box.message(a)["body"], LONG)
+                self.assertEqual(box.message(big)["body"], noise)
+                self.assertEqual(box.message(wx)["body"], LONG)
+                self.assertTrue(any(x.startswith(f"> //PART {big} ") for x in core.console))
+                self.assertGreater(core.sync.status["saved"], 100)        # compression
+                core.disconnect()
+                await until(lambda: core.state == "offline")
                 sent = [m for m in app.service.store.list_messages() if m.subject == "Vom Client"]
                 self.assertEqual(sent[0].body, "Hallo Tec\n73")
                 self.assertEqual(box.folder("outbox"), [])
@@ -653,7 +673,7 @@ class DeltaSyncTests(unittest.TestCase):
                 core.console.clear()
                 core.sync.start("mail")
                 await until(lambda: not core.sync.running, 30)
-                self.assertEqual(requests(), [f"//SYNC seq={seq} max=1024 want=754"])
+                self.assertEqual(requests(), [f"//SYNC seq={seq} max=1024 want=754 short=256"])
                 # read here, deleted here; deleted and read in the TinyBox
                 box.open(a)
                 box.delete(b)
@@ -669,14 +689,15 @@ class DeltaSyncTests(unittest.TestCase):
                 self.assertIsNone(app.service.store.get(b))
                 self.assertEqual(box.folder("sent"), [])                 # //D
                 self.assertEqual(box.todo("kill") + box.todo("read"), [])
-                # bulletins: list, header and text in one exchange; later only counts
+                # bulletins: list and header in one exchange (text on demand, CR40)
                 core.console.clear()
                 core.sync.start("bulletins")
                 await until(lambda: not core.sync.running, 30)
                 self.assertEqual(core.sync.status["error"], "")
                 self.assertEqual(len(requests()), 1)
                 self.assertEqual([m["subject"] for m in box.folder("b:WX")], ["Wetter"])
-                self.assertEqual(box.message(box.folder("b:WX")[0]["id"])["body"], "Sonne")
+                self.assertIsNone(box.message(box.folder("b:WX")[0]["id"])["body"])
+                self.assertIn(" want=0", requests()[0])
                 names = {r["name"]: r for r in box.summary()["rubrics"]}
                 self.assertEqual((names["WX"]["server"], names["WX"]["local"]), (1, 1))
                 h = box.get("rubrics.h")
@@ -753,3 +774,118 @@ class MultiRecipientTests(unittest.TestCase):
                              [(7, "OE3TEC", "OE3XYZ"), (8, "OE1ABC", "OE3XYZ")])
             self.assertEqual(box.folder("outbox"), [])
             box.close()
+
+
+class ShortTextTests(unittest.TestCase):
+    """CR40: short= - only short personal mail comes with its text."""
+
+    def setUp(self):
+        self.app = chat_app()
+        self.a = mail(self.app, "OE3TEC", "OE3GAS", "Kurz", "kurz")
+        self.b = mail(self.app, "OE3TEC", "OE3GAS", "Lang", "x" * 300)
+
+    def test_cap_granted(self):
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2,SHORT")
+        self.assertIn("SHORT", s.client.caps)
+
+    def test_only_short_texts(self):
+        s, t = client(self.app, caps="CHAT,SYNC,SYNC2,SHORT")
+        type_lines(s, "//SYNC seq=0 want=1000 short=256")
+        out = t.take().split("\r")[:-1]
+        self.assertIn(f"//MSG {self.a} 1", out)
+        self.assertNotIn(f"//MSG {self.b} 1", out)
+        self.assertTrue(any(x.startswith(f"//M {self.b} ") for x in out))
+        type_lines(s, "//SYNC seq=0 want=1000 short=0")
+        out = t.take().split("\r")[:-1]
+        self.assertFalse([x for x in out if x.startswith("//MSG")])
+        type_lines(s, "//SYNC seq=0 want=1000 short=x")
+        self.assertEqual(t.take().split("\r")[:-1], ["//ERR sync"])
+
+
+class LoginSyncAbortTests(unittest.TestCase):
+    """CR40: headers after every login, orderly abort with what is left,
+    a text clicked meanwhile goes between two exchanges."""
+
+    def test_login_abort_and_fetch(self):
+        async def scenario():
+            dw = FakeDirewolf()
+            port = await dw.start()
+            app = chat_app()
+            app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, agw_port=port,
+                                                   reconnect_sec=1)
+            adapter = tb_agw.AgwAdapter(app)
+            app.agw = adapter
+            t1 = asyncio.create_task(adapter.run())
+            await asyncio.wait_for(adapter.connected.wait(), 5)
+            first = mail(app, "OE3TEC", "OE3GAS", "Erste", LONG)
+            for i in range(30):
+                mail(app, "OE3TEC", "OE3GAS", f"Nummer {i}", "x" * 400)
+            for i in range(5):
+                mail(app, "OE3TEC", "WX", f"Wetter {i}", "Sonne", type="B")
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, agw_port=port, sync_chunk=256,
+                                             sync_pause=0.3))
+                box = core.mailbox
+                box.subscribe("WX", True)
+                t2 = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.link.agw_up.wait(), 5)
+                await core.connect()
+                # the login starts the sync by itself
+                await until(lambda: core.sync.running and core.sync.status["scope"] == "login", 10)
+                await until(lambda: "Press Abort" in core.sync.status["notice"], 20)
+                self.assertTrue(core.sync.status["notice"].startswith("Mail: "))
+                self.assertIn("mail header(s)", core.sync.status["notice"])
+                # a click meanwhile: served between two exchanges
+                await until(lambda: box.message(first) is not None, 20)
+                self.assertEqual(core.sync.fetch(first), "")
+                await until(lambda: box.message(first)["body"] is not None, 30)
+                self.assertTrue(core.sync.running)
+                # orderly abort: the exchange on the air is finished, then stop
+                core.sync.abort()
+                self.assertTrue(core.sync.status["aborting"])
+                await until(lambda: not core.sync.running, 30)
+                st = core.sync.status
+                self.assertEqual((st["step"], st["error"]), ("aborted", ""))
+                self.assertIn("Sync aborted. Still pending:", st["notice"])
+                self.assertIn("approx.", st["notice"])
+                self.assertTrue(any(x.startswith("*** Sync aborted.") for x in core.console))
+                n = len(box.folder("inbox"))
+                self.assertLess(n, 31)
+                self.assertFalse(box.folder("b:WX"))
+                self.assertEqual(core.state, "online")               # the link stays
+                # the next sync goes on from there and fetches no long text
+                self.assertTrue(core.sync.start("login"))
+                await until(lambda: not core.sync.running, 60)
+                self.assertEqual(core.sync.status["error"], "")
+                self.assertEqual(len(box.folder("inbox")), 31)
+                self.assertEqual(len(box.folder("b:WX")), 5)
+                self.assertEqual(sum(m["has_body"] for m in box.folder("inbox")), 1)
+                self.assertTrue(box.summary()["last_bulletins"])
+                core.disconnect()
+                await until(lambda: core.state == "offline")
+                box.close()
+                t2.cancel()
+            t1.cancel()
+            dw.server.close()
+        asyncio.run(scenario())
+
+
+class EstimateTests(unittest.TestCase):
+    def test_human_secs(self):
+        self.assertEqual(sync.human_secs(3), "a few seconds")
+        self.assertEqual(sync.human_secs(42), "approx. 40 s")
+        self.assertEqual(sync.human_secs(100), "approx. 1 min 40 s")
+        self.assertEqual(sync.human_secs(120), "approx. 2 min")
+        self.assertEqual(sync.human_secs(3600), "approx. 60 min")
+
+    def test_estimate_default_and_measured(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = ClientCore(client_cfg(tmp, sync_chunk=1024, sync_pause=5))
+            sy = core.sync
+            self.assertTrue(sy.radio)
+            # 1000 bytes, 1 exchange: 1000/100 + (5 + 3) = 18 s
+            self.assertAlmostEqual(sy.estimate(1000), 18.0)
+            sy._air_bytes, sy._air_secs = 2000, 10.0                 # measured 200 B/s
+            self.assertAlmostEqual(sy.estimate(1000), 5.0 + 5)
+            self.assertEqual(sy.estimate(0), 0.0)
+            core.mailbox.close()

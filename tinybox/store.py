@@ -429,12 +429,21 @@ class Store:
         """Clients must know at least this seq, else deletions would be missed."""
         return self._db.execute("SELECT floor FROM sync_seq WHERE k = 1").fetchone()[0]
 
-    def delete_bulletins_older_than(self, days: int) -> list[int]:
+    def delete_bulletins_older_than(self, days: int, only: list[str] | None = None,
+                                    exclude: list[str] | None = None) -> list[int]:
+        """Bulletins older than days; only = just these rubrics, exclude = all but
+        these (a rubric's own validity, CR40)."""
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        rows = self._db.execute(
-            "SELECT id FROM messages WHERE type = 'B' AND created < ?"
-            " AND (replace_key IS NULL OR replace_key NOT LIKE 'fixed:%')", (cutoff,)
-        ).fetchall()
+        sql = ("SELECT id FROM messages WHERE type = 'B' AND created < ?"
+               " AND (replace_key IS NULL OR replace_key NOT LIKE 'fixed:%')")
+        args: list = [cutoff]
+        for names, op in ((only, "IN"), (exclude, "NOT IN")):
+            if names:                            # NOT IN (NULL) would match nothing
+                sql += f" AND to_call {op} ({','.join('?' * len(names))})"
+                args += names
+            elif names is not None and op == "IN":
+                return []
+        rows = self._db.execute(sql, args).fetchall()
         ids = [r["id"] for r in rows]
         with self._db:
             self._db.executemany("DELETE FROM messages WHERE id = ?", [(i,) for i in ids])
