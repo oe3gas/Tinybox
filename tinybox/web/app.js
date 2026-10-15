@@ -737,8 +737,12 @@ function renderUser(card, d) {
   const cur = [["srt", "smoothed round trip time, s"], ["t1v", "current T1 timer value, s"],
                ["unack", "frames waiting for ACK"], ["rc", "current retry count"], ["baud", "link speed (v=2)"],
                ["state", "AX.25 link state"], ["age", "link age, s"]];
-  let raw = h("div", { class: "empty", text: "No Direwolf counters: the station has no radio link via Direwolf" +
-                                             " (or Direwolf has no TinyBox extension)." });
+  // where the counters come from: Direwolf fork (AGW 'Q') or TinyBox's own AX.25 link (KISS)
+  const kiss = d.interface === "kiss";
+  const src = kiss ? "TinyBox" : "Direwolf";
+  let raw = h("div", { class: "empty", text: kiss
+    ? "No link counters: the station has no AX.25 link to TinyBox."
+    : "No Direwolf counters: the station has no radio link via Direwolf (or Direwolf has no TinyBox extension)." });
   if (C) {
     const fmt = (k, v) => k.startsWith("bytes") ? kb(v) : k === "srt" || k === "t1v" ? v.toFixed(2) : String(v);
     raw = h("table", { class: "raw" },
@@ -752,7 +756,7 @@ function renderUser(card, d) {
           h("td", { class: "r", text: "-" }), h("td", { class: "r", text: fmt(k, C[k]) }),
           h("td", { class: "desc", text: desc })))));
   }
-  const pollNote = C ? "AGW query 'Q' v=" + (C.v || "?") +
+  const pollNote = C ? (kiss ? "KISS \u00b7 own AX.25 link" : "AGW query 'Q' v=" + (C.v || "?")) +
                        " \u00b7 every " + w.poll_sec + " s" +
                        (d.poll_age !== null ? " \u00b7 last answer " + d.poll_age + " s ago" : "") : "";
 
@@ -771,10 +775,10 @@ function renderUser(card, d) {
         h("h3", {}, "Bars ", h("span", { text: "from the worst direction, minus one bar per T1 timeout in the window" })),
         steps, calc),
       h("div", { class: "section" },
-        h("h3", {}, "Direwolf counters ", h("span", { text: pollNote })),
+        h("h3", {}, src + " counters ", h("span", { text: pollNote })),
         raw,
         h("div", { class: "legend", text: "Window = difference to the oldest sample in the window (what the bars are made of). " +
-                                           "Since link start = raw counter from Direwolf. Grey rows are current values, not differences." }))));
+                                           "Since link start = raw counter from " + src + ". Grey rows are current values, not differences." }))));
 }
 
 function viewMonitor() {

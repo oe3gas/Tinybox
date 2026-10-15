@@ -89,6 +89,7 @@ class WebTests(unittest.TestCase):
         app_js = (Path(__file__).resolve().parent.parent / "tinybox/web/app.js").read_text(
             encoding="utf-8")
         self.assertIn('" via " + st.interface.toUpperCase()', app_js)
+        self.assertIn('kiss ? "KISS \\u00b7 own AX.25 link"', app_js)
 
     def test_security_checks(self):
         async def scenario(s):

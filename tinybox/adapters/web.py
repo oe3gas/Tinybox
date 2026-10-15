@@ -526,7 +526,8 @@ class WebServer:
                "window": {"frames": dw.quality_window_frames, "minutes": dw.quality_window_min,
                           "min_frames": dw.quality_min_frames, "steps": list(dw.quality_steps),
                           "poll_sec": dw.quality_poll_sec},
-               "result": None, "counters": None, "counters_window": None, "poll_age": None}
+               "result": None, "counters": None, "counters_window": None, "poll_age": None,
+               "interface": self.app.cfg.radio.interface}
         if r is not None:
             out["result"] = {"bars": r.bars, "t1": r.t1,
                              "outgoing": self._direction(r.out, "TinyBox -> " + call),
