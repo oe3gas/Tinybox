@@ -1,0 +1,2 @@
+- Mail in the outbox goes out at once (connects to
+  your TinyBox by itself if needed).

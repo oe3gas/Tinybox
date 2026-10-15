@@ -2,6 +2,7 @@
 
 Two kinds of sync, each started on its own:
 
+send       only the outbox (CR47: a mail put into the outbox goes out at once)
 mail       1. send the outbox            //SEND ... -> //SENT <id>
            2. delete own mail            //KILL     -> //K ... //KEND
            3. report what was read here  //READ     -> //REND
@@ -55,7 +56,7 @@ BUSY_QUIET_SEC = 3       # the channel counts as free after this much silence
 BUSY_MAX_SEC = 30        # never wait longer than this for a free channel
 IDLE_SEC = 120            # no answer for this long: the sync gives up
 ABORT_GRACE_SEC = 30      # orderly abort: wait this long for the answer on the air (CR40)
-SCOPES = ("mail", "bulletins", "login", "fetch")
+SCOPES = ("mail", "bulletins", "login", "fetch", "send")
 END_LINES = ("//SYNCEND", "//BSYNCEND", "//GEND", "//MEND", "//RUEND", "//KEND", "//REND",
              "//SENT ", "//NOMSG ", "//ERR")
 CONNECT_SEC = 90          # connect + handshake when the sync connects by itself
@@ -147,6 +148,7 @@ class Syncer:
         self.store = store
         self.task: asyncio.Task | None = None
         self.own_connect = False          # the sync opened the connection itself
+        self.send_again = False           # CR47: outbox changed while busy - send after
         self.queue: asyncio.Queue | None = None
         self._body: tuple[int, int, list[str]] | None = None    # (id, lines left, lines)
         self.status = {"running": False, "scope": "", "step": "", "done": 0, "total": 0,
@@ -441,13 +443,18 @@ class Syncer:
                 if self._fetch_q:                    # another click meanwhile
                     await self._serve_fetches()
             else:
+                if scope == "send":                  # CR47: only what waits in the outbox
+                    items = self.store.outbox()
+                    for i, item in enumerate(items):
+                        self._set(step=f"sending {i + 1}/{len(items)}")
+                        await self._send_one(item)
                 if scope in ("mail", "login"):
                     await self._sync_mail()
                 if scope in ("bulletins", "login"):
                     await self._sync_bulletins()
                 if self._fetch_q:                    # clicked during the last exchange
                     await self._serve_fetches()
-                for name in (("mail", "bulletins") if scope == "login" else (scope,)):
+                for name in {"login": ("mail", "bulletins"), "send": ()}.get(scope, (scope,)):
                     self.store.put(f"last_sync.{name}", int(time.time()))
                 self._set(notice="")                 # the start notice is done
             self._set(step="done")
@@ -493,6 +500,11 @@ class Syncer:
             self.status["running"] = False
             self.status["aborting"] = False
             self.core._touch()
+        if self.send_again and self.status["step"] == "done":
+            self.send_again = False               # CR47: written meanwhile - out it goes,
+            task = asyncio.current_task()         # once this run is really over
+            if task is not None:
+                task.add_done_callback(lambda _t: self.core.send_outbox())
 
     async def _wait_ready(self) -> None:
         start = time.monotonic()

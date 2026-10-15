@@ -789,6 +789,26 @@ class ClientCore:
             self._set_mail(int(m.group(2)))
             self.console.append(f"*** mail notice: {m.group(2)} new")
 
+    def send_outbox(self) -> str:
+        """CR47: a mail just put into the outbox goes out at once - over the
+        connection to the own TinyBox, or the sync connects to it by itself.
+        Returns "" (on its way) or why it waits in the outbox."""
+        if not self.mailbox.outbox():
+            return ""
+        if self.sync.running:
+            self.sync.send_again = True           # after the running sync
+            return ""
+        if self.state != "offline" and not self.at_home:
+            return f"connected to {self.target} - goes out with the next sync at {self.home}"
+        if self.state != "offline" and self.state != "online":
+            self.sync.send_again = True
+            return "the connection is changing - goes out with the next sync"
+        if self.state == "online" and "SYNC" not in self.caps:
+            return "not ready yet - goes out with the next sync"
+        if not self.sync.start("send"):
+            return "busy (picture or no free channel) - goes out with the next sync"
+        return ""
+
     def _login_sync(self) -> None:
         if self.state == "online" and "SYNC" in self.caps and self.at_home \
                 and not self.sync.running:

@@ -889,3 +889,68 @@ class EstimateTests(unittest.TestCase):
             self.assertAlmostEqual(sy.estimate(1000), 5.0 + 5)
             self.assertEqual(sy.estimate(0), 0.0)
             core.mailbox.close()
+
+
+class SendAtOnceTests(unittest.TestCase):
+    """CR47: a mail put into the outbox goes out at once."""
+
+    def test_outbox_goes_out_at_once(self):
+        async def scenario():
+            dw = FakeDirewolf()
+            port = await dw.start()
+            app = chat_app()
+            app.cfg.direwolf = dataclasses.replace(app.cfg.direwolf, agw_port=port,
+                                                   reconnect_sec=1)
+            adapter = tb_agw.AgwAdapter(app)
+            app.agw = adapter
+            t1 = asyncio.create_task(adapter.run())
+            await asyncio.wait_for(adapter.connected.wait(), 5)
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, agw_port=port, sync_pause=0.05,
+                                             sync_on_login=False))
+                box = core.mailbox
+                t2 = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.port.agw_up.wait(), 5)
+                self.assertEqual(core.send_outbox(), "")           # nothing waits: nothing to do
+                self.assertFalse(core.sync.running)
+                # offline: the sync connects by itself, sends, disconnects again
+                box.save_out(None, "P", "OE3TEC", "Sofort", "gleich raus")
+                self.assertEqual(core.send_outbox(), "")
+                await asyncio.sleep(0)
+                self.assertEqual(core.sync.status["scope"], "send")
+                await until(lambda: not core.sync.running, 20)
+                self.assertEqual(core.sync.status["error"], "")
+                await until(lambda: core.state == "offline", 10)
+                self.assertEqual(box.folder("outbox"), [])
+                self.assertEqual([m.body for m in app.service.store.list_messages()
+                                  if m.subject == "Sofort"], ["gleich raus"])
+                self.assertEqual(box.folder("inbox"), [])          # "send" fetches nothing
+                self.assertEqual(list(core.channels), [1])         # its channel is gone again
+                # connected to the own TinyBox: over that connection
+                await core.connect("OE3GAS-1")
+                await until(lambda: core.state == "online" and core.caps, 10)
+                box.save_out(None, "P", "OE3TEC", "Online", "auch gleich")
+                self.assertEqual(core.send_outbox(), "")
+                await until(lambda: not core.sync.running and not box.folder("outbox"), 20)
+                self.assertEqual(core.state, "online")              # the link stays
+                # written while a sync runs: goes out right after it
+                self.assertTrue(core.sync.start("bulletins"))
+                box.save_out(None, "P", "OE3TEC", "Danach", "nach dem Sync")
+                self.assertEqual(core.send_outbox(), "")
+                self.assertTrue(core.sync.send_again)
+                await until(lambda: not box.folder("outbox"), 20)
+                self.assertTrue(any(m.subject == "Danach" for m in app.service.store.list_messages()))
+                core.disconnect()
+                await until(lambda: core.state == "offline")
+                t2.cancel()
+            t1.cancel()
+            dw.server.close()
+        asyncio.run(scenario())
+
+    def test_other_tinybox_waits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = ClientCore(client_cfg(tmp))
+            core.mailbox.save_out(None, "P", "OE3TEC", "x", "y")
+            core.chan.target, core.chan.state, core.chan.mode = "OE1XAB-1", "online", "tinybox"
+            self.assertIn("OE1XAB-1", core.send_outbox())
+            self.assertFalse(core.sync.running)

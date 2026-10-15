@@ -10,6 +10,11 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Post sofort aussenden (CR47): eine Mail, die in die Outbox kommt, geht
+  gleich hinaus - ueber die Verbindung zur eigenen TinyBox, sonst baut der
+  Client sie dafuer kurz selbst auf (Sync "send", holt nichts ab). Laeuft
+  gerade ein Abgleich, geht sie gleich danach hinaus. Ist der Chat-Kanal mit
+  einer anderen TinyBox verbunden, wartet sie mit Hinweis in der Outbox.
 - KISS ueber kisshub (CR46): mit link = kiss spricht der Client KISS-TCP mit
   dem kisshub und fuehrt AX.25 selbst (v2.2 mit SREJ/XID, faellt auf 2.0
   zurueck) - ohne Direwolf und ohne TinyBox ein vollstaendiges

@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR46 umgesetzt)
+Stand: 15.10.2026 (CR47 umgesetzt)
 
 ## Übersicht
 
@@ -53,6 +53,7 @@ Stand: 15.10.2026 (CR46 umgesetzt)
 | 44 | Verbindungslogbuch in TinyBox und Client: Gegenstation, Connect, Disconnect, Dauer, Bytes; unbegrenzt, Export CSV und ADIF; jeder User sieht seine Connects (`QSO`) | ✅ siehe unten |
 | 45 | Multi-Connect im Client: bis 5 Verbindungen, umschaltbar (Kanäle), Monitor-Kanal | ✅ siehe unten |
 | 46 | Client über kisshub (`link = kiss`) mit eigenem AX.25 – vollwertiges PR-Programm ohne Direwolf und ohne TinyBox; eingehende Connects | ✅ siehe unten |
+| 47 | Mail in der Outbox sofort aussenden, nicht erst beim nächsten Sync | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1259,4 +1260,26 @@ kisshub lauscht nur auf `127.0.0.1`: Client und kisshub laufen auf dem PC mit de
 Start: `kisshub.bat`, dann `tbclient.bat`. TinyBox und Client können sich denselben
 kisshub teilen (unterschiedliche Rufzeichen); kisshub gibt gesendete Frames auch an die
 anderen Clients weiter.
+
+## CR47 – Post sofort aussenden (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+Wenn eine Mail vom User geschrieben wurde und in die Outbox geht, soll sie gleich
+ausgesendet werden.
+
+### Umsetzung
+
+- Neuer Sync-Umfang **`send`**: nur die Outbox (`//SEND` je Mail), kein Abholen, setzt
+  „last sync“ nicht. `ClientCore.send_outbox()` startet ihn gleich nach dem Speichern
+  (`POST /api/mail/save`).
+- **Verbunden mit der eigenen TinyBox:** geht über diese Verbindung, sie bleibt stehen.
+- **Offline:** der Sync baut die Verbindung zur eigenen TinyBox in einem freien Kanal auf,
+  sendet und trennt wieder (Kanal verschwindet).
+- **Ein Abgleich läuft gerade:** die Mail geht gleich danach hinaus (`send_again`).
+- **Chat-Kanal mit einer anderen TinyBox / Verbindung im Auf- oder Abbau / Bild-Upload
+  / kein Kanal frei:** die Mail wartet in der Outbox; der Grund steht als Hinweis in der
+  Mailbox. Sie geht mit dem nächsten Sync (auch dem nach dem Anmelden) hinaus.
+- Hinweis im Composer: „Goes out right away to your TinyBox“.
+- Tests: `SendAtOnceTests` in `tests/test_mailsync.py`.
 

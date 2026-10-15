@@ -266,8 +266,11 @@ class WebServer:
                 if kind not in ("P", "B") or not CALL_AT_RE.match(to):
                     return 400, {"error": "address"}, None
                 oid = box.save_out(int(data.get("oid") or 0) or None, kind, to, subject, body)
+                waits = core.send_outbox()          # CR47: out at once
+                if waits:
+                    core.sync._notice(f"The mail waits in the outbox: {waits}.")
                 core._touch()
-                return 200, {"ok": True, "oid": oid}, None
+                return 200, {"ok": True, "oid": oid, "waits": waits}, None
             elif action == "discard":
                 ok = box.discard_out(int(data.get("oid", 0)))
             elif action == "subscribe":
