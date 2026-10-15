@@ -48,6 +48,8 @@ class StationCfg:
     sysop_via_radio: bool
     haddress: str = ""        # hierarchical address, e.g. OE3XTC.#NOE.AUT.EU ('' = call only)
     qth: str = ""             # shown in the R: line
+    freq: str = ""            # MHz of the radio port, for the ADIF export (CR44)
+    locator: str = ""         # Maidenhead locator, ADIF MY_GRIDSQUARE (CR44)
 
     @property
     def bbs_call(self) -> str:
@@ -508,7 +510,14 @@ def load(path: str | Path) -> Config:
                                  _get(cp, "station", "sysop_call", None)),
         sysop_via_radio=_get(cp, "station", "sysop_via_radio", False, bool),
         qth=_get(cp, "station", "qth", "").strip(),
+        freq=_get(cp, "station", "freq", "").strip(),
+        locator=_get(cp, "station", "locator", "").strip().upper(),
     )
+    if station.freq:
+        try:
+            float(station.freq)
+        except ValueError:
+            raise ConfigError("[station] freq: MHz, e.g. 144.800") from None
     haddress = _get(cp, "station", "haddress", "").strip()
     if haddress:
         from .addressing import AddressError, addr_call, normalize

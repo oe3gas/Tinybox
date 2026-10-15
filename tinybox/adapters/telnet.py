@@ -25,10 +25,14 @@ class TelnetTransport:
     def __init__(self, writer: asyncio.StreamWriter) -> None:
         self.writer = writer
         self.closing = False
+        self.rx_bytes = 0                 # CR44: for the logbook (lines + CR)
+        self.tx_bytes = 0
 
     def write(self, text: str) -> None:
         if not self.closing:
-            self.writer.write(text.replace("\r", "\r\n").encode("utf-8"))
+            data = text.replace("\r", "\r\n").encode("utf-8")
+            self.tx_bytes += len(data)
+            self.writer.write(data)
 
     def close(self) -> None:
         if not self.closing:
@@ -145,7 +149,9 @@ class TelnetConnection:
             await self.writer.drain()
             while not session.closed:
                 # reading along in a chat board is allowed: no idle timeout there
-                session.handle_line(await self._timed_line(not session.idle_exempt))
+                line = await self._timed_line(not session.idle_exempt)
+                transport.rx_bytes += len(line.encode("utf-8")) + 1
+                session.handle_line(line)
                 await self.writer.drain()
         except asyncio.TimeoutError:
             transport.write(texts.IDLE_TIMEOUT + "\r")

@@ -74,6 +74,7 @@ class KissConnection(AgwConnection):
     def write_bytes(self, data: bytes) -> None:
         if self.gone or not data:
             return
+        self.tx_bytes += len(data)
         self.link.send(data, self.adapter.now())
         self.adapter.service(self.link)
 

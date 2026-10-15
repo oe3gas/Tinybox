@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR42 und CR43 umgesetzt)
+Stand: 15.10.2026 (CR44 umgesetzt, CR45 in Planung)
 
 ## Übersicht
 
@@ -50,6 +50,8 @@ Stand: 15.10.2026 (CR42 und CR43 umgesetzt)
 | 41 | KISS-Mode: Kanal- und kisshub-Werte in der Sysop-Web-GUI (Kanalauslastung, gehörte Stationen, TNC-Zustand, Wartezeit im Hub) für das Qualitäts-Monitoring | ✅ siehe unten |
 | 42 | Freier Connect: „Connect to:“ in der Titelleiste statt fest verdrahtetem OE3GAS-1, Verlauf der letzten Ziele, Titelleiste einzeilig mit Zustands-Icons (connecting mit Zähler, connected, disconnecting, no answer / disconnected by) | ✅ siehe unten |
 | 43 | Terminalmodus: Gegenstelle ist keine TinyBox → Terminal statt Chat, kein `//CLIENT`; bei einer TinyBox per Menü | ✅ siehe unten |
+| 44 | Verbindungslogbuch in TinyBox und Client: Gegenstation, Connect, Disconnect, Dauer, Bytes; unbegrenzt, Export CSV und ADIF; jeder User sieht seine Connects (`QSO`) | ✅ siehe unten |
+| 45 | Multi-Connect im Client: bis 5 Verbindungen, umschaltbar (Kanäle), Monitor-Kanal | offen – Entscheidungen siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1108,4 +1110,80 @@ Prompt, die Oberfläche zeigte leere Boards.
   bei einer TinyBox; getippte Zeilen gehen dann direkt an sie.
 - **Zeichensatz:** UTF-8, sonst Latin-1 (wie bisher in `LineSplitter`).
 - **Grenzen:** kein Binärtransfer (YAPP, 7plus), keine Bilder, keine Mailbox der fremden BBS.
+
+## CR44 – Verbindungslogbuch (✅ 15.10.2026)
+
+### Erfassung und Entscheidungen (OE3GAS, 15.10.2026)
+
+Logbuch der Verbindungen in Client und TinyBox – keine Inhalte, nur Gegenstation,
+Connect-Zeit, Disconnect-Zeit, Gesamtdauer und, wenn möglich, die Bytes hin und zurück.
+
+1. Aufbewahrung **unbegrenzt**, Export als **CSV** und **ADIF**.
+2. In der TinyBox sieht **jeder User seine eigenen Connects**.
+3. Fehlversuche (SABM ohne Login) kommen in der TinyBox **nicht** hinein.
+4. Frequenz (für ADIF) im Client: **beim Start des Clients einmal abfragen**, gilt für die
+   ganze Sitzung; die zuletzt erfasste wird angeboten und kann übernommen oder
+   überschrieben werden.
+
+### TinyBox
+
+- Tabelle `connlog` in der Datenbank: `call`, `via` (radio/telnet), `t_on`, `t_off`, `secs`,
+  `rx`/`tx` (Nutzdaten-Bytes, gezählt im AGW-, KISS- und Telnet-Adapter),
+  `air_tx`/`air_rx` (Bytes über die Luft inkl. Wiederholungen aus der letzten
+  `Q`-Abfrage des Direwolf-Forks, sonst leer), `ended` (`bye` = von der TinyBox beendet,
+  `disc` = von der Station, `lost` = Verbindung verloren). Geschrieben in `Session.end()`,
+  genau einmal; die lokale Sysop-Konsole zählt nicht. Ein Fehler beim Schreiben bricht die
+  Trennung nie ab.
+- Befehl **`QSO`**: die letzten 10 Connects des eigenen Rufzeichens (alle SSIDs), `QSO 30`
+  mehr (max. 100). Sysop: `QSO ALL [n]`, `QSO <call> [n]`. In der Hilfe (`H`).
+- Sysop-Weboberfläche: Seite **Connection log** (Filter nach Rufzeichen, Knöpfe CSV und
+  ADIF; `GET /api/connlog`, `/api/connlog.csv`, `/api/connlog.adi?call=…`).
+- ADIF: `[station] freq` (MHz) und `[station] locator` in `tinybox.conf`; ohne `freq` fehlen
+  `FREQ`/`BAND` in der Datei.
+
+### Client
+
+- `data/tbclient/connlog.db`: jede Verbindung, auch nicht zustande gekommene (`failed`
+  = keine Antwort, `cancelled` = selbst abgebrochen; Dauer 0, ohne Bytes). Bytes =
+  Nutzdaten am Link. `ended`: `user`, `remote`, `failed`, `cancelled`. Mit der Frequenz
+  der Sitzung.
+- **Frequenz:** Beim ersten Öffnen der Oberfläche nach dem Start fragt ein Dialog nach der
+  Frequenz (letzte vorbelegt, „Skip“ = ohne). Änderbar unter Settings → Connection log.
+- Settings → **Connection log**: die letzten 200 Einträge, Links CSV (alles) und ADIF (nur
+  zustande gekommene Verbindungen, älteste zuerst). `[station] locator` in `tbclient.conf`.
+
+### ADIF
+
+ADIF 3.1.4 (`.adi`): `CALL`, `QSO_DATE`/`TIME_ON`, `QSO_DATE_OFF`/`TIME_OFF`, `MODE` = `PKT`,
+`STATION_CALLSIGN`, `OPERATOR`, `FREQ`, `BAND`, `MY_GRIDSQUARE`, `COMMENT`. Rufzeichen ohne
+SSID (Logbuchprogramme erwarten ein Rufzeichen); das volle Rufzeichen, Weg, Dauer und Bytes
+stehen im `COMMENT`. Gemeinsamer Code: `tinybox/connlog.py`. Tests: `tests/test_connlog.py`,
+`FreeConnectTests` in `tests/test_tbclient.py`.
+
+## CR45 – Multi-Connect im Client (offen)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+Den Client zu einem Multi-Connect-Programm ausbauen: max. 5 Verbindungen gleichzeitig,
+umschaltbar, jede Verbindung in einem eigenen Fenster (nicht gleichzeitig angezeigt, immer
+nur abwechselnd).
+
+### Vorschlag (Claude, 15.10.2026)
+
+1. Kanalleiste unter der Titelleiste, Kanal 1–5, Umschalten per Klick oder Alt+1 … Alt+5;
+   die Titelleiste (CR42) zeigt immer den aktiven Kanal.
+2. Kanal 0 = Monitor (alles Gehörte), zählt nicht zu den 5.
+3. Jeder Kanal mit seiner Ansicht: TinyBox → Chat/Mailbox, sonst Terminal.
+4. Hintergrund-Aktivität am Kanal-Chip sichtbar.
+5. Dieselbe Station nur einmal; Mailbox-Abgleich über den Kanal der Heim-TinyBox.
+6. Kanal bleibt nach Disconnect mit Verlauf stehen, bis man ihn schließt.
+7. Sendewarteschlange aller Kanäle im Monitor (gemeinsamer Funkkanal).
+
+### Entscheidungen (OE3GAS, 15.10.2026)
+
+- Zu 4: **Chip blinkt**, wenn im Hintergrund neuer Input kam; **rot blinkend**, wenn im
+  Hintergrund ein Disconnect erfolgte.
+- Nur **eine** TinyBox im Chat-Modus gleichzeitig; eine weitere TinyBox öffnet als Terminal.
+- Offen: was mit dem Telnet-Link geschieht (er erreicht nur den Testport der eigenen
+  TinyBox).
 

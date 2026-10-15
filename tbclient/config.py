@@ -17,6 +17,7 @@ class ConfigError(Exception):
 @dataclass
 class Config:
     mycall: str = ""
+    locator: str = ""                 # Maidenhead locator, ADIF MY_GRIDSQUARE (CR44)
     tinybox_call: str = "OE3GAS-1"
     link: str = "agw"                 # agw = radio via Direwolf, telnet = TinyBox test port
     ui: str = "auto"                  # auto | yes | no  (chat events as UI frames)
@@ -53,6 +54,7 @@ def load(path: str | Path) -> Config:
 
     cfg = Config()
     cfg.mycall = get("station", "mycall", "").upper()
+    cfg.locator = get("station", "locator", "").upper()
     cfg.tinybox_call = get("tinybox", "call", cfg.tinybox_call).upper()
     cfg.link = get("tinybox", "link", cfg.link).lower()
     cfg.ui = get("tinybox", "ui", cfg.ui).lower()

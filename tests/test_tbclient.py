@@ -434,6 +434,11 @@ class FreeConnectTests(unittest.TestCase):
                 t = asyncio.create_task(core.run())
                 await asyncio.wait_for(core.link.agw_up.wait(), 5)
                 await until(lambda: any(c["calls"] == {"OE3XBS-8"} for c in dw.clients))
+                # CR44: the frequency of the session is asked once
+                self.assertTrue(core.snapshot()["freq_ask"])
+                self.assertFalse(core.set_freq("abc"))
+                self.assertTrue(core.set_freq("144,8"))
+                self.assertEqual((core.freq, core.snapshot()["freq_ask"]), ("144.800", False))
                 # bad targets are refused
                 self.assertFalse(await core.connect("OE3XBS-99"))
                 self.assertFalse(await core.connect("oe3gas"))           # own call
@@ -468,9 +473,20 @@ class FreeConnectTests(unittest.TestCase):
                 await until(lambda: core.state == "offline")
                 self.assertEqual(states, ["disconnecting", "offline"])
                 self.assertEqual(core.ended["kind"], "user")
+                # CR44: the logbook - the failed connect and the connection with bytes
+                rows = core.logbook.rows()
+                self.assertEqual([(r["call"], r["ended"]) for r in rows],
+                                 [("OE3XBS-8", "user"), ("OE3NIX-1", "failed")])
+                self.assertEqual(rows[0]["tx"], 2)                    # "N" CR
+                self.assertGreater(rows[0]["rx"], 60)
+                self.assertIsNone(rows[1]["rx"])
+                self.assertEqual(len(core.logbook.rows(connected_only=True)), 1)
+                self.assertEqual(rows[0]["freq"], "144.800")
                 # the last target and the list survive a restart of the client
                 core2 = ClientCore(client_cfg(tmp, agw_port=port))
                 self.assertEqual(core2.target, "OE3XBS-8")
+                snap2 = core2.snapshot()          # a new run asks again, offers the last one
+                self.assertEqual((snap2["freq_ask"], snap2["freq_last"]), (True, "144.800"))
                 self.assertEqual(core2.recent[:2], ["OE3XBS-8", "OE3NIX-1"])
                 t.cancel()
             tb.cancel()

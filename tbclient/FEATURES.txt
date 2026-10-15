@@ -10,6 +10,13 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Verbindungslogbuch (CR44): jede Verbindung mit Gegenstation, Weg, Connect,
+  Disconnect, Dauer und Bytes rein/raus (Nutzdaten), auch Fehlversuche
+  ("no answer"). Unter Settings > Connection log, Export als CSV (alles)
+  und ADIF (nur zustande gekommene Verbindungen, MODE PKT). Die Frequenz
+  wird beim Start des Clients einmal abgefragt (die letzte wird angeboten)
+  und steht in jedem Eintrag; [station] locator fuer MY_GRIDSQUARE.
+  In der TinyBox zeigt der Befehl QSO die eigenen Connects.
 - Freier Connect (CR42): das Ziel steht nicht mehr fest. Ist man nicht
   verbunden, steht in der Titelleiste "Connect to:" mit einem Feld fuer das
   Rufzeichen (leer = das zuletzt verwendete, Liste der letzten 10), der

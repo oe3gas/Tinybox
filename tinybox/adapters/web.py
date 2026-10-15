@@ -27,7 +27,7 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from .. import VERSION, config, linkq
+from .. import VERSION, config, connlog, linkq
 from ..app import App
 from ..config import base_call, normalize_call
 from ..service import ServiceError
@@ -344,6 +344,8 @@ class WebServer:
             return self._json(writer, 200, {"csrf": csrf})
         if method == "GET" and parts == ["feed"]:
             return await self._feed(writer)
+        if method == "GET" and parts in (["connlog.csv"], ["connlog.adi"]):   # CR44 export
+            return self._connlog_file(writer, parts[0], query)
         result = self._api(method, parts, data)
         self._json(writer, 200, result)
 
@@ -363,6 +365,8 @@ class WebServer:
                 return self._linkq(parts[1])
             if parts == ["jlog"]:
                 return [asdict(e) for e in app.store.jlog_list(100)]
+            if parts == ["connlog"]:
+                return app.store.connlog_list(limit=1000)
             if parts == ["config"]:
                 return self._config()
             if parts == ["rubrics"]:
@@ -409,6 +413,24 @@ class WebServer:
             if parts == ["shutdown", "cancel"]:
                 return {"ok": app.shutdown.cancel()}
         raise HttpError(404)
+
+    def _connlog_file(self, writer, name: str, query: dict) -> None:
+        """The whole connection log (CR44) as CSV or ADIF; ?call=OE3TEC = one station."""
+        call = "".join(c for c in (query.get("call") or [""])[0].upper()
+                       if c.isascii() and (c.isalnum() or c == "-"))[:9]   # goes into a header
+        rows = self.app.store.connlog_list(base_call(call) if call else None)
+        st = self.app.cfg.station
+        stamp = time.strftime("%Y%m%d")
+        if name.endswith(".csv"):
+            body, ctype = connlog.to_csv(rows), "text/csv; charset=utf-8"
+        else:
+            rows = list(reversed(rows))                  # logbooks: oldest first
+            body = connlog.to_adif(rows, st.mailbox_call, "TinyBox", VERSION, freq=st.freq,
+                                   locator=st.locator, operator=st.sysop_call)
+            ctype = "text/plain; charset=us-ascii"
+        fname = f"tinybox-connlog-{stamp}{('-' + call) if call else ''}{name[7:]}"
+        self._send(writer, 200, body.encode("utf-8"), ctype,
+                   {"Content-Disposition": f'attachment; filename="{fname}"'})
 
     @staticmethod
     def _int(value: str) -> int:

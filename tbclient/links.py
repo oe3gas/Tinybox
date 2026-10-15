@@ -105,6 +105,8 @@ class BaseLink:
         self.online = False
         self.active = False               # anything but offline (connecting ... disconnecting)
         self.target = cfg.tinybox_call    # the station to connect to (set by the core)
+        self.rx_bytes = 0                 # CR44: payload of the current connection
+        self.tx_bytes = 0
 
     def _line(self, line: str) -> None:
         self.on_line(line)
@@ -195,6 +197,7 @@ class AgwLink(BaseLink):
             self.connecting = False
             self._set("online")
         elif kind == "D" and tb in (cfrom, cto):
+            self.rx_bytes += len(data)
             self.splitter.feed(data)
         elif kind == "Y" and tb in (cfrom, cto) and len(data) >= 4:
             self._outstanding = struct.unpack("<I", data[:4])[0]
@@ -209,6 +212,7 @@ class AgwLink(BaseLink):
             self._set("offline", "Direwolf not reachable")
             return
         self.connecting = True
+        self.rx_bytes = self.tx_bytes = 0
         self._set("connecting")
         self._send("C", self.cfg.mycall, self.target, pid=PID_NO_L3)
 
@@ -217,6 +221,7 @@ class AgwLink(BaseLink):
 
     def send_bytes(self, data: bytes) -> None:
         """Raw bytes (a line, or image data after //IMGGO)."""
+        self.tx_bytes += len(data)
         for i in range(0, len(data), PACLEN):
             self._send("D", self.cfg.mycall, self.target, data[i:i + PACLEN],
                        PID_NO_L3)
@@ -266,6 +271,7 @@ class TelnetLink(BaseLink):
         self.on_line(line)
 
     async def connect(self) -> None:
+        self.rx_bytes = self.tx_bytes = 0
         self._set("connecting")
         try:
             reader, writer = await asyncio.open_connection(self.cfg.telnet_host,
@@ -285,6 +291,7 @@ class TelnetLink(BaseLink):
                 data = await reader.read(1024)
                 if not data:
                     break
+                self.rx_bytes += len(data)
                 self.splitter.feed(_strip_iac(data))
         except (ConnectionError, OSError):
             pass
@@ -295,7 +302,9 @@ class TelnetLink(BaseLink):
         if self._writer is not None:
             self._sent.append(text)
             del self._sent[:-20]
-            self._writer.write((text + "\r\n").encode("utf-8"))
+            data = (text + "\r\n").encode("utf-8")
+            self.tx_bytes += len(data)
+            self._writer.write(data)
 
     def send_bytes(self, data: bytes) -> None:      # never used: no IMG cap on telnet
         if self._writer is not None:

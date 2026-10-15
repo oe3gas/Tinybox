@@ -103,6 +103,8 @@ class AgwConnection:
         self._after_z = False
         self.pump_task: asyncio.Task | None = None
         self.quality = linkq.LinkQuality(adapter.quality_cfg)
+        self.rx_bytes = 0                 # CR44: payload of this connection, for the logbook
+        self.tx_bytes = 0
 
     @property
     def log_ctx(self) -> str:
@@ -118,6 +120,7 @@ class AgwConnection:
         """Raw bytes (text already encoded, or compressed forwarding data)."""
         if self.gone:
             return
+        self.tx_bytes += len(data)
         n = self.adapter.cfg.direwolf.paclen
         self.queue.extend(data[i:i + n] for i in range(0, len(data), n))
         self._wakeup.set()
@@ -135,6 +138,7 @@ class AgwConnection:
 
     def feed(self, data: bytes) -> None:
         self.last_activity = time.monotonic()
+        self.rx_bytes += len(data)
         if self.session is not None and hasattr(self.session, "feed_bytes"):
             if not self.session.closed:         # forward link: bytes, it splits lines itself
                 self.session.feed_bytes(data)

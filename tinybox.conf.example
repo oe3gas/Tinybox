@@ -12,6 +12,9 @@ sysop_via_radio = no           # no: sysop rights only locally (callsigns
 haddress     =                 # hierarchical address of this mailbox, without SSID,
                                # e.g. OE3GAS.#NOE.AUT.EU (needed for [forward])
 qth          =                 # place name shown in R: lines, e.g. Hollabrunn
+freq         =                 # MHz of the radio port, e.g. 144.800 - for the ADIF export of
+                               # the connection log (empty: no FREQ/BAND in the .adi)
+locator      =                 # your locator for the ADIF export, e.g. JN88EP
 
 [direwolf]
 agw_host        = 127.0.0.1    # Direwolf runs on the same PC

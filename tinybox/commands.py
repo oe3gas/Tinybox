@@ -82,6 +82,41 @@ def cmd_jlog(s: Session, arg: str) -> None:
                               count=e.count) for e in entries])
 
 
+QSO_DEFAULT, QSO_MAX = 10, 100
+
+
+def cmd_qso(s: Session, arg: str) -> None:
+    """CR44: the connection log. Everybody sees his own connects (all SSIDs of
+    his call); the sysop also QSO ALL and QSO <call>."""
+    from .connlog import base_call, duration, kb
+    words = arg.upper().split()
+    base, n, which = base_call(s.call), QSO_DEFAULT, ""
+    if words and not words[0].isdigit():
+        if not s.sysop:
+            s.out(texts.USAGE_QSO)
+            return
+        which = words[0]
+        base = None if which in ("ALL", "ALLE") else base_call(which)
+        words = words[1:]
+    if words:
+        if not words[0].isdigit() or len(words) > 1:
+            s.out(texts.USAGE_QSO)
+            return
+        n = max(1, min(QSO_MAX, int(words[0])))
+    rows = s.service.store.connlog_list(base, n + 1)
+    if not rows:
+        s.out(texts.QSO_EMPTY)
+        return
+    more = len(rows) > n and n < QSO_MAX
+    lines = [texts.QSO_ROW.format(start=r["start"][:16].replace("T", " "),
+                                  dur=duration(r["secs"]), call=r["call"], via=r["via"],
+                                  rx=kb(r["rx"]), tx=kb(r["tx"]),
+                                  ended=" lost" if r["ended"] == "lost" else "")
+             for r in rows[:n]]
+    nxt = f"{which} {min(QSO_MAX, n * 2)}".strip()
+    s.out(texts.QSO_HEADER, *lines, *([texts.QSO_MORE.format(next=nxt)] if more else []))
+
+
 def cmd_kill(s: Session, arg: str) -> None:
     ids = _numbers(arg)
     if ids is None:
@@ -278,6 +313,7 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "S": cmd_send,
     "SP": cmd_send,
     "SB": cmd_send_bulletin,
+    "QSO": cmd_qso,
     "STAT": cmd_stat,
     "V": cmd_version,
 }

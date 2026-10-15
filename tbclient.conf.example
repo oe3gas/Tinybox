@@ -3,6 +3,8 @@
 
 [station]
 mycall       = OE3GAS          # your call, with SSID if wanted (OE3GAS-9 = mobile)
+locator      =                 # your locator for the ADIF export of the connection log, e.g. JN88EP
+                               # (the frequency is asked when the client starts)
 
 [tinybox]
 call         = OE3GAS-1        # your TinyBox (mailbox); other stations: "Connect to" in the top bar

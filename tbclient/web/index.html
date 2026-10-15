@@ -170,6 +170,15 @@
     <div class="row"><button id="imgdlg-ok" class="primary" disabled>Send</button><button id="imgdlg-cancel">Cancel</button></div>
   </div>
 </div>
+<div id="freqdlg" class="sheet hidden" role="dialog" aria-label="Frequency">
+  <form id="freq-form" class="sheet-body freqdlg" autocomplete="off">
+    <h2>Frequency</h2>
+    <p class="muted small">On which frequency do you work in this session? It goes into the connection log (ADIF export). Asked once when the client starts.</p>
+    <div class="row"><input id="freq-in" type="text" inputmode="decimal" maxlength="12" placeholder="144.800" aria-label="Frequency in MHz"><span class="muted">MHz</span></div>
+    <p id="freq-err" class="hint hidden">Enter MHz, e.g. 144.800</p>
+    <div class="row"><button type="submit" class="primary">Use</button><button type="button" id="freq-skip">Skip</button></div>
+  </form>
+</div>
 <div id="linkdlg" class="sheet hidden" role="dialog" aria-label="Link quality">
   <div class="sheet-body linkdlg">
     <div class="sheet-head"><h2 id="linkdlg-title">Link quality</h2><button id="linkdlg-close" class="icon-btn" aria-label="Close">✕</button></div>
@@ -183,6 +192,13 @@
     <h3>Connection</h3>
     <p id="conn-info" class="muted"></p>
     <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button><button id="btn-term">Terminal</button></div>
+
+    <h3>Connection log</h3>
+    <p class="muted small">Frequency of this session: <b id="freq-now">-</b> <button id="freq-change" class="sm">Change</button></p>
+    <p class="muted small">Every connection: station, times, duration, bytes in/out. Kept on this PC.
+      <a href="/api/connlog.csv" download>CSV</a> · <a href="/api/connlog.adi" download>ADIF</a></p>
+    <div class="clog-wrap"><table class="clog"><thead><tr><th>Connect</th><th>Time</th><th>Station</th><th>In / out</th><th></th></tr></thead>
+      <tbody id="clog"></tbody></table></div>
 
     <h3>Chat history</h3>
     <p class="muted">What the client fetches when you join a board with history. Older lines can always be loaded with the bar at the top of the chat.</p>

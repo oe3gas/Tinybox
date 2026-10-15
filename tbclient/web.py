@@ -51,8 +51,11 @@ import base64
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+
+from tinybox import connlog                # CSV and ADIF of the connection log (CR44)
 
 from . import VERSION
 from .core import ClientCore
@@ -132,9 +135,9 @@ class WebServer:
             return False
         body = await reader.readexactly(length) if length else b""
         url = urlsplit(target)
-        status, payload, ctype = await self._route(method, url.path, parse_qs(url.query),
-                                                  headers, body)
-        await self._send(writer, status, payload, ctype)
+        res = await self._route(method, url.path, parse_qs(url.query), headers, body)
+        status, payload, ctype = res[:3]
+        await self._send(writer, status, payload, ctype, res[3] if len(res) > 3 else None)
         return headers.get("connection", "").lower() != "close"
 
     async def _route(self, method, path, query, headers, body):
@@ -144,6 +147,10 @@ class WebServer:
                 since = int((query.get("since") or ["-1"])[0] or -1)
                 await core.wait_change(since, POLL_SEC)
                 return 200, core.snapshot(), None
+            if method == "GET" and path == "/api/connlog":          # CR44
+                return 200, core.logbook.rows(200), None
+            if method == "GET" and path in ("/api/connlog.csv", "/api/connlog.adi"):
+                return self._connlog_file(path)
             if method == "GET" and path == "/api/mail":
                 folder = (query.get("folder") or ["inbox"])[0]
                 if folder not in ("inbox", "sent", "outbox") and not folder.startswith("b:"):
@@ -171,6 +178,8 @@ class WebServer:
                 core.leave()
             elif path == "/api/join":
                 ok = core.join(int(data.get("board", 0)))
+            elif path == "/api/freq":              # CR44: frequency of this session (MHz)
+                ok = core.set_freq(str(data.get("freq", "")))
             elif path == "/api/term":              # CR43: a raw line from the terminal
                 ok = core.send_raw(str(data.get("text", "")))
             elif path == "/api/say":
@@ -217,6 +226,20 @@ class WebServer:
             data = data.replace(b"__TBC_VERSION__", VERSION.encode())
         return 200, data, TYPES.get(Path(name).suffix, "application/octet-stream")
 
+    def _connlog_file(self, path: str):
+        """The whole connection log as CSV (all, failed connects too) or ADIF
+        (connections only, oldest first - as logbook programs expect it)."""
+        cfg = self.core.cfg
+        name = f"tbclient-connlog-{cfg.mycall}-{time.strftime('%Y%m%d')}{path[-4:]}"
+        disp = {"Content-Disposition": f'attachment; filename="{name}"'}
+        if path.endswith(".csv"):
+            data = connlog.to_csv(self.core.logbook.rows()).encode("utf-8")
+            return 200, data, "text/csv; charset=utf-8", disp
+        rows = list(reversed(self.core.logbook.rows(connected_only=True)))
+        data = connlog.to_adif(rows, cfg.mycall, "TBClient", VERSION, locator=cfg.locator,
+                               operator=cfg.mycall).encode("utf-8")
+        return 200, data, "text/plain; charset=us-ascii", disp
+
     def _mail(self, action: str, data: dict):
         core, box = self.core, self.core.mailbox
         try:
@@ -262,7 +285,7 @@ class WebServer:
         core._touch()
         return (200 if ok else 400), {"ok": ok}, None
 
-    async def _send(self, writer, status, payload, ctype=None) -> None:
+    async def _send(self, writer, status, payload, ctype=None, extra=None) -> None:
         if isinstance(payload, (bytes, bytearray)):
             data = bytes(payload)
         else:
@@ -270,6 +293,7 @@ class WebServer:
             ctype = "application/json; charset=utf-8"
         head = [f"HTTP/1.1 {status} {REASONS.get(status, '')}",
                 f"Content-Type: {ctype}", f"Content-Length: {len(data)}",
-                "Cache-Control: no-store"] + [f"{k}: {v}" for k, v in HEADERS.items()]
+                "Cache-Control: no-store"] + [f"{k}: {v}" for k, v in HEADERS.items()] \
+            + [f"{k}: {v}" for k, v in (extra or {}).items()]
         writer.write(("\r\n".join(head) + "\r\n\r\n").encode("latin-1") + data)
         await writer.drain()

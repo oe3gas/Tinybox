@@ -62,6 +62,21 @@ CREATE TABLE IF NOT EXISTS jlog (
     last_seen  TEXT NOT NULL,
     count      INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS connlog (                 -- CR44: one row per connection, kept forever
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    call    TEXT NOT NULL,
+    base    TEXT NOT NULL,                            -- call without SSID (QSO of a user)
+    via     TEXT NOT NULL,
+    t_on    TEXT NOT NULL,                            -- connect, UTC ISO
+    t_off   TEXT NOT NULL,                            -- disconnect
+    secs    INTEGER NOT NULL,
+    rx      INTEGER,
+    tx      INTEGER,
+    air_tx  INTEGER,
+    air_rx  INTEGER,
+    ended   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS connlog_base ON connlog (base, id);
 CREATE TABLE IF NOT EXISTS users (
     call       TEXT PRIMARY KEY,
     last_login TEXT NOT NULL
@@ -552,6 +567,28 @@ class Store:
                 " count = count + 1",
                 (call, now, now),
             )
+
+    # --- connection logbook (CR44) ---------------------------------------------
+
+    def connlog_add(self, row: dict) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO connlog (call, base, via, t_on, t_off, secs, rx, tx, air_tx,"
+                " air_rx, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (row["call"], row["call"].split("-", 1)[0], row["via"], row["start"],
+                 row["end"], row["secs"], row.get("rx"), row.get("tx"), row.get("air_tx"),
+                 row.get("air_rx"), row["ended"]))
+
+    def connlog_list(self, base: str | None = None, limit: int | None = None) -> list[dict]:
+        """Newest first. base = only this station (call without SSID)."""
+        sql = "SELECT * FROM connlog" + (" WHERE base = ?" if base else "") + " ORDER BY id DESC"
+        args: list = [base] if base else []
+        if limit:
+            sql += " LIMIT ?"
+            args.append(limit)
+        return [{"call": r["call"], "via": r["via"], "start": r["t_on"], "end": r["t_off"],
+                 "secs": r["secs"], "rx": r["rx"], "tx": r["tx"], "air_tx": r["air_tx"],
+                 "air_rx": r["air_rx"], "ended": r["ended"]} for r in self._db.execute(sql, args)]
 
     def jlog_list(self, limit: int = 20) -> list[JlogEntry]:
         rows = self._db.execute(

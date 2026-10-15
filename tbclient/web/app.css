@@ -146,6 +146,19 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 }
 @media (max-width: 400px) { #me-avatar { display: none; } }
 
+.freqdlg { max-width: 360px; }
+.freqdlg .row input { flex: none; width: 9em; font-family: ui-monospace, Consolas, monospace; }
+
+/* --- connection log (CR44) ------------------------------------------- */
+.clog-wrap { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.clog { width: 100%; border-collapse: collapse; font-size: 12px; }
+.clog th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 600;
+  padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.clog td { padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  font-family: ui-monospace, Consolas, monospace; }
+.clog td.end { color: var(--muted); font-family: inherit; }
+.clog tr.failed td { color: var(--muted); }
+
 /* --- terminal (CR43) --------------------------------------------------- */
 .termview { flex: 1; display: none; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
 #app.view-term .main-col, #app.view-term .people, #app.view-term .mailview { display: none !important; }

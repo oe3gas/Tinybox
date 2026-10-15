@@ -955,6 +955,52 @@ function viewJlog() {
   return {};
 }
 
+// CR44: connection log - one row per connection, kept forever; export CSV/ADIF
+function fmtDur(s) {
+  s = Math.max(0, s || 0);
+  return s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}m`
+    : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}`;
+}
+function fmtBytes(n) {
+  return n === null || n === undefined ? "-" : n < 1000 ? String(n) : (n / 1000).toFixed(1) + " k";
+}
+function viewConnlog() {
+  const tbody = h("tbody", {}, h("tr", {}, h("td", { colspan: 8, text: "Loading ..." })));
+  const filter = h("input", { type: "search", placeholder: "Filter call", class: "mono",
+                              style: "width:9em", "aria-label": "Filter by call" });
+  const link = (ext, label) => h("a", { class: "btn sm", text: label, href: "/api/connlog." + ext });
+  const csv = link("csv", "CSV"), adi = link("adi", "ADIF");
+  let rows = [];
+  const show = () => {
+    const f = filter.value.trim().toUpperCase();
+    const base = f.split("-")[0];
+    csv.href = "/api/connlog.csv" + (f ? "?call=" + encodeURIComponent(base) : "");
+    adi.href = "/api/connlog.adi" + (f ? "?call=" + encodeURIComponent(base) : "");
+    const list = rows.filter((r) => !f || r.call.startsWith(f));
+    tbody.replaceChildren(...(list.length ? list.map((r) => h("tr", {},
+      h("td", { class: "mono", text: fullDate(r.start) }),
+      h("td", { class: "mono", text: fullDate(r.end) }),
+      h("td", { class: "mono", text: fmtDur(r.secs) }),
+      h("td", { class: "mono", text: r.call }),
+      h("td", { text: r.via }),
+      h("td", { class: "mono", text: fmtBytes(r.rx) + " / " + fmtBytes(r.tx) }),
+      h("td", { class: "mono", title: "bytes sent on the air incl. repeats / received (Direwolf with TinyBox extension)",
+                text: r.air_tx === null ? "-" : fmtBytes(r.air_tx) + " / " + fmtBytes(r.air_rx) }),
+      h("td", { text: r.ended })))
+      : [h("tr", {}, h("td", { colspan: 8, text: rows.length ? "No match." : "No connects logged yet." }))]));
+  };
+  filter.addEventListener("input", show);
+  main().className = "one";
+  main().replaceChildren(h("section", { class: "card" },
+    h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Connection log" }), filter, csv, adi),
+    h("div", { class: "scroll" }, h("table", { class: "data" },
+      h("thead", {}, h("tr", {}, ["Connect (UTC)", "Disconnect (UTC)", "Duration", "Call", "Via",
+        "Bytes in / out", "On air out / in", "Ended"].map((t) => h("th", { text: t })))),
+      tbody))));
+  api("connlog").then((r) => { rows = r; show(); }).catch((e) => toast(e.message, true));
+  return {};
+}
+
 function viewSettings() {
   const grid = h("div", { class: "settings-grid" });
   const file = h("span", { class: "mono" });
@@ -987,7 +1033,8 @@ function route() {
     a.classList.toggle("active", a.dataset.nav === navKey));
   renderRubricNav();                              // Rubrik in der Seitenleiste markieren
   const views = { dashboard: viewDashboard, messages: viewMessages, compose: viewCompose,
-                  users: viewUsers, monitor: viewMonitor, jlog: viewJlog, settings: viewSettings };
+                  users: viewUsers, monitor: viewMonitor, jlog: viewJlog,
+                  connlog: viewConnlog, settings: viewSettings };
   if (name === "message" && /^\d+$/.test(parts[1] || "")) S.view = viewMessage(Number(parts[1]));
   else if (name === "user" && parts[1]) S.view = viewUser(decodeURIComponent(parts[1]));
   else S.view = (views[name] || viewDashboard)();

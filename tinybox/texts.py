@@ -38,12 +38,14 @@ HELP = [
     "             e.g. SP OE1ABC @ OE1XAB.#WIE.AUT.EU",
     "  SB topic   Send bulletin, e.g. SB ALL  (SB ALL @ WW: to the whole network)",
     "             Optional at the end: $BID, e.g. SB DX @ EU $DX0815",
+    "  QSO        Your last connects to this mailbox (QSO 30: the last 30)",
     "  STAT       Link quality of your radio connection (STAT ALL: all stations)",
     "  V          Version",
 ]
 HELP_SYSOP = [
     "Sysop:",
     "  E n field value   Edit header, field = TO, FROM, TYPE, STATUS, SUBJ, AT",
+    "  QSO ALL [n] / QSO call [n]   Connection log of all stations / of one",
 ]
 
 VERSION_TEXT = f"TinyBox {VERSION} - {{mode}}."
@@ -159,6 +161,11 @@ STAT_USAGE = "Usage: STAT or STAT ALL"
 JLOG_HEADER = "Call       Last seen (UTC)   Count"
 JLOG_ROW = "{call:<10} {last:<17} {count:>5}"
 JLOG_EMPTY = "No stations logged yet."
+QSO_HEADER = "Connect (UTC)     Time   Call       Via     In/out bytes"
+QSO_ROW = "{start:<16}  {dur:>6} {call:<10} {via:<7} {rx}/{tx}{ended}"
+QSO_EMPTY = "No connects logged."
+QSO_MORE = "Older connects: QSO {next}"
+USAGE_QSO = "Usage: QSO [n]   (sysop: QSO ALL [n], QSO call [n])"
 
 BUSY = "Sorry, TinyBox is busy. Please try again later."
 IDLE_TIMEOUT = "Idle timeout, disconnecting. 73."

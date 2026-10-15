@@ -249,6 +249,7 @@ function render() {
   $("off-tb").textContent = S.tinybox;
   $("me-avatar").replaceChildren(avatar(S.mycall, S.my_symbol, true));
   renderTop();
+  renderFreq();
   autoTerm();
   renderTerm();
   $("off-reason").textContent = endedText() || S.reason || "";
@@ -1869,6 +1870,7 @@ function initMail() {
 // the status; on the right Disconnect, Mailbox/Chat and the menu.
 let stateRecv = 0;            // performance.now() when the snapshot came in
 let recentShown = "";
+let lastEndAt = 0;
 const CALL_OK = /^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$/;
 
 function setConnIcon(name, cls) {
@@ -2003,6 +2005,50 @@ function termKey(e) {
   e.target.value = termHist[termHistPos] || "";
 }
 
+// ---------------------------------------------------------------- connection log (CR44)
+function durText(s) {
+  s = Math.max(0, s || 0);
+  return s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}m`
+    : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}`;
+}
+function byteText(n) { return n === null || n === undefined ? "-" : n < 1000 ? String(n) : (n / 1000).toFixed(1) + "k"; }
+async function loadConnlog() {
+  let rows = [];
+  try { rows = await (await fetch("/api/connlog", { cache: "no-store" })).json(); } catch (e) { return; }
+  const ENDED = { user: "", remote: "by station", failed: "no answer", cancelled: "cancelled" };
+  $("clog").replaceChildren(...(rows.length ? rows.map((r) => {
+    const tr = el("tr", r.ended === "failed" || r.ended === "cancelled" ? "failed" : "");
+    const d = new Date(r.start);
+    tr.append(el("td", "", d.toLocaleDateString([], { day: "2-digit", month: "2-digit" }) + " " + hhmm(d / 1000)),
+      el("td", "", r.secs || r.rx !== null ? durText(r.secs) : "-"), el("td", "", r.call),
+      el("td", "", r.rx === null ? "-" : byteText(r.rx) + " / " + byteText(r.tx)),
+      el("td", "end", ENDED[r.ended] || ""));
+    return tr;
+  }) : [(() => { const tr = el("tr"); const td = el("td", "end", "No connections yet."); td.colSpan = 5; tr.append(td); return tr; })()]));
+}
+
+// frequency of this session (CR44): asked once per start of the client
+let freqShown = false;
+function renderFreq() {
+  $("freq-now").textContent = S.freq ? S.freq + " MHz" : "not given";
+  if (S.freq_ask && !freqShown) openFreq();
+  if (!S.freq_ask) freqShown = false;
+}
+function openFreq() {
+  freqShown = true;
+  $("freq-in").value = S.freq || S.freq_last || "";
+  $("freq-err").classList.add("hidden");
+  $("freqdlg").classList.remove("hidden");
+  $("freq-in").focus(); $("freq-in").select();
+}
+async function saveFreq(e) {
+  e.preventDefault();
+  const v = $("freq-in").value.trim().replace(",", ".");
+  if (v && !(Number(v) >= 0.1)) { $("freq-err").classList.remove("hidden"); return; }
+  if (!(await api("freq", { freq: v }))) { $("freq-err").classList.remove("hidden"); return; }
+  $("freqdlg").classList.add("hidden");
+}
+
 function openTerm() {
   termAuto = false;
   $("sheet").classList.add("hidden");
@@ -2018,6 +2064,8 @@ async function poll() {
       if (!r.ok) throw new Error(r.status);
       S = await r.json();
       stateRecv = performance.now();
+      const endAt = S.ended ? S.ended.at : 0;            // CR44: a connection ended -> new row
+      if (endAt !== lastEndAt) { lastEndAt = endAt; if (!$("sheet").classList.contains("hidden")) loadConnlog(); }
       since = S.version;
       render();
       if (!$("sheet").classList.contains("hidden")) renderSymbols();
@@ -2065,10 +2113,13 @@ async function start() {
   $("term-input").addEventListener("keydown", termKey);
   $("term-close").onclick = () => { termAuto = false; setView(view === "term" ? "chat" : view); };
   $("btn-term").onclick = openTerm;
+  $("freq-form").onsubmit = saveFreq;
+  $("freq-skip").onclick = async () => { await api("freq", { freq: "" }); $("freqdlg").classList.add("hidden"); };
+  $("freq-change").onclick = () => { $("sheet").classList.add("hidden"); openFreq(); };
   $("nav-terminal").onclick = openTerm;
   $("bh-leave").onclick = () => api("leave");
   const openSheet = (focus) => {
-    $("sheet").classList.remove("hidden"); renderSymbols();
+    $("sheet").classList.remove("hidden"); renderSymbols(); loadConnlog();
     if (focus) $(focus).scrollIntoView({ block: "start" });
   };
   $("btn-menu").onclick = () => openSheet();

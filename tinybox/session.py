@@ -63,6 +63,8 @@ class Session:
         self._t0 = time.monotonic()
         logsetup.counters.sessions += 1
         self.started = utc_now()
+        self._closed_by_us = False      # CR44: B command or timeout -> "bye"
+        self._logged = False
         self.state = State.COMMAND
         self.chat_board: str | None = None  # set by ChatHub while in a board
         self.client = None  # clientproto.ClientInfo after //CLIENT (TinyBox client)
@@ -193,6 +195,7 @@ class Session:
         """Log off from the mailbox side (command B, timeout)."""
         if self.state != State.CLOSED:
             self.flush_output()              # "73, bye" before the link goes down
+            self._closed_by_us = True
             self.state = State.CLOSED
             self.transport.close()
 
@@ -208,6 +211,26 @@ class Session:
             logging.getLogger("tinybox.session").info(
                 "session end via %s after %s%s", self.origin, logsetup.ms(self._t0),
                 " - connection lost" if lost else "")
+            self._log_connection(lost)
+
+    def _log_connection(self, lost: bool) -> None:
+        """CR44: one row in the connection logbook - station, way, times, bytes.
+        The local sysop console is no connection."""
+        if self._logged or self.origin == "sysop":
+            return
+        self._logged = True
+        t = self.transport
+        q = getattr(getattr(t, "quality", None), "last", None) or {}
+        air_tx = (q.get("bytes_new", 0) + q.get("bytes_retry", 0)) if q else None
+        try:
+            self.service.store.connlog_add({
+                "call": self.call, "via": self.origin, "start": self.started, "end": utc_now(),
+                "secs": int(time.monotonic() - self._t0),
+                "rx": getattr(t, "rx_bytes", None), "tx": getattr(t, "tx_bytes", None),
+                "air_tx": air_tx, "air_rx": q.get("bytes_rx") if q.get("bytes_rx") else None,
+                "ended": "bye" if self._closed_by_us else "lost" if lost else "disc"})
+        except Exception:                 # the logbook must never break a disconnect
+            logging.getLogger("tinybox.session").exception("connection log: row not written")
 
     # --- input ----------------------------------------------------------
 

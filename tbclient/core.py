@@ -17,6 +17,7 @@ from . import VERSION, proto
 from .config import CALL_RE, Config
 from .images import Images, ImageStore
 from .links import AgwLink, TelnetLink
+from .logbook import Logbook
 from .mailstore import MailStore
 from .radio import RawFrame, aprs_symbol
 from .sync import Syncer
@@ -60,6 +61,13 @@ class ClientCore:
         self.mode = ""
         self.term: deque[tuple[int, str, str]] = deque(maxlen=TERM_MAX)  # (n, rx|tx|sys, text)
         self.term_n = 0
+        # CR44: connection logbook
+        self.logbook = Logbook(cfg.data_dir / "connlog.db")
+        self._conn_t0 = 0.0                       # monotonic: connecting / online since
+        self._conn_start = ""                     # UTC ISO of that moment
+        # the frequency is asked once per run of the client (the last one is offered)
+        self.freq = ""
+        self.freq_asked = False
         self.caps: set[str] = set()
         self.handshake_done = False
         self.boards: list[dict] = []
@@ -418,6 +426,9 @@ class ClientCore:
         if state == "connecting":
             self.ended = None
             self.mode = ""
+            self._mark_start()
+        if state == "online" and prev != "online":
+            self._mark_start()                     # the connection counts from here
         if state == "online":
             self.handshake_done = False
             self.mode = "tinybox" if self.link.kind == "telnet" else ""
@@ -430,6 +441,8 @@ class ClientCore:
             kind = "user" if self._user_disc else "failed" if prev == "connecting" else "remote"
             self.ended = {"kind": kind, "at": int(time.time()), "call": self.target}
             self._user_disc = False
+            if prev != "offline":
+                self._log_connection(prev, kind)
             self.handshake_done = False
             self.caps = set()
             self._clear_board()
@@ -444,6 +457,46 @@ class ClientCore:
         self.console.append(f"*** {state}" + (f" ({reason})" if reason else ""))
         self._term("sys", f"*** {state} {self.target}" + (f" ({reason})" if reason else ""))
         self._touch()
+
+    def set_freq(self, freq: str) -> bool:
+        """Frequency (MHz) for this run of the client; '' = none. Goes into
+        every logbook row from now on and into the ADIF export."""
+        freq = freq.strip().replace(",", ".")
+        if freq:
+            try:
+                f = float(freq)
+            except ValueError:
+                return False
+            if not 0.1 <= f <= 300000:
+                return False
+            whole, _, dec = f"{f:.6f}".rstrip("0").partition(".")
+            freq = f"{whole}.{dec.ljust(3, '0')}"          # 144.8 -> 144.800
+            self.settings["freq"] = freq
+            self._save_settings()
+        self.freq, self.freq_asked = freq, True
+        self._touch()
+        return True
+
+    def _mark_start(self) -> None:
+        self._conn_t0 = time.monotonic()
+        self._conn_start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    def _log_connection(self, prev: str, kind: str) -> None:
+        """CR44: one row per connection; one that never came up as "failed"
+        (duration 0). The bytes are the payload counted on the link."""
+        failed = prev == "connecting"
+        try:
+            self.logbook.add({
+                "call": self.target, "via": self.link.kind,
+                "start": self._conn_start or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "end": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "secs": 0 if failed else int(time.monotonic() - self._conn_t0),
+                "rx": None if failed else self.link.rx_bytes,
+                "tx": None if failed else self.link.tx_bytes,
+                "ended": ("cancelled" if kind == "user" else "failed") if failed else kind,
+                "freq": self.freq})
+        except Exception:                    # the logbook must never break the client
+            log.exception("connection log: row not written")
 
     def _known_tinybox(self) -> bool:
         return (self.link.kind == "telnet" or self.at_home
@@ -844,6 +897,8 @@ class ClientCore:
             "link": self.link.kind, "state": self.state, "reason": self.reason,
             "state_age": round(now - self.state_at, 1), "ended": self.ended,
             "mode": self.mode,                                          # CR43
+            "freq": self.freq, "freq_ask": not self.freq_asked,         # CR44
+            "freq_last": self.settings.get("freq", ""),
             "term": list(self.term)[-TERM_SNAPSHOT:], "term_n": self.term_n,
             "client": self.handshake_done and bool(self.caps or self.boards),
             "ui": "UI" in self.caps,

@@ -1,0 +1,4 @@
+- Connection log: station, times, duration, bytes in/out
+  (Settings). Export CSV and ADIF.
+- Frequency asked at client start, goes into the log.
+- TinyBox: QSO lists your connects.
