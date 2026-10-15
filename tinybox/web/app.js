@@ -14,7 +14,8 @@ const S = {
   search: "",
   rubric: "",          // show only the bulletins of this rubric (nav or rubrics card)
   rubrics: [],         // [rubrics] of tinybox.conf plus the ones only used by bulletins
-  mon: true,
+  monQ: "",            // CR52: monitor filter text
+  monKind: "",         // CR52: monitor selection (see MON_KINDS)
   view: null,        // references to live parts of the current view
   currentId: null,
   prefill: null,     // CR51: Reply -> #/compose with this
@@ -254,13 +255,62 @@ function startFeed() {
   };
 }
 
+// ---- monitor (CR52, like the client's monitor CR50) -------------------------------
+// Three kinds of lines: "frame" = an AX.25 frame on the channel (KISS mode, also our
+// own), "mon" = session text TinyBox sends to / gets from a station, "log" = TinyBox log.
+// Every call has a colour of its own - the same call always the same colour.
+const MON_KINDS = [["", "Everything"], ["frame", "Channel frames"], ["tx", "Own frames (TX)"],
+  ["mon", "Session text"], ["log", "Log"], ["tb", "All TinyBox special frames"],
+  ["chat", "chat (TBCHAT)"], ["quality", "quality (%Q)"], ["mail", "mail (TBMAIL)"],
+  ["beacon", "beacon"], ["proto", "proto (//...)"]];
+
+function callColor(call) {
+  let x = 2166136261;
+  for (const ch of call.replace(/\*$/, "")) x = Math.imul(x ^ ch.charCodeAt(0), 16777619) >>> 0;
+  return `hsl(${x % 360}, 70%, ${26 + (x >> 9) % 10}%)`;    // dark enough on the light ground
+}
+function callSpan(call) {
+  return h("span", { class: "mc", style: "color: " + callColor(call), text: call });
+}
+function myCall() { return (S.status && S.status.mailbox) || "TINYBOX"; }
+
+function monText(it) {
+  if (it.type === "frame")
+    return `${it.t} ${it.tx ? "tx " : ""}${it.src} ${it.dst} ${(it.via || []).join(",")} <${it.typ}> ${it.kind} ${it.text}`;
+  if (it.type === "mon") return `${it.t} ${it.call} ${myCall()} ${it.text}`;
+  return `${it.t} ${it.text}`;
+}
+function monMatch(it) {
+  const k = S.monKind;
+  if (k === "frame" || k === "mon" || k === "log") { if (it.type !== k) return false; }
+  else if (k === "tx") { if (it.type !== "frame" || !it.tx) return false; }
+  else if (k === "tb") { if (it.type !== "frame" || !it.kind) return false; }
+  else if (k) { if (it.type !== "frame" || it.kind !== k) return false; }
+  const q = S.monQ.trim().toLowerCase();
+  return !q || monText(it).toLowerCase().includes(q);
+}
+
 function feedLine(item) {
-  if (item.type === "mon") {
+  if (item.type === "frame") {
+    const line = h("div", { class: "line frame" + (item.tx ? " tx" : "") },
+      h("span", { class: "t", text: item.t }), " ",
+      h("span", { class: "rt", text: item.tx ? "TX" : "RX" }), " ",
+      callSpan(item.src), " → ", callSpan(item.dst));
+    if (item.via && item.via.length) {
+      line.append(" via ");
+      item.via.forEach((v, i) => { if (i) line.append(","); line.append(callSpan(v)); });
+    }
+    line.append(h("span", { class: "typ", text: " <" + item.typ + ">" }));
+    if (item.kind) line.append(" ", h("span", { class: "kind", text: item.kind }));
+    if (item.text) line.append(": " + item.text);
+    return line;
+  }
+  if (item.type === "mon") {                     // ">" TinyBox to the station, "<" back
+    const [a, b] = item.dir === "<" ? [item.call, myCall()] : [myCall(), item.call];
     return h("div", { class: "line mon" },
       h("span", { class: "t", text: item.t }), " ",
-      h("strong", { text: item.call }), " ",
-      item.dir === "<" ? h("span", { class: "in", text: "<" }) : ">", " ",
-      item.text);
+      h("span", { class: "rt", text: "TXT" }), " ",
+      callSpan(a), " → ", callSpan(b), ": ", item.text);
   }
   const cls = item.level === "WARNING" || item.level === "ERROR" ? "warn" : "sys";
   return h("div", { class: "line log" },
@@ -268,6 +318,7 @@ function feedLine(item) {
 }
 
 function appendLine(box, item) {
+  if (!monMatch(item)) return;
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   box.append(feedLine(item));
   while (box.childElementCount > 500) box.firstChild.remove();
@@ -593,17 +644,28 @@ function channelCard() {
 }
 
 function monitorCard() {
-  const body = h("div", { class: "monitor" + (S.mon ? "" : " hide-mon") });
-  for (const item of S.feed) body.append(feedLine(item));
+  const body = h("div", { class: "monitor" });
+  function redraw() {
+    body.replaceChildren(...S.feed.filter(monMatch).map(feedLine));
+    body.scrollTop = body.scrollHeight;
+  }
+  const q = h("input", { type: "search", placeholder: "Filter: call, text, I, REJ ...", value: S.monQ,
+                         oninput: (e) => { S.monQ = e.target.value; redraw(); } });
+  const kind = h("select", { title: "Show only", onchange: (e) => { S.monKind = e.target.value; redraw(); } },
+    MON_KINDS.map(([v, t]) => h("option", { value: v, text: t })));
+  kind.value = S.monKind;
+  const clear = async () => {
+    S.feed = []; body.replaceChildren();
+    try { await api("monitor/clear", {}); } catch (e) { /* only this tab then */ }
+  };
   const card = h("section", { class: "card", style: "flex-grow: 1" },
     h("div", { class: "card-head" },
       h("h2", { class: "grow", text: "Live monitor" }),
-      h("label", { class: "check" },
-        h("input", { type: "checkbox", checked: S.mon, onchange: (e) => {
-          S.mon = e.target.checked; body.classList.toggle("hide-mon", !S.mon);
-        } }), "MON"),
-      h("button", { class: "btn sm", type: "button", onclick: () => { S.feed = []; body.replaceChildren(); } }, "Clear")),
+      h("label", { class: "search mon-q" }, h("span", { class: "sr-only", text: "Filter" }), q),
+      h("label", {}, h("span", { class: "sr-only", text: "Show only" }), kind),
+      h("button", { class: "btn sm", type: "button", onclick: clear }, "Clear")),
     body);
+  redraw();
   requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
   return { card, body };
 }

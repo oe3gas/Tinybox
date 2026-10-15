@@ -37,7 +37,7 @@ import json
 import logging
 import time
 
-from .. import chanmon, logsetup
+from .. import chanmon, framemon, logsetup
 from ..app import App
 from ..ax25 import frame as ax
 from ..ax25.frame import AX25Error, Frame
@@ -185,6 +185,7 @@ class KissAdapter(AgwAdapter):
         logsetup.counters.frames_out += 1
         log.debug(">> %s", f)
         self.channel.record(self.mycall, len(raw), path=f.path)
+        framemon.emit(raw, tx=True, mycall=self.mycall, mod128=f.modulo == 128)   # CR52
         # one transmitter for all: our other links could not be answered meanwhile
         air = self._airtime(len(raw))
         now = self.now()
@@ -226,6 +227,10 @@ class KissAdapter(AgwAdapter):
         self.channel.record(src, len(data),
                             path=[c + ("*" if h else "") for c, h in zip(path, repeated)])
         target = self.links.get(src) if dest == self.mycall else None
+        # CR52: every frame heard goes to the web monitor; a known link knows its modulo
+        known = target or (self.links.get(dest) if src == self.mycall else None)
+        framemon.emit(data, tx=False, mycall=self.mycall,
+                      mod128=(known.modulo == 128) if known else None)
         air = self._airtime(len(data))
         for link in self.links.values():
             if link is not target:

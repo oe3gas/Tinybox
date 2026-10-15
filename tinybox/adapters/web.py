@@ -27,7 +27,7 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from .. import VERSION, config, connlog, linkq
+from .. import VERSION, config, connlog, framemon, linkq, logsetup
 from ..app import App
 from ..config import base_call, normalize_call
 from ..service import ServiceError
@@ -46,7 +46,7 @@ MAX_HEADER = 16 * 1024
 MAX_BODY = 128 * 1024
 MAX_WEB_SESSIONS = 20      # remembered logins (data/web.sessions)
 SSE_PING_SEC = 15
-BACKLOG_LINES = 300
+BACKLOG_LINES = 600
 
 SECURITY_HEADERS = {
     "Content-Security-Policy": ("default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -106,10 +106,18 @@ class HubLogHandler(logging.Handler):
             return
         try:
             t = self.formatter_time(record)
-            if record.name == "tinybox.monitor" and isinstance(record.args, tuple) \
+            if record.name == "tinybox.frames":                     # CR52: channel frames
+                item = {"type": "frame", "t": t, **getattr(record, "frame", {})}
+            elif record.name == "tinybox.monitor" and isinstance(record.args, tuple) \
                     and len(record.args) == 2 and record.msg in ("%s > %s", "%s < %s"):
                 item = {"type": "mon", "t": t, "call": str(record.args[0]),
                         "dir": record.msg[3], "text": str(record.args[1])}
+            elif record.name == "tinybox.monitor" and isinstance(record.args, tuple) \
+                    and len(record.args) == 1 and record.msg in ("> %s", "< %s"):
+                # CR52: session text; the station is in the session context "#7 OE3TEC"
+                ctx = logsetup.context().split()
+                item = {"type": "mon", "t": t, "call": ctx[1] if len(ctx) > 1 else "?",
+                        "dir": record.msg[0], "text": str(record.args[0])}
             else:
                 item = {"type": "log", "t": t, "level": record.levelname,
                         "text": record.getMessage()}
@@ -185,6 +193,7 @@ class WebServer:
         loop = asyncio.get_running_loop()
         self._log_handler = HubLogHandler(self.hub, loop)
         logging.getLogger().addHandler(self._log_handler)
+        framemon.flog.addHandler(self._log_handler)          # CR52 (does not propagate)
         self.app.bus.subscribe("*", lambda name, data: self.hub.push(
             {"type": "event", "name": name}))
         self.app.web_login_url = f"http://127.0.0.1:{self.port}/login?token={self.token}"
@@ -193,6 +202,7 @@ class WebServer:
     def close(self) -> None:
         if self._log_handler:
             logging.getLogger().removeHandler(self._log_handler)
+            framemon.flog.removeHandler(self._log_handler)
         if self.server:
             self.server.close()
 
@@ -414,6 +424,9 @@ class WebServer:
                 if app.stop_event is not None:
                     asyncio.get_running_loop().call_later(0.3, app.stop_event.set)
                 return {"ok": True, "delay": 0}
+            if parts == ["monitor", "clear"]:                    # CR52: Clear for all tabs
+                self.hub.backlog.clear()
+                return {"ok": True}
             if parts == ["shutdown", "cancel"]:
                 return {"ok": app.shutdown.cancel()}
         raise HttpError(404)

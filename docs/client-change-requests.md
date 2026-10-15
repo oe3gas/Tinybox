@@ -1408,3 +1408,39 @@ Betrifft die Sysop-Web-GUI der TinyBox (http://127.0.0.1:8080/), nicht den Clien
    Empfänger und Betreff; „Cancel“ geht zurück zur Nachricht.
 - Dateien: `tinybox/web/app.js` (`viewMessage`, `viewCompose`, `route`),
   `tinybox/web/app.css` (`main.split`). Nur die TinyBox, kein neuer Client.
+
+## CR52 – TinyBox-Web-GUI: Monitor wie im Client (✅ 15.10.2026)
+
+### Erfassung (OE3GAS, 15.10.2026)
+
+1. Die Monitor-Ansicht der TinyBox für den Sysop so gestalten wie im Client (CR50): Rufzeichen
+   farblich unterschieden, Suchfeld für Strings.
+2. Frage: Sehen wir als Sysop die ausgesendeten Frames der TinyBox? Gemonitort werden sie
+   bisher nicht.
+
+### Umsetzung
+
+1. **Monitor** (Seite und Karte im Dashboard):
+   - Jedes Rufzeichen hat eine feste Farbe (Hash, wie im Client; dunkler für den hellen
+     Hintergrund).
+   - Feld **Filter**: nur Zeilen mit dem Text (Zeit, Rufzeichen, Typ, Art, Inhalt;
+     Groß-/Kleinschreibung egal), auch für neu eintreffende Zeilen.
+   - Auswahl: alles · Kanal-Frames · eigene Frames (TX) · Sitzungstext · Log ·
+     TinyBox-Sonderframes (alle, `chat`, `quality`, `mail`, `beacon`, `proto` – wie CR50).
+     Ersetzt das bisherige Kästchen „MON“.
+   - **Clear** leert den Monitor auch in der TinyBox (`POST /api/monitor/clear`), ein Reload
+     bringt die alten Zeilen nicht zurück. Der Rückblick fasst jetzt 600 Zeilen (vorher 300).
+2. **Frames im Monitor (KISS-Mode):** Im KISS-Mode macht die TinyBox AX.25 selbst und
+   kennt daher jeden Frame – die gehörten und **die eigenen**. Neues Modul
+   `tinybox/framemon.py`: jeder Frame wird eine Zeile
+   `21:40:02 TX OE3GAS-1 → OE3TEC <I 0,0>: Welcome …` (`RX` gehört, `TX` gesendet; I-, S-,
+   U-Frames mit Zählern und P/F, Modulo 128 aus der Verbindung oder geschätzt).
+   Die Frames gehen nur an die Web-GUI (Logger `tinybox.frames` ohne Weitergabe), nicht in
+   Logdatei oder Konsole.
+   - Im **AGW-Mode** (Direwolf) gibt es weiterhin keine Frames, nur Sitzungstext und Log:
+     Dort macht Direwolf AX.25 und meldet der TinyBox keine eigenen Frames.
+   - Sitzungstext (`TXT`) zeigt jetzt auch das Rufzeichen der Gegenstation
+     (`OE3GAS-1 → OE3TEC: …`); bisher stand dort nur `> Text`.
+- Dateien: `tinybox/framemon.py` (neu), `tinybox/adapters/kiss.py`, `tinybox/adapters/web.py`,
+  `tinybox/web/app.js`, `tinybox/web/app.css`. Test: `tests/test_framemon.py`.
+  Nur die TinyBox, kein neuer Client.
