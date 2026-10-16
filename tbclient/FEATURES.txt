@@ -155,6 +155,10 @@ Station
 - Verbindungsqualitaet als Balken; Teilnehmer antippen zeigt die Zahlen
   dahinter (Richtungen, Verluste, Balkenrechnung, Zaehler).
 - Monitor der Verbindung.
+- APRS im Klartext (Knopf "APRS" im Monitor): jedes Paket in seine
+  Teile zerlegt und farbig auf den Klartext abgebildet; die "Lupe"
+  erklaert eine angeklickte Zeile Stueck fuer Stueck. Links zu aprs.fi
+  und OpenStreetMap, Entfernung vom eigenen Locator.
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu

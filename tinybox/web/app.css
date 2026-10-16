@@ -216,6 +216,9 @@ table.raw tr.dim td { color: var(--ink-3); }
 .monitor .kind.mail { background: #4a1c3b; } .monitor .kind.beacon { background: #1c3b5c; }
 .monitor .kind.proto { background: #3a3a3a; }
 .card-head .mon-q input { width: 16em; }
+.mon-split { flex-grow: 1; display: flex; min-height: 0; }      /* monitor + APRS lens (CR55) */
+.mon-split .monitor { min-width: 0; }
+.btn.aprs-btn.on { background: var(--ink); color: var(--paper); }
 .card-head select { font: inherit; font-size: 14px; padding: 6px 8px; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper); }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 

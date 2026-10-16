@@ -1,0 +1,60 @@
+/* APRS in plain language in the monitor (CR55) - shared by the TinyBox web GUI
+   and the client. One colour per role; hovering lights up the pair. */
+.ar-r-type { color: #c9a6ff; } .ar-r-time { color: #7fc8ff; } .ar-r-pos { color: #5fd4bf; }
+.ar-r-sym { color: #ffb466; } .ar-r-move { color: #8fb0ff; } .ar-r-alt { color: #b5e27a; }
+.ar-r-dev { color: #f0d264; } .ar-r-stat { color: #ff9fb4; } .ar-r-wx { color: #67d3f0; }
+.ar-r-tlm { color: #ffa8c5; } .ar-r-tp { color: #e0a6ff; } .ar-r-text { color: #d6dde4; }
+.ar-r-warn { color: #ff7b7b; }
+
+.ar-u { border-bottom: 1px solid color-mix(in srgb, currentColor 55%, transparent); }
+.ar-hot { background: color-mix(in srgb, currentColor 26%, transparent);
+  outline: 1px solid currentColor; border-radius: 2px; }
+.ar-part.ar-hot { outline: none; background: #1e2a36; color: inherit; }
+.ar-row { cursor: pointer; }
+.ar-row.ar-sel { background: #17222d; }
+.ar-info { white-space: pre-wrap; }
+.ar-badge { display: inline-block; margin-left: 5px; padding: 0 5px; border: 1px solid currentColor;
+  border-radius: 4px; font: 10.5px/1.5 system-ui, "Segoe UI", sans-serif; vertical-align: 1px; opacity: .85; }
+.mk.aprs, .kind.aprs { background: #2a2140 !important; color: #c9a6ff !important; }
+
+/* the plain-text line under the monitor line */
+.ar-dec { display: block; padding: 0 0 6px 2.5em; font: 13px/1.7 system-ui, "Segoe UI", sans-serif;
+  color: #8b98a5; white-space: normal; }
+.ar-dec .ar { padding: 1px 2px; border-radius: 3px; }
+.ar-arrow { color: #5d6a76; }
+.ar-sep { color: #4d5965; }
+.ar-link { margin-left: 12px; font-size: 12px; color: #5aa2ff; }
+.ar-link:hover { color: #8cc0ff; }
+
+/* the lens */
+.ar-lens { flex: 0 0 400px; max-width: 46%; overflow: auto; background: #121a22; color: #d6dde4;
+  border-left: 1px solid #24303b; padding: 14px 16px 20px; font: 13px/1.5 system-ui, "Segoe UI", sans-serif; }
+.ar-lens[hidden] { display: none; }
+.ar-kicker { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #8b98a5; }
+.ar-title { margin: 4px 0 2px; font-size: 18px; font-weight: 600; color: #fff; }
+.ar-sub, .ar-muted, .ar-lbl { color: #8b98a5; }
+.ar-empty { color: #b7c1ca; margin: 10px 0; }
+.ar-sec { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+.ar-h { margin: 0; font-size: 13px; font-weight: 600; color: #fff; }
+.ar-note { color: #b7c1ca; margin: 2px 0 0; }
+.ar-mono { font-family: ui-monospace, Consolas, monospace; }
+.ar-addr { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 6px 10px; align-items: baseline; }
+.ar-cells { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; border-radius: 6px; }
+.ar-cells.ar-hot { outline: 1px solid #5fd4bf; background: transparent; }
+.ar-cell { background: #0c1218; border: 1px solid #2a3846; border-radius: 6px; padding: 5px 2px; text-align: center; }
+.ar-cpos { font-size: 10px; color: #8b98a5; }
+.ar-cch { font: 20px ui-monospace, Consolas, monospace; color: #5fd4bf; }
+.ar-cd { font-family: ui-monospace, Consolas, monospace; color: #fff; }
+.ar-cbit { font-size: 11px; color: #ff9fb4; }
+.ar-sum { font-size: 12px; }
+.ar-part { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 5px 6px; border-radius: 6px; }
+.ar-raw { font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; align-self: start; }
+.ar-plabel { color: #fff; font-weight: 600; }
+.ar-pmean { color: #c3ccd4; }
+.ar-pcalc { font: 11.5px ui-monospace, Consolas, monospace; color: #8b98a5; margin-top: 1px; }
+.ar-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.ar-btn { display: inline-block; padding: 7px 12px; border: 1px solid #2f4a66; border-radius: 6px;
+  color: #5aa2ff; text-decoration: none; }
+.ar-btn:hover { background: #17283a; }
+.ar-small { font-size: 11px; color: #6f7b86; margin-top: 14px; }
+@media (max-width: 899px) { .ar-lens { display: none; } }

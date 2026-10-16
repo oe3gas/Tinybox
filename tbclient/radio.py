@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from tinybox import aprs
+
 UI_CONTROL = 0x03
 
 
@@ -19,6 +21,7 @@ class RawFrame:
     control: int = 0
     info: bytes = b""
     rest: bytes = b""          # everything after the address field (monitor, modulo 128)
+    repeated: list[bool] = field(default_factory=list)   # H bit per digipeater (CR55)
 
     @property
     def is_ui(self) -> bool:
@@ -43,22 +46,30 @@ def _addr(raw: bytes) -> tuple[str, bool]:
     return (f"{base}-{ssid}" if ssid else base), bool(raw[6] & 0x01)
 
 
+def _hbit(raw: bytes) -> bool:
+    """'has been repeated' of a digipeater address (shown as '*')."""
+    return bool(raw[6] & 0x80)
+
+
 def decode(data: bytes) -> RawFrame | None:
     """None for anything that is not a sane AX.25 frame."""
     calls: list[str] = []
+    hbits: list[bool] = []
     pos = 0
     while True:
         if pos + 7 > len(data) or len(calls) > 10:
             return None
         call, last = _addr(data[pos:pos + 7])
         calls.append(call)
+        hbits.append(_hbit(data[pos:pos + 7]))
         pos += 7
         if last:
             break
     if len(calls) < 2 or pos >= len(data):
         return None
     control = data[pos]
-    frame = RawFrame(calls[0], calls[1], calls[2:], control, rest=bytes(data[pos:]))
+    frame = RawFrame(calls[0], calls[1], calls[2:], control, rest=bytes(data[pos:]),
+                     repeated=hbits[2:])
     if frame.is_ui or frame.is_i:
         frame.info = bytes(data[pos + 2:])      # skip the PID
     return frame
@@ -145,7 +156,9 @@ def text_of(info: bytes) -> str:
     return "".join(c if c.isprintable() else "." for c in raw)[:200]
 
 
-def monitor_entry(f: RawFrame, mod128: bool = False, tinyboxes: frozenset = frozenset()) -> dict:
+def monitor_entry(f: RawFrame, mod128: bool = False, tinyboxes: frozenset = frozenset(),
+                  aprs_memory: "aprs.TelemetryMemory | None" = None,
+                  home: tuple[float, float] | None = None) -> dict:
     """One monitor line as parts (CR50): the GUI colours the calls and filters.
     kind = what the TinyBox sends besides normal text (empty for anything else):
         chat     UI to TBCHAT-n: chat events (#seq ...)
@@ -169,8 +182,17 @@ def monitor_entry(f: RawFrame, mod128: bool = False, tinyboxes: frozenset = froz
             kind = "proto"
         elif text.startswith("%Q "):
             kind = "quality"
-    return {"src": f.src, "dst": f.dest, "via": list(f.path),
-            "typ": frame_type(f.control, ext), "text": text, "kind": kind}
+    entry = {"src": f.src, "dst": f.dest,
+             "via": [c + ("*" if h else "") for c, h in zip(f.path, f.repeated or [False] * len(f.path))],
+             "typ": frame_type(f.control, ext), "text": text, "kind": kind}
+    if f.is_ui and kind in ("", "beacon") and f.rest[1:2] == b"\xf0":
+        try:                                       # CR55: APRS in plain language
+            a = aprs.decode(f.dest, f.src, f.path, f.repeated, f.info, memory=aprs_memory, home=home)
+        except Exception:                          # the monitor must never break the radio
+            a = None
+        if a is not None:
+            entry["aprs"] = a
+    return entry
 
 
 def describe(f: RawFrame, mod128: bool = False) -> str:

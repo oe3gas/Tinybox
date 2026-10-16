@@ -9,6 +9,7 @@
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/aprsview.css">
 </head>
 <body>
 <div id="app">
@@ -146,6 +147,7 @@
         <input id="mon-q" type="search" placeholder="Filter" aria-label="Show only lines with this text" autocomplete="off" spellcheck="false">
         <select id="mon-kind" aria-label="Which frames">
           <option value="">All frames</option>
+          <option value="aprs">APRS frames</option>
           <option value="tb">TinyBox: all special frames</option>
           <option value="chat">TinyBox: chat events (UI TBCHAT)</option>
           <option value="quality">TinyBox: link quality (%Q)</option>
@@ -153,10 +155,14 @@
           <option value="beacon">TinyBox: beacon</option>
           <option value="proto">TinyBox: client protocol (//)</option>
         </select>
+        <span id="mon-aprs"></span>
         <button id="mon-clear" class="sm">Clear</button>
       </span>
       <button id="term-close" class="sm">Back to chat</button></div>
-    <pre id="term-out" class="term-out" aria-live="polite"></pre>
+    <div class="term-split">
+      <pre id="term-out" class="term-out" aria-live="polite"></pre>
+      <aside id="aprs-lens" class="ar-lens" aria-label="APRS lens" hidden></aside>
+    </div>
     <form id="term-form" class="term-in" autocomplete="off">
       <input id="term-input" type="text" maxlength="250" spellcheck="false" autocapitalize="off" enterkeyhint="send" placeholder="Command (Enter = send)">
       <button type="submit" class="send" aria-label="Send">➤</button>
@@ -242,6 +248,7 @@
     <p class="muted small">TinyBox client <span id="version"></span>. APRS symbols: aprs.fi symbol set by OH7LZB, <a href="https://github.com/hessu/aprs-symbols" rel="noopener" target="_blank">github.com/hessu/aprs-symbols</a>.</p>
   </div>
 </div>
+<script src="/aprsview.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

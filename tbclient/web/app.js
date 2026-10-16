@@ -2127,6 +2127,10 @@ function autoTerm() {
   if (view !== want) setView(want);
 }
 
+function showLens() {                           // CR55: the APRS lens only next to the monitor
+  $("aprs-lens").hidden = !(activeCh === 0 && AprsView.enabled());
+}
+
 function renderTerm() {
   const out = $("term-out");
   const lines = S.ch === activeCh ? (S.term || []) : [];
@@ -2139,6 +2143,7 @@ function renderTerm() {
   $("term-close").classList.toggle("hidden", !c.chat || mon);
   $("term-form").classList.toggle("hidden", mon);
   $("mon-tools").classList.toggle("hidden", !mon);
+  showLens();
   $("term-input").disabled = c.state !== "online";
   if (S.ch !== activeCh) return;                   // lines of another channel: wait
   if (mon) { renderMonitor(); return; }
@@ -2174,25 +2179,32 @@ function callSpan(call) {
   return s;
 }
 function monText(e) {
-  return `${e.t} ${e.src} ${e.dst} ${(e.via || []).join(",")} <${e.typ}> ${e.kind} ${e.text}`.toLowerCase();
+  return (`${e.t} ${e.src} ${e.dst} ${(e.via || []).join(",")} <${e.typ}> ${e.kind} ${e.text}` +
+          (e.aprs ? " aprs" + AprsView.searchText(e) : "")).toLowerCase();
 }
 function monMatch(e) {
   const q = $("mon-q").value.trim().toLowerCase();
   const k = $("mon-kind").value;
-  if (k === "tb" ? !e.kind : k && e.kind !== k) return false;
+  if (k === "aprs" ? !e.aprs : k === "tb" ? !e.kind : k && e.kind !== k) return false;
   return !q || monText(e).includes(q);
 }
 function monLine(e) {
   const line = el("span", "ml");
-  line.append(el("span", "mt", e.t + " "), callSpan(e.src), " → ", callSpan(e.dst));
+  const ap = AprsView.active(e);                // CR55: APRS in plain language
+  line.append(el("span", "mt", e.t + " "), callSpan(e.src), " → ", ap ? AprsView.dest(e) : callSpan(e.dst));
   if (e.via && e.via.length) {
     line.append(" via ");
-    e.via.forEach((v, i) => { if (i) line.append(","); line.append(callSpan(v)); });
+    e.via.forEach((v, i) => { if (i) line.append(","); line.append(callSpan(v.replace(/\*$/, ""))); if (v.endsWith("*")) line.append("*"); });
   }
   line.append(el("span", "mty", ` <${e.typ}>`));
   if (e.kind) line.append(el("span", "mk " + e.kind, e.kind));
-  if (e.text) line.append(": " + e.text);
+  if (ap) line.append(el("span", "mk aprs", "aprs"));
+  if (e.text) line.append(": ", ap ? AprsView.info(e) : e.text);
   line.append("\n");
+  if (ap) {
+    line.append(AprsView.decoded(e));
+    AprsView.decorate(line, e);
+  }
   return line;
 }
 function renderMonitor() {
@@ -2361,7 +2373,10 @@ async function start() {
   const monRedraw = () => { monDirty = true; if (S && activeCh === 0) { renderMonitor(); $("term-out").scrollTop = $("term-out").scrollHeight; } };
   $("mon-q").addEventListener("input", monRedraw);
   $("mon-kind").addEventListener("change", monRedraw);
-  $("mon-clear").onclick = async () => { await api("monitor/clear"); monLines = []; monRedraw(); };
+  $("mon-clear").onclick = async () => { await api("monitor/clear"); monLines = []; AprsView.forget(); monRedraw(); };
+  $("mon-aprs").replaceWith(AprsView.toggleButton("sm"));        // CR55
+  AprsView.attachLens($("aprs-lens"));
+  AprsView.onChange(() => { showLens(); monRedraw(); });
   $("freq-form").onsubmit = saveFreq;
   $("freq-skip").onclick = async () => { await api("freq", { freq: "" }); $("freqdlg").classList.add("hidden"); };
   $("freq-change").onclick = () => { $("sheet").classList.add("hidden"); openFreq(); };

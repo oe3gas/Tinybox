@@ -10,6 +10,7 @@ import re
 import time
 from collections import deque
 
+from tinybox import aprs                  # APRS in plain language for the monitor (CR55)
 from tinybox import chatimg               # the image reference in a chat line (CR12)
 
 from . import VERSION, proto
@@ -59,6 +60,8 @@ class ClientCore:
         self.monitor: deque[tuple[int, str]] = deque(maxlen=MONITOR_MAX)   # (n, line)
         self.monitor_n = 0
         self._mod128: set[frozenset] = set()      # pairs that talk modulo 128 (monitor)
+        self.aprs_memory = aprs.TelemetryMemory()  # CR55: telemetry definitions per station
+        self.aprs_home = aprs.locator_to_latlon(cfg.locator) if cfg.locator else None
         # CR44: connection logbook
         self.logbook = Logbook(cfg.data_dir / "connlog.db")
         # the frequency is asked once per run of the client (the last one is offered)
@@ -637,7 +640,8 @@ class ClientCore:
                 self._mod128.discard(pair)
         self.monitor_n += 1
         entry = monitor_entry(f, pair in self._mod128,
-                              frozenset([self.home, *self.settings.get("tinyboxes", [])]))
+                              frozenset([self.home, *self.settings.get("tinyboxes", [])]),
+                              self.aprs_memory, self.aprs_home)
         entry["t"] = time.strftime("%H:%M:%S")
         self.monitor.append((self.monitor_n, entry))
         tb = self.target

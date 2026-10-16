@@ -1,0 +1,3 @@
+- Monitor: button APRS shows APRS packets in plain text,
+  every part in its own colour. Click a line: the lens
+  explains it part by part. Links to aprs.fi and the map.

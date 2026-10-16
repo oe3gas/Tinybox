@@ -198,12 +198,14 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .term-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface);
   border-bottom: 1px solid var(--line); }
 .term-bar .sp { flex: 1; }
-.term-out { flex: 1; margin: 0; overflow: auto; padding: 8px 10px; background: #0c1218; color: #d3e6d3;
+.term-split { flex: 1; display: flex; min-height: 0; }   /* monitor + APRS lens (CR55) */
+.term-out { flex: 1; min-width: 0; margin: 0; overflow: auto; padding: 8px 10px; background: #0c1218; color: #d3e6d3;
   font: 13px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
 .term-out .tx { color: #85b7eb; }
 /* monitor (CR50) */
 .mon-tools { display: inline-flex; gap: 6px; align-items: center; }
 .mon-tools input { width: 11em; border-radius: 8px; padding: 4px 8px; font-size: 13px; }
+.mon-tools button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .mon-tools select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 8px;
   border: 1px solid var(--line); background: var(--surface); color: var(--text); }
 .term-out .mt { color: #6f7b86; }

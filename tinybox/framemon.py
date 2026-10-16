@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 
+from . import aprs
 from .ax25 import frame as ax
 from .ax25.frame import AX25Error
 
@@ -25,6 +26,11 @@ U_NAMES = {0x2F: "SABM", 0x6F: "SABME", 0x43: "DISC", 0x0F: "DM", 0x63: "UA", 0x
            0x03: "UI", 0xAF: "XID", 0xE3: "TEST"}
 S_NAMES = {0x01: "RR", 0x05: "RNR", 0x09: "REJ", 0x0D: "SREJ"}
 PID_NO_L3 = 0xF0
+
+# CR55: APRS in plain language - telemetry definitions heard so far and the
+# own position (from the locator; the web GUI sets it)
+aprs_memory = aprs.TelemetryMemory()
+home: tuple[float, float] | None = None
 
 
 def frame_type(control: int, ext: int | None = None) -> str:
@@ -101,9 +107,17 @@ def entry(data: bytes, *, tx: bool, mycall: str, mod128: bool | None = None) -> 
             kind = "proto"
         elif text.startswith("%Q "):
             kind = "quality"
-    return {"src": src, "dst": dest,
-            "via": [c + ("*" if h else "") for c, h in zip(path, repeated)],
-            "typ": typ, "text": text, "kind": kind, "tx": tx}
+    e = {"src": src, "dst": dest,
+         "via": [c + ("*" if h else "") for c, h in zip(path, repeated)],
+         "typ": typ, "text": text, "kind": kind, "tx": tx}
+    if typ.startswith("UI") and kind in ("", "beacon") and rest[1:2] == bytes([PID_NO_L3]):
+        try:
+            a = aprs.decode(dest, src, path, repeated, info, memory=aprs_memory, home=home)
+        except Exception:                              # the monitor must never break the radio
+            a = None
+        if a is not None:
+            e["aprs"] = a
+    return e
 
 
 def emit(data: bytes, *, tx: bool, mycall: str, mod128: bool | None = None) -> None:

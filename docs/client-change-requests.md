@@ -1484,3 +1484,53 @@ farbige Marken. Nur `tinybox/web/app.css` und `tinybox/web/app.js` – nur die T
    Tooltip sagt wohin: „Back to Chat“, „Back to Monitor“ (Kanal 0) oder „Back to Terminal“.
    Monitor und TinyBox terminal sind in der Seitenleiste markiert, wenn sie offen sind.
 - Client-Version 2026.10.16.
+
+## CR55 – Monitor: APRS im Klartext, lehrreich (✅ 16.10.2026)
+
+### Erfassung (OE3GAS, 16.10.2026)
+
+1. APRS-Pakete im Monitor von TinyBox und Client für Menschen lesbar darstellen, wenn ein
+   Toggle „APRS“ aktiv ist – nach Variante A: Rohzeile bleibt, darunter die Übersetzung.
+2. Die Einzelteile des Pakets grafisch auf die Klartextteile abbilden: Wer sich APRS im Client
+   ansieht, interessiert sich für Struktur und „Grammatik“ von APRS.
+3. Links zu aprs.fi und OpenStreetMap.
+4. Erklären, dass „AP…“-Ziele auf eine Liste definierter Geräte verweisen, andere Ziele (Mic-E)
+   eigentlich Nutzdaten sind.
+- Entwurf: Design-Canvas „APRS-Monitor lehrreich“ (claude.ai).
+
+### Umsetzung
+
+1. **Decoder `tinybox/aprs.py`** (eine Stelle für TinyBox und Client): zerlegt einen UI-Frame
+   in Teile (Rolle = Farbe, Schlüssel, Bezeichnung, Bedeutung, Rechenweg) und Klartext-Chips.
+   Die Teile ergeben zusammen wieder das Infofeld. Verstanden werden: Positionen
+   unkomprimiert, komprimiert (base-91) und Mic-E (inkl. Längen-Offset, Message-Bits,
+   Mehrdeutigkeit, Höhe, Gerät aus Präfix/Suffix, abgeschnittene Pakete); Wetter (mit
+   Umrechnung °F→°C, mph→km/h; fehlerhafte Felder wie `h0` rot); Kurs/Geschwindigkeit, PHG,
+   RNG, `/A=` Höhe; Zeitstempel (mit Hinweis, wenn die Uhr des Senders falsch geht); Status;
+   Nachrichten (Empfänger, Nummer, ack/rej, Bulletins); Telemetrie **skaliert** mit den vorher
+   gehörten PARM/UNIT/EQNS/BITS (Speicher je Station); Third-Party (`}`, inneres Paket
+   rekursiv); Objekte und Items; positionsloses Wetter.
+   - **Zielfeld**: `device ID` (Eintrag der Geräteliste aprs-deviceid), `payload` (Mic-E: die
+     Breite + Message-Bits, in der Lupe als sechs Kästchen zerlegt) oder `free word`.
+   - **Pfad**: je Eintrag eine Erklärung (wer hat weitergegeben, was ist noch offen), Summe
+     und Warnung bei langen Pfaden (WIDE3 und mehr).
+   - Entfernung und Richtung vom eigenen `locator` (tinybox.conf / tbclient.conf).
+   - Daten: `tinybox/aprs_data.json` – Geräteliste aus aprs-deviceid (CC BY-SA 2.0, Quelle in
+     der Lupe genannt) und Symbolnamen aus dem Symbolsatz des Clients.
+2. **Monitore**: `tbclient/radio.monitor_entry` und `tinybox/framemon.entry` hängen das Ergebnis
+   als `aprs` an den Eintrag (nur UI-Frames mit PID F0, nicht die TinyBox-Sonderframes).
+   Der Client liest jetzt auch das H-Bit der Digipeater: der Pfad zeigt `*` wie in der TinyBox.
+3. **Anzeige** (`tinybox/web/aprsview.js` + `.css`, eine Kopie für beide GUIs – der Client
+   liefert sie aus `tinybox/web` aus):
+   - Knopf **APRS** in der Monitor-Leiste (Zustand je Browser gemerkt). An: das Infofeld in
+     Farben je Rolle, das Ziel mit Marke `device ID`/`payload`, Marke `aprs`, darunter die
+     Klartextzeile mit Links **aprs.fi ↗** und **map ↗**.
+   - **Hover**: ein Teil der Rohzeile leuchtet zusammen mit seinem Klartextteil auf (und
+     umgekehrt), auch in der Lupe.
+   - **Lupe** (rechts neben dem Monitor; Client: Kanal 0, TinyBox: Seite „Monitor“): Klick auf
+     eine APRS-Zeile zeigt 1 · Adressteil (From, „To“ mit Erklärung, Pfad), bei Mic-E die
+     sechs Zeichen des Zielfelds, 2 · Infofeld Teil für Teil mit Bedeutung und Rechenweg,
+     Knöpfe zu aprs.fi und OpenStreetMap. Unter 900 px Breite nur die Klartextzeile.
+   - Auswahl „APRS frames“ im Filter; das Suchfeld findet auch den Klartext.
+- Tests: `tests/test_aprs.py` (echte Pakete vom 16.10.2026 auf 144.800 MHz, Monitore beider Seiten).
+- Client-Version 2026.10.16.2.

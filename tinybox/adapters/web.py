@@ -27,7 +27,7 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from .. import VERSION, config, connlog, framemon, linkq, logsetup
+from .. import VERSION, aprs, config, connlog, framemon, linkq, logsetup
 from ..app import App
 from ..config import base_call, normalize_call
 from ..service import ServiceError
@@ -41,6 +41,8 @@ STATIC_FILES = {
     "/app.css": ("app.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/logo.svg": ("logo.svg", "image/svg+xml"),
+    "/aprsview.js": ("aprsview.js", "text/javascript; charset=utf-8"),     # CR55 (also the client's)
+    "/aprsview.css": ("aprsview.css", "text/css; charset=utf-8"),
 }
 MAX_HEADER = 16 * 1024
 MAX_BODY = 128 * 1024
@@ -194,6 +196,8 @@ class WebServer:
         self._log_handler = HubLogHandler(self.hub, loop)
         logging.getLogger().addHandler(self._log_handler)
         framemon.flog.addHandler(self._log_handler)          # CR52 (does not propagate)
+        if self.cfg.station.locator:                          # CR55: distance in the APRS line
+            framemon.home = aprs.locator_to_latlon(self.cfg.station.locator)
         self.app.bus.subscribe("*", lambda name, data: self.hub.push(
             {"type": "event", "name": name}))
         self.app.web_login_url = f"http://127.0.0.1:{self.port}/login?token={self.token}"

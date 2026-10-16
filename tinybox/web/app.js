@@ -260,7 +260,7 @@ function startFeed() {
 // own), "mon" = session text TinyBox sends to / gets from a station, "log" = TinyBox log.
 // Every call has a colour of its own - the same call always the same colour.
 const MON_KINDS = [["", "Everything"], ["frame", "Channel frames"], ["tx", "Own frames (TX)"],
-  ["mon", "Session text"], ["log", "Log"], ["tb", "All TinyBox special frames"],
+  ["aprs", "APRS frames"], ["mon", "Session text"], ["log", "Log"], ["tb", "All TinyBox special frames"],
   ["chat", "chat (TBCHAT)"], ["quality", "quality (%Q)"], ["mail", "mail (TBMAIL)"],
   ["beacon", "beacon"], ["proto", "proto (//...)"]];
 
@@ -276,7 +276,8 @@ function myCall() { return (S.status && S.status.mailbox) || "TINYBOX"; }
 
 function monText(it) {
   if (it.type === "frame")
-    return `${it.t} ${it.tx ? "tx " : ""}${it.src} ${it.dst} ${(it.via || []).join(",")} <${it.typ}> ${it.kind} ${it.text}`;
+    return `${it.t} ${it.tx ? "tx " : ""}${it.src} ${it.dst} ${(it.via || []).join(",")} <${it.typ}> ${it.kind} ${it.text}` +
+      (it.aprs ? " aprs" + AprsView.searchText(it) : "");
   if (it.type === "mon") return `${it.t} ${it.call} ${myCall()} ${it.text}`;
   return `${it.t} ${it.text}`;
 }
@@ -284,6 +285,7 @@ function monMatch(it) {
   const k = S.monKind;
   if (k === "frame" || k === "mon" || k === "log") { if (it.type !== k) return false; }
   else if (k === "tx") { if (it.type !== "frame" || !it.tx) return false; }
+  else if (k === "aprs") { if (it.type !== "frame" || !it.aprs) return false; }
   else if (k === "tb") { if (it.type !== "frame" || !it.kind) return false; }
   else if (k) { if (it.type !== "frame" || it.kind !== k) return false; }
   const q = S.monQ.trim().toLowerCase();
@@ -292,17 +294,23 @@ function monMatch(it) {
 
 function feedLine(item) {
   if (item.type === "frame") {
+    const ap = AprsView.active(item);
     const line = h("div", { class: "line frame" + (item.tx ? " tx" : "") },
       h("span", { class: "t", text: item.t }), " ",
       h("span", { class: "rt", text: item.tx ? "TX" : "RX" }), " ",
-      callSpan(item.src), " → ", callSpan(item.dst));
+      callSpan(item.src), " → ", ap ? AprsView.dest(item) : callSpan(item.dst));
     if (item.via && item.via.length) {
       line.append(" via ");
       item.via.forEach((v, i) => { if (i) line.append(","); line.append(callSpan(v)); });
     }
     line.append(h("span", { class: "typ", text: " <" + item.typ + ">" }));
     if (item.kind) line.append(" ", h("span", { class: "kind " + item.kind, text: item.kind }));
-    if (item.text) line.append(": " + item.text);
+    if (ap) line.append(" ", h("span", { class: "kind aprs", text: "aprs" }));
+    if (item.text) line.append(": ", ap ? AprsView.info(item) : item.text);
+    if (ap) {                                    // CR55: the plain-text line, click = lens
+      line.append(AprsView.decoded(item));
+      AprsView.decorate(line, item);
+    }
     return line;
   }
   if (item.type === "mon") {                     // ">" TinyBox to the station, "<" back
@@ -643,8 +651,9 @@ function channelCard() {
   return { card, update };
 }
 
-function monitorCard() {
+function monitorCard(withLens) {
   const body = h("div", { class: "monitor" });
+  const lens = withLens ? h("aside", { class: "ar-lens", "aria-label": "APRS lens" }) : null;   // CR55
   function redraw() {
     body.replaceChildren(...S.feed.filter(monMatch).map(feedLine));
     body.scrollTop = body.scrollHeight;
@@ -655,7 +664,7 @@ function monitorCard() {
     MON_KINDS.map(([v, t]) => h("option", { value: v, text: t })));
   kind.value = S.monKind;
   const clear = async () => {
-    S.feed = []; body.replaceChildren();
+    S.feed = []; body.replaceChildren(); AprsView.forget();
     try { await api("monitor/clear", {}); } catch (e) { /* only this tab then */ }
   };
   const card = h("section", { class: "card", style: "flex-grow: 1" },
@@ -663,8 +672,13 @@ function monitorCard() {
       h("h2", { class: "grow", text: "Live monitor" }),
       h("label", { class: "search mon-q" }, h("span", { class: "sr-only", text: "Filter" }), q),
       h("label", {}, h("span", { class: "sr-only", text: "Show only" }), kind),
+      AprsView.toggleButton("btn sm aprs-btn"),
       h("button", { class: "btn sm", type: "button", onclick: clear }, "Clear")),
-    body);
+    lens ? h("div", { class: "mon-split" }, body, lens) : body);
+  const showLens = () => { if (lens) lens.hidden = !AprsView.enabled(); };
+  if (lens) AprsView.attachLens(lens);
+  AprsView.onChange(() => { if (card.isConnected) { showLens(); redraw(); } });
+  showLens();
   redraw();
   requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
   return { card, body };
@@ -1022,7 +1036,7 @@ function renderUser(card, d) {
 }
 
 function viewMonitor() {
-  const mon = monitorCard();
+  const mon = monitorCard(true);
   mon.card.style.minHeight = "100%";
   main().className = "one";
   main().replaceChildren(mon.card);
