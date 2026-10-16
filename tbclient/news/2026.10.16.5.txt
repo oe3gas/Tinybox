@@ -1,0 +1,1 @@
+- Fix: Monitor in the side bar opens again after Mailbox.

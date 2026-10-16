@@ -1585,3 +1585,16 @@ farbige Marken. Nur `tinybox/web/app.css` und `tinybox/web/app.js` – nur die T
    **Heard**. Ohne Digipeater steht nur der Absender da; hat ein Digi kein Rufzeichen
    eingetragen, endet die Kette mit „?“. Die Texte zu Aliasen und Resthops entfallen.
 - Decoder liefert dafür `chain`. Tests in `tests/test_aprs.py`. Client-Version 2026.10.16.4.
+
+## CR58 – Bug: Monitor startet nach Mailbox nicht (✅ 16.10.2026)
+
+**Fehler (OE3GAS):** Nach einem anderen Knopf (z. B. Inbox) reagierte „Monitor“ in der Seitenleiste
+nicht; erst nach „TinyBox terminal“ ging es.
+
+**Ursache:** Der Monitor ist Kanal 0. War Kanal 0 schon der aktive Kanal (man kam aus dem Monitor in
+die Mailbox), brach der Kanalwechsel sofort ab und die Mailbox blieb stehen. „TinyBox terminal“
+wechselte vorher auf den Chat-Kanal, danach ging der Wechsel auf 0 wieder.
+
+**Lösung:** Ein Klick auf den schon aktiven Kanal (Monitor, Kanal-Chip, Alt+Zahl) schaltet jetzt
+dessen Ansicht ein. Client-Version 2026.10.16.5.
+

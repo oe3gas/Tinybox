@@ -1941,7 +1941,12 @@ function baseView() {
 const backView = () => (manualTerm && curCh().chat ? "term" : baseView());
 
 function switchCh(n) {
-  if (n === activeCh || n < 0 || n > (S ? S.max_ch : 5)) return;
+  if (n < 0 || n > (S ? S.max_ch : 5)) return;
+  if (n === activeCh) {                            // CR58: already this channel, but maybe
+    if (view !== backView()) setView(backView());  // the mailbox is shown: back to the channel
+    if (S) render();
+    return;
+  }
   activeCh = n;
   manualTerm = false;
   try { localStorage.setItem("tbc-ch", String(n)); } catch (e) { /* ok */ }
