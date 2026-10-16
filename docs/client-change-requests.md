@@ -1455,3 +1455,32 @@ schwarzen Hintergrund haben.
 Frametyp gedämpft grau, eigene Frames (TX) und Eingaben hellblau, Warnungen hellrot. Die Rufzeichen
 bekommen hellere Farben (wie im Client), die TinyBox-Sonderframes (chat, quality, mail, beacon, proto)
 farbige Marken. Nur `tinybox/web/app.css` und `tinybox/web/app.js` – nur die TinyBox, kein neuer Client.
+
+## CR54 – Client: Farbbereiche links, neuer Kopf, Knöpfe Chat und Mailbox (✅ 16.10.2026)
+
+### Erfassung (OE3GAS, 16.10.2026)
+
+1. Farbliche Trennung der Bereiche „Chat Boards“, „Mail“, „Bulletins“ und „Station“ – nach
+   Mockup (Variante E): Bereiche nicht füllen, sondern in ihrer Farbe umranden, Kopf als
+   farbiges Band, gewählter Eintrag voll in der Bereichsfarbe.
+2. „Rubrics…“ (Bulletins) und „Settings“ (Station) als Einträge entfernen; dafür ein Zahnrad
+   rechts im Kopf von „Bulletins“ und „Station“.
+3. Kopfzeile: neben dem Logo zweizeilig „TinyBox Client“, etwas Abstand, dann der Call-Avatar.
+4. Der Knopf zurück aus der Mailbox hieß „Terminal“, führte aber zum Monitor – Tooltip
+   korrigieren; neben dem Mail-Knopf auch einen Chat-Knopf.
+
+### Umsetzung
+
+1. Farben: Chat Boards violett `#6d4bd1`, Mail petrol `#0b7f86`, Bulletins ocker `#b06a00`,
+   Station schiefergrau `#52606e` (unterscheiden sich auch in der Helligkeit; Grün/Rot/Gelb
+   bleiben dem Verbindungsstatus und den Qualitätsbalken). Im Dunkelmodus sind Rahmen und
+   Symbole aufgehellt. Gilt auch für die Ordnerliste der Mailbox am Handy.
+2. Zahnrad bei Bulletins öffnet die Rubrikenliste, bei Station die Settings. Ohne abonnierte
+   Rubrik steht im Bulletin-Bereich „No rubric subscribed“.
+3. „TinyBox / Client“ neben dem Logo, feiner Trennstrich, dann Avatar und Call. Unter 760 px
+   Breite fällt der Schriftzug weg (Platz für „Connect to“).
+4. Zwei Knöpfe oben rechts: **Chat** und **Mailbox**; der Knopf der offenen Ansicht ist weiß
+   gefüllt. Chat schaltet auf den Chat-Kanal. Mailbox nochmals gedrückt führt zurück, der
+   Tooltip sagt wohin: „Back to Chat“, „Back to Monitor“ (Kanal 0) oder „Back to Terminal“.
+   Monitor und TinyBox terminal sind in der Seitenleiste markiert, wenn sie offen sind.
+- Client-Version 2026.10.16.

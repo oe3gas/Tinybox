@@ -14,6 +14,8 @@
 <div id="app">
   <header class="top">
     <img class="top-logo" src="/logo.svg" alt="TinyBox" width="32" height="32">
+    <span class="brand" aria-hidden="true"><b>TinyBox</b><span>Client</span></span>
+    <span class="brand-sep" aria-hidden="true"></span>
     <div id="me-avatar"></div>
     <span id="me-call" class="tcall">-</span>
     <img id="conn-ic" class="conn-ic" src="/conn/connect.png" alt="" width="22" height="22">
@@ -28,7 +30,8 @@
     <span class="top-status"><span id="status-dot" class="dot"></span><button id="status-text" class="link-btn" aria-label="Who is here">offline</button></span>
     <span class="sp"></span>
     <button id="btn-disc" class="tb-btn hidden" aria-label="Disconnect" title="Disconnect"><img src="/conn/disconnect.png" alt="" width="22" height="22"></button>
-    <button id="btn-view" class="icon-btn view-btn" aria-label="Mailbox" title="Mailbox"><span id="view-icon">✉</span><span id="view-cnt" class="cnt hidden"></span></button>
+    <button id="btn-chat" class="icon-btn view-btn" aria-label="Chat" title="Chat"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
+    <button id="btn-view" class="icon-btn view-btn" aria-label="Mailbox" title="Mailbox"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span id="view-cnt" class="cnt hidden"></span></button>
     <button id="btn-menu" class="icon-btn" aria-label="Settings">☰</button>
   </header>
   <nav id="chstrip" class="chstrip" aria-label="Channels"></nav>
@@ -44,13 +47,14 @@
 
   <div class="body">
   <aside id="nav" class="nav" aria-label="Navigation">
-    <div class="nav-h">Chat boards</div>
-    <div id="nav-boards"></div>
+    <section class="navsec sec-chat"><div class="nav-h">Chat boards</div>
+      <div id="nav-boards"></div></section>
     <div id="nav-mailbox"></div>
-    <div class="nav-h">Station</div>
-    <button id="nav-terminal" class="nav-item" title="Type TinyBox commands (L, R, F, QSO ...) directly - the TinyBox of the chat channel"><span>▸ TinyBox terminal</span></button>
-    <button id="nav-monitor" class="nav-item"><span>▸ Monitor</span></button>
-    <button id="nav-settings" class="nav-item"><span>⚙ Settings</span></button>
+    <section class="navsec sec-station">
+      <div class="nav-h sync-h"><span>Station</span><button id="nav-settings" class="sec-gear" aria-label="Settings" title="Settings">⚙&#xFE0E;</button></div>
+      <button id="nav-terminal" class="nav-item" title="Type TinyBox commands (L, R, F, QSO ...) directly - the TinyBox of the chat channel"><span><span class="ic">▸</span> TinyBox terminal</span></button>
+      <button id="nav-monitor" class="nav-item" title="Monitor: everything heard (Alt+0)"><span><span class="ic">▸</span> Monitor</span></button>
+    </section>
   </aside>
 
   <div class="main-col">

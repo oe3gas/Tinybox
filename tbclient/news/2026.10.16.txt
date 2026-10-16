@@ -1,0 +1,3 @@
+- Left column: one colour per section (chat, mail,
+  bulletins, station). Rubrics and settings: gear in the head.
+- Top bar: "TinyBox Client", own buttons for chat and mail.

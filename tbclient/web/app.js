@@ -249,6 +249,7 @@ function render() {
   $("off-tb").textContent = S.tinybox;
   $("me-avatar").replaceChildren(avatar(S.mycall, S.my_symbol, true));
   renderTop();
+  renderViewBtns();
   renderFreq();
   autoTerm();
   renderTerm();
@@ -1418,13 +1419,15 @@ function folderEntries() {
              ["sent", "✓ Sent", 0, false]];
   const r = M.rubrics.filter((x) => x.sub || x.local)
     .map((x) => ["b:" + x.name, "▤ " + (x.name === "TBNEWS" ? "TinyBox News" : x.name), x.unread, true]);
-  return { folders: f, rubrics: [...r, ["rubrics", "⚙ Rubrics…", 0, false]] };
+  return { folders: f, rubrics: r };            // the rubric list: gear in the head (CR54)
 }
 
 function navButton(key, label, n, strong, target) {
   const active = view === "mail" && folder === key;
   const b = el("button", "nav-item" + (active ? " active" : ""));
-  b.append(el("span", "", label));
+  const m = /^([^\w\s])\s+(.*)$/.exec(label);  // CR54: the symbol in the colour of the section
+  if (m) { const s = el("span", ""); s.append(el("span", "ic", m[1]), " " + m[2]); b.append(s); }
+  else b.append(el("span", "", label));
   if (n) b.append(el("span", strong ? "cnt" : "n", String(n)));
   b.onclick = () => openFolder(key);
   target.append(b);
@@ -1434,7 +1437,7 @@ function navButton(key, label, n, strong, target) {
  * what that sync is doing (or why it failed). The sync after the login
  * (scope "login", CR40) covers both: Abort in both heads, the step under the
  * one it is working on. Abort is orderly: the exchange on the air is finished. */
-function syncHead(target, title, scope) {
+function syncHead(target, title, scope, gear) {
   const sy = S.sync || {};
   const mine = sy.scope === scope || sy.scope === "login";
   const running = sy.running && mine;
@@ -1448,7 +1451,15 @@ function syncHead(target, title, scope) {
                        : "Fetch the headers of new bulletins of the subscribed rubrics";
   b.disabled = (sy.running && !mine) || (running && sy.aborting);   // one sync at a time
   b.onclick = (ev) => { ev.stopPropagation(); api(running ? "mail/abort" : "mail/sync", { scope }); };
-  h.append(el("span", "", title), b);
+  if (gear) {                                    // CR54: rubric list behind the gear
+    const tools = el("span", "sec-tools");
+    const g = el("button", "sec-gear" + (view === "mail" && folder === "rubrics" ? " on" : ""), "\u2699\uFE0E");
+    g.title = "Bulletin rubrics: subscribe";
+    g.setAttribute("aria-label", "Bulletin rubrics");
+    g.onclick = (ev) => { ev.stopPropagation(); openFolder("rubrics"); };
+    tools.append(b, g);
+    h.append(el("span", "", title), tools);
+  } else h.append(el("span", "", title), b);
   target.append(h);
   let txt = "", err = false;
   if (running && active === scope) txt = sy.step + "…";
@@ -1476,10 +1487,14 @@ function buildMailNav(target) {
     x.onclick = (ev) => { ev.stopPropagation(); noticeDismissed = sy.notice; render(); };
     if (noticeDismissed !== sy.notice) { n.prepend(x); target.append(n); }
   }
-  syncHead(target, "Mail", "mail");
-  for (const [k, l, n, strong] of folders) navButton(k, l, n, strong, target);
-  syncHead(target, "Bulletins", "bulletins");
-  for (const [k, l, n, strong] of rubrics) navButton(k, l, n, strong, target);
+  // CR54: each section framed in its own colour
+  const mail = el("section", "navsec sec-mail"), bul = el("section", "navsec sec-bul");
+  target.append(mail, bul);
+  syncHead(mail, "Mail", "mail");
+  for (const [k, l, n, strong] of folders) navButton(k, l, n, strong, mail);
+  syncHead(bul, "Bulletins", "bulletins", true);
+  for (const [k, l, n, strong] of rubrics) navButton(k, l, n, strong, bul);
+  if (!rubrics.length) bul.append(el("p", "muted small pad", "No rubric subscribed"));
 }
 let noticeDismissed = "";
 
@@ -1496,8 +1511,6 @@ function renderMailbox() {
   const M = S.mailbox;
   if (!M) return;
   // badge on the top bar button; the icon switches between the two views
-  $("view-icon").textContent = view === "mail" ? (backView() === "term" ? ">_" : "💬") : "✉";
-  $("btn-view").title = view === "mail" ? (backView() === "term" ? "Terminal" : "Chat") : "Mailbox";
   $("view-cnt").textContent = String(M.unread);
   $("view-cnt").classList.toggle("hidden", !M.unread || view === "mail");
   buildMailNav($("nav-mailbox"));
@@ -1851,6 +1864,7 @@ async function deleteCurrent() {
 
 function initMail() {
   $("btn-view").onclick = () => setView(view === "mail" ? backView() : "mail");
+  $("btn-chat").onclick = goChat;
   document.querySelectorAll(".mv-tochat").forEach((b) => { b.onclick = () => setView("chat"); });
   $("mv-back-folders").onclick = () => setLevel("folders");
   $("mv-back-list").onclick = () => { draft = null; setLevel("list"); showReader(); };
@@ -1898,6 +1912,27 @@ function chanOf(n) {
                 mode: "", view: "term", chat: false, act: 0, term_n: 0, outstanding: null, virtual: true };
 }
 const curCh = () => chanOf(activeCh);
+
+/* CR54: Chat and Mailbox each have a button in the top bar; the one of the view
+ * shown is filled. Mailbox pressed again goes back to where you came from. */
+function renderViewBtns() {
+  const back = backView();
+  const backName = back === "term" ? (activeCh === 0 ? "Monitor" : "Terminal") : "Chat";
+  const mt = view === "mail" ? "Back to " + backName : "Mailbox";
+  $("btn-view").title = mt;
+  $("btn-view").setAttribute("aria-label", mt);
+  $("btn-view").classList.toggle("on", view === "mail");
+  $("btn-chat").classList.toggle("on", view === "chat");
+  $("nav-monitor").classList.toggle("active", view === "term" && activeCh === 0);
+  $("nav-terminal").classList.toggle("active", view === "term" && activeCh !== 0);
+}
+
+function goChat() {
+  if (S && S.chat_ch && activeCh !== S.chat_ch) switchCh(S.chat_ch);
+  manualTerm = false;
+  if (activeCh !== 0 && curCh().chat) setView("chat");
+  else if (S) render();
+}
 
 function baseView() {
   if (activeCh === 0) return "term";

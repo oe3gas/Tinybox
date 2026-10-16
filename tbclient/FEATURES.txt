@@ -10,6 +10,13 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Neues Aussehen (CR54): die Bereiche links (Chat boards, Mail, Bulletins,
+  Station) haben je eine Farbe - farbiger Rahmen, Kopf als farbiges Band,
+  Symbole und gewaehlter Eintrag in der Bereichsfarbe. Rubriken und
+  Settings ueber das Zahnrad im Kopf von Bulletins bzw. Station. Oben
+  "TinyBox Client" neben dem Logo; eigene Knoepfe fuer Chat und Mailbox
+  (der der offenen Ansicht ist gefuellt). Mailbox nochmals gedrueckt fuehrt
+  zurueck - der Tooltip nennt jetzt richtig Chat, Monitor oder Terminal.
 - Monitor neu (CR50): ohne "fm", jedes Rufzeichen in einer eigenen,
   gleichbleibenden Farbe; Filter nach Text (gilt auch fuer neu
   hereinkommende Frames), Auswahl der TinyBox-Sonderframes (Chat-Ereignisse,
