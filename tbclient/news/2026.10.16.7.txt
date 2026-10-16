@@ -1,0 +1,2 @@
+- APRS Lense on the phone: tap a line, the lens slides up
+  from below. Tap a part to light up its pair.

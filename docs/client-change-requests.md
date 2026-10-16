@@ -1609,3 +1609,19 @@ das Bild aus dem Symbolsatz des Clients (`/aprs/symbols-*.png`). Die TinyBox-Web
 Symbolbilder und zeigt weiter nur den Text. Der Gerätename in der Erklärung hat die Gerätefarbe (gelb),
 Hover verbindet ihn mit dem „To“-Feld. Client-Version 2026.10.16.6.
 
+## CR60 – APRS-Lense am Handy (✅ 16.10.2026)
+
+**Wunsch (OE3GAS):** Am Handy ist die Detailleiste der APRS-Lense nicht zu sehen. Gewählt: Variante A
+(Bottom Sheet).
+
+**Lösung** (TinyBox-Web-GUI und Client gleich, `tinybox/web/aprsview.js` + `.css`):
+- Unter 900 px Breite ist die Lense ein **Bottom Sheet**: Tippen auf eine APRS-Zeile lässt es von
+  unten heraufgleiten (75 % der Höhe); die angetippte Zeile rückt nach oben und bleibt sichtbar, der
+  Monitor läuft weiter. Schließen mit ✕, Wisch nach unten (am Griff oder ganz oben im Sheet), Tippen
+  außerhalb oder Esc. Tippen auf eine andere APRS-Zeile wechselt den Inhalt.
+- **Antippen statt Darüberfahren:** Ein Tipp auf einen Teil der Payload oder des Klartexts hält das
+  Paar hervorgehoben (auch in der Lense, die dorthin scrollt); ein Tipp in der Lense markiert den Teil
+  oben in der Zeile. Am PC wirkt ein Klick genauso, das Darüberfahren bleibt.
+- TinyBox-Dashboard (ohne eigene Lense-Leiste): am Handy erscheint dasselbe Sheet.
+- Client-Version 2026.10.16.7.
+

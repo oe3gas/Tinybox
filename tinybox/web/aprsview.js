@@ -7,7 +7,9 @@
 //   * the info field cut into coloured parts (one colour per role),
 //   * a plain-text line under the monitor line,
 //   * the "lens": a panel that takes the selected line apart, part by part,
-//   * hovering a part lights up its plain-text counterpart (and back).
+//   * hovering a part lights up its plain-text counterpart (and back),
+//   * on a phone (CR60) the lens is a bottom sheet; tapping a part pins
+//     the pair (there is no hover on a touch screen).
 // The toggle state is kept per browser.
 "use strict";
 
@@ -19,6 +21,9 @@ const AprsView = (() => {
   let lensBox = null;             // the lens element of the page (null: no lens)
   let lastId = 0;
   let symbolRenderer = null;      // CR59: the page may draw APRS symbols (the client has the sprites)
+  let pinned = "";                // CR60: key of the part tapped/clicked (stays lit)
+  let sheet = null;               // CR60: lens of a page without one (phone only)
+  const narrow = window.matchMedia ? window.matchMedia("(max-width: 899px)") : { matches: false };
   const listeners = [];
 
   function mk(tag, cls, text) {
@@ -87,10 +92,15 @@ const AprsView = (() => {
   function decorate(lineEl, e) {
     lineEl.dataset.aid = idOf(e);
     lineEl.classList.add("ar-row");
-    if (selected === e) lineEl.classList.add("ar-sel");
+    if (selected === e) {
+      lineEl.classList.add("ar-sel");
+      if (pinned) lineEl.querySelectorAll(`[data-k="${pinned.replace(/[^\w.-]/g, "")}"]`)
+        .forEach((x) => x.classList.add("ar-pin"));      // a redrawn line keeps its pin
+    }
     lineEl.addEventListener("click", (ev) => {
       if (ev.target.closest("a")) return;
-      select(e);
+      const k = ev.target.closest("[data-k]");
+      select(e, k ? k.dataset.k : "");
     });
   }
   function searchText(e) { return e && e.aprs ? " " + e.aprs.text + " " + e.aprs.title : ""; }
@@ -112,6 +122,53 @@ const AprsView = (() => {
     if (t) hot(t, false);
   });
 
+  // ---- CR60: pinned pair (a tap or click on a part) --------------------------------
+  function applyPin() {
+    document.querySelectorAll(".ar-pin").forEach((x) => x.classList.remove("ar-pin"));
+    if (!pinned || !selected) return;
+    const k = pinned.replace(/[^\w.-]/g, "");
+    document.querySelectorAll(`[data-aid="${idOf(selected)}"] [data-k="${k}"]`)
+      .forEach((x) => x.classList.add("ar-pin"));
+  }
+
+  // ---- CR60: the lens as a bottom sheet on a phone ------------------------------------
+  function box() {                       // the lens to draw into
+    if (lensBox && lensBox.isConnected) return lensBox;
+    if (!narrow.matches) return lensBox;
+    if (!sheet) {                        // a page without a lens (TinyBox dashboard)
+      sheet = mk("aside", "ar-lens ar-floating");
+      sheet.setAttribute("aria-label", "APRS Lense");
+      document.body.append(sheet);
+    }
+    return sheet;
+  }
+  function openSheet() {
+    const b = box();
+    if (!b || !narrow.matches) return;
+    b.classList.add("ar-open");
+    b.scrollTop = 0;
+    const row = selected && document.querySelector(`.ar-row[data-aid="${idOf(selected)}"]`);
+    if (row) row.scrollIntoView({ block: "start", behavior: "smooth" });   // stays visible above
+  }
+  function closeSheet() {
+    document.querySelectorAll(".ar-lens.ar-open").forEach((x) => x.classList.remove("ar-open"));
+  }
+  document.addEventListener("click", (ev) => {           // a tap outside the sheet closes it
+    if (!narrow.matches || !document.querySelector(".ar-lens.ar-open")) return;
+    if (ev.target.closest(".ar-lens") || ev.target.closest(".ar-row")) return;
+    closeSheet();
+  });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeSheet(); });
+  let touchY = null;                                       // swipe down closes it
+  document.addEventListener("touchstart", (ev) => {
+    const l = ev.target.closest && ev.target.closest(".ar-lens.ar-open");
+    touchY = l && (l.scrollTop <= 0 || ev.target.closest(".ar-grab")) ? ev.touches[0].clientY : null;
+  }, { passive: true });
+  document.addEventListener("touchend", (ev) => {
+    if (touchY !== null && ev.changedTouches[0].clientY - touchY > 70) closeSheet();
+    touchY = null;
+  }, { passive: true });
+
   // ---- the lens ---------------------------------------------------------------------
   function section(title) {
     const s = mk("section", "ar-sec");
@@ -119,20 +176,33 @@ const AprsView = (() => {
     return s;
   }
   function renderLens() {
+    const lensBox = box();
     if (!lensBox) return;                        // visibility: the page decides
     lensBox.replaceChildren();
-    lensBox.append(mk("div", "ar-kicker", "APRS Lense"));
+    const grab = mk("div", "ar-grab");             // CR60: handle and close of the sheet
+    const x = mk("button", "ar-close", "\u2715");
+    x.type = "button";
+    x.setAttribute("aria-label", "Close");
+    x.addEventListener("click", closeSheet);
+    grab.append(mk("span", "ar-handle"), x);
+    lensBox.append(grab, mk("div", "ar-kicker", "APRS Lense"));
     const e = selected;
     if (!e || !e.aprs) {
       lensBox.append(mk("p", "ar-empty",
         "Click an APRS line in the monitor: it is taken apart here, part by part. " +
-        "Hover a part to see which plain-text piece belongs to it."));
+        "Hover or tap a part to see which plain-text piece belongs to it."));
       lensBox.append(foot());
       return;
     }
     const a = e.aprs;
     const root = mk("div", "ar-lensbody");
     root.dataset.aid = idOf(e);
+    root.addEventListener("click", (ev) => {      // CR60: tap a part = pin the pair
+      if (ev.target.closest("a, button")) return;
+      const k = ev.target.closest("[data-k]");
+      pinned = k ? k.dataset.k : "";
+      applyPin();
+    });
     root.append(mk("h2", "ar-title", a.title), mk("div", "ar-sub", `${e.src} · heard ${e.t || ""}`));
 
     // 1 - address part
@@ -223,15 +293,24 @@ const AprsView = (() => {
   }
 
   // ---- state ------------------------------------------------------------------------
-  function select(e) {
+  function select(e, key) {
+    const again = selected === e;
     selected = e;
+    pinned = key || (again ? pinned : "");
     document.querySelectorAll(".ar-row.ar-sel").forEach((x) => x.classList.remove("ar-sel"));
     document.querySelectorAll(`.ar-row[data-aid="${idOf(e)}"]`).forEach((x) => x.classList.add("ar-sel"));
     renderLens();
+    applyPin();
+    openSheet();
+    if (pinned && narrow.matches) {              // CR60: show the tapped part in the sheet
+      const t = box() && box().querySelector(`.ar-part.ar-pin`);
+      if (t) setTimeout(() => t.scrollIntoView({ block: "center" }), 250);
+    }
   }
   function setEnabled(v) {
     on = !!v;
     try { localStorage.setItem(STORE, on ? "1" : "0"); } catch (e) { /* not kept */ }
+    if (!on) closeSheet();
     renderLens();
     listeners.forEach((f) => f(on));
   }
@@ -246,7 +325,7 @@ const AprsView = (() => {
     return b;
   }
   function attachLens(el) { lensBox = el; renderLens(); }
-  function forget() { selected = null; renderLens(); }
+  function forget() { selected = null; pinned = ""; closeSheet(); renderLens(); }
 
   return { setSymbolRenderer: (f) => { symbolRenderer = f; }, enabled: () => on, setEnabled, onChange: (f) => listeners.push(f), active, dest, info, payload, decoded,
            decorate, searchText, select, attachLens, toggleButton, forget };

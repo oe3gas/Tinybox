@@ -59,7 +59,6 @@
   color: #5aa2ff; text-decoration: none; }
 .ar-btn:hover { background: #17283a; }
 .ar-small { font-size: 11px; color: #6f7b86; margin-top: 14px; }
-@media (max-width: 899px) { .ar-lens { display: none; } }
 
 /* CR57: the path as a chain of stations; the one you heard is highlighted */
 .ar-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
@@ -72,3 +71,26 @@
 .ar-payload { display: block; padding-left: 2.5em; }
 /* CR59: the APRS symbol next to its meaning (client: sprites from /aprs) */
 .ar-sym { display: inline-block; vertical-align: -4px; margin-right: 6px; }
+/* CR60: a tapped part stays lit (no hover on a touch screen) */
+.ar-pin { background: color-mix(in srgb, currentColor 30%, transparent);
+  outline: 1px solid currentColor; border-radius: 2px; }
+.ar-part.ar-pin { outline: 1px solid #3a4a5a; background: #1e2a36; color: inherit; }
+.ar-chip.ar-pin { background: color-mix(in srgb, #e0a6ff 26%, transparent); }
+.ar-grab { display: none; }
+.ar-floating { display: none; }
+/* CR60: on a phone the lens is a bottom sheet over the monitor */
+@media (max-width: 899px) {
+  .ar-lens, .ar-floating { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+    height: 75vh; height: 75dvh; max-width: none; flex: none; border-left: none; border-top: 1px solid #2f4a66;
+    border-radius: 14px 14px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, .45); padding-top: 0;
+    transform: translateY(105%); transition: transform .22s ease-out; overscroll-behavior: contain; }
+  .ar-lens.ar-open { transform: none; }
+  .ar-lens[hidden] { display: none; }
+  .ar-grab { display: flex; position: sticky; top: 0; z-index: 1; justify-content: center; align-items: center;
+    height: 34px; margin: 0 -16px 4px; background: #121a22; }
+  .ar-handle { width: 40px; height: 4px; border-radius: 2px; background: #4a5866; }
+  .ar-close { position: absolute; right: 8px; top: 2px; width: 44px; height: 32px; border: none;
+    background: transparent; color: #b7c1ca; font-size: 18px; cursor: pointer; }
+  .ar-part { grid-template-columns: 88px minmax(0, 1fr); }
+  .ar-dec, .ar-payload { padding-left: 1.2em; }
+}
