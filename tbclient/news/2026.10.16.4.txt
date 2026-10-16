@@ -1,0 +1,2 @@
+- APRS Lense: payload and plain text on lines of their own.
+  Lens shows the path as a chain: sender -> digis.

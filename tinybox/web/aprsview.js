@@ -65,6 +65,11 @@ const AprsView = (() => {
     }
     return wrap;
   }
+  function payload(e) {                          // the info field on a line of its own (CR57)
+    const p = info(e);
+    p.classList.add("ar-payload");
+    return p;
+  }
   function decoded(e) {
     const a = e.aprs;
     const line = mk("span", "ar-dec");
@@ -144,17 +149,13 @@ const AprsView = (() => {
     hc.classList.add("ar-mono");
     heard.append(hc, mk("div", "ar-note", a.heard.note));
     grid.append(heard, mk("span", "ar-lbl", "Path"));
-    const path = mk("div");
-    if (!a.path.length) path.append(mk("div", "ar-muted", "(empty)"));
-    for (const p of a.path) {
-      const r = mk("div");
-      const c = p.k ? part(p.call, "tp", p.k) : mk("span", "", p.call);
-      c.classList.add("ar-mono");
-      r.append(c, mk("span", "ar-muted", " – " + p.note));
-      path.append(r);
-    }
-    path.append(mk("div", "ar-note", a.path_note));
-    for (const w of a.warnings || []) path.append(part("⚠ " + w, "warn", "path", "div"));
+    const path = mk("div", "ar-chain");         // CR57: sender -> digipeaters, nothing else
+    (a.chain || []).forEach((c, i) => {
+      if (i) path.append(mk("span", "ar-arrow-r", "\u2192"));
+      const chip = mk("span", "ar-chip" + (c.k === "heard" ? " ar-chip-heard" : ""), c.call);
+      if (c.k === "heard") chip.dataset.k = "heard";
+      path.append(chip);
+    });
     grid.append(path);
     s1.append(grid);
     root.append(s1);
@@ -231,6 +232,6 @@ const AprsView = (() => {
   function attachLens(el) { lensBox = el; renderLens(); }
   function forget() { selected = null; renderLens(); }
 
-  return { enabled: () => on, setEnabled, onChange: (f) => listeners.push(f), active, dest, info, decoded,
+  return { enabled: () => on, setEnabled, onChange: (f) => listeners.push(f), active, dest, info, payload, decoded,
            decorate, searchText, select, attachLens, toggleButton, forget };
 })();

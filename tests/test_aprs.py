@@ -158,8 +158,13 @@ class PathTests(unittest.TestCase):
         r = dec("APMI04", "OE3CRA-2", ["OE3XWJ-10", "WIDE2-1"], [1, 0],
                 b":OE3CRA-2 :UNIT.Volt,Pkt,Pkt,Pcnt,None,On,On,On,On,Hi,Hi,Hi,Hi")
         self.assertEqual(r["heard"]["call"], "OE3XWJ-10")
-        self.assertIn("heard from OE3XWJ-10", chips(r))
+        self.assertEqual([c["call"] for c in r["chain"]], ["OE3CRA-2", "OE3XWJ-10"])
         self.assertTrue(r["segs"][-1]["mean"].startswith("A1 Volt · A2 Pkt"))
+        r = dec("APMI06", "OM0ODX", ["OE6XTR", "OE3XWJ-10", "WIDE2"], [1, 1, 1], b">status")
+        self.assertEqual([(c["call"], c["k"]) for c in r["chain"]],
+                         [("OM0ODX", "src"), ("OE6XTR", ""), ("OE3XWJ-10", "heard")])
+        r = dec("APMI06", "OM0ODX", ["WIDE2-1"], [0], b">status")
+        self.assertEqual([(c["call"], c["k"]) for c in r["chain"]], [("OM0ODX", "heard")])
 
 
     def test_hops_used_and_left(self):

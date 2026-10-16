@@ -1045,7 +1045,14 @@ def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, in
     for r in rows:
         if heard and r["call"].rstrip("*") == heard:
             r["k"] = "heard"
-    out.chip(f"heard from {heard}" if heard else "heard from ? (untraced digipeater)", "tp", "heard")
+    chain = [{"call": src, "k": "src"}]              # CR57: the way the packet went
+    for call, h in zip(path, repeated):
+        if h and not (_ALIAS.match(call) or call.split("-")[0] in _OLD_ALIASES):
+            chain.append({"call": call, "k": "heard" if call == heard else ""})
+    if not heard:
+        chain.append({"call": "?", "k": "heard"})        # relayed by a digi that left no call
+    elif heard == src:
+        chain[0]["k"] = "heard"
     for w in warnings:
         out.chip("⚠ long path", "warn", "path")
         break
@@ -1053,7 +1060,7 @@ def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, in
         "title": out.title,
         "dest": {"mode": mode, "note": note, "device": dev},
         "path": rows, "path_note": summary, "warnings": warnings,
-        "heard": {"call": heard, "note": heard_note},
+        "heard": {"call": heard, "note": heard_note}, "chain": chain,
         "segs": out.segs, "chips": out.chips,
         "text": " ".join(c["t"] for c in out.chips),
     }

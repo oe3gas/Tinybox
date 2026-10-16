@@ -305,8 +305,8 @@ function feedLine(item) {
     }
     line.append(h("span", { class: "typ", text: " <" + item.typ + ">" }));
     if (item.kind) line.append(" ", h("span", { class: "kind " + item.kind, text: item.kind }));
-    if (ap) line.append(" ", h("span", { class: "kind aprs", text: "aprs" }));
-    if (item.text) line.append(": ", ap ? AprsView.info(item) : item.text);
+    if (ap) line.append(AprsView.payload(item));             // CR57: a line of its own
+    else if (item.text) line.append(": " + item.text);
     if (ap) {                                    // CR55: the plain-text line, click = lens
       line.append(AprsView.decoded(item));
       AprsView.decorate(line, item);

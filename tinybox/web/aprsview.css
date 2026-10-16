@@ -60,3 +60,13 @@
 .ar-btn:hover { background: #17283a; }
 .ar-small { font-size: 11px; color: #6f7b86; margin-top: 14px; }
 @media (max-width: 899px) { .ar-lens { display: none; } }
+
+/* CR57: the path as a chain of stations; the one you heard is highlighted */
+.ar-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.ar-chip { display: inline-block; padding: 1px 8px; border: 1px solid #3a4a5a; border-radius: 10px;
+  font: 12.5px ui-monospace, Consolas, monospace; color: #d6dde4; background: #18222c; }
+.ar-chip-heard { border-color: #e0a6ff; color: #e0a6ff; }
+.ar-chip.ar-hot { background: color-mix(in srgb, #e0a6ff 26%, transparent); outline: none; }
+.ar-arrow-r { color: #6f7b86; font-size: 12px; }
+/* CR57: in the monitor the payload and the plain text each start a line of their own */
+.ar-payload { display: block; padding-left: 2.5em; }

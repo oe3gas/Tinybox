@@ -2198,9 +2198,12 @@ function monLine(e) {
   }
   line.append(el("span", "mty", ` <${e.typ}>`));
   if (e.kind) line.append(el("span", "mk " + e.kind, e.kind));
-  if (ap) line.append(el("span", "mk aprs", "aprs"));
-  if (e.text) line.append(": ", ap ? AprsView.info(e) : e.text);
-  line.append("\n");
+  if (ap) {                                      // CR57: payload and plain text on lines of their own
+    line.append(AprsView.payload(e));           // a block: starts its own line
+  } else {
+    if (e.text) line.append(": " + e.text);
+    line.append("\n");
+  }
   if (ap) {
     line.append(AprsView.decoded(e));
     AprsView.decorate(line, e);
