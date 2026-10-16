@@ -267,7 +267,7 @@ const MON_KINDS = [["", "Everything"], ["frame", "Channel frames"], ["tx", "Own 
 function callColor(call) {
   let x = 2166136261;
   for (const ch of call.replace(/\*$/, "")) x = Math.imul(x ^ ch.charCodeAt(0), 16777619) >>> 0;
-  return `hsl(${x % 360}, 70%, ${26 + (x >> 9) % 10}%)`;    // dark enough on the light ground
+  return `hsl(${x % 360}, 70%, ${62 + (x >> 9) % 12}%)`;    // light on the dark monitor
 }
 function callSpan(call) {
   return h("span", { class: "mc", style: "color: " + callColor(call), text: call });
@@ -301,7 +301,7 @@ function feedLine(item) {
       item.via.forEach((v, i) => { if (i) line.append(","); line.append(callSpan(v)); });
     }
     line.append(h("span", { class: "typ", text: " <" + item.typ + ">" }));
-    if (item.kind) line.append(" ", h("span", { class: "kind", text: item.kind }));
+    if (item.kind) line.append(" ", h("span", { class: "kind " + item.kind, text: item.kind }));
     if (item.text) line.append(": " + item.text);
     return line;
   }

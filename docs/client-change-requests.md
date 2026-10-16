@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.10.2026 (CR50 umgesetzt)
+Stand: 16.10.2026 (CR53 umgesetzt)
 
 ## Übersicht
 
@@ -57,6 +57,7 @@ Stand: 15.10.2026 (CR50 umgesetzt)
 | 48 | TinyBox-Bake: Text und Intervall in `[beacon]`, neue Post als „Mail for:“-Liste in der Bake | ✅ siehe unten |
 | 49 | Suche in Mails und Bulletins: Client (Suchfeld), TinyBox (Befehl `F`), Sysop-Weboberfläche | ✅ siehe unten |
 | 50 | Monitor: alter Monitor aus den Settings raus, ohne „fm“, Rufzeichen farbig, Filter nach Text und nach TinyBox-Sonderframes, Clear | ✅ siehe unten |
+| 53 | TinyBox-Web-GUI: Monitor auf schwarzem Hintergrund (wie im Client) | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -1444,3 +1445,13 @@ Betrifft die Sysop-Web-GUI der TinyBox (http://127.0.0.1:8080/), nicht den Clien
 - Dateien: `tinybox/framemon.py` (neu), `tinybox/adapters/kiss.py`, `tinybox/adapters/web.py`,
   `tinybox/web/app.js`, `tinybox/web/app.css`. Test: `tests/test_framemon.py`.
   Nur die TinyBox, kein neuer Client.
+
+## CR53 – TinyBox-Web-GUI: Monitor auf schwarzem Hintergrund (✅ 16.10.2026)
+
+**Wunsch (OE3GAS):** Der Live-Monitor der TinyBox-Web-GUI soll wie der Monitor im Client einen
+schwarzen Hintergrund haben.
+
+**Lösung:** Gleiche Farben wie der Client-Monitor (CR50): Grund `#0c1218`, Text hellgrün-grau, Zeit und
+Frametyp gedämpft grau, eigene Frames (TX) und Eingaben hellblau, Warnungen hellrot. Die Rufzeichen
+bekommen hellere Farben (wie im Client), die TinyBox-Sonderframes (chat, quality, mail, beacon, proto)
+farbige Marken. Nur `tinybox/web/app.css` und `tinybox/web/app.js` – nur die TinyBox, kein neuer Client.

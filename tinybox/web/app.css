@@ -196,21 +196,25 @@ table.raw tr.dim td { color: var(--ink-3); }
 .legend { font-size: 12px; color: var(--ink-3); margin-top: 10px; }
 @media (max-width: 900px) { .dirs, .steps { grid-template-columns: 1fr 1fr; } }
 
-/* monitor */
+/* monitor - dark ground like the client's monitor (CR50/CR52) */
 .monitor { flex-grow: 1; padding: 12px 18px; font-family: var(--mono); font-size: 13px; line-height: 1.65;
-           background: var(--paper-2); overflow: auto; min-height: 220px; }
+           background: #0c1218; color: #d3e6d3; overflow: auto; min-height: 220px; }
 .monitor .line { white-space: pre-wrap; word-break: break-word; }
-.monitor .t { color: var(--ink-3); }
-.monitor .in { color: var(--accent); font-weight: 700; }
-.monitor .sys { font-style: italic; }
-.monitor .warn { color: var(--danger); font-weight: 600; }
+.monitor .t { color: #6f7b86; }
+.monitor .in { color: #85b7eb; font-weight: 700; }
+.monitor .sys { font-style: italic; color: #8b959e; }
+.monitor .warn { color: #ff8a80; font-weight: 600; }
 /* CR52: calls in colours, frame type, TinyBox kinds */
 .monitor .mc { font-weight: 700; }
-.monitor .rt { display: inline-block; width: 3ch; color: var(--ink-3); font-size: 11px; font-weight: 700; }
-.monitor .line.tx .rt { color: var(--accent); }
-.monitor .line.mon .rt { color: var(--ink-3); }
-.monitor .typ { color: var(--ink-2); }
-.monitor .kind { padding: 0 5px; border: 1px solid var(--ink-3); border-radius: 3px; font-size: 11px; font-weight: 700; }
+.monitor .rt { display: inline-block; width: 3ch; color: #6f7b86; font-size: 11px; font-weight: 700; }
+.monitor .line.tx .rt { color: #85b7eb; }
+.monitor .line.mon .rt { color: #6f7b86; }
+.monitor .typ { color: #8b959e; }
+.monitor .kind { padding: 0 5px; border: 1px solid #4a5560; border-radius: 3px; font-size: 11px; font-weight: 700;
+                 background: #26384a; color: #dfe6ec; }
+.monitor .kind.chat { background: #1c4a3a; } .monitor .kind.quality { background: #4a3a12; }
+.monitor .kind.mail { background: #4a1c3b; } .monitor .kind.beacon { background: #1c3b5c; }
+.monitor .kind.proto { background: #3a3a3a; }
 .card-head .mon-q input { width: 16em; }
 .card-head select { font: inherit; font-size: 14px; padding: 6px 8px; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper); }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
