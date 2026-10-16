@@ -2,6 +2,7 @@
 144.800 MHz on 16.10.2026."""
 
 import calendar
+import re
 import unittest
 
 from tinybox import aprs
@@ -75,6 +76,12 @@ class PositionTests(unittest.TestCase):
         self.assertIn("PHG 4 W 3 dBi omni", chips(r))
         self.assertIn("DireWolf", r["dest"]["device"])
 
+    def test_hf_gateway_is_explained(self):
+        r = dec("APMI01-2", "OE3MZC-2", [], [], b"@161319z4812.06N/01555.87E& Igate in Neulengbach")
+        self.assertIn("HF gateway", chips(r))                       # not "hF gateway"
+        sym = [x for x in r["segs"] if x["label"] == "Symbol code"][0]
+        self.assertIn("iGate", sym["mean"])
+
     def test_compressed(self):
         r = dec("APOT2A", "OE3XKN-10", ["OE3XWJ-10", "WIDE1", "WIDE3-3"], [1, 1, 0], b"!/6,fxRISM} st 13.5V 25C")
         self.assertAlmostEqual(r["lat"], 48.2007, places=3)
@@ -99,7 +106,7 @@ class PositionTests(unittest.TestCase):
     def test_distance_from_the_locator(self):
         home = aprs.locator_to_latlon("JN88EP")
         r = dec("APDR10", "OE1IAH-8", [], [], b"!4808.09N/01508.51Ev297/000", home=home)
-        self.assertRegex(chips(r)[-1], r"^\d+ km, \d+° from you$")
+        self.assertTrue(any(re.fullmatch(r"\d+ km, \d+° from you", c) for c in chips(r)))
 
 
 class OtherTypesTests(unittest.TestCase):
@@ -143,6 +150,18 @@ class OtherTypesTests(unittest.TestCase):
 
 
 class PathTests(unittest.TestCase):
+    def test_heard_from_the_last_digipeater(self):
+        self.assertEqual(aprs.heard_from("DA1MIY-9", ["DB0SLB-10", "WIDE1", "OE3XWJ-10", "WIDE2"], [True] * 4)[0],
+                         "OE3XWJ-10")
+        self.assertEqual(aprs.heard_from("OE3CRA-2", ["WIDE2-1"], [False])[0], "OE3CRA-2")
+        self.assertEqual(aprs.heard_from("OE3CRA-2", ["WIDE2"], [True])[0], "")     # untraced digi
+        r = dec("APMI04", "OE3CRA-2", ["OE3XWJ-10", "WIDE2-1"], [1, 0],
+                b":OE3CRA-2 :UNIT.Volt,Pkt,Pkt,Pcnt,None,On,On,On,On,Hi,Hi,Hi,Hi")
+        self.assertEqual(r["heard"]["call"], "OE3XWJ-10")
+        self.assertIn("heard from OE3XWJ-10", chips(r))
+        self.assertTrue(r["segs"][-1]["mean"].startswith("A1 Volt · A2 Pkt"))
+
+
     def test_hops_used_and_left(self):
         rows, summary, warn = aprs.explain_path(["OE3XWJ-10", "WIDE1", "WIDE2-1"], [True, True, False])
         self.assertEqual(rows[0]["call"], "OE3XWJ-10*")

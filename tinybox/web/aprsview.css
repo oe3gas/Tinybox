@@ -10,7 +10,9 @@
 .ar-hot { background: color-mix(in srgb, currentColor 26%, transparent);
   outline: 1px solid currentColor; border-radius: 2px; }
 .ar-part.ar-hot { outline: none; background: #1e2a36; color: inherit; }
-.ar-row { cursor: pointer; }
+.ar-row { display: block; cursor: pointer; border-top: 1px solid #263544; border-bottom: 1px solid #263544;
+  padding-top: 3px; }                                    /* a line between APRS packets (CR56) */
+.ar-row + .ar-row { border-top: none; }
 .ar-row.ar-sel { background: #17222d; }
 .ar-info { white-space: pre-wrap; }
 .ar-badge { display: inline-block; margin-left: 5px; padding: 0 5px; border: 1px solid currentColor;
@@ -50,7 +52,7 @@
 .ar-part { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 5px 6px; border-radius: 6px; }
 .ar-raw { font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; align-self: start; }
 .ar-plabel { color: #fff; font-weight: 600; }
-.ar-pmean { color: #c3ccd4; }
+.ar-pmean { color: #c3ccd4; overflow-wrap: anywhere; }
 .ar-pcalc { font: 11.5px ui-monospace, Consolas, monospace; color: #8b98a5; margin-top: 1px; }
 .ar-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .ar-btn { display: inline-block; padding: 7px 12px; border: 1px solid #2f4a66; border-radius: 6px;

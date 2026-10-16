@@ -12,9 +12,9 @@
 "use strict";
 
 const AprsView = (() => {
-  const STORE = "tinybox.aprsView";
-  let on = true;
-  try { on = localStorage.getItem(STORE) !== "0"; } catch (e) { /* no storage: default on */ }
+  const STORE = "tinybox.aprsLens";
+  let on = false;                 // off until the button is pressed (CR56)
+  try { on = localStorage.getItem(STORE) === "1"; } catch (e) { /* no storage: off */ }
   let selected = null;            // the entry shown in the lens
   let lensBox = null;             // the lens element of the page (null: no lens)
   let lastId = 0;
@@ -115,7 +115,7 @@ const AprsView = (() => {
   function renderLens() {
     if (!lensBox) return;                        // visibility: the page decides
     lensBox.replaceChildren();
-    lensBox.append(mk("div", "ar-kicker", "APRS lens"));
+    lensBox.append(mk("div", "ar-kicker", "APRS Lense"));
     const e = selected;
     if (!e || !e.aprs) {
       lensBox.append(mk("p", "ar-empty",
@@ -138,12 +138,19 @@ const AprsView = (() => {
     grid.append(from, mk("span", "ar-lbl", "“To”"));
     const to = mk("div");
     to.append(dest(e), mk("div", "ar-note", a.dest.note));
-    grid.append(to, mk("span", "ar-lbl", "Path"));
+    grid.append(to, mk("span", "ar-lbl", "Heard"));
+    const heard = mk("div");                    // CR56: which station did the radio receive?
+    const hc = part(a.heard.call || "unknown", "tp", "heard");
+    hc.classList.add("ar-mono");
+    heard.append(hc, mk("div", "ar-note", a.heard.note));
+    grid.append(heard, mk("span", "ar-lbl", "Path"));
     const path = mk("div");
     if (!a.path.length) path.append(mk("div", "ar-muted", "(empty)"));
     for (const p of a.path) {
       const r = mk("div");
-      r.append(mk("span", "ar-mono", p.call), mk("span", "ar-muted", " – " + p.note));
+      const c = p.k ? part(p.call, "tp", p.k) : mk("span", "", p.call);
+      c.classList.add("ar-mono");
+      r.append(c, mk("span", "ar-muted", " – " + p.note));
       path.append(r);
     }
     path.append(mk("div", "ar-note", a.path_note));
@@ -212,9 +219,9 @@ const AprsView = (() => {
     listeners.forEach((f) => f(on));
   }
   function toggleButton(cls) {
-    const b = mk("button", cls || "", "APRS");
+    const b = mk("button", cls || "", "APRS Lense");
     b.type = "button";
-    b.title = "Show APRS packets in plain language";
+    b.title = "APRS packets in plain language, and the lens that takes them apart";
     const sync = () => { b.setAttribute("aria-pressed", on ? "true" : "false"); b.classList.toggle("on", on); };
     b.addEventListener("click", () => setEnabled(!on));
     listeners.push(sync);

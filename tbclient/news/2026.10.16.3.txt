@@ -1,0 +1,3 @@
+- Monitor: button is now "APRS Lense", off until pressed.
+  A line between APRS packets. The lens says which station
+  you really heard and explains symbols like HF gateway.

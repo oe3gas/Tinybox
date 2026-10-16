@@ -118,6 +118,45 @@ def symbol_name(table: str, code: str) -> str:
     return ""
 
 
+_GATE_OVERLAY = {"I": "iGate", "R": "receive-only iGate (radio → internet only)",
+                 "T": "transmitting iGate, 1 hop", "2": "transmitting iGate, 2 hops"}
+_DIGI_OVERLAY = {"1": "WIDE1-1 fill-in digipeater (a home station that helps weak mobiles)",
+                 "S": "SSn-N digipeater (regional paths like CZ3-3)", "I": "digipeater with iGate",
+                 "L": "WIDEn-N digipeater that limits long paths", "A": "digipeater with alternative input",
+                 "E": "emergency-powered digipeater", "P": "PacComm digipeater", "X": "experimental digipeater",
+                 "V": "viscous digipeater (waits whether another one relays first)"}
+_SYM_NOTES = {
+    "/&": ("Originally a station linking HF and VHF APRS. Today mostly used for iGates - "
+           "a gateway between radio and the internet (APRS-IS). Cleaner would be the alternate table with an "
+           "overlay letter: I& iGate, R& receive-only iGate, T& transmitting iGate (1 hop), 2& (2 hops)."),
+    "/#": ("Repeats packets so they travel further. The alternate table with an overlay tells "
+           "the kind, e.g. 1# = WIDE1-1 fill-in, S# = regional SSn-N digipeater, I# = digipeater with iGate."),
+    "/_": "After the position come wind, temperature, rain, humidity and air pressure.",
+    "/r": "The comment usually gives frequency, shift and tone (CTCSS).",
+    "/-": "Fixed station at home (QTH).",
+}
+
+
+def symbol_note(table: str, code: str) -> str:
+    """What a symbol means beyond its name (for the lens); '' if nothing to add."""
+    if table == "/" or table == "\\":
+        return _SYM_NOTES.get(table + code, "")
+    over = str("abcdefghij".index(table)) if "a" <= table <= "j" else table
+    if code == "&":
+        what = _GATE_OVERLAY.get(over, f"gateway of kind {over}")
+        return f"Gateway with overlay {over}: {what}. Overlays tell the kind of gateway."
+    if code == "#":
+        what = _DIGI_OVERLAY.get(over, f"digipeater of kind {over}")
+        return f"Digipeater with overlay {over}: {what}."
+    return f"The overlay character {over} is printed on the symbol."
+
+
+def _sym_mean(table: str, code: str, name: str) -> str:
+    base = f"{table}{code} = {name}" if name else f"{table}{code} - not assigned in the symbol set"
+    note = symbol_note(table, code)
+    return f"{base}. {note}" if note else base
+
+
 def _sym_table_text(table: str) -> str:
     if table == "/":
         return "/ = primary table"
@@ -153,6 +192,9 @@ def lon_text(lon: float) -> str:
 
 
 def _lc(name: str) -> str:
+    """'Weather station' -> 'weather station', but 'HF gateway' stays."""
+    if len(name) > 1 and name[1].isupper():
+        return name
     return name[:1].lower() + name[1:]
 
 
@@ -283,6 +325,27 @@ def explain_path(path: list[str], repeated: list[bool]) -> tuple[list[dict], str
     return rows, summary, warnings
 
 
+_OLD_ALIASES = {"RELAY", "WIDE", "TRACE", "GATE", "ECHO"}
+
+
+def heard_from(src: str, path: list[str], repeated: list[bool]) -> tuple[str, str]:
+    """Which station did the radio actually receive? The sender, or the last
+    digipeater that relayed the packet (it put its call into the path)."""
+    if not any(repeated):
+        return src, (f"Nobody has relayed it: your radio received {src} itself.")
+    last = max(i for i, h in enumerate(repeated) if h)
+    for i in range(last, -1, -1):
+        call = path[i]
+        if not repeated[i]:
+            break
+        if _ALIAS.match(call) or call.split("-")[0] in _OLD_ALIASES:
+            continue                                      # a used alias: the digi stands before it
+        return call, (f"{call} relayed it last - its transmission is what your radio received. "
+                      f"The sender {src} may well be out of your range.")
+    return "", ("The last digipeater did not put its call into the path: who exactly you "
+                "received cannot be seen.")
+
+
 # ---------------------------------------------------------------- positions
 
 def _uncompressed(body: str, out: _Out) -> int | None:
@@ -301,8 +364,7 @@ def _uncompressed(body: str, out: _Out) -> int | None:
     out.seg(table, "sym", "sym", "Symbol table", _sym_table_text(table))
     out.seg(lon_s + ew, "pos", "pos", "Longitude", lon_text(lon), "dddmm.mm + E/W")
     name = symbol_name(table, code)
-    out.seg(code, "sym", "sym", "Symbol code", f"{table}{code} = {name}" if name else
-            f"{table}{code} - not assigned in the symbol set", "")
+    out.seg(code, "sym", "sym", "Symbol code", _sym_mean(table, code, name), "")
     out.chip(f"{lat_text(lat)} {lon_text(lon)}", "pos", "pos")
     out.chip(_lc(name) if name else f"symbol {table}{code} ⚠ unassigned", "sym" if name else "warn", "sym")
     return 19
@@ -325,7 +387,7 @@ def _compressed(body: str, out: _Out) -> int | None:
     out.seg(la, "pos", "pos", "Latitude (compressed)", lat_text(lat), f"base-91 {_b91(la)} → 90 − {_b91(la)}/380926")
     out.seg(lo, "pos", "pos", "Longitude (compressed)", lon_text(lon), f"base-91 {_b91(lo)} → −180 + {_b91(lo)}/190463")
     name = symbol_name(tab if tab in "/\\" else table, code)
-    out.seg(code, "sym", "sym", "Symbol code", f"{tab}{code} = {name}" if name else f"{tab}{code} - not assigned in the symbol set")
+    out.seg(code, "sym", "sym", "Symbol code", _sym_mean(tab if tab in "/\\" else table, code, name))
     out.chip(f"{lat_text(lat)} {lon_text(lon)}", "pos", "pos")
     out.chip(_lc(name) if name else f"symbol {tab}{code} ⚠ unassigned", "sym" if name else "warn", "sym")
     cst = c + s + t
@@ -633,7 +695,7 @@ def _mice(dest: str, text: str, out: _Out, home) -> bool:
             f"{knots} kn = {knots * 1.852:.0f} km/h, course {course}°",
             f"speed ({b[4]}−28)·10 + ⌊({b[5]}−28)/10⌋ (−800 if ≥ 800) · course ({dc} mod 10)·100 + ({b[6]}−28) (−400 if ≥ 400)")
     name = symbol_name(table, code_c)
-    out.seg(code_c, "sym", "sym", "Symbol code", (f"{table}{code_c} = {name}" if name else f"{table}{code_c} - not assigned"),
+    out.seg(code_c, "sym", "sym", "Symbol code", _sym_mean(table, code_c, name),
             "in Mic-E the code comes before the table")
     out.seg(table, "sym", "sym", "Symbol table", _sym_table_text(table))
 
@@ -697,6 +759,22 @@ def _mice(dest: str, text: str, out: _Out, home) -> bool:
     return True
 
 
+def _tdef_mean(kind: str, rest: str) -> str:
+    """PARM/UNIT/EQNS/BITS values channel by channel."""
+    vals = [v.strip() for v in rest.split(",")]
+    if kind in ("PARM", "UNIT"):
+        names = [f"A{i + 1}" for i in range(5)] + [f"B{i + 1}" for i in range(8)]
+        return " · ".join(f"{n} {v}" for n, v in zip(names, vals) if v)
+    if kind == "EQNS":
+        parts = []
+        for i in range(0, min(len(vals), 15) - 2, 3):
+            a, b, c = vals[i:i + 3]
+            parts.append(f"A{i // 3 + 1} = {a}·x² + {b}·x + {c}")
+        return " · ".join(parts)
+    bits, _, title = rest.partition(",")
+    return f"bits {bits.strip()}: these values mean 'active' (B1–B8) · project title \u201c{title.strip()}\u201d"
+
+
 def _message(src: str, text: str, out: _Out, memory: TelemetryMemory | None) -> bool:
     if len(text) < 11 or text[10] != ":":
         return False
@@ -719,7 +797,7 @@ def _message(src: str, text: str, out: _Out, memory: TelemetryMemory | None) -> 
         out.title = "Telemetry definition"
         out.seg(kind + ".", "tlm", "tdef", f"{kind} definition", meaning,
                 "sent to itself so that programs can read its T# values")
-        out.seg(rest, "tlm", "tval", "Values", rest)
+        out.seg(rest, "tlm", "tval", "Values", _tdef_mean(kind, rest))
         out.chip(f"Telemetry {kind.lower()} for {target}", "type", "type")
         out.chip(rest, "tlm", "tval")
         return True
@@ -963,6 +1041,11 @@ def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, in
         dist, brg = distance_bearing(home, (out.lat, out.lon))
         out.chip(f"{dist:.0f} km, {brg:.0f}° from you", "pos", "dist")
     rows, summary, warnings = explain_path(path, repeated)
+    heard, heard_note = heard_from(src, path, repeated)
+    for r in rows:
+        if heard and r["call"].rstrip("*") == heard:
+            r["k"] = "heard"
+    out.chip(f"heard from {heard}" if heard else "heard from ? (untraced digipeater)", "tp", "heard")
     for w in warnings:
         out.chip("⚠ long path", "warn", "path")
         break
@@ -970,6 +1053,7 @@ def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, in
         "title": out.title,
         "dest": {"mode": mode, "note": note, "device": dev},
         "path": rows, "path_note": summary, "warnings": warnings,
+        "heard": {"call": heard, "note": heard_note},
         "segs": out.segs, "chips": out.chips,
         "text": " ".join(c["t"] for c in out.chips),
     }

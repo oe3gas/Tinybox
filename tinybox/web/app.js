@@ -653,7 +653,7 @@ function channelCard() {
 
 function monitorCard(withLens) {
   const body = h("div", { class: "monitor" });
-  const lens = withLens ? h("aside", { class: "ar-lens", "aria-label": "APRS lens" }) : null;   // CR55
+  const lens = withLens ? h("aside", { class: "ar-lens", "aria-label": "APRS Lense" }) : null;   // CR55
   function redraw() {
     body.replaceChildren(...S.feed.filter(monMatch).map(feedLine));
     body.scrollTop = body.scrollHeight;

@@ -155,9 +155,10 @@ Station
 - Verbindungsqualitaet als Balken; Teilnehmer antippen zeigt die Zahlen
   dahinter (Richtungen, Verluste, Balkenrechnung, Zaehler).
 - Monitor der Verbindung.
-- APRS im Klartext (Knopf "APRS" im Monitor): jedes Paket in seine
+- APRS im Klartext (Knopf "APRS Lense" im Monitor): jedes Paket in seine
   Teile zerlegt und farbig auf den Klartext abgebildet; die "Lupe"
-  erklaert eine angeklickte Zeile Stueck fuer Stueck. Links zu aprs.fi
+  erklaert eine angeklickte Zeile Stueck fuer Stueck - auch, welche
+  Station man wirklich gehoert hat und was das Symbol bedeutet. Links zu aprs.fi
   und OpenStreetMap, Entfernung vom eigenen Locator.
 
 Update holen
