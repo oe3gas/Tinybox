@@ -96,6 +96,10 @@ class SpotTests(unittest.TestCase):
         self.assertEqual(mode_of(14195, ""), "SSB")
         self.assertEqual(mode_of(14195, "rtty contest"), "RTTY")
         self.assertEqual(mode_of(10145, ""), "")
+        self.assertEqual((band_of(144300), band_of(432200)), ("2m", "70cm"))
+        self.assertEqual(mode_of(144174.5, ""), "FT8")
+        self.assertEqual(mode_of(144050, ""), "CW")
+        self.assertEqual(mode_of(432200, ""), "SSB")
 
 
 class CtyTests(unittest.TestCase):
@@ -159,8 +163,10 @@ def fill(st: Store, c: ctymod.Cty, base: float) -> None:
         (200, "DX de W1AW:     14030.0  3B8AA   CW  0902Z"),
         # common entity (DL) -> excluded
         (300, "DX de OE3GAS:   14030.0  DL1XX   CW  0903Z"),
-        # 2m -> not in bands
-        (400, "DX de OE3GAS:  144300.0  3B8BB   SSB 0904Z"),
+        # 70cm with one spotter -> counted, not shown
+        (400, "DX de OE3GAS:  432200.0  3B8BB   SSB 0904Z"),
+        # 160m spotted by AF -> neither relevant nor in band activity
+        (450, "DX de 3B8XX:     1830.0  VP8AA   CW  0905Z"),
     ]
     for off, line in lines:
         s = parse(line)
@@ -199,8 +205,9 @@ class DigestTests(unittest.TestCase):
         self.assertIn("20 17", rows[0])
         self.assertIn("CW FT8", rows[0])
         self.assertTrue(rows[0].rstrip().endswith(" 3"))
-        self.assertIn("1 Rufzeichen mit weniger als 2 Spottern", d.text)
-        self.assertIn("9 Spots gesamt, davon 6 relevant", d.text)
+        self.assertIn("2 Rufzeichen mit weniger als 2 Spottern", d.text)
+        self.assertIn("10 Spots gesamt, davon 7 relevant", d.text)
+        self.assertIn("(auf 2m 70cm alle)", d.text)
         self.assertNotIn("Achtung", d.text)
         self.assertTrue(all(len(l) < 80 for l in lines))
         self.assertTrue(d.subject.startswith("DX-Zusammenfassung "))
@@ -209,7 +216,23 @@ class DigestTests(unittest.TestCase):
         d = self.digest()
         act = d.text.split("Bandaktivitaet")[1]
         self.assertRegex(act, r"20m\s+4 #+\s+\d\dz")       # W1AW is NA -> not counted
-        self.assertNotIn("2m ", act.replace("12m", ""))     # 2m not in bands
+        self.assertRegex(act, r"70cm\s+1 #")
+        self.assertRegex(act, r"160m\s+0\n")                # AF spotter not counted
+
+    def test_vhf_counts_every_entity(self):
+        c = cty()
+        for sp in ("OE3GAS", "OE1ABC", "DK9IP"):
+            for line in (f"DX de {sp}:  144300.0  DL0ABC  SSB tropo  1200Z",
+                         f"DX de {sp}:  432174.0  OE5XYZ  -12 dB  1201Z",
+                         f"DX de {sp}:   14200.0  DL0HF   SSB  1202Z"):
+                s = parse(line)
+                self.st.add(s, self.base + 2000, c.lookup(s.dx), c.lookup(s.spotter))
+        rows = {l.split()[0]: l for l in self.digest().text.splitlines() if l[:2] in ("DL", "OE")}
+        self.assertIn("DL0ABC", rows)
+        self.assertIn(" 2m ", rows["DL0ABC"])
+        self.assertIn("70cm", rows["OE5XYZ"])
+        self.assertIn("FT8", rows["OE5XYZ"])
+        self.assertNotIn("DL0HF", rows)                    # HF: DL still excluded
 
     def test_byte_limit_drops_rows(self):
         c = cty()

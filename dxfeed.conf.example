@@ -29,8 +29,9 @@ to       = DX                          ; rubric; no @ address = this mailbox onl
                                        ; rubric must be listed there as accepted.
 hours    = 24
 spotter_continents = EU                ; only spots heard on these continents (empty = all)
-bands    = 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m
-; DXCC entities that are left out (primary prefix as in cty.dat)
+bands    = 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 70cm
+all_dxcc_bands = 2m 70cm               ; exclude does not apply here (VHF/UHF DX is mostly EU)
+; DXCC entities that are left out (primary prefix as in cty.dat), not on all_dxcc_bands
 exclude  = DL F G GM GW GI EI I EA CT ON PA LX HB OE OK OM SP HA S5 9A E7 YU Z3 LZ YO
            ER SV OZ SM LA OH ES YL LY UR EU UA UA2 K VE JA UA9
 min_spotters = 2                       ; fewer different spotters: only counted (busted calls)

@@ -3,7 +3,9 @@
 Relevance filter (dxfeed.conf [digest]):
   * spotter on one of spotter_continents (default EU): heard from here
   * band in bands (default 160m ... 4m)
-  * DXCC entity known and not in exclude (the entities on the air every day)
+  * DXCC entity known and not in exclude (the entities on the air every day);
+    on all_dxcc_bands (default 2m 70cm) every entity counts, since DX on
+    VHF/UHF from here is mostly Europe
 One line per DX call: entity, bands, modes, first/last time, number of
 different spotters. Calls seen by fewer than min_spotters stations are only
 counted (often busted calls). Then the band activity of all spots from the
@@ -49,8 +51,12 @@ class Digest:
     spots: int          # spots in the window (all)
 
 
+HF_BANDS = {"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"}
+
+
 def _short_band(band: str) -> str:
-    return band[:-1] if band.endswith("m") and not band.endswith("cm") else band
+    """HF without unit (20 17 15), VHF/UHF with it (6m 2m 70cm) - "2" would be unclear."""
+    return band[:-1] if band in HF_BANDS else band
 
 
 def time_span(first: int, last: int) -> str:
@@ -77,7 +83,9 @@ def aggregate(rows, cfg: DigestCfg) -> tuple[list[DxLine], int]:
             continue
         if r["band"] not in cfg.bands:
             continue
-        if not r["dx_prefix"] or r["dx_prefix"] in cfg.exclude:
+        if not r["dx_prefix"]:
+            continue
+        if r["band"] not in cfg.all_dxcc_bands and r["dx_prefix"] in cfg.exclude:
             continue
         n += 1
         d = by_call.get(r["dx"])
@@ -143,7 +151,9 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
     window_h = (until - since) / 3600
     conts = "/".join(sorted(cfg.spotter_continents)) or "allen Kontinenten"
     head = [f"DX-Zusammenfassung {t0:%d.%m.%Y %H:%M} - {t1:%d.%m.%Y %H:%M} Lokalzeit",
-            f"Spots von Stationen in {conts}, ohne haeufige DXCC-Gebiete.",
+            f"Spots von Stationen in {conts}, ohne haeufige DXCC-Gebiete"
+            + (f" (auf {' '.join(b for b in BAND_ORDER if b in cfg.all_dxcc_bands and b in cfg.bands)}"
+               " alle)." if cfg.all_dxcc_bands & set(cfg.bands) else "."),
             f"{len(rows)} Spots gesamt, davon {n_rel} relevant: {len(lines)} DX-Rufzeichen "
             f"aus {entities} Gebieten."]
     if coverage_sec < 0.9 * (until - since):

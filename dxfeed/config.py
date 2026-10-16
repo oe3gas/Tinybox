@@ -19,7 +19,9 @@ DEFAULT_EXCLUDE = (
     "ER SV OZ SM LA OH ES YL LY UR EU UA UA2 "
     # elsewhere: very common from Europe
     "K VE JA UA9")
-DEFAULT_BANDS = "160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m"
+DEFAULT_BANDS = "160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 70cm"
+# on these bands every DXCC counts: 2m/70cm DX from here is mostly Europe
+DEFAULT_ALL_DXCC_BANDS = "2m 70cm"
 
 
 class ConfigError(Exception):
@@ -54,6 +56,7 @@ class DigestCfg:
     spotter_continents: frozenset[str] = frozenset({"EU"})
     exclude: frozenset[str] = frozenset(DEFAULT_EXCLUDE.split())
     bands: tuple[str, ...] = tuple(DEFAULT_BANDS.split())
+    all_dxcc_bands: frozenset[str] = frozenset(DEFAULT_ALL_DXCC_BANDS.split())
     min_spotters: int = 2
     max_lines: int = 30
     max_bytes: int = 3000
@@ -124,10 +127,13 @@ def load(path: str | Path) -> Config:
     if not RUBRIC_RE.match(to):
         raise ConfigError(f"[digest] to: '{to}' - 1-6 letters/digits, no @ (local only)")
     bands = tuple(b.lower() for b in get("digest", "bands", DEFAULT_BANDS).split())
-    unknown = [b for b in bands if b not in BAND_ORDER]
-    if unknown:
-        raise ConfigError(f"[digest] bands: unknown {' '.join(unknown)} "
-                          f"(known: {' '.join(BAND_ORDER)})")
+    all_dxcc = tuple(b.lower() for b in get("digest", "all_dxcc_bands",
+                                            DEFAULT_ALL_DXCC_BANDS).split())
+    for key, lst in (("bands", bands), ("all_dxcc_bands", all_dxcc)):
+        unknown = [b for b in lst if b not in BAND_ORDER]
+        if unknown:
+            raise ConfigError(f"[digest] {key}: unknown {' '.join(unknown)} "
+                              f"(known: {' '.join(BAND_ORDER)})")
     valid = get("digest", "valid", "7d")
     if valid and not VALID_RE.match(valid):
         raise ConfigError(f"[digest] valid: '{valid}' - e.g. 36h, 7d, empty = keep")
@@ -137,6 +143,7 @@ def load(path: str | Path) -> Config:
         spotter_continents=frozenset(get("digest", "spotter_continents", "EU").upper().split()),
         exclude=frozenset(get("digest", "exclude", DEFAULT_EXCLUDE).upper().split()),
         bands=bands,
+        all_dxcc_bands=frozenset(all_dxcc),
         min_spotters=max(1, get("digest", "min_spotters", 2, int)),
         max_lines=max(5, get("digest", "max_lines", 30, int)),
         max_bytes=max(800, get("digest", "max_bytes", 3000, int)),
