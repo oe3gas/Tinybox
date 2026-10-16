@@ -2384,6 +2384,7 @@ async function start() {
   $("mon-clear").onclick = async () => { await api("monitor/clear"); monLines = []; AprsView.forget(); monRedraw(); };
   $("mon-aprs").replaceWith(AprsView.toggleButton("sm"));        // CR55
   AprsView.attachLens($("aprs-lens"));
+  AprsView.setSymbolRenderer(symbolEl);                       // CR59: symbols in the lens
   AprsView.onChange(() => { showLens(); monRedraw(); });
   $("freq-form").onsubmit = saveFreq;
   $("freq-skip").onclick = async () => { await api("freq", { freq: "" }); $("freqdlg").classList.add("hidden"); };

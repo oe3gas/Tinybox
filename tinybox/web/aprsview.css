@@ -70,3 +70,5 @@
 .ar-arrow-r { color: #6f7b86; font-size: 12px; }
 /* CR57: in the monitor the payload and the plain text each start a line of their own */
 .ar-payload { display: block; padding-left: 2.5em; }
+/* CR59: the APRS symbol next to its meaning (client: sprites from /aprs) */
+.ar-sym { display: inline-block; vertical-align: -4px; margin-right: 6px; }

@@ -365,6 +365,7 @@ def _uncompressed(body: str, out: _Out) -> int | None:
     out.seg(lon_s + ew, "pos", "pos", "Longitude", lon_text(lon), "dddmm.mm + E/W")
     name = symbol_name(table, code)
     out.seg(code, "sym", "sym", "Symbol code", _sym_mean(table, code, name), "")
+    out.segs[-1]["sym"] = table + code                    # CR59: the lens draws the icon
     out.chip(f"{lat_text(lat)} {lon_text(lon)}", "pos", "pos")
     out.chip(_lc(name) if name else f"symbol {table}{code} ⚠ unassigned", "sym" if name else "warn", "sym")
     return 19
@@ -388,6 +389,7 @@ def _compressed(body: str, out: _Out) -> int | None:
     out.seg(lo, "pos", "pos", "Longitude (compressed)", lon_text(lon), f"base-91 {_b91(lo)} → −180 + {_b91(lo)}/190463")
     name = symbol_name(tab if tab in "/\\" else table, code)
     out.seg(code, "sym", "sym", "Symbol code", _sym_mean(tab if tab in "/\\" else table, code, name))
+    out.segs[-1]["sym"] = (tab if tab in "/\\" else table) + code
     out.chip(f"{lat_text(lat)} {lon_text(lon)}", "pos", "pos")
     out.chip(_lc(name) if name else f"symbol {tab}{code} ⚠ unassigned", "sym" if name else "warn", "sym")
     cst = c + s + t
@@ -697,6 +699,7 @@ def _mice(dest: str, text: str, out: _Out, home) -> bool:
     name = symbol_name(table, code_c)
     out.seg(code_c, "sym", "sym", "Symbol code", _sym_mean(table, code_c, name),
             "in Mic-E the code comes before the table")
+    out.segs[-1]["sym"] = table + code_c
     out.seg(table, "sym", "sym", "Symbol table", _sym_table_text(table))
 
     rest = text[9:]

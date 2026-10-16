@@ -1598,3 +1598,14 @@ wechselte vorher auf den Chat-Kanal, danach ging der Wechsel auf 0 wieder.
 **Lösung:** Ein Klick auf den schon aktiven Kanal (Monitor, Kanal-Chip, Alt+Zahl) schaltet jetzt
 dessen Ansicht ein. Client-Version 2026.10.16.5.
 
+## CR59 – APRS-Lense: Symbol als Bild, Gerätename gelb (✅ 16.10.2026)
+
+**Wunsch (OE3GAS):** In der Detailansicht beim Symbol-Code auch das Symbol zeigen („> = car“ + Bild) –
+die Symbole hat der Client ja schon. Den Gerätenamen (z. B. „WB2OSZ DireWolf“) in der Erklärung zum
+„To“-Feld auch gelb.
+
+**Lösung:** Der Decoder gibt beim Symbol-Code das Symbol (Tabelle + Code) mit; die Lense zeigt davor
+das Bild aus dem Symbolsatz des Clients (`/aprs/symbols-*.png`). Die TinyBox-Web-GUI hat keine
+Symbolbilder und zeigt weiter nur den Text. Der Gerätename in der Erklärung hat die Gerätefarbe (gelb),
+Hover verbindet ihn mit dem „To“-Feld. Client-Version 2026.10.16.6.
+

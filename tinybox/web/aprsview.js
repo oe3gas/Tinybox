@@ -18,6 +18,7 @@ const AprsView = (() => {
   let selected = null;            // the entry shown in the lens
   let lensBox = null;             // the lens element of the page (null: no lens)
   let lastId = 0;
+  let symbolRenderer = null;      // CR59: the page may draw APRS symbols (the client has the sprites)
   const listeners = [];
 
   function mk(tag, cls, text) {
@@ -142,7 +143,7 @@ const AprsView = (() => {
     from.append(mk("span", "ar-mono", e.src), mk("span", "ar-muted", " – the sender."));
     grid.append(from, mk("span", "ar-lbl", "“To”"));
     const to = mk("div");
-    to.append(dest(e), mk("div", "ar-note", a.dest.note));
+    to.append(dest(e), destNote(a));
     grid.append(to, mk("span", "ar-lbl", "Heard"));
     const heard = mk("div");                    // CR56: which station did the radio receive?
     const hc = part(a.heard.call || "unknown", "tp", "heard");
@@ -189,7 +190,13 @@ const AprsView = (() => {
       raw.classList.add("ar-raw", "ar-u");
       const txt = mk("div");
       txt.append(mk("div", "ar-plabel", p.label));
-      if (p.mean) txt.append(mk("div", "ar-pmean", p.mean));
+      if (p.mean) {
+        const m = mk("div", "ar-pmean");
+        const icon = p.sym && symbolRenderer ? symbolRenderer(p.sym) : null;
+        if (icon) { icon.classList.add("ar-sym"); m.append(icon); }   // CR59: "> = car" + the symbol
+        m.append(p.mean);
+        txt.append(m);
+      }
       if (p.calc) txt.append(mk("div", "ar-pcalc", p.calc));
       row.append(raw, txt);
       s2.append(row);
@@ -201,6 +208,15 @@ const AprsView = (() => {
     if (a.lat !== undefined) links.append(link(osm(a.lat, a.lon), "Position on OpenStreetMap ↗", "ar-btn"));
     root.append(links, foot());
     lensBox.append(root);
+  }
+  // CR59: the device name in the note in its colour (yellow), like in the plain-text line
+  function destNote(a) {
+    const n = mk("div", "ar-note");
+    const dev = a.dest.device;
+    const i = dev ? a.dest.note.indexOf(dev) : -1;
+    if (i < 0) { n.textContent = a.dest.note; return n; }
+    n.append(a.dest.note.slice(0, i), part(dev, "dev", "dest"), a.dest.note.slice(i + dev.length));
+    return n;
   }
   function foot() {
     return mk("p", "ar-small", "Device names: aprs-deviceid (CC BY-SA 2.0). Decoded locally - nothing is fetched.");
@@ -232,6 +248,6 @@ const AprsView = (() => {
   function attachLens(el) { lensBox = el; renderLens(); }
   function forget() { selected = null; renderLens(); }
 
-  return { enabled: () => on, setEnabled, onChange: (f) => listeners.push(f), active, dest, info, payload, decoded,
+  return { setSymbolRenderer: (f) => { symbolRenderer = f; }, enabled: () => on, setEnabled, onChange: (f) => listeners.push(f), active, dest, info, payload, decoded,
            decorate, searchText, select, attachLens, toggleButton, forget };
 })();

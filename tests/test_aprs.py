@@ -81,6 +81,7 @@ class PositionTests(unittest.TestCase):
         self.assertIn("HF gateway", chips(r))                       # not "hF gateway"
         sym = [x for x in r["segs"] if x["label"] == "Symbol code"][0]
         self.assertIn("iGate", sym["mean"])
+        self.assertEqual(sym["sym"], "/&")
 
     def test_compressed(self):
         r = dec("APOT2A", "OE3XKN-10", ["OE3XWJ-10", "WIDE1", "WIDE3-3"], [1, 1, 0], b"!/6,fxRISM} st 13.5V 25C")

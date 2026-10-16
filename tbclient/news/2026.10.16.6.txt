@@ -1,0 +1,1 @@
+- APRS Lense: symbol icon next to its meaning, device name in yellow.
