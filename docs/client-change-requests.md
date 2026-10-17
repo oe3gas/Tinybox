@@ -1655,3 +1655,28 @@ Hover verbindet ihn mit dem „To“-Feld. Client-Version 2026.10.16.6.
    Wetterfelder mit zu vielen Ziffern (`h074`, `b125031`) sind jetzt als fehlerhaft markiert.
 - Tests: `tests/test_aprsstats.py`, `tests/test_aprs.py`. Client-Version 2026.10.17.
 
+## CR62 – APRS-Lense: Aussendung als Karte, Knopf in drei Stufen (✅ 17.10.2026)
+
+### Erfassung (OE3GAS, 17.10.2026)
+
+1. Die gewählte Aussendung viel deutlicher markieren: die Aussendung als Ganzes, darin die Teile
+   „Frame“ und „Interpretation“. Entwurf im Canvas „APRS-Monitor lehrreich“ – gewählt Variante 2
+   (Karte mit farbigem Kopfband).
+2. Die APRS-Lense ausblendbar: 1. Klick auf „APRS Lense“ = Interpretationssicht (Knopf blau),
+   2. Klick = dazu die Lense rechts (Knopf grün wie „Mail“ links), 3. Klick = alles aus, zurück zum
+   Monitor (Knopf weiß).
+3. In der Interpretationssicht ohne Lense schaltet ein Klick rechts im Kopfband der gewählten
+   Aussendung die Lense ein; Text „view Frame in APRS lense“.
+
+### Umsetzung
+
+1. Jede APRS-Aussendung ist eine Karte: oben **Frame** (Kopfzeile + Payload, dunkel), darunter
+   **Interpretation** (heller), beide mit kleinem Etikett, gestrichelt getrennt. Die gewählte Karte hat
+   einen blauen Rahmen (2 px) und ein blaues Kopfband mit Zeit und Rufzeichen.
+2. Knopf in drei Stufen (weiß → blau → grün `#0b7f86` → weiß), Tooltip sagt die nächste Stufe; die
+   Stufe wird je Browser gemerkt. Die Lense (rechts bzw. am Handy das Bottom Sheet) gibt es nur in der
+   grünen Stufe.
+3. Kopfband rechts: Knopf **view Frame in APRS lense** (schaltet auf grün und zeigt die Aussendung in
+   der Lense); in der grünen Stufe steht dort „shown in the APRS lense“.
+- Gleich in TinyBox-Web-GUI und Client (`tinybox/web/aprsview.js` + `.css`). Client-Version 2026.10.17.2.
+

@@ -2137,7 +2137,7 @@ function autoTerm() {
 }
 
 function showLens() {                           // CR55: the APRS lens only next to the monitor
-  $("aprs-lens").hidden = !(activeCh === 0 && AprsView.enabled());
+  $("aprs-lens").hidden = !(activeCh === 0 && AprsView.lensOn());   // CR62: only in step 2
 }
 
 function renderTerm() {
@@ -2198,8 +2198,8 @@ function monMatch(e) {
   return !q || monText(e).includes(q);
 }
 function monLine(e) {
-  const line = el("span", "ml");
-  const ap = AprsView.active(e);                // CR55: APRS in plain language
+  const ap = AprsView.active(e);                // CR55/62: APRS as a card (Frame + Interpretation)
+  const line = el("span", ap ? "" : "ml");
   line.append(el("span", "mt", e.t + " "), callSpan(e.src), " → ", ap ? AprsView.dest(e) : callSpan(e.dst));
   if (e.via && e.via.length) {
     line.append(" via ");
@@ -2207,18 +2207,12 @@ function monLine(e) {
   }
   line.append(el("span", "mty", ` <${e.typ}>`));
   if (e.kind) line.append(el("span", "mk " + e.kind, e.kind));
-  if (ap) {                                      // CR57: payload and plain text on lines of their own
-    line.append(AprsView.payload(e));           // a block: starts its own line
-  } else {
-    if (e.text) line.append(": " + e.text);
-    line.append("\n");
-  }
-  if (ap) {
-    line.append(AprsView.decoded(e));
-    AprsView.decorate(line, e);
-  }
+  if (ap) return AprsView.card(e, line, "ml");
+  if (e.text) line.append(": " + e.text);
+  line.append("\n");
   return line;
 }
+
 function renderMonitor() {
   const out = $("term-out");
   const lines = S.term || [];

@@ -15,8 +15,10 @@
 
 const AprsView = (() => {
   const STORE = "tinybox.aprsLens";
-  let on = false;                 // off until the button is pressed (CR56)
-  try { on = localStorage.getItem(STORE) === "1"; } catch (e) { /* no storage: off */ }
+  // CR62: three steps - 0 monitor as it was, 1 interpretation, 2 interpretation + lens
+  let mode = 0;
+  try { mode = Math.max(0, Math.min(2, Number(localStorage.getItem(STORE)) || 0)); } catch (e) { /* off */ }
+  let on = mode > 0;
   let selected = null;            // the entry shown in the lens
   let lensBox = null;             // the lens element of the page (null: no lens)
   let lastId = 0;
@@ -79,7 +81,7 @@ const AprsView = (() => {
   function decoded(e) {
     const a = e.aprs;
     const line = mk("span", "ar-dec");
-    line.append(mk("span", "ar-arrow", "↳ "));
+    line.append(mk("span", "ar-lbl2", "Interpretation"));
     a.chips.forEach((c, i) => {
       if (i) line.append(mk("span", "ar-sep", " · "));
       line.append(part(c.t, c.r, c.k));
@@ -102,6 +104,21 @@ const AprsView = (() => {
       const k = ev.target.closest("[data-k]");
       select(e, k ? k.dataset.k : "");
     });
+  }
+  // CR62: one APRS transmission as a card: band (when selected), Frame, Interpretation
+  function card(e, head, extraClass) {
+    const c = mk("div", "ar-card" + (extraClass ? " " + extraClass : ""));
+    const band = mk("div", "ar-band");
+    const who = mk("span", "", `${e.t || ""} \u00b7 ${e.src}`);
+    const go = mk("button", "ar-tolens", "view Frame in APRS lense");
+    go.type = "button";
+    go.addEventListener("click", (ev) => { ev.stopPropagation(); select(e); setMode(2); });
+    band.append(who, go, mk("span", "ar-inlens", "shown in the APRS lense"));
+    const frame = mk("div", "ar-frame");
+    frame.append(mk("span", "ar-lbl2", "Frame"), head, payload(e));
+    c.append(band, frame, decoded(e));
+    decorate(c, e);
+    return c;
   }
   function searchText(e) { return e && e.aprs ? " " + e.aprs.text + " " + e.aprs.title : ""; }
 
@@ -301,25 +318,37 @@ const AprsView = (() => {
     document.querySelectorAll(`.ar-row[data-aid="${idOf(e)}"]`).forEach((x) => x.classList.add("ar-sel"));
     renderLens();
     applyPin();
-    openSheet();
+    if (mode === 2) openSheet();
     if (pinned && narrow.matches) {              // CR60: show the tapped part in the sheet
       const t = box() && box().querySelector(`.ar-part.ar-pin`);
       if (t) setTimeout(() => t.scrollIntoView({ block: "center" }), 250);
     }
   }
-  function setEnabled(v) {
-    on = !!v;
-    try { localStorage.setItem(STORE, on ? "1" : "0"); } catch (e) { /* not kept */ }
-    if (!on) closeSheet();
+  function setMode(m) {
+    mode = m;
+    on = m > 0;
+    try { localStorage.setItem(STORE, String(m)); } catch (e) { /* not kept */ }
+    document.documentElement.dataset.aprsMode = String(m);
+    if (m < 2) closeSheet();
     renderLens();
+    if (m === 2 && selected) openSheet();
     listeners.forEach((f) => f(on));
   }
+  function setEnabled(v) { setMode(v ? 1 : 0); }
+  document.documentElement.dataset.aprsMode = String(mode);
   function toggleButton(cls) {
-    const b = mk("button", cls || "", "APRS Lense");
+    const b = mk("button", (cls || "") + " ar-toggle", "APRS Lense");
     b.type = "button";
-    b.title = "APRS packets in plain language, and the lens that takes them apart";
-    const sync = () => { b.setAttribute("aria-pressed", on ? "true" : "false"); b.classList.toggle("on", on); };
-    b.addEventListener("click", () => setEnabled(!on));
+    const TIPS = ["Show APRS packets with their interpretation",
+                  "Interpretation on - click again to add the lens on the right",
+                  "Interpretation and lens on - click again to switch both off"];
+    const sync = () => {
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.classList.toggle("on", mode === 1);               // blue
+      b.classList.toggle("ar-lens-on", mode === 2);       // green
+      b.title = TIPS[mode];
+    };
+    b.addEventListener("click", () => setMode((mode + 1) % 3));
     listeners.push(sync);
     sync();
     return b;
@@ -327,6 +356,7 @@ const AprsView = (() => {
   function attachLens(el) { lensBox = el; renderLens(); }
   function forget() { selected = null; pinned = ""; closeSheet(); renderLens(); }
 
-  return { setSymbolRenderer: (f) => { symbolRenderer = f; }, enabled: () => on, setEnabled, onChange: (f) => listeners.push(f), active, dest, info, payload, decoded,
+  return { setSymbolRenderer: (f) => { symbolRenderer = f; }, enabled: () => on, setEnabled, setMode,
+           mode: () => mode, lensOn: () => mode === 2, card, onChange: (f) => listeners.push(f), active, dest, info, payload, decoded,
            decorate, searchText, select, attachLens, toggleButton, forget };
 })();

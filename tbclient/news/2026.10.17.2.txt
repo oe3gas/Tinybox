@@ -1,0 +1,3 @@
+- APRS Lense button in 3 steps: blue = interpretation,
+  green = with lens, white = off. Each packet is a card
+  (Frame + Interpretation), the selected one in blue.

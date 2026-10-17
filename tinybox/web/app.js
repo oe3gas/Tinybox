@@ -295,23 +295,19 @@ function monMatch(it) {
 function feedLine(item) {
   if (item.type === "frame") {
     const ap = AprsView.active(item);
-    const line = h("div", { class: "line frame" + (item.tx ? " tx" : "") },
+    const head = h(ap ? "span" : "div", { class: ap ? "" : "line frame" + (item.tx ? " tx" : "") },
       h("span", { class: "t", text: item.t }), " ",
       h("span", { class: "rt", text: item.tx ? "TX" : "RX" }), " ",
       callSpan(item.src), " → ", ap ? AprsView.dest(item) : callSpan(item.dst));
     if (item.via && item.via.length) {
-      line.append(" via ");
-      item.via.forEach((v, i) => { if (i) line.append(","); line.append(callSpan(v)); });
+      head.append(" via ");
+      item.via.forEach((v, i) => { if (i) head.append(","); head.append(callSpan(v)); });
     }
-    line.append(h("span", { class: "typ", text: " <" + item.typ + ">" }));
-    if (item.kind) line.append(" ", h("span", { class: "kind " + item.kind, text: item.kind }));
-    if (ap) line.append(AprsView.payload(item));             // CR57: a line of its own
-    else if (item.text) line.append(": " + item.text);
-    if (ap) {                                    // CR55: the plain-text line, click = lens
-      line.append(AprsView.decoded(item));
-      AprsView.decorate(line, item);
-    }
-    return line;
+    head.append(h("span", { class: "typ", text: " <" + item.typ + ">" }));
+    if (item.kind) head.append(" ", h("span", { class: "kind " + item.kind, text: item.kind }));
+    if (ap) return AprsView.card(item, head, "line frame" + (item.tx ? " tx" : ""));   // CR62
+    if (item.text) head.append(": " + item.text);
+    return head;
   }
   if (item.type === "mon") {                     // ">" TinyBox to the station, "<" back
     const [a, b] = item.dir === "<" ? [item.call, myCall()] : [myCall(), item.call];
@@ -675,7 +671,7 @@ function monitorCard(withLens) {
       AprsView.toggleButton("btn sm aprs-btn"),
       h("button", { class: "btn sm", type: "button", onclick: clear }, "Clear")),
     lens ? h("div", { class: "mon-split" }, body, lens) : body);
-  const showLens = () => { if (lens) lens.hidden = !AprsView.enabled(); };
+  const showLens = () => { if (lens) lens.hidden = !AprsView.lensOn(); };   // CR62: only in step 2
   if (lens) AprsView.attachLens(lens);
   AprsView.onChange(() => { if (card.isConnected) { showLens(); redraw(); } });
   showLens();
