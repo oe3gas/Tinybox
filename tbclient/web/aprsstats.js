@@ -33,6 +33,14 @@ const AprsStatsView = (() => {
     b.addEventListener("click", () => onCall(call));
     return b;
   }
+  function devBtn(dev) {                   // CR63: a device filters the monitor too
+    if (!dev || dev === "(unknown)") return mk("span", "st-empty", dev || "–");
+    const b = mk("button", "st-call st-dev", dev);
+    b.type = "button";
+    b.title = "Show frames of " + dev + " in the monitor";
+    b.addEventListener("click", () => onCall(dev));
+    return b;
+  }
   function ago(t) {
     const s = Math.max(0, Math.round(data.now - t));
     return s < 90 ? s + " s" : s < 5400 ? Math.round(s / 60) + " min" : Math.round(s / 3600) + " h";
@@ -150,42 +158,34 @@ const AprsStatsView = (() => {
                   mk("span", "", hhmm(d.now)));
     body.append(card("Frames over time", "", tlb, tlfoot));
 
-    // sins first: that is what one wants to see
-    const sins = card("Sins", "what burdens the channel", table("sins", [
-      ["Station", "call", (r) => callBtn(r.call)],
-      ["Sin", "kind", (r) => mk("span", "st-sin", SIN[r.kind] || r.kind)],
-      ["What", "text"],
-      ["Frames", "count", null, true],
-    ], d.sins, 60));
-    sins.classList.add("st-wide");
-    body.append(sins);
-
     const grid = mk("div", "st-grid");
+    // CR63 order: Heard, iGates, Packet types, then the rest; Sins at the very end
     grid.append(
       card("Heard", "who your radio actually received", table("heard", [
         ["Station", "call", (r) => callBtn(r.call)], ["Frames", "n", null, true],
         ["Share", "pct", (r) => r.pct + " %", true], ["Last", "last", (r) => ago(r.last), true]], d.heard)),
-      card("Packet types", "", bars(d.types.map((t) => [CAT[t.cat] || t.cat, t.n, `${t.n} · ${t.pct} %`]))),
+      card("iGates", "internet → radio (third-party packets)", table("igates", [
+        ["iGate", "call", (r) => callBtn(r.call)], ["Frames", "n", null, true],
+        ["Stations", "stations", null, true], ["Share", "pct", (r) => r.pct + " %", true]], d.igates)),
+      card("Packet types", "", bars(d.types.map((t) => [CAT[t.cat] || t.cat, t.n, `${t.pct} % (${t.n})`]))),
     );
     const snd = card("Senders", "third-party packets count for the station inside", table("senders", [
       ["Station", "call", (r) => callBtn(r.call)], ["Frames", "n", null, true],
       ["Every", "every", (r) => interval(r.every), true], ["km", "dist", null, true],
-      ["Types", "cats"], ["Device", "dev"], ["Internet", "inet", null, true],
+      ["Types", "cats"], ["Device", "dev", (r) => devBtn(r.dev)], ["Internet", "inet", null, true],
       ["Last", "last", (r) => ago(r.last), true]], d.senders, 100));
     snd.classList.add("st-wide");
     grid.append(snd);
     grid.append(
-      card("Devices", "device list (tocalls / Mic-E)", table("devices", [
-        ["Device", "dev"], ["Frames", "n", null, true], ["Stations", "stations", null, true]], d.devices)),
+      card("Devices", "device list (tocalls / Mic-E) - click to see them in the monitor", table("devices", [
+        ["Device", "dev", (r) => devBtn(r.dev)], ["Frames", "n", null, true],
+        ["Stations", "stations", null, true]], d.devices)),
       card("Digipeaters", "every station that relayed (*)", table("digis", [
         ["Digipeater", "call", (r) => callBtn(r.call)], ["Frames", "n", null, true]], d.digis),
         mk("h4", "st-h4", "Ways (sender → … → you)"),
         table("chains", [["Chain", "chain"], ["Frames", "n", null, true]], d.chains),
         mk("h4", "st-h4", "Hops (relayed how often)"),
         bars(d.hops.map(([h, n]) => [h === 0 ? "direct" : h + " hop" + (h > 1 ? "s" : ""), n]))),
-      card("iGates", "internet → radio (third-party packets)", table("igates", [
-        ["iGate", "call", (r) => callBtn(r.call)], ["Frames", "n", null, true],
-        ["Stations", "stations", null, true], ["Share", "pct", (r) => r.pct + " %", true]], d.igates)),
     );
     const R = d.range;
     if (R.have_home) {
@@ -203,6 +203,14 @@ const AprsStatsView = (() => {
     }
     grid.append(card("Countries", "by call prefix", table("countries", [
       ["Country", "country"], ["Frames", "n", null, true], ["Stations", "stations", null, true]], d.countries)));
+    const sins = card("Sins", "what burdens the channel", table("sins", [
+      ["Station", "call", (r) => callBtn(r.call)],
+      ["Sin", "kind", (r) => mk("span", "st-sin", SIN[r.kind] || r.kind)],
+      ["What", "text"],
+      ["Frames", "count", null, true],
+    ], d.sins, 60));
+    sins.classList.add("st-wide");
+    grid.append(sins);
     body.append(grid);
   }
 

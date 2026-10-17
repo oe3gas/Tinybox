@@ -221,6 +221,14 @@ def locator_to_latlon(loc: str) -> tuple[float, float] | None:
     return lat, lon
 
 
+_COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+
+
+def compass(deg: float) -> str:
+    """238 -> 'WSW'"""
+    return _COMPASS[int((deg % 360) / 22.5 + 0.5) % 16]
+
+
 def distance_bearing(a: tuple[float, float], b: tuple[float, float]) -> tuple[float, float]:
     """Great-circle distance in km and bearing from a to b in degrees."""
     la1, lo1, la2, lo2 = map(math.radians, (a[0], a[1], b[0], b[1]))
@@ -1061,9 +1069,11 @@ def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, in
             note = f"Not a recipient: a free word in the destination field ({base}), not from the device list."
         if dev:
             out.chip(dev, "dev", "dest")
+    where = None
     if home and out.lat is not None:
         dist, brg = distance_bearing(home, (out.lat, out.lon))
         out.chip(f"{dist:.0f} km, {brg:.0f}° from you", "pos", "dist")
+        where = {"km": round(dist), "deg": round(brg) % 360, "dir": compass(brg)}
     rows, summary, warnings = explain_path(path, repeated)
     heard, heard_note = heard_from(src, path, repeated)
     for r in rows:
@@ -1087,6 +1097,8 @@ def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, in
         "heard": {"call": heard, "note": heard_note}, "chain": chain,
         "segs": out.segs, "chips": out.chips,
         "text": " ".join(c["t"] for c in out.chips),
+        "dist": where, "home": bool(home),          # CR63: for the band of the card
+        "symbol": next((sg["sym"] for sg in out.segs if sg.get("sym")), ""),
     }
     if mice:
         result["mice"] = mice

@@ -559,6 +559,7 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .st-sort { border: none; background: none; padding: 4px 6px; font-weight: 600; font-size: 12px; color: var(--muted); }
 .st-call { border: none; background: none; padding: 0; color: var(--accent); font: 600 13px ui-monospace, Consolas, monospace; }
 .st-call:hover { text-decoration: underline; }
+.st-dev { font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; text-align: left; }
 .st-mono { font-family: ui-monospace, Consolas, monospace; }
 .st-sin { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 12px; white-space: nowrap;
   background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }

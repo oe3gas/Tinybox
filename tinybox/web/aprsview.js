@@ -109,7 +109,12 @@ const AprsView = (() => {
   function card(e, head, extraClass) {
     const c = mk("div", "ar-card" + (extraClass ? " " + extraClass : ""));
     const band = mk("div", "ar-band");
-    const who = mk("span", "", `${e.t || ""} \u00b7 ${e.src}`);
+    const who = mk("span", "ar-who", `${e.t || ""} \u00b7 ${e.src}`);
+    const a = e.aprs;                                  // CR63: symbol and distance next to the call
+    const icon = a.symbol && symbolRenderer ? symbolRenderer(a.symbol) : null;
+    if (icon) { icon.classList.add("ar-sym", "ar-bandsym"); who.append(icon); }
+    who.append(mk("span", "ar-dist", "Distance: " + (!a.home ? "unknown (no locator)"
+      : a.dist ? `${a.dist.km} km, ${a.dist.deg}\u00b0 ${a.dist.dir}` : "no position in this packet")));
     const go = mk("button", "ar-tolens", "view Frame in APRS lense");
     go.type = "button";
     go.addEventListener("click", (ev) => { ev.stopPropagation(); select(e); setMode(2); });
@@ -120,7 +125,11 @@ const AprsView = (() => {
     decorate(c, e);
     return c;
   }
-  function searchText(e) { return e && e.aprs ? " " + e.aprs.text + " " + e.aprs.title : ""; }
+  function searchText(e) {
+    if (!e || !e.aprs) return "";
+    const o = e.aprs.origin;                      // CR63: a third party's own device is found too
+    return " " + e.aprs.text + " " + e.aprs.title + (o && o.device ? " " + o.device : "");
+  }
 
   // ---- hover: light up all parts with the same key of the same entry --------------
   function hot(target, onOff) {

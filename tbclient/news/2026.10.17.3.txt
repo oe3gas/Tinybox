@@ -1,0 +1,3 @@
+- APRS statistics: new order, sins at the end, devices
+  open the monitor filtered. Selected packet: symbol and
+  distance (km, direction) in the blue band.

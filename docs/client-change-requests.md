@@ -1680,3 +1680,20 @@ Hover verbindet ihn mit dem „To“-Feld. Client-Version 2026.10.16.6.
    der Lense); in der grünen Stufe steht dort „shown in the APRS lense“.
 - Gleich in TinyBox-Web-GUI und Client (`tinybox/web/aprsview.js` + `.css`). Client-Version 2026.10.17.2.
 
+## CR63 – APRS-Statistik: Reihenfolge, Geräte-Filter; Kopfband mit Symbol und Entfernung (✅ 17.10.2026)
+
+**Wunsch (OE3GAS):** In der Statistik „Sins“ ganz nach unten, oben „Heard“, „iGates“, „Packet types“;
+bei den Pakettypen zuerst die Prozent, dahinter in Klammer die Anzahl; Geräte filterbar wie die
+Rufzeichen. Im blauen Kopfband der gewählten Aussendung neben dem Rufzeichen das APRS-Symbol und
+„Distance“: ohne Locator „unknown“, sonst km und Richtung.
+
+**Lösung:**
+- Statistik: Heard · iGates · Packet types, dann Senders, Devices, Digipeaters, Range, Countries,
+  zuletzt Sins (über die ganze Breite). Pakettypen als „12.3 % (45)“.
+- Geräte (Tabelle Devices und Spalte Device bei Senders) sind anklickbar: der Monitor zeigt die
+  Aussendungen dieses Geräts (bei Third-Party-Paketen auch das Gerät der inneren Station).
+- Kopfband: Symbol (Bild aus dem Symbolsatz des Clients) und „Distance: 37 km, 179° S“ (Richtung mit
+  16 Himmelsrichtungen); ohne `locator` „unknown (no locator)“, bei Paketen ohne Position
+  „no position in this packet“. Decoder liefert dafür `dist`, `home`, `symbol`.
+- Client-Version 2026.10.17.3.
+

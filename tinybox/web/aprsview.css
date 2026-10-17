@@ -117,3 +117,7 @@ html[data-aprs-mode="2"] .ar-inlens { display: inline; }
 .ar-toggle.on { background: #1f6fd1 !important; color: #fff !important; border-color: #1f6fd1 !important; }
 .ar-toggle.ar-lens-on { background: #0b7f86 !important; color: #fff !important; border-color: #0b7f86 !important; }
 @media (max-width: 899px) { .ar-frame, .ar-card .ar-dec { padding-left: 8px; padding-right: 8px; } }
+/* CR63: symbol and distance in the band of the selected card */
+.ar-who { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ar-bandsym { margin-right: 0; background-color: #fff; border-radius: 4px; }
+.ar-dist { font-weight: 400; opacity: .92; }
