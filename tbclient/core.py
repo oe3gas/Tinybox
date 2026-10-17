@@ -10,9 +10,9 @@ import re
 import time
 from collections import deque
 
-from tinybox import aprs                  # APRS in plain language for the monitor (CR55)
-from tinybox.aprsstats import AprsStats    # CR61
-from tinybox import chatimg               # the image reference in a chat line (CR12)
+from prcore import aprs                  # APRS in plain language for the monitor (CR55)
+from prcore.aprsstats import AprsStats    # CR61
+from prcore import chatimg               # the image reference in a chat line (CR12)
 
 from . import VERSION, proto
 from .config import CALL_RE, Config

@@ -9,8 +9,8 @@ import unittest
 from kisshub import profiles
 from tinybox import chanmon
 from tinybox.adapters import kiss as kissadapter
-from tinybox.ax25 import frame as ax
-from tinybox.ax25 import kissio
+from prcore.ax25 import frame as ax
+from prcore import kiss
 
 from tests.test_kisshub import FakePK232, HubTestBase, fast
 
@@ -69,8 +69,8 @@ class HubStatusTests(HubTestBase):
         await self.start_hub(FakePK232("cmd"))
         await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
         w, _got = await self.client()
-        w.write(kissio.encode(ax.ui_frame("TBCHAT-1", "OE3GAS-1", b"hi").encode()))
-        w.write(kissio.encode(ax.s_frame("RR", "OE1ABC", "OE3GAS-1", 1).encode()))
+        w.write(kiss.encode(ax.ui_frame("TBCHAT-1", "OE3GAS-1", b"hi").encode()))
+        w.write(kiss.encode(ax.s_frame("RR", "OE1ABC", "OE3GAS-1", 1).encode()))
         await self.wait(lambda: len(self.fake.transmitted) == 2)
         st = await self.get_status()
         t = st["tnc"]

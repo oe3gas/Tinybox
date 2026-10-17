@@ -41,7 +41,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from tinybox.ax25 import kissio
+from prcore import kiss
 
 from .tnc import Tnc
 
@@ -188,11 +188,11 @@ class Hub:
                    writer)
         self.clients[writer] = c
         log.info("%s connected (%d clients)", c.name, len(self.clients))
-        dec = kissio.Decoder()
+        dec = kiss.Decoder()
         try:
             while data := await reader.read(4096):
                 for port, cmd, frame in dec.feed(data):
-                    if cmd != kissio.CMD_DATA:
+                    if cmd != kiss.CMD_DATA:
                         log.debug("%s: KISS command 0x%02X ignored", c.name, cmd)
                         continue
                     c.rx += 1
@@ -208,7 +208,7 @@ class Hub:
             log.info("%s disconnected (%d clients)", c.name, len(self.clients))
 
     def _to_clients(self, port: int, frame: bytes, skip: Client | None = None) -> None:
-        raw = kissio.encode(frame, port)
+        raw = kiss.encode(frame, port)
         for c in list(self.clients.values()):
             if c is skip or c.writer.is_closing():
                 continue
@@ -249,7 +249,7 @@ class Hub:
                 continue
             prio, _, frame, port, origin, queued = heapq.heappop(self._queue)
             now = self.now()
-            if now - queued > self.cfg.stale_sec or not self.tnc.send(kissio.encode(frame, port)):
+            if now - queued > self.cfg.stale_sec or not self.tnc.send(kiss.encode(frame, port)):
                 self.dropped += 1
                 continue
             self._waits.append((now, prio, now - queued))

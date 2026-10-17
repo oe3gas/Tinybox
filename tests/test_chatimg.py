@@ -8,7 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tinybox import chatimg, config
+from prcore import chatimg as chatref
+from tinybox import config
 from tinybox.adapters import agw
 from tinybox.config import ChatBoard, ChatCfg
 from tinybox.session import Session
@@ -26,7 +27,7 @@ def h6(data: bytes) -> str:
 
 
 def ref(data: bytes, bh: str = BH32) -> str:
-    return f"~#{h6(data)}{chatimg.size_code(len(data))}{bh}"
+    return f"~#{h6(data)}{chatref.size_code(len(data))}{bh}"
 
 
 class RadioTransport(FakeTransport):
@@ -105,34 +106,34 @@ class ConfigTests(unittest.TestCase):
 
 class ReferenceTests(unittest.TestCase):
     def test_parse(self):
-        self.assertEqual(chatimg.size_code(5120), "50")
-        self.assertEqual(chatimg.size_code(5121), "51")
-        self.assertEqual(chatimg.size_code(100000), "ff")
-        self.assertEqual(chatimg.blurhash_len("B"), 16)       # 3x2
-        self.assertEqual(chatimg.blurhash_len("K"), 22)       # 3x3
-        self.assertEqual(chatimg.blurhash_len("L"), 28)       # 4x3 (the usual one)
-        self.assertEqual(chatimg.blurhash_len("A"), 12)       # 2x2
-        self.assertEqual(chatimg.blurhash_len(" "), 0)
-        r = chatimg.parse_ref(f"~#a1b2c350{BH32} Blick vom Berg")
+        self.assertEqual(chatref.size_code(5120), "50")
+        self.assertEqual(chatref.size_code(5121), "51")
+        self.assertEqual(chatref.size_code(100000), "ff")
+        self.assertEqual(chatref.blurhash_len("B"), 16)       # 3x2
+        self.assertEqual(chatref.blurhash_len("K"), 22)       # 3x3
+        self.assertEqual(chatref.blurhash_len("L"), 28)       # 4x3 (the usual one)
+        self.assertEqual(chatref.blurhash_len("A"), 12)       # 2x2
+        self.assertEqual(chatref.blurhash_len(" "), 0)
+        r = chatref.parse_ref(f"~#a1b2c350{BH32} Blick vom Berg")
         self.assertEqual(r, ("a1b2c3", 5120, BH32, 0, 26))
-        r = chatimg.parse_ref(f"~^OE3TEC 1402 ~#a1b2c350{BH33}")
+        r = chatref.parse_ref(f"~^OE3TEC 1402 ~#a1b2c350{BH33}")
         self.assertEqual(r[:3], ("a1b2c3", 5120, BH33))
-        self.assertIsNone(chatimg.parse_ref("~#a1b2c350BEHV"))          # too short
-        self.assertIsNone(chatimg.parse_ref(f"~#a1b2c350{BH32}x"))      # glued text
-        self.assertIsNone(chatimg.parse_ref("plain ~# text"))
-        self.assertIsNone(chatimg.parse_ref(f"x~#a1b2c350{BH32}"))       # not at a start
+        self.assertIsNone(chatref.parse_ref("~#a1b2c350BEHV"))          # too short
+        self.assertIsNone(chatref.parse_ref(f"~#a1b2c350{BH32}x"))      # glued text
+        self.assertIsNone(chatref.parse_ref("plain ~# text"))
+        self.assertIsNone(chatref.parse_ref(f"x~#a1b2c350{BH32}"))       # not at a start
 
     def test_terminal_text(self):
-        self.assertEqual(chatimg.terminal_text(f"~#a1b2c350{BH32} Blick vom Berg"),
+        self.assertEqual(chatref.terminal_text(f"~#a1b2c350{BH32} Blick vom Berg"),
                          "[Image 5.0 KB - TinyBox client only] Blick vom Berg")
-        self.assertEqual(chatimg.terminal_text(f"~^OE3TEC 1402 ~#a1b2c350{BH33}"),
+        self.assertEqual(chatref.terminal_text(f"~^OE3TEC 1402 ~#a1b2c350{BH33}"),
                          "~^OE3TEC 1402 [Image 5.0 KB - TinyBox client only]")
-        self.assertEqual(chatimg.terminal_text("plain ~# text"), "plain ~# text")
+        self.assertEqual(chatref.terminal_text("plain ~# text"), "plain ~# text")
 
     def test_types(self):
-        self.assertEqual(chatimg.image_type(WEBP), "webp")
-        self.assertEqual(chatimg.image_type(JPEG), "jpeg")
-        self.assertIsNone(chatimg.image_type(b"GIF89a..."))
+        self.assertEqual(chatref.image_type(WEBP), "webp")
+        self.assertEqual(chatref.image_type(JPEG), "jpeg")
+        self.assertIsNone(chatref.image_type(b"GIF89a..."))
 
 
 class UploadTests(unittest.TestCase):
@@ -366,7 +367,7 @@ class UploadNoticeAndQuoteTests(unittest.TestCase):
         type_lines(s, f"//IMGPUT {h6(WEBP)} {len(WEBP)}")
         # the uploader gets //IMGGO, everybody in the board the event
         self.assertIn(f"//IMGGO {h6(WEBP)} 0", t.take())
-        self.assertIn(f"^OE3GAS {chatimg.size_code(len(WEBP))}", ot.take())
+        self.assertIn(f"^OE3GAS {chatref.size_code(len(WEBP))}", ot.take())
         self.assertIn("*** OE3GAS is sending a picture (0.8 KB)", tt.take())
         # not stored in the history
         self.assertEqual(self.app.store.chat_recent("TREFF", "2000-01-01T00:00:00Z", 10), [])

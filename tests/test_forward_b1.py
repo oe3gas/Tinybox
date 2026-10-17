@@ -16,7 +16,8 @@ from pathlib import Path
 
 from tinybox.adapters.forward import ForwardModule
 from tinybox.config import PartnerCfg
-from tinybox.fwd import b1, lzhuf
+from prcore import lzhuf
+from tinybox.fwd import b1
 from tinybox.fwd.link import Link, TcpLink
 from tinybox.fwd.protocol import ProtocolError, own_sid, parse_fs
 

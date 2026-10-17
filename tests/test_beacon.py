@@ -8,7 +8,7 @@ import unittest
 
 from tinybox import beacon, config
 from tinybox.adapters import agw as agwmod
-from tinybox.ax25 import frame as ax
+from prcore.ax25 import frame as ax
 from tests.test_tinybox import ROOT, make_app
 
 

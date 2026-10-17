@@ -27,7 +27,9 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from .. import VERSION, aprs, config, connlog, framemon, linkq, logsetup
+from prcore import aprs
+
+from .. import VERSION, config, connlog, framemon, linkq, logsetup
 from ..app import App
 from ..config import base_call, normalize_call
 from ..service import ServiceError

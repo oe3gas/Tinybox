@@ -15,10 +15,10 @@ import unittest
 
 from tinybox import config
 from tinybox.adapters import kiss as kissadapter
-from tinybox.ax25 import frame as ax
-from tinybox.ax25 import kissio
-from tinybox.ax25.frame import Frame
-from tinybox.ax25.link import Ax25Link, LinkCfg
+from prcore.ax25 import frame as ax
+from prcore import kiss
+from prcore.ax25.frame import Frame
+from prcore.ax25.link import Ax25Link, LinkCfg
 
 from tests.test_tinybox import ROOT, make_app
 
@@ -51,11 +51,11 @@ class Air:
     async def handle(self, reader, writer) -> None:
         self.writer = writer
         self.client.set()
-        dec = kissio.Decoder()
+        dec = kiss.Decoder()
         try:
             while chunk := await reader.read(4096):
                 for _, cmd, data in dec.feed(chunk):
-                    if cmd == kissio.CMD_DATA:
+                    if cmd == kiss.CMD_DATA:
                         self._from_tinybox(data)
         except ConnectionError:
             pass
@@ -90,7 +90,7 @@ class Air:
 
     def inject(self, raw: bytes) -> None:
         if self.writer is not None and not self.writer.is_closing():
-            self.writer.write(kissio.encode(raw))
+            self.writer.write(kiss.encode(raw))
 
     async def _ticks(self) -> None:
         while True:

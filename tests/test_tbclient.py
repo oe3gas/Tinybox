@@ -705,7 +705,7 @@ class ImageTests(unittest.TestCase):
 
     def test_upload_and_fetch_over_radio(self):
         async def scenario():
-            from tinybox import chatimg
+            from prcore import chatimg
             dw = FakeDirewolf()
             port = await dw.start()
             app = chat_app()
@@ -769,7 +769,7 @@ class ImageJsTests(unittest.TestCase):
                               str(root / "tbclient" / "web" / "app.js")],
                              capture_output=True, text=True, encoding="utf-8", check=True)
         r = json.loads(out.stdout)
-        from tinybox import chatimg
+        from prcore import chatimg
         self.assertEqual(len(r["bh"]), 16)                       # 3x2 components
         self.assertEqual(r["shape"], {"nx": 3, "ny": 2})
         self.assertEqual((r["len33"], r["len43"]), (22, 28))
@@ -798,7 +798,7 @@ class ImageHoldTests(unittest.TestCase):
 
     def test_lines_wait_until_the_bytes_are_handed_over(self):
         async def scenario():
-            from tinybox import chatimg
+            from prcore import chatimg
             with tempfile.TemporaryDirectory() as tmp:
                 core = ClientCore(client_cfg(tmp))
                 sent: list = []
@@ -838,7 +838,7 @@ class ImageHoldTests(unittest.TestCase):
         (it had the picture), the client took that as done and never sent the
         chat line - the picture did not show up again."""
         async def scenario():
-            from tinybox import chatimg
+            from prcore import chatimg
             with tempfile.TemporaryDirectory() as tmp:
                 core = ClientCore(client_cfg(tmp))
                 sent: list = []
@@ -913,7 +913,7 @@ class UploadNoticeTests(unittest.TestCase):
 
     def test_event_and_progress(self):
         from tbclient import proto
-        from tinybox import chatimg
+        from prcore import chatimg
         ev = proto.parse_event("#5A ^OE1ABC 50")
         self.assertEqual((ev.kind, ev.call, ev.ref), ("upload", "OE1ABC", 5120))
         self.assertIsNone(proto.parse_event("#5B ^OE1ABC zz"))

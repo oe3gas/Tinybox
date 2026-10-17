@@ -134,7 +134,7 @@ def parse_header(rest: str) -> dict | None:
 
 
 def decompress(data: bytes) -> str:
-    from tinybox.fwd import lzhuf               # the same codec as FBB forwarding (B1)
+    from prcore import lzhuf               # the same codec as FBB forwarding (B1)
     raw = lzhuf.decompress_b1(data, max_size=1_000_000)
     try:
         return raw.decode("utf-8")

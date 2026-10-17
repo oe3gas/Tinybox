@@ -5,9 +5,9 @@ from __future__ import annotations
 import dataclasses
 import unittest
 
-from tinybox.ax25 import frame as ax
-from tinybox.ax25 import xid
-from tinybox.ax25.link import Ax25Link, LinkCfg, State
+from prcore.ax25 import frame as ax
+from prcore.ax25 import xid
+from prcore.ax25.link import Ax25Link, LinkCfg, State
 
 from tests.ax25sim import Sim
 from tests.test_ax25_link import A_CALL, B_CALL, V20, V22, payload

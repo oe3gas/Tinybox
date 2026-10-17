@@ -15,6 +15,7 @@ OUT="production/$SHORT"
 
 # Runtime files: everything the NanoPi needs, nothing else.
 INCLUDE='tinybox
+prcore
 brocast/brocast
 brocast/brocast-core.yaml
 brocast/brocastd.conf.example

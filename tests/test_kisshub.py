@@ -19,8 +19,8 @@ from kisshub import profiles
 from kisshub.hub import PRIO_CONTROL, PRIO_I, PRIO_UI, Hub, HubCfg, priority
 from kisshub.tnc import Tnc
 from kisshub.transport import TcpTransport
-from tinybox.ax25 import frame as ax
-from tinybox.ax25 import kissio
+from prcore.ax25 import frame as ax
+from prcore import kiss
 
 ROOT = Path(__file__).resolve().parent.parent
 EXPERT_ONLY = {"RAWHDLC", "HPOLL", "PPERSIST"}
@@ -50,7 +50,7 @@ class FakePK232:
         self.expert = False
         self._line = bytearray()
         self._host = bytearray()
-        self._dec = kissio.Decoder()
+        self._dec = kiss.Decoder()
 
     async def handle(self, reader, writer) -> None:
         self.writer = writer
@@ -73,7 +73,7 @@ class FakePK232:
                 self.state = "cmd"
                 return
             for port, cmd, frame in self._dec.feed(data):
-                if cmd == kissio.CMD_DATA:
+                if cmd == kiss.CMD_DATA:
                     self.transmitted.append(frame)
                     if self.on_air:
                         self.on_air(frame)
@@ -135,7 +135,7 @@ class FakePK232:
 
     def receive(self, frame: bytes) -> None:
         """A frame heard on the air: to the host as KISS."""
-        self.out(kissio.encode(frame))
+        self.out(kiss.encode(frame))
 
 
 class HubTestBase(unittest.IsolatedAsyncioTestCase):
@@ -145,7 +145,7 @@ class HubTestBase(unittest.IsolatedAsyncioTestCase):
         self.fake = fake
         self.tnc_server = await asyncio.start_server(fake.handle, "127.0.0.1", 0)
         tport = self.tnc_server.sockets[0].getsockname()[1]
-        params = {kissio.CMD_TXDELAY: 30, kissio.CMD_P: 63}
+        params = {kiss.CMD_TXDELAY: 30, kiss.CMD_P: 63}
 
         def factory(on_frame):
             return Tnc(self.profile, TcpTransport("127.0.0.1", tport), on_frame,
@@ -174,11 +174,11 @@ class HubTestBase(unittest.IsolatedAsyncioTestCase):
     async def client(self):
         reader, writer = await asyncio.open_connection("127.0.0.1", self.hub.port)
         got: list[bytes] = []
-        dec = kissio.Decoder()
+        dec = kiss.Decoder()
 
         async def pump():
             while data := await reader.read(4096):
-                got.extend(f for _, c, f in dec.feed(data) if c == kissio.CMD_DATA)
+                got.extend(f for _, c, f in dec.feed(data) if c == kiss.CMD_DATA)
         task = asyncio.create_task(pump())
         self.addAsyncCleanup(self._close, writer, task)
         await self.wait(lambda: len(self.hub.clients) >= 1)
@@ -199,8 +199,8 @@ class TncDialogTests(HubTestBase):
         self.assertEqual(self.fake.lines[0], "EXPERT ON")
         self.assertEqual(self.fake.lines[-2:], ["KISS ON", "HOST ON"])
         await self.wait(lambda: len(self.fake.params) == 2)
-        self.assertEqual(self.fake.params, [(kissio.CMD_TXDELAY, bytes((30,))),
-                                            (kissio.CMD_P, bytes((63,)))])
+        self.assertEqual(self.fake.params, [(kiss.CMD_TXDELAY, bytes((30,))),
+                                            (kiss.CMD_P, bytes((63,)))])
 
     async def test_wakes_from_every_state(self):
         for state in ("autobaud", "converse", "xoff", "host", "kiss"):
@@ -260,11 +260,11 @@ class HubTests(HubTestBase):
         self.fake.receive(heard)
         await self.wait(lambda: got1 == [heard] and got2 == [heard])
         mine = ax.ui_frame("TBCHAT-1", "OE3GAS-1", b"hi").encode()
-        w1.write(kissio.encode(mine) + kissio.encode_param(kissio.CMD_TXDELAY, 1))
+        w1.write(kiss.encode(mine) + kiss.encode_param(kiss.CMD_TXDELAY, 1))
         await self.wait(lambda: self.fake.transmitted == [mine] and len(got2) == 2)
         self.assertEqual(got2[-1], mine)                          # client 2 "hears" it
         self.assertEqual(got1, [heard])                           # not echoed to sender
-        self.assertNotIn((kissio.CMD_TXDELAY, b"\x01"), self.fake.params)
+        self.assertNotIn((kiss.CMD_TXDELAY, b"\x01"), self.fake.params)
 
     async def test_acknowledgement_overtakes_ui_frames(self):
         # 1200 Bd, 0.3 s lead: only about one 100-byte frame at a time goes to the TNC
@@ -302,7 +302,7 @@ class EndToEndTests(HubTestBase):
     async def test_tinybox_over_kisshub_and_pk232(self):
         """TinyBox (KissAdapter) -> kisshub -> PK-232 -> air -> a station."""
         from tinybox.adapters import kiss as kissadapter
-        from tinybox.ax25.link import Ax25Link
+        from prcore.ax25.link import Ax25Link
         from tests.test_kiss_adapter import kiss_app, station_cfg
 
         fake = FakePK232("kiss")                       # left in KISS by a previous run
@@ -370,7 +370,7 @@ class HubConfigTests(unittest.TestCase):
         cfg = hubconfig.load(ROOT / "kisshub.conf.example")
         self.assertEqual((cfg.tnc.profile.name, cfg.tnc.device, cfg.hub.port),
                          ("pk232", "COM3", 8101))
-        self.assertEqual(cfg.tnc.params[kissio.CMD_TXDELAY], 30)
+        self.assertEqual(cfg.tnc.params[kiss.CMD_TXDELAY], 30)
 
     def test_init_lines_override(self):
         cfg = self.load("[tnc]\nprofile=generic\ntransport=tcp\nport=4001\n"

@@ -229,7 +229,7 @@ def payload(body: str, z: bool) -> tuple[str, bytes]:
     else ('T', UTF-8 text)."""
     raw = body.replace("\r", "").encode("utf-8")
     if z and len(raw) > 64:
-        from .fwd import lzhuf              # only the codec, not the forward module
+        from prcore import lzhuf              # only the codec, not the forward module
         data = lzhuf.compress_b1(raw)
         if len(data) < len(raw):
             return "Z", data
@@ -406,7 +406,7 @@ class _Answer:
         plain = "".join(r + "\r" for r in rows)
         raw = plain.encode("utf-8")
         if self.z and len(raw) > ZSYNC_MIN:
-            from .fwd import lzhuf
+            from prcore import lzhuf
             data = lzhuf.compress_b1(raw)
             if len(data) < len(raw):
                 s.transport.write(f"//ZSYNC {len(data)}\r")

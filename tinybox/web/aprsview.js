@@ -2,7 +2,7 @@
 //
 // Shared by the TinyBox web GUI and the client (the client serves this file
 // from tinybox/web, so there is only one copy). The TinyBox and the client
-// decode APRS frames in Python (tinybox/aprs.py) and hand every monitor entry
+// decode APRS frames in Python (prcore/aprs.py) and hand every monitor entry
 // an "aprs" part; this file only draws it:
 //   * the info field cut into coloured parts (one colour per role),
 //   * a plain-text line under the monitor line,

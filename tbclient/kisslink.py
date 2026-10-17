@@ -21,10 +21,10 @@ import json
 import logging
 import time
 
-from tinybox.ax25 import frame as ax
-from tinybox.ax25.frame import AX25Error, Frame
-from tinybox.ax25.kissio import KissTcpClient
-from tinybox.ax25.link import Ax25Link, LinkCfg
+from prcore.ax25 import frame as ax
+from prcore.ax25.frame import AX25Error, Frame
+from prcore.kiss import KissTcpClient
+from prcore.ax25.link import Ax25Link, LinkCfg
 
 from . import radio
 from .config import Config

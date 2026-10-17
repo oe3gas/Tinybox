@@ -17,7 +17,7 @@ from tbclient.mailstore import MailStore
 from tbclient import VERSION, sync
 from tbclient.sync import parse_header
 from tinybox.adapters import agw as tb_agw
-from tinybox.fwd import lzhuf
+from prcore import lzhuf
 from tinybox.session import Session, State
 from tests.test_chat import chat_app
 from tests.test_tbclient import FakeDirewolf, client_cfg, until

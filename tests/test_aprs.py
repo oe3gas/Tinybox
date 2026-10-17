@@ -5,7 +5,7 @@ import calendar
 import re
 import unittest
 
-from tinybox import aprs
+from prcore import aprs
 
 NOW = calendar.timegm((2026, 10, 16, 12, 1, 0))      # 14:01 local
 
@@ -216,7 +216,7 @@ class MonitorTests(unittest.TestCase):
 
     def test_tinybox_frame_monitor(self):
         from tinybox import framemon
-        from tinybox.ax25 import frame as ax
+        from prcore.ax25 import frame as ax
         e = framemon.entry(ax.ui_frame("TX0W84", "OM4MO-9", self.INFO).encode(), tx=False, mycall="OE3GAS-1")
         self.assertEqual(e["aprs"]["dest"]["mode"], "payload")
         e = framemon.entry(ax.ui_frame("ID", "OE3GAS-1", b"TinyBox").encode(), tx=True, mycall="OE3GAS-1")

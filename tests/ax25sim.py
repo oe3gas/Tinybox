@@ -13,8 +13,8 @@ import heapq
 import random
 from typing import Callable
 
-from tinybox.ax25.frame import Frame
-from tinybox.ax25.link import Ax25Link
+from prcore.ax25.frame import Frame
+from prcore.ax25.link import Ax25Link
 
 
 class Sim:

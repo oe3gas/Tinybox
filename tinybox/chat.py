@@ -41,6 +41,8 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable
 
+from prcore.chatimg import terminal_text
+
 from . import chatimg, linkq, texts
 from .config import ChatBoard, Config
 from .events import EventBus
@@ -234,13 +236,13 @@ class ChatHub:
             quoted = self._line_of(board, ref) if live else ""
             if quoted:
                 call, _, what = quoted.partition(": ")
-                what = chatimg.terminal_text(what, short=True)
+                what = terminal_text(what, short=True)
                 if len(what) > QUOTE_EXCERPT:
                     what = what[:QUOTE_EXCERPT] + "\u2026"
                 text = texts.CHAT_QUOTE.format(call=call, text=what) + rest
             else:
                 text = texts.CHAT_QUOTE_GONE.format(ref=m.group(1)) + rest
-        return chatimg.terminal_text(text)
+        return terminal_text(text)
 
     def say(self, session: Session, text: str) -> None:
         board = self.cfg.chat.board(session.chat_board or "")

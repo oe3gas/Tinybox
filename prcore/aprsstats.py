@@ -185,7 +185,7 @@ class AprsStats:
     # --- input --------------------------------------------------------------------
     def add(self, src: str, path: list[str], repeated: list[bool], info: bytes, nbytes: int,
             aprs: dict, now: float | None = None) -> dict:
-        """One APRS frame heard (aprs = tinybox.aprs.decode() of it)."""
+        """One APRS frame heard (aprs = prcore.aprs.decode() of it)."""
         now = time.time() if now is None else now
         origin = (aprs.get("origin") or {}).get("call") or src
         gate = (aprs.get("origin") or {}).get("gate") or ""

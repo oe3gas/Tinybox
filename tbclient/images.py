@@ -2,7 +2,7 @@
 
 The browser shrinks the picture (WebP, long side at most 320 px, under the
 TinyBox limit) and computes the blurhash; this module keeps the bytes, moves
-them over the air and knows what is here. Protocol: tinybox/chatimg.py.
+them over the air and knows what is here. Protocol: tinybox/chatimg.py, reference format: prcore/chatimg.py.
 
 Upload    //IMGPUT <hash> <bytes> -> //IMGGO <hash> <have>, then the bytes
           from <have> on - all of them at once to Direwolf, and right behind
@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tinybox import chatimg               # reference format, hash, type check
+from prcore import chatimg               # reference format, hash, type check
 
 if TYPE_CHECKING:
     from .core import ClientCore

@@ -7,7 +7,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
-from tinybox.ax25 import kissio
+from prcore import kiss
 
 from .hub import HubCfg
 from .profiles import PROFILES, Profile, with_init_lines
@@ -78,11 +78,11 @@ def load(path: str | Path) -> Config:
     txdelay_ms = get("kiss", "txdelay_ms", 300, int)
     params = {}
     if send_params:
-        params = {kissio.CMD_TXDELAY: kissio.ms_to_units(txdelay_ms),
-                  kissio.CMD_P: get("kiss", "persist", 63, int),
-                  kissio.CMD_SLOTTIME: kissio.ms_to_units(get("kiss", "slottime_ms", 100, int)),
-                  kissio.CMD_FULLDUPLEX: 0}
-        if not 0 <= params[kissio.CMD_P] <= 255:
+        params = {kiss.CMD_TXDELAY: kiss.ms_to_units(txdelay_ms),
+                  kiss.CMD_P: get("kiss", "persist", 63, int),
+                  kiss.CMD_SLOTTIME: kiss.ms_to_units(get("kiss", "slottime_ms", 100, int)),
+                  kiss.CMD_FULLDUPLEX: 0}
+        if not 0 <= params[kiss.CMD_P] <= 255:
             raise ConfigError("[kiss] persist: 0..255")
 
     tnc = TncCfg(profile=profile, transport=transport, device=device,

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from tinybox import config
 from tinybox.adapters import kiss as kissadapter
-from tinybox.ax25 import kissio
+from prcore import kiss
 
 from tbclient import config as ccfg
 from tbclient import core as core_mod
@@ -36,15 +36,15 @@ class FakeHub:
 
     async def _conn(self, r, w) -> None:
         self.clients.append(w)
-        dec = kissio.Decoder()
+        dec = kiss.Decoder()
         try:
             while chunk := await r.read(4096):
                 for port, cmd, data in dec.feed(chunk):
-                    if cmd != kissio.CMD_DATA:
+                    if cmd != kiss.CMD_DATA:
                         continue
                     for other in self.clients:
                         if other is not w and not other.is_closing():
-                            other.write(kissio.encode(data, port))
+                            other.write(kiss.encode(data, port))
         except (ConnectionError, OSError):
             pass
         finally:

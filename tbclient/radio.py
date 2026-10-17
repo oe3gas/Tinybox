@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from tinybox import aprs
+from prcore import aprs
 
 UI_CONTROL = 0x03
 

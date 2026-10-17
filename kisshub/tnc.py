@@ -21,7 +21,7 @@ import time
 from collections import deque
 from typing import Callable
 
-from tinybox.ax25 import kissio
+from prcore import kiss
 
 from .profiles import KISS_EXIT, Profile, Step
 
@@ -69,7 +69,7 @@ class Tnc:
         self.rx_frames = self.tx_frames = 0
         self._term = bytearray()
         self._term_event = asyncio.Event()
-        self._decoder = kissio.Decoder()
+        self._decoder = kiss.Decoder()
         self._stopping = False
         # for the status query (CR41)
         self.state_since = time.time()
@@ -112,7 +112,7 @@ class Tnc:
             try:
                 await self._wake()
                 await self._init()
-                self._decoder = kissio.Decoder()
+                self._decoder = kiss.Decoder()
                 self._term.clear()
                 self._set_state("kiss")
                 self.inits += 1
@@ -144,7 +144,7 @@ class Tnc:
             data = await self.transport.read()
             if self.state == "kiss":
                 for port, cmd, frame in self._decoder.feed(data):
-                    if cmd == kissio.CMD_DATA:
+                    if cmd == kiss.CMD_DATA:
                         self.rx_frames += 1
                         try:
                             self.on_frame(port, frame)
@@ -221,7 +221,7 @@ class Tnc:
 
     def _send_params(self) -> None:
         for cmd, value in self.params.items():
-            self.transport.write(kissio.encode_param(cmd, value))
+            self.transport.write(kiss.encode_param(cmd, value))
 
     # --- KISS ---------------------------------------------------------------------------
 

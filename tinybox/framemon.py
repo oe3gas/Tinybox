@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import logging
 
-from . import aprs
-from .ax25 import frame as ax
-from .ax25.frame import AX25Error
+from prcore import aprs
+from prcore.ax25 import frame as ax
+from prcore.ax25.frame import AX25Error
 
 flog = logging.getLogger("tinybox.frames")
 flog.propagate = False

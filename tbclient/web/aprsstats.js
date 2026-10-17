@@ -1,5 +1,5 @@
 // APRS statistics of the channel (CR61) - the page "APRS statistics" in the client.
-// The numbers come from GET /api/aprs/stats?win=<seconds> (tinybox/aprsstats.py);
+// The numbers come from GET /api/aprs/stats?win=<seconds> (prcore/aprsstats.py);
 // this file only draws them. CR65: a click on a call opens the station page of
 // that call (GET /api/aprs/station?call=..&win=..); Back goes the way back.
 "use strict";

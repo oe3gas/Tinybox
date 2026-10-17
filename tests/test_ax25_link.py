@@ -11,8 +11,8 @@ import random
 import unittest
 
 from tinybox import linkq
-from tinybox.ax25 import frame as ax
-from tinybox.ax25.link import Ax25Link, LinkCfg, State
+from prcore.ax25 import frame as ax
+from prcore.ax25.link import Ax25Link, LinkCfg, State
 
 from tests.ax25sim import Sim, pair
 

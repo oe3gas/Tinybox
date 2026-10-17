@@ -39,10 +39,10 @@ import time
 
 from .. import chanmon, framemon, logsetup
 from ..app import App
-from ..ax25 import frame as ax
-from ..ax25.frame import AX25Error, Frame
-from ..ax25.kissio import KissTcpClient
-from ..ax25.link import Ax25Link, LinkCfg
+from prcore.ax25 import frame as ax
+from prcore.ax25.frame import AX25Error, Frame
+from prcore.kiss import KissTcpClient
+from prcore.ax25.link import Ax25Link, LinkCfg
 from ..config import Config, normalize_call
 from .agw import DRAIN_TIMEOUT, AgwAdapter, AgwConnection
 

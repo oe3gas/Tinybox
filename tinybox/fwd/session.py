@@ -34,7 +34,9 @@ from dataclasses import dataclass, field
 from .. import logsetup
 from ..config import PartnerCfg
 from ..service import MessageService
-from . import b1, lzhuf
+from prcore import lzhuf
+
+from . import b1
 from .link import Link
 from .protocol import (CTRL_Z, MAX_BLOCK, Proposal, ProtocolError, block_end_ok, checksum,
                        own_sid, parse_fs, parse_proposal, parse_rli_reply, parse_send_cmd,

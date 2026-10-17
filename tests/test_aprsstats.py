@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tinybox import aprs
-from tinybox.aprsstats import AprsStats, country
+from prcore import aprs
+from prcore.aprsstats import AprsStats, country
 
 T0 = 1_792_000_000.0
 
@@ -86,7 +86,7 @@ class StatsTests(unittest.TestCase):
     def test_file_is_tidied_while_running(self):
         import sqlite3
         import time as _t
-        from tinybox import aprsstats
+        from prcore import aprsstats
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "aprsstats.db"
             st = AprsStats(p)

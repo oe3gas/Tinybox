@@ -5,8 +5,8 @@ from __future__ import annotations
 import random
 import unittest
 
-from tinybox.ax25 import frame as ax
-from tinybox.ax25.frame import AX25Error, Frame
+from prcore.ax25 import frame as ax
+from prcore.ax25.frame import AX25Error, Frame
 
 ME, YOU = "OE3GAS-1", "OE3ABC"
 

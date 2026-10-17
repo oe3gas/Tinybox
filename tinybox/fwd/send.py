@@ -16,7 +16,9 @@ import logging
 from .. import logsetup
 from ..service import MessageService
 from ..store import Message
-from . import b1, lzhuf
+from prcore import lzhuf
+
+from . import b1
 from .protocol import CTRL_Z, Proposal
 
 log = logging.getLogger("tinybox.forward")

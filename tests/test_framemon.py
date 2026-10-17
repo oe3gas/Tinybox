@@ -8,7 +8,7 @@ import unittest
 
 from tinybox import framemon, logsetup
 from tinybox.adapters.web import Hub, HubLogHandler
-from tinybox.ax25 import frame as ax
+from prcore.ax25 import frame as ax
 
 
 class EntryTests(unittest.TestCase):
