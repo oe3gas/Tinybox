@@ -181,7 +181,7 @@ class LossRecoveryTests(unittest.TestCase):
         self.assertLess(a.srt, 8.0)
         a.rc = 3
         a._select_t1(sim.now, measured=False)
-        self.assertEqual(a.t1v, min(30.0, max(3.0, a.srt * 16)))
+        self.assertEqual(a.t1v, min(30.0, max(3.0, a.srt * 8)))   # backoff capped (17.10.2026)
 
 
 class BusyTests(unittest.TestCase):

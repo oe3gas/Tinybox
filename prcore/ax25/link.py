@@ -64,6 +64,9 @@ from . import xid
 from .frame import Frame, i_frame, s_frame, u_frame
 
 
+MAX_BACKOFF_STEPS = 2           # T1 on retries: SRT x 4, x 8, x 8 ...
+
+
 class State(IntEnum):
     # numbers as in Direwolf's ax25_link.c, so 'state=' in link quality means the same
     DISCONNECTED = 0
@@ -524,15 +527,35 @@ class Ax25Link:
                 self._invoke_retransmission(f.nr)
 
     def _rx_srej(self, f: Frame, now: float) -> None:
-        """The peer misses exactly frame N(R): send that one again, ack nothing."""
+        """The peer misses exactly frame N(R): send that one again.
+
+        With F=1 (AX.25 v2.2, 4.3.2.4) the SREJ also acknowledges everything up to
+        N(R)-1, and as a response it is the answer to our poll: timer recovery is
+        over. Direwolf answers a poll with SREJ F=1 whenever it misses a frame -
+        without this the link stayed in recovery and polled again (field test
+        PK-232, 17.10.2026)."""
         self.peer_busy = False
         self.c["srej_rx"] += 1
         self.c["rej_rx"] += 1
         if f.command and f.pf:
             self._tx_s(self._rr(), command=False, pf=True)
             self.t2_at = None
+        if not self._nr_valid(f.nr):
+            return
+        if f.pf:
+            self._set_va(f.nr)                        # F=1: up to N(R)-1 acknowledged
+            if self.state == State.TIMER_RECOVERY and not f.command:
+                self._select_t1(now, measured=False)
+                self._stop_t1()
+                self.rc = 0
+                self.state = State.CONNECTED
         entry = self.sent.get(f.nr)
-        if entry is None or not self._nr_valid(f.nr) or f.nr == self.vs:
+        if entry is None or f.nr == self.vs:
+            if self.state == State.CONNECTED and self.t1_at is None:
+                if self.va == self.vs:
+                    self._start_t3(now)
+                else:
+                    self._start_t1(now)
             return                                    # already acked or never sent
         self._emit(i_frame(self.remote, self.mycall, f.nr, self.vr, entry.info,
                            modulo=self.modulo, path=self.path))
@@ -540,7 +563,8 @@ class Ax25Link:
         self.c["i_retry"] += 1
         self.c["bytes_retry"] += len(entry.info)
         self.t2_at = None
-        if self.t1_at is not None:
+        if self.t1_at is not None or self.state == State.CONNECTED:
+            self._stop_t3()
             self._start_t1(now)                       # give the repeat time to arrive
 
     # --- XID ----------------------------------------------------------------------
@@ -645,7 +669,10 @@ class Ax25Link:
             self.srt = 7 / 8 * self.srt + 1 / 8 * elapsed
             self.t1v = self._clamp(2 * self.srt)
         elif self.rc > 0:
-            self.t1v = self._clamp(self.srt * 2 ** (self.rc + 1))
+            # back off on retries, but at most to 8 x SRT: beyond that the link only
+            # waits longer for an answer that a lossy channel will not bring sooner
+            # (polls every 30 s for minutes in the field test, 17.10.2026)
+            self.t1v = self._clamp(self.srt * 2 ** (min(self.rc, MAX_BACKOFF_STEPS) + 1))
 
     def _start_t1(self, now: float) -> None:
         """T1 runs from the estimated end of our own transmission."""

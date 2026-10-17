@@ -404,3 +404,35 @@ class HubConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConsoleTests(HubTestBase):
+    async def test_console_mark_debug_trace_and_live_txdelay(self):
+        import logging as _logging
+        from kisshub.console import Console, LogControl
+        await self.start_hub(FakePK232("cmd"))
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        await self.wait(lambda: len(self.fake.params) == 2)
+        lines: list[str] = []
+        ctl = LogControl("INFO", "")
+        con = Console(self.hub, ctl, out=lambda *a: lines.append(" ".join(map(str, a))))
+        with self.assertLogs("kisshub", "INFO") as logs:
+            con.handle_line("log mark test 1")
+            con.handle_line("LOG TRACE")
+            con.handle_line("TXDELAY 600")
+        text = "\n".join(logs.output)
+        self.assertIn("MARK: test 1", text)
+        self.assertIn(">> TNC param TXDELAY=60", text)
+        await self.wait(lambda: len(self.fake.params) == 3)
+        self.assertEqual(self.fake.params[-1], (kiss.CMD_TXDELAY, bytes((60,))))
+        self.assertEqual(self.hub.tnc.state, "kiss")            # never left KISS
+        self.assertAlmostEqual(self.hub.cfg.txdelay_sec, 0.6)
+        con.handle_line("LOG DEBUG")
+        self.assertEqual(_logging.getLogger("kisshub").level, _logging.DEBUG)
+        con.handle_line("LOG OFF")
+        self.assertFalse(self.hub.tnc.trace)
+        self.assertEqual(_logging.getLogger("kisshub").level, _logging.NOTSET)
+        con.handle_line("PARAMS")
+        self.assertIn("TXDELAY 600 ms", lines[-1])
+        con.handle_line("bogus")
+        self.assertIn("unknown command", lines[-1])

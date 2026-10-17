@@ -35,6 +35,7 @@ class Config:
     hub: HubCfg
     log_level: str = "INFO"
     log_file: str = ""
+    trace: bool = False               # [log] trace: every byte to/from the TNC in hex
 
 
 def load(path: str | Path) -> Config:
@@ -103,7 +104,7 @@ def load(path: str | Path) -> Config:
     if hub.air_baud < 300:
         raise ConfigError("[kiss] air_baud: at least 300")
     return Config(tnc=tnc, hub=hub, log_level=get("log", "level", "INFO").upper(),
-                  log_file=get("log", "file", ""))
+                  log_file=get("log", "file", ""), trace=get("log", "trace", False, bool))
 
 
 def make_transport(t: TncCfg):

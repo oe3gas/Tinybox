@@ -233,3 +233,62 @@ class EfficiencyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SrejAnswerTests(unittest.TestCase):
+    """Field test PK-232 / Direwolf, 17.10.2026: Direwolf answers our poll with
+    SREJ F=1 when it misses a frame. That is the answer to the poll."""
+
+    def setUp(self):
+        self.box = Ax25Link(A_CALL, B_CALL, cfg=V22, now=0)
+        self.t = 0.0
+        self.rx(ax.u_frame("SABME", A_CALL, B_CALL, command=True, pf=True))
+        self.box.send(payload(self.box.n1 + 30), self.t)      # two I frames: 0 and 1
+        self.assertEqual(self.box.vs, 2)
+        self.out()
+
+    def rx(self, f):
+        self.box.receive(ax.Frame.decode(f.encode(), self.box.modulo), self.t)
+
+    def out(self):
+        return self.box.pop_output()
+
+    def poll(self):
+        """Run the clock until the box polls (T1 expired)."""
+        while self.box.state != State.TIMER_RECOVERY:
+            self.t = self.box.next_deadline()
+            self.box.tick(self.t)
+        return self.out()
+
+    def test_srej_f1_ends_timer_recovery_and_repeats_the_frame(self):
+        polls = self.poll()
+        self.assertTrue(any(f.kind == "RR" and f.command and f.pf for f in polls))
+        self.rx(ax.s_frame("SREJ", A_CALL, B_CALL, 0, command=False, pf=True, modulo=128))
+        sent = self.out()
+        self.assertEqual(self.box.state, State.CONNECTED)
+        self.assertEqual(self.box.rc, 0)
+        self.assertEqual([f.ns for f in sent if f.is_i], [0])
+        self.assertIsNotNone(self.box.t1_at)                  # frames 0, 1 still open
+
+    def test_srej_f1_acknowledges_below_nr(self):
+        self.poll()
+        self.rx(ax.s_frame("SREJ", A_CALL, B_CALL, 1, command=False, pf=True, modulo=128))
+        self.assertEqual(self.box.va, 1)                      # frame 0 acknowledged
+        self.assertEqual([f.ns for f in self.out() if f.is_i], [1])
+
+    def test_srej_without_f_acknowledges_nothing(self):
+        self.rx(ax.s_frame("SREJ", A_CALL, B_CALL, 1, command=False, pf=False, modulo=128))
+        self.assertEqual(self.box.va, 0)
+
+    def test_retry_backoff_is_capped(self):
+        """T1 on retries grows to 8 x SRT at most (unless t1_max is lower)."""
+        self.poll()
+        intervals, last = [], self.t
+        for _ in range(6):
+            self.t = self.box.next_deadline()
+            intervals.append(self.t - last)
+            last = self.t
+            self.box.tick(self.t)
+            self.out()
+        cap = min(self.box.cfg.t1_max_sec, 8 * self.box.srt)
+        self.assertTrue(all(i <= cap + 1.0 for i in intervals), intervals)

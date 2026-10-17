@@ -1,5 +1,8 @@
 """python -m kisshub [-c kisshub.conf]
 
+Commands can be typed into the window while it runs (H for help): LOG MARK,
+LOG DEBUG, LOG TRACE, TXDELAY ... - see console.py.
+
 Ctrl+C ends kisshub cleanly: the TNC is switched back out of KISS first
 (if the profile says so), so a terminal program or pk232py finds it at cmd:.
 """
@@ -13,6 +16,7 @@ import sys
 
 from . import VERSION
 from .config import ConfigError, load, make_transport
+from .console import Console, LogControl
 from .hub import Hub
 from .tnc import Tnc
 
@@ -34,6 +38,9 @@ async def main(cfg) -> None:
                    reconnect_sec=t.reconnect_sec, params=t.params)
 
     hub = Hub(cfg.hub, tnc_factory)
+    hub.tnc.trace = cfg.trace
+    if sys.stdin is not None and sys.stdin.isatty():
+        Console(hub, LogControl(cfg.log_level, cfg.log_file)).start_stdin()
     try:
         await hub.run()
     finally:

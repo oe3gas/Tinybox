@@ -22,10 +22,31 @@ from collections import deque
 from typing import Callable
 
 from prcore import kiss
+from prcore.ax25 import frame as ax
+from prcore.ax25.frame import AX25Error
 
 from .profiles import KISS_EXIT, Profile, Step
 
 log = logging.getLogger(__name__)
+
+PARAM_NAMES = {kiss.CMD_TXDELAY: "TXDELAY", kiss.CMD_P: "PERSIST",
+               kiss.CMD_SLOTTIME: "SLOTTIME", kiss.CMD_TXTAIL: "TXTAIL",
+               kiss.CMD_FULLDUPLEX: "FULLDUPLEX"}
+
+
+def _hex(data: bytes, limit: int = 400) -> str:
+    text = data[:limit].hex(" ")
+    return text + (f" ... (+{len(data) - limit})" if len(data) > limit else "")
+
+
+def summary(ax25: bytes) -> str:
+    """'OE3GAS-1>OE3GAS,DIGI* 118 B' for the trace."""
+    try:
+        dest, src, path, rep = ax.peek(ax25)
+    except AX25Error:
+        return f"{len(ax25)} B (no AX.25 address)"
+    via = "".join("," + c + ("*" if h else "") for c, h in zip(path, rep))
+    return f"{src}>{dest}{via} {len(ax25)} B"
 
 
 class TncError(Exception):
@@ -71,6 +92,7 @@ class Tnc:
         self._term_event = asyncio.Event()
         self._decoder = kiss.Decoder()
         self._stopping = False
+        self.trace = False                           # LOG TRACE: every byte in hex
         # for the status query (CR41)
         self.state_since = time.time()
         self.inits = 0                               # times the TNC reached KISS
@@ -146,8 +168,13 @@ class Tnc:
     async def _read_loop(self) -> None:
         while True:
             data = await self.transport.read()
+            if self.trace:
+                log.info("<< TNC %d bytes | %s", len(data), _hex(data))
             if self.state == "kiss":
                 for port, cmd, frame in self._decoder.feed(data):
+                    if self.trace:
+                        log.info("<< TNC frame %s", summary(frame) if cmd == kiss.CMD_DATA
+                                 else f"KISS command 0x{cmd:02x}")
                     if cmd == kiss.CMD_DATA:
                         self.rx_frames += 1
                         try:
@@ -164,7 +191,7 @@ class Tnc:
     async def _step(self, step: Step) -> tuple[bool, bytes]:
         """Send one step; True if one of its expected answers arrived."""
         self._term.clear()
-        self.transport.write(step.send)
+        self._write(step.send)
         if not step.expect:
             await asyncio.sleep(step.timeout)
             return True, bytes(self._term)
@@ -225,15 +252,29 @@ class Tnc:
 
     def _send_params(self) -> None:
         for cmd, value in self.params.items():
-            self.transport.write(kiss.encode_param(cmd, value))
+            self._write(kiss.encode_param(cmd, value), f"param {PARAM_NAMES.get(cmd, cmd)}={value}")
+
+    def set_param(self, cmd: int, value: int) -> bool:
+        """Change a KISS parameter (TXDELAY, P, SLOTTIME ...) while running. It is
+        kept for the next init too. True if it went to the TNC at once (in KISS)."""
+        self.params[cmd] = value
+        if self.state != "kiss":
+            return False
+        self._write(kiss.encode_param(cmd, value), f"param {PARAM_NAMES.get(cmd, cmd)}={value}")
+        return True
 
     # --- KISS ---------------------------------------------------------------------------
 
-    def send(self, kiss_frame: bytes) -> bool:
+    def _write(self, data: bytes, what: str = "") -> None:
+        if self.trace:
+            log.info(">> TNC %s%s", f"{what} | " if what else "", _hex(data))
+        self.transport.write(data)
+
+    def send(self, kiss_frame: bytes, ax25: bytes | None = None) -> bool:
         """One complete KISS frame (FEND ... FEND). False while not in KISS."""
         if self.state != "kiss":
             return False
-        self.transport.write(kiss_frame)
+        self._write(kiss_frame, summary(ax25) if ax25 is not None else "")
         self.tx_frames += 1
         return True
 
@@ -243,10 +284,10 @@ class Tnc:
         if self.state == "kiss" and self.profile.exit_kiss:
             log.info("leaving KISS mode")
             self.state = "init"
-            self.transport.write(KISS_EXIT)
+            self._write(KISS_EXIT, "leave KISS")
             await asyncio.sleep(1.5)
             for step in self.profile.exit_lines:
-                self.transport.write(step.send)
+                self._write(step.send)
                 await asyncio.sleep(0.5)
             await self.transport.drain()
         self.transport.close()

@@ -1,0 +1,2 @@
+- KISS: SREJ answer to a poll ends the recovery at once.
+- KISS: repeat polls at most 8 x round trip apart.

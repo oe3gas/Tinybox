@@ -30,4 +30,5 @@ status_port = 8102         ; status for the TinyBox web GUI (JSON, loopback only
 [log]
 level = INFO               ; DEBUG shows every byte of the TNC dialog
 file  =                    ; e.g. kisshub.log
+trace = no                 ; yes: every byte to/from the TNC in hex (console: LOG TRACE)
 status_every_sec = 600
