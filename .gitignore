@@ -43,3 +43,6 @@ Thumbs.db
 desktop.ini
 ~$*
 .~lock.*#
+
+# --- Produktions-Builds: lokal gebaut, Version per Git-Tag prod-<hash> -------
+production/

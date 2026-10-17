@@ -1110,6 +1110,17 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - **Betrieb PC2:** `start_alles.bat` startet den Sammler (`START_DXFEED=1`, nur wenn `dxfeed.conf` existiert); `dxfeed_aufgabe_einrichten.bat` legt die 05:00-Aufgabe an. NanoPi: `dxfeed.service`, `dxfeed-digest.timer` (aktiv, sobald `dxfeed.conf` existiert).
 - **Später (offen):** BBS-Befehl `DX` (letzte gefilterte Spots auf Abruf), persönliche Watchlist (Mail nur bei Treffer, opt-in).
 
+## 17. Refactoring (entschieden 17.10.2026)
+
+Gezielt in Schritten, kein Großumbau. Sicherheitsnetz sind die bestehenden Tests (TinyBox und brocast).
+
+1. ✅ **`production/` aus dem Repo** (17.10.2026): Builds bleiben lokal (`.gitignore`), freigegebene Versionen werden mit Git-Tag `prod-<hash>` markiert. Der bisherige Build `f16d5a3` liegt im Tag `prod-f16d5a3` (Details in PRODUCTION.md).
+2. **Gemeinsames Paket** (Arbeitstitel `prcore`) für AX.25, KISS, AGW, APRS, chatimg und lzhuf, genutzt von TinyBox, tbclient, brocastd und kisshub. Heute mehrfach vorhanden bzw. greift der tbclient direkt auf TinyBox-Interna zu. Plan folgt vor dem Umbau.
+3. **Config-Laden** auf eine gemeinsame, tabellengesteuerte Grundlage (heute vier eigene Lader, `tinybox/config.py: load` rund 200 Zeilen).
+4. **Lange Funktionen** (z. B. `aprs._mice`, `aprsstats.report`, tbclient `core._control`, `web._route`) nur aufteilen, wenn dort ohnehin CRs anstehen.
+
+Offen aus Schritt 1: `kisshub/` ist in `build_production.sh` weder in `INCLUDE` noch in `EXCLUDE` – klären, ob kisshub auf den NanoPi gehört.
+
 ---
 
 ## Quellen

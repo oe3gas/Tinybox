@@ -2,6 +2,8 @@
 # Build a stripped production version for the NanoPi from a git commit.
 #   ./build_production.sh            -> production/<short-hash of HEAD>/
 #   ./build_production.sh <commit>   -> production/<short-hash of commit>/
+#   ./build_production.sh prod-<hash> -> rebuild a released version (git tag)
+# production/ is local only (.gitignore) - tag the source commit, never commit the build.
 # The files come from the commit (git archive), not from the working tree.
 # Details: PRODUCTION.md
 set -euo pipefail

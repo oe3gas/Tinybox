@@ -47,7 +47,7 @@ A build is about 1.2 MB, compared with 3.7 MB for the full repository.
 
 | File | Purpose |
 |---|---|
-| `build_production.sh` | Builds `production/<short-hash>/` from a git commit. Its `INCLUDE` list says what is shipped. |
+| `build_production.sh` | Builds `production/<short-hash>/` from a git commit or tag. Its `INCLUDE` list says what is shipped. The output stays local (ignored by git). |
 | `deploy/install.sh` | Installs or updates the build on the NanoPi into `/opt/tinybox`. |
 | `deploy/systemd/*` | The systemd units and timers that replace the `.bat` files and Windows scheduled tasks. |
 | `deploy/journald-tinybox.conf` | Keeps the systemd journal in RAM only (16 MB). |
@@ -65,15 +65,26 @@ The existing program code is never changed for production.
    ./build_production.sh 3547e37    # or from any other commit
    ```
 
-   After a `production/...` commit, HEAD is that commit and not the code commit. In that case, always pass the source commit explicitly.
-
-   The result is `production/<short-hash>/`, for example `production/f16d5a3/`. `VERSION` inside it records the full hash, the commit date and the build time.
+   The result is `production/<short-hash>/`, for example `production/f16d5a3/`. `VERSION` inside it records the full hash, the commit date and the build time. The `production/` folder is local only and ignored by git; builds are **not** committed.
 3. Read the script's warnings:
    - **`WARNING: not classified (left out): <file>`** means a file was added that is in neither `INCLUDE` nor `EXCLUDE`. It was **not** shipped. Add it to `INCLUDE` if the NanoPi needs it at runtime, otherwise to `EXCLUDE`, then delete the build folder and build again.
-   - **`deploy/ taken from the working tree`** means the `deploy/` files are not in that commit yet. That only happens for the first build, `f16d5a3`. Builds from later commits take `deploy/` from the commit.
-4. Commit the new `production/<short-hash>/` folder. The commit that adds it has a different hash than the folder name. That is expected: the folder name is the hash of the **source** commit.
+   - **`deploy/ taken from the working tree`** means the `deploy/` files are not in that commit. That only happened for the first build, `f16d5a3`. Builds from later commits take `deploy/` from the commit.
+4. Mark the source commit with a tag, so it is clear which version runs on the NanoPi and the build can be repeated at any time:
+
+   ```sh
+   git tag -a prod-<short-hash> <short-hash> -m "Produktionsbuild <short-hash>"
+   git push origin prod-<short-hash>
+   ```
+
+   To rebuild an older version later, run `./build_production.sh prod-<short-hash>`. `git tag -l 'prod-*'` lists all released versions.
 
 An existing build folder is never overwritten. To rebuild, delete it first.
+
+**The first build `f16d5a3`** cannot be rebuilt from its source commit, because its `deploy/` came from the working tree. Its finished folder is kept in the tag `prod-f16d5a3` (the commit that last contained `production/f16d5a3/`). To get it back:
+
+```sh
+git archive prod-f16d5a3 production/f16d5a3 | tar -x
+```
 
 ## 2. Install on the NanoPi (first time)
 
@@ -169,6 +180,6 @@ The journal is in RAM, so logs from before a crash or reboot are lost. To keep t
 
 - [ ] Everything committed, tests pass on the development machine
 - [ ] `./build_production.sh` runs with no `not classified` warnings
-- [ ] Commit `production/<short-hash>/`
+- [ ] Tag the source commit `prod-<short-hash>` and push the tag (not the build folder)
 - [ ] Copy it to the NanoPi and run `sudo sh deploy/install.sh`
 - [ ] Check `systemctl status tinybox brocastd` and `journalctl -u tinybox -n 30`
