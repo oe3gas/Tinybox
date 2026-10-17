@@ -577,6 +577,27 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .st-tbar { flex: 1; min-height: 1px; background: var(--accent); border-radius: 2px 2px 0 0; opacity: .85; }
 .st-tlfoot { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 .st-far p { margin: 2px 0 8px; font-size: 13px; }
+/* CR65: the station page */
+.term-out .mc { cursor: pointer; }
+.term-out .mc:hover { text-decoration: underline; }
+.st-head { display: flex; flex-direction: column; gap: 8px; }
+.st-name { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.st-callbig { font: 700 22px ui-monospace, Consolas, monospace; }
+.st-bigsym { width: 28px !important; height: 28px !important; background-size: 448px 168px !important; }
+.st-role { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent); }
+.st-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 16px; font-size: 13px; }
+.st-k { color: var(--muted); margin-right: 6px; }
+.st-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.st-linkbtn { display: inline-block; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--accent); text-decoration: none; font-size: 13px; }
+.st-note { font-size: 13px; margin: 0 0 8px; }
+.st-chainrow { display: inline-flex; flex-wrap: wrap; align-items: center; }
+.st-arrow { color: var(--muted); }
+.st-heat { display: grid; grid-template-columns: 2.6em repeat(24, minmax(0, 1fr)); gap: 2px; font-size: 10px; }
+.st-heat-h { color: var(--muted); text-align: left; }
+.st-heat-d { color: var(--muted); font-size: 11px; }
+.st-heat-c { height: 16px; border-radius: 2px; background: color-mix(in srgb, var(--line) 50%, transparent); }
 @media (max-width: 699px) {
   .st-grid { grid-template-columns: 1fr; }
   .st-bar { grid-template-columns: 7em minmax(0, 1fr) 5.5em; }

@@ -2136,6 +2136,14 @@ function autoTerm() {
   if (view !== want) setView(want);
 }
 
+// CR65: the statistics of one call, from the monitor; Back returns to the same place
+let statsFromMon = null;
+function openStationStats(call) {
+  if (view === "term" && activeCh === 0) statsFromMon = $("term-out").scrollTop;
+  AprsStatsView.openStation(call.replace(/\*$/, ""));
+  setView("stats");
+}
+
 function showLens() {                           // CR55: the APRS lens only next to the monitor
   $("aprs-lens").hidden = !(activeCh === 0 && AprsView.lensOn());   // CR62: only in step 2
 }
@@ -2397,13 +2405,27 @@ async function start() {
   $("nav-settings").onclick = () => openSheet();
   $("nav-monitor").onclick = () => switchCh(0);              // CR50: the monitor channel
   AprsStatsView.attach($("statsview"));                       // CR61: APRS statistics
-  AprsStatsView.back = () => setView(backView());
-  AprsStatsView.setOnCall((call) => {                         // a call: the monitor, filtered
+  AprsStatsView.setSymbolRenderer(symbolEl);
+  AprsStatsView.setOnCall((call) => {                         // "Show in monitor": filtered
     $("mon-q").value = call;
     monDirty = true;
+    statsFromMon = null;
     if (activeCh === 0) setView("term"); else switchCh(0);
   });
-  $("nav-stats").onclick = () => setView("stats");
+  AprsStatsView.setOnExit(() => {                             // Back on the first page
+    const from = statsFromMon;
+    statsFromMon = null;
+    setView(backView());
+    if (from !== null && activeCh === 0) $("term-out").scrollTop = from;   // the same place
+  });
+  $("nav-stats").onclick = () => { statsFromMon = null; AprsStatsView.openOverview(); setView("stats"); };
+  AprsView.setOnStation(openStationStats);                    // CR65: band and lens
+  $("term-out").addEventListener("click", (ev) => {           // CR65: a call in the monitor
+    const c = activeCh === 0 && ev.target.closest(".mc");
+    if (!c) return;
+    ev.stopPropagation();                                     // not the selection of the card
+    openStationStats(c.textContent);
+  }, true);
   $("status-text").onclick = () => $("app").classList.toggle("show-people");
   $("people-close").onclick = () => $("app").classList.remove("show-people");
   $("linkdlg-close").onclick = closeLink;

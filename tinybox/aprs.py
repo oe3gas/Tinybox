@@ -252,6 +252,8 @@ class _Out:
         self.device = ""
         self.mice: dict | None = None
         self.origin: dict | None = None             # CR61: third party - the inner station
+        self.speed: float | None = None             # CR65: km/h, for the station page
+        self.alt: float | None = None               # CR65: metres
 
     def seg(self, raw: str, role: str, key: str, label: str, mean: str = "", calc: str = "") -> None:
         if raw:
@@ -410,6 +412,7 @@ def _compressed(body: str, out: _Out) -> int | None:
             ft = 1.002 ** ((ord(c) - 33) * 91 + ord(s) - 33)
             out.seg(cst, "alt", "alt", "Altitude (compressed)", f"{ft * 0.3048:.0f} m ({ft:.0f} ft)", "1.002^cs feet")
             out.chip(f"{ft * 0.3048:.0f} m", "alt", "alt")
+            out.alt = ft * 0.3048
         elif c == "{":
             rng = 2 * 1.08 ** (ord(s) - 33)
             out.seg(cst, "move", "cs", "Radio range", f"{rng * 1.609:.0f} km", "2 × 1.08^s miles")
@@ -420,6 +423,7 @@ def _compressed(body: str, out: _Out) -> int | None:
             out.seg(cst, "move", "cs", "Course and speed", f"{kn * 1.852:.0f} km/h, course {course}°",
                     f"course ({ord(c)}−33)·4 · speed 1.08^({ord(s)}−33) − 1 = {kn:.0f} kn")
             out.chip(f"{kn * 1.852:.0f} km/h → {course}°", "move", "cs")
+            out.speed = kn * 1.852
     return 13
 
 
@@ -499,6 +503,7 @@ def _comment(text: str, out: _Out, label: str = "Comment") -> None:
         ft = int(m.group(1))
         out.seg(m.group(0), "alt", "alt", "Altitude", f"{ft * 0.3048:.0f} m ({ft} ft)", "/A= then feet, 6 digits")
         out.chip(f"{ft * 0.3048:.0f} m", "alt", "alt")
+        out.alt = ft * 0.3048
         out.seg(after, "text", "cmt", label, "free text")
         free = before + " " + after
     if free.strip():
@@ -522,6 +527,7 @@ def _extension(text: str, out: _Out, weather: bool) -> int:
             out.seg(m.group(0), "move", "move", "Course and speed",
                     f"course {c}°, {sp * 1.852:.0f} km/h ({sp} kn)", "ddd/sss: course°/speed knots")
             out.chip(f"{sp * 1.852:.0f} km/h → {c}°" if sp else f"standing (course {c}°)", "move", "move")
+            out.speed = sp * 1.852
         return 7
     m = re.match(r"^PHG(\d)(\d)(\d)(\d)", text)
     if m:
@@ -763,6 +769,9 @@ def _mice(dest: str, text: str, out: _Out, home) -> bool:
     out.chip(lat_text(lat), "pos", "dest")
     out.chip(lon_text(lon), "pos", "lon")
     out.chip(f"{knots * 1.852:.0f} km/h → {course}°" if knots else f"standing (course {course}°)", "move", "move")
+    out.speed = knots * 1.852
+    if alt_m:
+        out.alt = _b91(alt_m.group(1)) - 10000
     if alt_m:
         out.chip(f"{_b91(alt_m.group(1)) - 10000} m", "alt", "alt")
     out.chip(msg, "warn" if msg == "Emergency" else "stat", "dest")
@@ -963,6 +972,7 @@ def _third_party(text: str, out: _Out, home, now, memory) -> bool:
         out.segs += sub.segs
         out.chips += sub.chips
         out.lat, out.lon = sub.lat, sub.lon
+        out.speed, out.alt = sub.speed, sub.alt
         if sub.title:
             out.title = f"Third-party packet: {sub.title.lower()}"
     else:
@@ -1099,6 +1109,7 @@ def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, in
         "text": " ".join(c["t"] for c in out.chips),
         "dist": where, "home": bool(home),          # CR63: for the band of the card
         "symbol": next((sg["sym"] for sg in out.segs if sg.get("sym")), ""),
+        "speed": None if out.speed is None else round(out.speed), "alt": None if out.alt is None else round(out.alt),
     }
     if mice:
         result["mice"] = mice

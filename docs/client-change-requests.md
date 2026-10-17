@@ -1710,3 +1710,31 @@ alles. Die Datei `aprsstats.db` auch im laufenden Betrieb aufräumen, nicht nur 
   aus der Datei gelöscht; der freie Platz wird von SQLite wiederverwendet.
 - Test `test_file_is_tidied_while_running`. Client-Version 2026.10.17.4.
 
+## CR65 – Statistik je Rufzeichen (Stationsseite) (✅ 17.10.2026)
+
+### Erfassung (OE3GAS, 17.10.2026)
+
+Statistik je Call: Art der Frames, Zeitverlauf Frames/h und was sonst interessant ist. Erreichbar aus
+der Monitoransicht (Klick auf ein Rufzeichen) und aus der Übersichts-Statistik. Umfang: Vorschlag
+Punkte 1–10 (letzte Texte und Messwert-Verläufe später).
+
+### Umsetzung
+
+- **Zugänge:** Klick auf ein Rufzeichen im Monitor (Absender, Digipeater im Pfad; alle Stufen des
+  APRS-Lense-Knopfs; Rufzeichen unterstreichen sich beim Darüberfahren); im blauen Kopfband
+  **Station statistics** (bei Third-Party zusätzlich die innere Station); Rufzeichen der Pfad-Kette in
+  der Lense; jedes Rufzeichen in der Übersichts-Statistik (statt direkt in den Monitor). Auf der
+  Stationsseite sind Rufzeichen wieder anklickbar; **‹ Back** geht Schritt für Schritt zurück, zuletzt
+  an dieselbe Stelle im Monitor bzw. in die Übersicht. **Show in monitor** filtert den Monitor.
+- **Inhalt** (Zeitfenster Last hour / 24 h / All): Kopf mit Symbol, Rolle (mobil/fix, Digipeater,
+  iGate, Wetter, Objekte, Telemetrie), Gerät, Land, Entfernung + Richtung, zuerst/zuletzt gehört,
+  Links aprs.fi / Karte / Track; Kacheln (Frames, Kanalanteil und Sendezeit, für andere weitergegeben,
+  Internet → Funk, von deinem Funkgerät empfangen); Frames pro Zeiteinheit; Art der Frames;
+  Bakenverhalten (typischer/kürzester/längster Abstand, fester Takt?, Verteilung); Wie sie zu dir kommt
+  (direkt/über Digis, Wege, Hops, verlangter Pfad, wer sie dir gebracht hat); Aktivität Wochentag ×
+  Stunde (alles Gespeicherte); Bewegung (Strecke, Höchstgeschwindigkeit, Höhe); als Digipeater bzw.
+  iGate: für welche Stationen; Sünden dieser Station.
+- Datensätze speichern dafür zusätzlich Symbol, Geschwindigkeit und Höhe (`tinybox/aprs.py` liefert
+  `speed`, `alt`). API `GET /api/aprs/station?call=..&win=..`.
+- Tests `test_station_page`. Client-Version 2026.10.17.5.
+

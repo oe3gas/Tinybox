@@ -44,6 +44,27 @@ class StatsTests(unittest.TestCase):
         self.assertIn(("OM0ODX", "internet → radio"), kinds)  # 1 of 7 frames = 14 %
         self.assertEqual(r["range"]["farthest_direct"]["call"], "OE3XKN-10")
 
+    def test_station_page(self):
+        for i in range(5):
+            feed(self.st, T0 + 300 * i, "OE1IAH-8", ["OE6XTR", "OE3XWJ-10", "WIDE2"], [1, 1, 1],
+                 b"!4807.19N/01656.63Ev209/000/A=000891Arnold car 578", dest="APDR10")
+        feed(self.st, T0 + 10, "OM0ODX", ["OE3XWJ-10", "WIDE2"], [1, 1],
+             b"}OM5KV-15>APNL51,TCPIP,OM0ODX*:!4746.48N/01805.55E`Radiosonde")
+        s = self.st.station("oe1iah-8", 0, now=T0 + 1500)
+        self.assertEqual(s["frames"], 5)
+        self.assertEqual(s["types"][0]["cat"], "position")
+        self.assertEqual(s["beacon"]["median"], 300)
+        self.assertEqual(s["ways"]["chains"][0]["chain"], "OE1IAH-8 → OE6XTR → OE3XWJ-10")
+        self.assertEqual(s["roles"][0], "fixed station")
+        self.assertEqual(sum(map(sum, s["activity"])), 5)
+        self.assertIn("km", s["pos"])
+        digi = self.st.station("OE3XWJ-10", 0, now=T0 + 1500)
+        self.assertEqual(digi["frames"], 0)
+        self.assertEqual(digi["relayed"], 6)
+        self.assertIn("digipeater", digi["roles"])
+        gate = self.st.station("OM0ODX", 0, now=T0 + 1500)
+        self.assertEqual(gate["as_igate"], [{"call": "OM5KV-15", "n": 1}])
+
     def test_window_and_reset(self):
         feed(self.st, T0, "OE3CRA-2", [], [], b">old")
         feed(self.st, T0 + 7200, "OE3CRA-2", [], [], b">new")

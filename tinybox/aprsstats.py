@@ -201,7 +201,8 @@ class AprsStats:
                "dev": dev or "", "cat": aprs.get("cat", "other"), "nbytes": nbytes,
                "lat": aprs.get("lat"), "lon": aprs.get("lon"), "flags": aprs.get("flags", []),
                "h": hashlib.blake2s(_norm(info.decode("latin-1")).encode("latin-1"), digest_size=6).hexdigest(),
-               "req": req}
+               "req": req, "sym": aprs.get("symbol", ""),          # CR65: for the station page
+               "spd": aprs.get("speed"), "alt": aprs.get("alt")}
         self.recs.append(rec)
         cut = now - KEEP_SEC
         if len(self.recs) > MAX_RECORDS or (self.recs and self.recs[0]["t"] < cut):
@@ -327,6 +328,128 @@ class AprsStats:
             "timeline": {"slot": slot, "first": first, "counts": tl},
             "sins": self._sins(recs, n, span),
         }
+
+    # --- one station (CR65) -----------------------------------------------------------
+    def station(self, call: str, window: int = 0, now: float | None = None) -> dict:
+        """Everything about one call: as sender, as digipeater, as iGate."""
+        now = time.time() if now is None else now
+        call = call.upper().strip()
+        start = max(self.since, now - window) if window else self.since
+        allrecs = [r for r in self.recs if r["t"] >= start]
+        n_all = len(allrecs)
+        air_all = sum(airtime(r["nbytes"]) for r in allrecs) or 1
+        own = [r for r in allrecs if r["origin"] == call]
+        relayed = [r for r in allrecs if call in r["digis"] and r["origin"] != call]
+        gated = [r for r in allrecs if r["gate"] == call]
+        heard_as = sum(1 for r in allrecs if r["heard"] == call)
+        span = max(60.0, now - (allrecs[0]["t"] if allrecs and not window else start))
+
+        out: dict = {"call": call, "window": window, "since": start, "now": now,
+                     "frames": len(own), "country": country(call), "have_home": bool(self.home),
+                     "relayed": len(relayed), "gated": len(gated), "heard_as": heard_as}
+        if own:
+            out["first"], out["last"] = own[0]["t"], own[-1]["t"]
+            out["device"] = Counter(r["dev"] for r in own if r["dev"]).most_common(1)[0][0] \
+                if any(r["dev"] for r in own) else ""
+            out["symbol"] = next((r.get("sym") for r in reversed(own) if r.get("sym")), "")
+        # last position, distance and direction
+        pos = [r for r in own if r["lat"] is not None]
+        if pos:
+            lp = pos[-1]
+            out["pos"] = {"lat": lp["lat"], "lon": lp["lon"], "t": lp["t"]}
+            if self.home:
+                d = _dist(self.home, (lp["lat"], lp["lon"]))
+                la1, lo1, la2, lo2 = map(math.radians, (self.home[0], self.home[1], lp["lat"], lp["lon"]))
+                brg = (math.degrees(math.atan2(math.sin(lo2 - lo1) * math.cos(la2),
+                       math.cos(la1) * math.sin(la2) - math.sin(la1) * math.cos(la2) * math.cos(lo2 - lo1))) + 360) % 360
+                out["pos"].update({"km": round(d), "deg": round(brg) % 360})
+        # 1) kinds of frames
+        cats = Counter(r["cat"] for r in own)
+        out["types"] = [{"cat": c, "n": k, "pct": round(100 * k / len(own), 1)} for c, k in cats.most_common()]
+        # 2) frames per time slot (frames/h for 24 h and more)
+        slot = 300 if window and window <= 3600 else 3600 if (window and window <= 86400) or span <= 2 * 86400 \
+            else 6 * 3600
+        t0 = allrecs[0]["t"] if allrecs and not window else start
+        first = math.floor(t0 / slot) * slot
+        nslots = max(1, math.ceil((now - first) / slot))
+        tl = [0] * nslots
+        for r in own:
+            i = int((r["t"] - first) // slot)
+            if 0 <= i < nslots:
+                tl[i] += 1
+        out["timeline"] = {"slot": slot, "first": first, "counts": tl}
+        # 3) activity pattern: weekday x hour (local time), always over everything kept
+        grid = [[0] * 24 for _ in range(7)]
+        for r in self.recs:
+            if r["origin"] == call:
+                lt = time.localtime(r["t"])
+                grid[lt.tm_wday][lt.tm_hour] += 1
+        out["activity"] = grid
+        # 4) beacon behaviour
+        ts = [r["t"] for r in own]
+        gaps = [b - a for a, b in zip(ts, ts[1:]) if b - a > 30]
+        if gaps:
+            edges = [(60, "< 1 min"), (300, "1–5 min"), (600, "5–10 min"), (1800, "10–30 min"),
+                     (3600, "30–60 min"), (float("inf"), "≥ 1 h")]
+            buckets = Counter(next(lbl for e, lbl in edges if g < e) for g in gaps)
+            out["beacon"] = {"median": round(statistics.median(gaps)), "min": round(min(gaps)),
+                             "max": round(max(gaps)), "buckets": [[lbl, buckets.get(lbl, 0)] for _, lbl in edges],
+                             "regular": len(gaps) >= 4 and statistics.pstdev(gaps) < 0.15 * statistics.mean(gaps)}
+        # 5) how it reaches you
+        if own:
+            direct = sum(1 for r in own if not r["digis"] and not r["gate"])
+            out["ways"] = {"direct": direct, "via": len(own) - direct,
+                           "chains": [{"chain": c, "n": k} for c, k in
+                                      Counter(" → ".join([call] + r["digis"]) for r in own).most_common(8)],
+                           "hops": [[h, k] for h, k in sorted(Counter(len(r["digis"]) for r in own).items())],
+                           "asked": [[h, k] for h, k in sorted(Counter(r["req"] for r in own).items())],
+                           "heard": [{"call": c, "n": k} for c, k in
+                                     Counter(r["heard"] or "?" for r in own).most_common(8)]}
+        # 6) as digipeater, 7) as iGate
+        out["as_digi"] = [{"call": c, "n": k} for c, k in Counter(r["origin"] for r in relayed).most_common(20)]
+        out["as_igate"] = [{"call": c, "n": k} for c, k in Counter(r["origin"] for r in gated).most_common(20)]
+        # 8) share of the channel
+        mine = own + gated                              # what this station puts on the air
+        out["share"] = {"frames_pct": round(100 * len(own) / n_all, 1) if n_all else 0,
+                        "air_pct": round(100 * sum(airtime(r["nbytes"]) for r in own) / air_all, 1),
+                        "air_sec": round(sum(airtime(r["nbytes"]) for r in mine))}
+        # 9) movement
+        if len(pos) >= 2:
+            km = 0.0
+            fast = 0.0
+            for a_, b_ in zip(pos, pos[1:]):
+                d = _dist((a_["lat"], a_["lon"]), (b_["lat"], b_["lon"]))
+                dt = b_["t"] - a_["t"]
+                if 0.1 <= d < 50:                       # < 100 m: GPS jitter; > 50 km: a wrong fix
+                    km += d
+                    if dt >= 20:
+                        fast = max(fast, d / (dt / 3600))
+            spd = [r["spd"] for r in pos if r.get("spd") is not None]
+            alts = [r["alt"] for r in pos if r.get("alt") is not None]
+            out["move"] = {"km": round(km, 1), "max_kmh": round(max(spd)) if spd else round(fast),
+                           "alt_min": min(alts) if alts else None, "alt_max": max(alts) if alts else None,
+                           "moving": max(_dist((pos[0]["lat"], pos[0]["lon"]), (r["lat"], r["lon"]))
+                                         for r in pos) >= 1.0}
+        # roles
+        roles = []
+        if relayed:
+            roles.append("digipeater")
+        if gated:
+            roles.append("iGate")
+        if cats.get("weather"):
+            roles.append("weather station")
+        if cats.get("object"):
+            roles.append("objects (repeaters, events)")
+        if cats.get("telemetry") or cats.get("tdef"):
+            roles.append("telemetry")
+        if out.get("move", {}).get("moving"):
+            roles.insert(0, "mobile")
+        elif pos:
+            roles.insert(0, "fixed station")
+        out["roles"] = roles
+        # 10) sins
+        out["sins"] = [x for x in self._sins(allrecs, n_all, span) if x["call"] == call]
+        return out
 
     # --- what burdens the channel ---------------------------------------------------
     def _sins(self, recs: list[dict], n: int, span: float) -> list[dict]:

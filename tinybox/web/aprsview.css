@@ -121,3 +121,10 @@ html[data-aprs-mode="2"] .ar-inlens { display: inline; }
 .ar-who { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ar-bandsym { margin-right: 0; background-color: #fff; border-radius: 4px; }
 .ar-dist { font-weight: 400; opacity: .92; }
+/* CR65: buttons to the station statistics */
+.ar-bandr { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.ar-tostat { border: 1px solid rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .12); color: #fff;
+  border-radius: 6px; padding: 1px 8px; font: 500 12px system-ui, "Segoe UI", sans-serif; cursor: pointer; }
+.ar-tostat:hover { background: rgba(255, 255, 255, .25); }
+button.ar-chip { cursor: pointer; }
+button.ar-chip:hover { border-color: #5aa2ff; }

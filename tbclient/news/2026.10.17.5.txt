@@ -1,0 +1,3 @@
+- New: station statistics per call - click a call in the
+  monitor or in the APRS statistics. Kinds of frames,
+  frames/h, activity, beacon gaps, ways, digi/iGate, sins.

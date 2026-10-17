@@ -23,6 +23,7 @@ const AprsView = (() => {
   let lensBox = null;             // the lens element of the page (null: no lens)
   let lastId = 0;
   let symbolRenderer = null;      // CR59: the page may draw APRS symbols (the client has the sprites)
+  let onStation = null;           // CR65: the page may show the statistics of a call
   let pinned = "";                // CR60: key of the part tapped/clicked (stays lit)
   let sheet = null;               // CR60: lens of a page without one (phone only)
   const narrow = window.matchMedia ? window.matchMedia("(max-width: 899px)") : { matches: false };
@@ -118,7 +119,21 @@ const AprsView = (() => {
     const go = mk("button", "ar-tolens", "view Frame in APRS lense");
     go.type = "button";
     go.addEventListener("click", (ev) => { ev.stopPropagation(); select(e); setMode(2); });
-    band.append(who, go, mk("span", "ar-inlens", "shown in the APRS lense"));
+    const right = mk("span", "ar-bandr");
+    if (onStation) {                                   // CR65: statistics of the call(s)
+      const calls = [e.src];
+      const o = a.origin && a.origin.call;
+      if (o && o !== e.src) calls.push(o);
+      calls.forEach((call, i) => {
+        const b = mk("button", "ar-tostat", i ? `${call} statistics` : "Station statistics");
+        b.type = "button";
+        b.title = "Statistics of " + call;
+        b.addEventListener("click", (ev) => { ev.stopPropagation(); onStation(call); });
+        right.append(b);
+      });
+    }
+    right.append(go, mk("span", "ar-inlens", "shown in the APRS lense"));
+    band.append(who, right);
     const frame = mk("div", "ar-frame");
     frame.append(mk("span", "ar-lbl2", "Frame"), head, payload(e));
     c.append(band, frame, decoded(e));
@@ -249,8 +264,14 @@ const AprsView = (() => {
     const path = mk("div", "ar-chain");         // CR57: sender -> digipeaters, nothing else
     (a.chain || []).forEach((c, i) => {
       if (i) path.append(mk("span", "ar-arrow-r", "\u2192"));
-      const chip = mk("span", "ar-chip" + (c.k === "heard" ? " ar-chip-heard" : ""), c.call);
+      const chip = mk(onStation && c.call !== "?" ? "button" : "span",
+                      "ar-chip" + (c.k === "heard" ? " ar-chip-heard" : ""), c.call);
       if (c.k === "heard") chip.dataset.k = "heard";
+      if (onStation && c.call !== "?") {                // CR65: a call in the chain -> its statistics
+        chip.type = "button";
+        chip.title = "Statistics of " + c.call;
+        chip.addEventListener("click", (ev) => { ev.stopPropagation(); onStation(c.call); });
+      }
       path.append(chip);
     });
     grid.append(path);
@@ -365,7 +386,7 @@ const AprsView = (() => {
   function attachLens(el) { lensBox = el; renderLens(); }
   function forget() { selected = null; pinned = ""; closeSheet(); renderLens(); }
 
-  return { setSymbolRenderer: (f) => { symbolRenderer = f; }, enabled: () => on, setEnabled, setMode,
+  return { setSymbolRenderer: (f) => { symbolRenderer = f; }, setOnStation: (f) => { onStation = f; }, enabled: () => on, setEnabled, setMode,
            mode: () => mode, lensOn: () => mode === 2, card, onChange: (f) => listeners.push(f), active, dest, info, payload, decoded,
            decorate, searchText, select, attachLens, toggleButton, forget };
 })();

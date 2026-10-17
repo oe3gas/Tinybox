@@ -152,6 +152,12 @@ class WebServer:
                 ch = (query.get("ch") or [""])[0]            # CR45: the channel shown
                 await core.wait_change(since, POLL_SEC)
                 return 200, core.snapshot(int(ch) if ch.isdigit() else None), None
+            if method == "GET" and path == "/api/aprs/station":     # CR65: one call
+                win = (query.get("win") or ["0"])[0]
+                call = (query.get("call") or [""])[0]
+                if not call:
+                    return 400, {"error": "call"}, None
+                return 200, core.aprs_stats.station(call, int(win) if win.isdigit() else 0), None
             if method == "GET" and path == "/api/aprs/stats":       # CR61
                 win = (query.get("win") or ["0"])[0]
                 return 200, core.aprs_stats.report(int(win) if win.isdigit() else 0), None

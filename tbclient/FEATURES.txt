@@ -165,6 +165,10 @@ Station
   Verlauf und Kanalauslastung - dazu die "Suenden" (zu haeufige Baken,
   unveraenderte Wiederholungen, lange Pfade, falsche Uhren, kaputte Pakete,
   viel Internet-Verkehr auf Funk). Gespeichert bis 7 Tage.
+- Stationsseite je Rufzeichen (Klick auf ein Rufzeichen im Monitor oder in
+  der Statistik): Rolle, Geraet, Entfernung, Art der Frames, Frames/h,
+  Aktivitaet nach Wochentag/Stunde, Bakenabstaende, Wege zu dir, Leistung als
+  Digipeater und iGate, Kanalanteil, Bewegung, Suenden. "Back" fuehrt zurueck.
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu
