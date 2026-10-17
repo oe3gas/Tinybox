@@ -1697,3 +1697,16 @@ Rufzeichen. Im blauen Kopfband der gewählten Aussendung neben dem Rufzeichen da
   „no position in this packet“. Decoder liefert dafür `dist`, `home`, `symbol`.
 - Client-Version 2026.10.17.3.
 
+## CR64 – APRS-Statistik: Zeitfenster als Knöpfe, Datei laufend aufräumen (✅ 17.10.2026)
+
+**Wunsch (OE3GAS):** Die Statistik zeigte nur die letzte Stunde – Anzeige für letzte Stunde, 24 h und
+alles. Die Datei `aprsstats.db` auch im laufenden Betrieb aufräumen, nicht nur beim Start.
+
+**Lösung:**
+- Die Auswahl war ein Klappmenü und leicht zu übersehen; jetzt drei Knöpfe **Last hour · 24 h · All**
+  in der Kopfleiste, der gewählte blau. „All“ = alles Gespeicherte (max. 7 Tage bzw. seit dem
+  letzten Reset). Die Wahl wird je Browser gemerkt.
+- `tinybox/aprsstats.py`: einmal pro Stunde werden Datensätze älter als 7 Tage (und über 200 000)
+  aus der Datei gelöscht; der freie Platz wird von SQLite wiederverwendet.
+- Test `test_file_is_tidied_while_running`. Client-Version 2026.10.17.4.
+

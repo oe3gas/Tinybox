@@ -62,6 +62,20 @@ class StatsTests(unittest.TestCase):
             self.assertEqual(st2.report(0)["totals"]["frames"], 1)
             st2.close()
 
+    def test_file_is_tidied_while_running(self):
+        import sqlite3
+        import time as _t
+        from tinybox import aprsstats
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "aprsstats.db"
+            st = AprsStats(p)
+            now = _t.time()
+            feed(st, now - aprsstats.KEEP_SEC - 10, "OE3OLD", [], [], b">old")
+            feed(st, now + aprsstats.PRUNE_SEC + 1, "OE3NEW", [], [], b">new")    # an hour later
+            st.close()
+            n = sqlite3.connect(str(p)).execute("SELECT count(*) FROM rec").fetchone()[0]
+            self.assertEqual(n, 1)
+
     def test_country(self):
         self.assertEqual(country("OE3GAS-1"), "Austria")
         self.assertEqual(country("OK1KZE-1"), "Czechia")

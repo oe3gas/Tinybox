@@ -538,6 +538,10 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .st-title { display: flex; flex-direction: column; line-height: 1.2; }
 .st-since { font-size: 12px; }
 .st-sp { flex: 1; }
+.st-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.st-seg button { border: none; border-radius: 0; padding: 5px 12px; font-size: 13px; background: var(--surface); }
+.st-seg button + button { border-left: 1px solid var(--line); }
+.st-seg button.on { background: var(--accent); color: #fff; }
 .st-win { font: inherit; font-size: 13px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line);
   background: var(--surface); color: var(--text); }
 .st-body { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }

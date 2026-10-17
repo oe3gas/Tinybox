@@ -39,6 +39,7 @@ log = logging.getLogger(__name__)
 
 KEEP_SEC = 7 * 86400          # records older than this are dropped
 MAX_RECORDS = 200_000
+PRUNE_SEC = 3600              # CR64: tidy the file this often while running
 BAUD = 1200
 TXDELAY_SEC = 0.3             # assumed key-up time per frame (air time estimate)
 
@@ -118,6 +119,7 @@ class AprsStats:
         self.recs: list[dict] = []
         self.since = time.time()                     # counting since (start or reset)
         self._db: sqlite3.Connection | None = None
+        self._pruned = time.time()                   # CR64: the file is tidied every hour
         if path is not None:
             self._open()
 
@@ -151,9 +153,18 @@ class AprsStats:
             return
         try:
             self._db.execute("INSERT INTO rec VALUES (?, ?)", (rec["t"], json.dumps(rec, separators=(",", ":"))))
+            if rec["t"] - self._pruned >= PRUNE_SEC:     # CR64: not only at the start
+                self._prune(rec["t"])
             self._db.commit()
         except sqlite3.Error as exc:
             log.warning("APRS statistics: %s", exc)
+
+    def _prune(self, now: float) -> None:
+        """Drop what is older than KEEP_SEC (and more than MAX_RECORDS) from the file."""
+        self._pruned = now
+        self._db.execute("DELETE FROM rec WHERE t < ?", (now - KEEP_SEC,))
+        self._db.execute("DELETE FROM rec WHERE rowid NOT IN (SELECT rowid FROM rec ORDER BY t DESC LIMIT ?)",
+                         (MAX_RECORDS,))
 
     def reset(self) -> None:
         self.recs.clear()

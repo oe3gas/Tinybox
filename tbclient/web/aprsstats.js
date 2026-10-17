@@ -228,19 +228,26 @@ const AprsStatsView = (() => {
     back.type = "button";
     back.setAttribute("aria-label", "Back");
     back.addEventListener("click", () => AprsStatsView.back());
-    const sel = mk("select", "st-win");
+    // CR64: the time window as three buttons, always visible
+    const sel = mk("div", "st-seg");
+    sel.setAttribute("role", "group");
     sel.setAttribute("aria-label", "Time window");
-    for (const [v, t] of [[3600, "Last hour"], [86400, "Last 24 h"], [0, "Since start (max. 7 days)"]]) {
-      const o = mk("option", "", t);
-      o.value = String(v);
-      sel.append(o);
+    const segs = [];
+    for (const [v, t, tip] of [[3600, "Last hour", "the last 60 minutes"], [86400, "24 h", "the last 24 hours"],
+                               [0, "All", "everything kept (max. 7 days, or since the last reset)"]]) {
+      const b = mk("button", "", t);
+      b.type = "button";
+      b.title = tip;
+      b.addEventListener("click", () => {
+        win = v;
+        try { localStorage.setItem("tbc-aprs-win", String(win)); } catch (e) { /* ok */ }
+        segs.forEach(([x, bv]) => x.classList.toggle("on", bv === win));
+        load();
+      });
+      b.classList.toggle("on", v === win);
+      segs.push([b, v]);
+      sel.append(b);
     }
-    sel.value = String(win);
-    sel.addEventListener("change", () => {
-      win = Number(sel.value);
-      try { localStorage.setItem("tbc-aprs-win", String(win)); } catch (e) { /* ok */ }
-      load();
-    });
     const reset = mk("button", "sm", "Reset");
     reset.type = "button";
     reset.addEventListener("click", async () => {

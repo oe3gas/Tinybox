@@ -1,0 +1,2 @@
+- APRS statistics: buttons Last hour / 24 h / All.
+  Old data (> 7 days) is removed every hour.
