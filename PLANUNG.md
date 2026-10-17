@@ -1115,7 +1115,7 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 Gezielt in Schritten, kein Großumbau. Sicherheitsnetz sind die bestehenden Tests (TinyBox und brocast).
 
 1. ✅ **`production/` aus dem Repo** (17.10.2026): Builds bleiben lokal (`.gitignore`), freigegebene Versionen werden mit Git-Tag `prod-<hash>` markiert. Der bisherige Build `f16d5a3` liegt im Tag `prod-f16d5a3` (Details in PRODUCTION.md).
-2. **Gemeinsames Paket `prcore`** für die Funk-Grundlagen (Plan 17.10.2026, siehe 17.1).
+2. ✅ **Gemeinsames Paket `prcore`** für die Funk-Grundlagen (umgesetzt 17.10.2026, siehe 17.1; Funktest steht aus).
 3. **Config-Laden** auf eine gemeinsame, tabellengesteuerte Grundlage (heute vier eigene Lader, `tinybox/config.py: load` rund 200 Zeilen).
 4. **Lange Funktionen** (z. B. `aprs._mice`, `aprsstats.report`, tbclient `core._control`, `web._route`) nur aufteilen, wenn dort ohnehin CRs anstehen.
 
@@ -1144,19 +1144,25 @@ NanoPi-Produktionsschiene (`PRODUCTION.md`, `build_production.sh`, `deploy/`, vo
 Regel: `prcore` importiert nie aus `tinybox`, `tbclient`, `kisshub` oder `brocast` – nur umgekehrt.
 
 **Reihenfolge** (jeder Teilschritt ein eigener Commit, Tests vorher und nachher grün):
-- **2a – Verschieben** der fertigen Module (ax25, kiss, aprs, aprsstats, lzhuf, chatimg-Funktionen). Rein mechanisch, kein Verhalten ändert sich; Importe in tinybox, tbclient, kisshub, fwdsim und den Tests werden angepasst, keine Umleitungs-Module in `tinybox/`.
-- **2b – AGW-Kopf** vereinheitlichen (tinybox, tbclient, fwdsim).
-- **2c – KISS-Port** zusammenführen: Basisklasse in `prcore/kissport.py`, `KissAdapter` und `KissPort` behalten nur ihr Eigenes (BBS-Sitzungen bzw. Client-Kanäle). Einziger Teilschritt mit echtem Verhaltensrisiko → danach **Funktest** auf PC1 mit PK-232 (und VARA FM, sobald es läuft), TinyBox und Client im KISS-Mode.
-- **2d – brocast** (Entscheidung offen, siehe unten).
+- ✅ **2a – Verschieben** der fertigen Module (ax25, kiss, aprs, aprsstats, lzhuf, chatimg-Funktionen). Rein mechanisch, kein Verhalten ändert sich; Importe in tinybox, tbclient, kisshub, fwdsim und den Tests werden angepasst, keine Umleitungs-Module in `tinybox/`.
+- ✅ **2b – AGW-Kopf** vereinheitlichen (tinybox, tbclient, fwdsim).
+- ✅ **2c – KISS-Port** zusammenführen: Basisklasse in `prcore/kissport.py`, `KissAdapter` und `KissPort` behalten nur ihr Eigenes (BBS-Sitzungen bzw. Client-Kanäle). Einziger Teilschritt mit echtem Verhaltensrisiko → danach **Funktest** auf PC1 mit PK-232 (und VARA FM, sobald es läuft), TinyBox und Client im KISS-Mode.
+- **2d – brocast:** entschieden 17.10.2026 – bleibt eigenständig mit seinen eigenen UI-Kopien.
+
+**Stand 17.10.2026:** 2a–2c umgesetzt (Commits „Refactoring 2a/2b/2c“), 628 Tests grün, tbclient 2026.10.17.6.
+- `prcore/agw.py`: AGW-Kopf (`Frame`, `read_frame`, `decode_call`, `via_data`); `AgwProtocolError` ist jetzt ein `ConnectionError`.
+- `prcore/kissport.py`: `KissPort` mit Haken (`on_heard`, `on_transmit`, `received`, `accept_incoming`, `on_link_event`) sowie `fetch_hub_status`/`poll_hub`. TinyBox: `_BoxPort` als Bestandteil von `KissAdapter` (der weiter vom AGW-Adapter erbt); Client: `KissPort` erbt direkt.
+- Nebenbei behoben (Client): Ein Connect ohne freien Kanal wurde mit UA angenommen und dann vergessen; jetzt bekommt die Station DM, wie beschrieben. Die TinyBox lehnt nie ab, für sie unverändert.
+- Eingehende Rufzeichen werden im KISS-Port jetzt auf beiden Seiten gleich normalisiert (Großschrift, ohne „-0“); bisher nur im Client.
+- Offen: **Funktest** auf PC1 mit PK-232 (KISS-Mode) – TinyBox und Client je: eingehender und ausgehender Connect, Mail/Chat, Trennen; Client zusätzlich Connect bei belegten Kanälen (DM).
+- Ältere Abschnitte und `docs/` nennen noch die alten Pfade (`tinybox/ax25`, `tinybox/aprs.py` …); das ist Geschichte und bleibt so.
 
 **Nebenwirkungen:**
-- tbclient: Version erhöhen und News-Datei („intern umgebaut, keine neuen Funktionen“) bei 2a und 2c.
+- tbclient: Version einmal für 2a–2c erhöht (2026.10.17.6) mit News-Datei – ein Bulletin statt drei.
 - `build_production.sh`: `prcore` muss in `INCLUDE`, sonst startet die TinyBox im NanoPi-Build nicht. Nur diese eine Zeile, sonst bleibt die NanoPi-Schiene unberührt.
 - Gestartet wird alles weiter aus dem Repo-Wurzelordner (`python -m tinybox`, `-m tbclient`, `-m kisshub`), dort ist `prcore` ohne weiteres importierbar.
 
-**Offene Entscheidungen:**
-- **brocast:** Bleibt es eigenständig (läuft aus `brocast/`, soll an andere Stationen weitergegeben werden können) mit seinen eigenen kleinen UI-Kopien, oder nutzt es auch `prcore`? Vorschlag: vorerst eigenständig lassen – die Kopien sind klein und stabil, und brocast braucht keinen Verbindungsbetrieb.
-- **Name** `prcore` (packet radio core) – oder ein anderer.
+**Entscheidungen (17.10.2026):** brocast bleibt eigenständig; Name `prcore`; im NanoPi-Build nur `prcore` in `INCLUDE`.
 
 Offen aus Schritt 1: `kisshub/` ist in `build_production.sh` weder in `INCLUDE` noch in `EXCLUDE`. Laut Abschnitt 15 ist der NanoPi kein Ziel für den KISS-Mode → bei Gelegenheit in `EXCLUDE` eintragen.
 

@@ -10,7 +10,7 @@ from kisshub import profiles
 from tinybox import chanmon
 from tinybox.adapters import kiss as kissadapter
 from prcore.ax25 import frame as ax
-from prcore import kiss
+from prcore import kiss, kissport
 
 from tests.test_kisshub import FakePK232, HubTestBase, fast
 
@@ -63,7 +63,7 @@ class HubStatusTests(HubTestBase):
     profile = fast(profiles.PK232)
 
     async def get_status(self) -> dict:
-        return await kissadapter.fetch_hub_status("127.0.0.1", self.hub.status_port)
+        return await kissport.fetch_hub_status("127.0.0.1", self.hub.status_port)
 
     async def test_status_query(self):
         await self.start_hub(FakePK232("cmd"))

@@ -64,6 +64,7 @@ COMPONENT = {
     "tinybox.monitor.kiss": "kiss",
     "prcore.kiss": "kiss",
     "prcore.ax25.link": "kiss",
+    "prcore.kissport": "kiss",
     "tinybox.adapters.telnet": "telnet",
     "tinybox.adapters.web": "web",
     "tinybox.adapters.brocast": "brocast",

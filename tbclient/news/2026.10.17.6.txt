@@ -1,0 +1,3 @@
+- Internal rework: radio code now shared with the
+  TinyBox (prcore). No new functions.
+- KISS: a connect when no channel is free now gets DM.
