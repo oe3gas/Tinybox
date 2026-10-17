@@ -502,8 +502,11 @@ def start_block(cfg, version: str, config_path: str | None,
         f"config {config_path or '-'}, data {cfg.storage.data_dir}, log {log_path or '-'}",
         f"station mailbox {cfg.station.mailbox_call}, bbs {cfg.station.bbs_call}, "
         f"sysop {cfg.station.sysop_call}",
-        f"agw {cfg.direwolf.agw_host}:{cfg.direwolf.agw_port} "
-        f"port {cfg.direwolf.agw_radio_port}, max_users {cfg.mailbox.max_users}",
+        (f"radio kiss {cfg.kiss.host}:{cfg.kiss.port} channel {cfg.kiss.channel} "
+         f"(own AX.25 {cfg.ax25.version}), max_users {cfg.mailbox.max_users}"
+         if cfg.radio.interface == "kiss" else
+         f"radio agw {cfg.direwolf.agw_host}:{cfg.direwolf.agw_port} "
+         f"port {cfg.direwolf.agw_radio_port}, max_users {cfg.mailbox.max_users}"),
         f"adapters: {adapters}",
         f"brocast token {_secret(cfg.brocast.token)}, "
         f"level {cfg.logging.level}, debug {','.join(sorted(debug)) or '-'}, "
