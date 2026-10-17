@@ -11,6 +11,7 @@ import time
 from collections import deque
 
 from tinybox import aprs                  # APRS in plain language for the monitor (CR55)
+from tinybox.aprsstats import AprsStats    # CR61
 from tinybox import chatimg               # the image reference in a chat line (CR12)
 
 from . import VERSION, proto
@@ -62,6 +63,7 @@ class ClientCore:
         self._mod128: set[frozenset] = set()      # pairs that talk modulo 128 (monitor)
         self.aprs_memory = aprs.TelemetryMemory()  # CR55: telemetry definitions per station
         self.aprs_home = aprs.locator_to_latlon(cfg.locator) if cfg.locator else None
+        self.aprs_stats = AprsStats(cfg.data_dir / "aprsstats.db", self.aprs_home)   # CR61
         # CR44: connection logbook
         self.logbook = Logbook(cfg.data_dir / "connlog.db")
         # the frequency is asked once per run of the client (the last one is offered)
@@ -644,6 +646,12 @@ class ClientCore:
                               self.aprs_memory, self.aprs_home)
         entry["t"] = time.strftime("%H:%M:%S")
         self.monitor.append((self.monitor_n, entry))
+        if "aprs" in entry:                      # CR61: APRS statistics
+            try:
+                self.aprs_stats.add(f.src, f.path, f.repeated, f.info,
+                                    7 * (2 + len(f.path)) + len(f.rest), entry["aprs"])
+            except Exception:                    # statistics must never break the radio
+                log.exception("APRS statistics")
         tb = self.target
         if f.direct:
             self.direct_at[f.src] = time.time()

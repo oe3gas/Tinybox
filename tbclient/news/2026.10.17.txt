@@ -1,0 +1,5 @@
+- New: APRS statistics (Station > APRS statistics): heard
+  stations, senders, devices, digipeaters, iGates, range,
+  countries - and the sins that burden the channel.
+- APRS Lense: plain text as a card under the packet.
+- Better Mic-E device detection.

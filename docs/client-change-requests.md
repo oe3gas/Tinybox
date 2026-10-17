@@ -1625,3 +1625,33 @@ Hover verbindet ihn mit dem „To“-Feld. Client-Version 2026.10.16.6.
 - TinyBox-Dashboard (ohne eigene Lense-Leiste): am Handy erscheint dasselbe Sheet.
 - Client-Version 2026.10.16.7.
 
+## CR61 – APRS-Lense: Klartext als Karte; APRS-Statistik mit „Sünden“ (✅ 17.10.2026)
+
+### Erfassung (OE3GAS, 17.10.2026)
+
+1. Zwischen APRS-Paket und Interpretation zu wenig Trennung – gewählt: Variante B (Klartext als Karte).
+2. Kleines Statistik-Tool: Frames je gehörter Station, je Sender, je AP-Device und was sonst
+   interessant ist – ausdrücklich auch die „Sünden“ ausweisen.
+
+### Umsetzung
+
+1. Die Interpretation steht in einer eigenen, leicht helleren Karte mit runden Ecken unter der
+   Payload; die gewählte Zeile hebt auch ihre Karte hervor (TinyBox und Client).
+2. **APRS statistics** (Client, Station > APRS statistics). Modul `tinybox/aprsstats.py`, Daten in
+   `data/tbclient/aprsstats.db` (bis 7 Tage, Neustart verliert nichts). Zeitfenster letzte Stunde,
+   24 h oder seit Start; Reset mit zweitem Klick; alle 15 s aktualisiert.
+   - Kacheln: Frames (je Minute), Stationen, Kanalauslastung (geschätzte Sendezeit bei 1200 Bd),
+     Internet → Funk. Verlauf als Balken.
+   - **Sins**: zu häufige Positionsbaken im Stand (< 5 min) bzw. in Fahrt (< 30 s); unveränderte
+     Wiederholungen (< 10 min, Zeitstempel ignoriert; Telemetrie-Definitionen: einmal pro Stunde
+     reicht); lange Pfade (WIDE3 und mehr); falsche Uhr; fehlerhafte Pakete; iGates mit viel
+     Internet-Verkehr auf Funk (≥ 5 % des Kanals oder ≥ 30/h).
+   - Tabellen (sortierbar): Heard, Senders (Third-Party zählt für die innere Station; Abstand,
+     Entfernung, Typen, Gerät), Devices, Packet types, Digipeaters mit Wegen und Hop-Verteilung,
+     iGates, Range (weiteste direkt/über Digis, Entfernungsklassen; braucht `locator`), Countries.
+   - Klick auf ein Rufzeichen öffnet den Monitor, gefiltert auf diese Station.
+   - Die TinyBox-Web-GUI bekommt die Statistik vorerst nicht (sieht Frames nur im KISS-Mode).
+3. Decoder: Mic-E-Gerät wird auch ohne Präfix und mit CR am Ende erkannt (FT1D, FTM-400, TH-D72);
+   Wetterfelder mit zu vielen Ziffern (`h074`, `b125031`) sind jetzt als fehlerhaft markiert.
+- Tests: `tests/test_aprsstats.py`, `tests/test_aprs.py`. Client-Version 2026.10.17.
+

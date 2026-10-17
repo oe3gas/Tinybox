@@ -160,6 +160,11 @@ Station
   erklaert eine angeklickte Zeile Stueck fuer Stueck - auch, welche
   Station man wirklich gehoert hat und was das Symbol bedeutet. Links zu aprs.fi
   und OpenStreetMap, Entfernung vom eigenen Locator.
+- APRS-Statistik (Station > APRS statistics): gehoerte Stationen, Absender,
+  Geraete, Pakettypen, Digipeater und Wege, iGates, Reichweite, Laender,
+  Verlauf und Kanalauslastung - dazu die "Suenden" (zu haeufige Baken,
+  unveraenderte Wiederholungen, lange Pfade, falsche Uhren, kaputte Pakete,
+  viel Internet-Verkehr auf Funk). Gespeichert bis 7 Tage.
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu

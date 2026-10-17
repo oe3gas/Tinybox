@@ -243,6 +243,7 @@ class _Out:
         self.title = ""
         self.device = ""
         self.mice: dict | None = None
+        self.origin: dict | None = None             # CR61: third party - the inner station
 
     def seg(self, raw: str, role: str, key: str, label: str, mean: str = "", calc: str = "") -> None:
         if raw:
@@ -451,7 +452,9 @@ def _weather(text: str, out: _Out, first: str = "") -> int:
         letter = text[i]
         digits, label, conv = _WX["s#" if letter == "s" and "s" not in first else letter]
         value = text[i + 1:i + 1 + digits]
-        if not (re.fullmatch(r"-?\d+", value) or (value and set(value) <= set(". "))) or len(value) != digits:
+        longer = text[i + 1 + digits:i + 2 + digits].isdigit() and value.isdigit()   # CR61: h074
+        if longer or not (re.fullmatch(r"-?\d+", value) or (value and set(value) <= set(". "))) \
+                or len(value) != digits:
             run = re.match(r"-?\d*", text[i + 1:]).group(0)
             if not run:
                 break
@@ -705,18 +708,9 @@ def _mice(dest: str, text: str, out: _Out, home) -> bool:
     rest = text[9:]
     dev = ""
     prefix = suffix = ""
-    tail = rest.rstrip(" ")
+    tail = rest.rstrip(" \r\n")                  # CR61: radios end with spaces or CR
     trail = rest[len(tail):]
-    if rest[:1] in ("`", "'"):
-        prefix = rest[0]
-        for suf, nm in data()["mice"]:
-            if rest.endswith(suf) and len(rest) >= len(suf) + 1:
-                suffix, dev, tail, trail = suf, nm, rest, ""
-                break
-            if tail.endswith(suf) and len(tail) >= len(suf) + 1:
-                suffix, dev = suf, nm
-                break
-    elif rest[:1] in (">", "]"):
+    if rest[:1] in (">", "]"):                     # legacy Kenwood
         prefix = rest[0]
         best = ""
         for pre, suf, nm in data()["micelegacy"]:
@@ -726,6 +720,17 @@ def _mice(dest: str, text: str, out: _Out, home) -> bool:
                 elif not suffix and not best:
                     best = nm
         dev = dev or best
+    else:                                          # new Mic-E: two characters at the end
+        if rest[:1] in ("`", "'"):
+            prefix = rest[0]
+        for suf, nm in data()["mice"]:
+            if suf.strip() != suf:                 # "_ " (VX-8): the space is part of it
+                if rest.endswith(suf) and len(rest) >= len(prefix) + len(suf):
+                    suffix, dev, tail, trail = suf, nm, rest, ""
+                    break
+            elif tail.endswith(suf) and len(tail) >= len(prefix) + len(suf):
+                suffix, dev = suf, nm
+                break
     mid = tail[len(prefix):len(tail) - len(suffix)] if suffix else rest[len(prefix):]
     if prefix:
         out.seg(prefix, "dev", "dev", "Device prefix",
@@ -943,6 +948,7 @@ def _third_party(text: str, out: _Out, home, now, memory) -> bool:
             "same order as on the air: from>to,path:")
     out.chip("Third party: internet → radio" if via_inet else "Third party", "type", "type")
     out.chip(f"from {src}" + (f" via iGate {gate.group(1)}" if gate else ""), "tp", "inner")
+    out.origin = {"call": src, "device": device_of(dst), "gate": gate.group(1) if gate else ""}   # CR61
     sub = _Out("i.")
     sub.title = ""
     if inner and _decode_info(src, dst, inner, sub, home, now, memory):
@@ -992,6 +998,21 @@ def _decode_info(src: str, dest: str, text: str, out: _Out, home, now: float,
         out.chip(out.title, "type", "type")
         return True
     return False
+
+
+_CATS = [("third-party packet: ", None), ("mic-e", "mice"), ("weather", "weather"),
+         ("telemetry definition", "tdef"), ("telemetry", "telemetry"), ("position", "position"),
+         ("object", "object"), ("item", "object"), ("status", "status"), ("message", "message"),
+         ("bulletin", "message"), ("third-party", "other")]
+
+
+def _category(title: str) -> str:
+    """position, mice, weather, telemetry, tdef, object, status, message or other."""
+    t = title.lower()
+    for word, cat in _CATS:
+        if t.startswith(word):
+            return _category(title[len(word):]) if cat is None else cat
+    return "other"
 
 
 def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, info: bytes, *,
@@ -1069,6 +1090,18 @@ def decode(dest: str, src: str, path: list[str], repeated: list[bool] | None, in
     }
     if mice:
         result["mice"] = mice
+    # CR61: for the statistics - kind of packet, flags, the station the packet is from
+    result["cat"] = _category(out.title)
+    flags = []
+    if warnings:
+        flags.append("longpath")
+    if any("clock off" in c["t"] for c in out.chips):
+        flags.append("clock")
+    if any(sg["r"] == "warn" for sg in out.segs):
+        flags.append("malformed")
+    result["flags"] = flags
+    if out.origin:
+        result["origin"] = out.origin
     if out.lat is not None:
         result["lat"], result["lon"] = round(out.lat, 5), round(out.lon, 5)
     return result

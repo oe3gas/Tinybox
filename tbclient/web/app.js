@@ -1371,6 +1371,9 @@ function setView(v) {
   try { localStorage.setItem("tbc-view", v); } catch (e) { /* ok */ }
   $("app").classList.toggle("view-mail", v === "mail");
   $("app").classList.toggle("view-term", v === "term");
+  $("app").classList.toggle("view-stats", v === "stats");      // CR61
+  $("statsview").classList.toggle("hidden", v !== "stats");
+  if (v === "stats") AprsStatsView.show(); else AprsStatsView.hide();
   $("mailview").classList.toggle("hidden", v !== "mail");
   $("termview").classList.toggle("hidden", v !== "term");
   if (S) render();
@@ -1925,6 +1928,7 @@ function renderViewBtns() {
   $("btn-chat").classList.toggle("on", view === "chat");
   $("nav-monitor").classList.toggle("active", view === "term" && activeCh === 0);
   $("nav-terminal").classList.toggle("active", view === "term" && activeCh !== 0);
+  $("nav-stats").classList.toggle("active", view === "stats");
 }
 
 function goChat() {
@@ -2127,7 +2131,7 @@ const termHist = [];
 let termHistPos = 0;
 
 function autoTerm() {
-  if (view === "mail") return;
+  if (view === "mail" || view === "stats") return;
   const want = backView();
   if (view !== want) setView(want);
 }
@@ -2398,6 +2402,14 @@ async function start() {
   $("btn-menu").onclick = () => openSheet();
   $("nav-settings").onclick = () => openSheet();
   $("nav-monitor").onclick = () => switchCh(0);              // CR50: the monitor channel
+  AprsStatsView.attach($("statsview"));                       // CR61: APRS statistics
+  AprsStatsView.back = () => setView(backView());
+  AprsStatsView.setOnCall((call) => {                         // a call: the monitor, filtered
+    $("mon-q").value = call;
+    monDirty = true;
+    if (activeCh === 0) setView("term"); else switchCh(0);
+  });
+  $("nav-stats").onclick = () => setView("stats");
   $("status-text").onclick = () => $("app").classList.toggle("show-people");
   $("people-close").onclick = () => $("app").classList.remove("show-people");
   $("linkdlg-close").onclick = closeLink;

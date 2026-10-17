@@ -94,3 +94,9 @@
   .ar-part { grid-template-columns: 88px minmax(0, 1fr); }
   .ar-dec, .ar-payload { padding-left: 1.2em; }
 }
+/* CR61: the interpretation as a card of its own under the packet (variant B) */
+.ar-dec { margin: 4px 0 8px 2.5em; padding: 4px 10px 5px; background: #172230; border: 1px solid #243344;
+  border-radius: 7px; }
+.ar-row.ar-sel { background: #111a23; }
+.ar-row.ar-sel .ar-dec { background: #1b2938; border-color: #2f4a66; }
+@media (max-width: 899px) { .ar-dec { margin-left: 1.2em; padding-left: 8px; } }

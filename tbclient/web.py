@@ -73,7 +73,7 @@ FILES = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js",
          "/emoji.json": "emoji.json", "/aprs/symbols-0.png": "aprs/aprs-symbols-24-0@2x.png",
          "/aprs/symbols-1.png": "aprs/aprs-symbols-24-1@2x.png",
          "/aprs/names.json": "aprs/names.json", "/manifest.json": "manifest.json",
-         "/logo.svg": "logo.svg",
+         "/logo.svg": "logo.svg", "/aprsstats.js": "aprsstats.js",
          "/aprsview.js": str(SHARED / "aprsview.js"), "/aprsview.css": str(SHARED / "aprsview.css")}
 # CR42: the icons of the connection in the top bar
 FILES.update({f"/conn/{p.name}": f"conn/{p.name}" for p in (STATIC / "conn").glob("*.png")})
@@ -152,6 +152,9 @@ class WebServer:
                 ch = (query.get("ch") or [""])[0]            # CR45: the channel shown
                 await core.wait_change(since, POLL_SEC)
                 return 200, core.snapshot(int(ch) if ch.isdigit() else None), None
+            if method == "GET" and path == "/api/aprs/stats":       # CR61
+                win = (query.get("win") or ["0"])[0]
+                return 200, core.aprs_stats.report(int(win) if win.isdigit() else 0), None
             if method == "GET" and path == "/api/connlog":          # CR44
                 return 200, core.logbook.rows(200), None
             if method == "GET" and path in ("/api/connlog.csv", "/api/connlog.adi"):
@@ -181,6 +184,8 @@ class WebServer:
             elif path == "/api/disconnect":      # {"ch": 2}; none = the chat channel
                 ch = data.get("ch")
                 core.disconnect(ch if isinstance(ch, int) else None)
+            elif path == "/api/aprs/stats/reset":  # CR61
+                core.aprs_stats.reset()
             elif path == "/api/monitor/clear":    # CR50
                 core.clear_monitor()
             elif path == "/api/channel/close":   # CR45: an offline channel goes away

@@ -1,0 +1,75 @@
+"""CR61: APRS statistics of the channel."""
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from tinybox import aprs
+from tinybox.aprsstats import AprsStats, country
+
+T0 = 1_792_000_000.0
+
+
+def feed(st, t, src, path, used, info, dest="APMI06"):
+    rep = [bool(x) for x in used]
+    a = aprs.decode(dest, src, path, rep, info, now=t)
+    st.add(src, path, rep, info, 7 * (2 + len(path)) + 2 + len(info), a, now=t)
+
+
+class StatsTests(unittest.TestCase):
+    def setUp(self):
+        self.st = AprsStats(None, aprs.locator_to_latlon("JN88EP"))
+        self.st.since = T0 - 1
+
+    def test_counts(self):
+        for i in range(5):                        # a stationary car every 60 s
+            feed(self.st, T0 + 60 * i, "OE1IAH-8", ["OE6XTR", "OE3XWJ-10", "WIDE2"], [1, 1, 1],
+                 b"!4807.19N/01656.63Ev209/000/A=000891Arnold car 578", dest="APDR10")
+        feed(self.st, T0 + 10, "OM0ODX", ["OE3XWJ-10", "WIDE2"], [1, 1],
+             b"}OM5KV-15>APNL51,TCPIP,OM0ODX*:!4746.48N/01805.55E`Radiosonde")
+        feed(self.st, T0 + 20, "OE3XKN-10", ["WIDE1", "WIDE3-3"], [0, 0], b"!/6,fxRISM} st", dest="APOT2A")
+        r = self.st.report(0, now=T0 + 400)
+        self.assertEqual(r["totals"]["frames"], 7)
+        self.assertEqual(r["totals"]["inet"], 1)
+        heard = {h["call"]: h["n"] for h in r["heard"]}
+        self.assertEqual(heard, {"OE3XWJ-10": 6, "OE3XKN-10": 1})
+        senders = {s["call"] for s in r["senders"]}
+        self.assertIn("OM5KV-15", senders)                     # the station inside, not the iGate
+        self.assertEqual(r["igates"][0]["call"], "OM0ODX")
+        self.assertEqual(r["digis"][0], {"call": "OE3XWJ-10", "n": 6})
+        self.assertIn({"chain": "OE6XTR → OE3XWJ-10", "n": 5}, r["chains"])
+        kinds = {(s["call"], s["kind"]) for s in r["sins"]}
+        self.assertIn(("OE1IAH-8", "too often"), kinds)
+        self.assertIn(("OE3XKN-10", "long path"), kinds)
+        self.assertIn(("OM0ODX", "internet → radio"), kinds)  # 1 of 7 frames = 14 %
+        self.assertEqual(r["range"]["farthest_direct"]["call"], "OE3XKN-10")
+
+    def test_window_and_reset(self):
+        feed(self.st, T0, "OE3CRA-2", [], [], b">old")
+        feed(self.st, T0 + 7200, "OE3CRA-2", [], [], b">new")
+        self.assertEqual(self.st.report(3600, now=T0 + 7300)["totals"]["frames"], 1)
+        self.assertEqual(self.st.report(0, now=T0 + 7300)["totals"]["frames"], 2)
+        self.st.reset()
+        self.assertEqual(self.st.report(0)["totals"]["frames"], 0)
+
+    def test_kept_over_a_restart(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "aprsstats.db"
+            st = AprsStats(p)
+            feed(st, __import__("time").time(), "OE3CRA-2", [], [], b">hello")
+            st.close()
+            st2 = AprsStats(p)
+            self.assertEqual(st2.report(0)["totals"]["frames"], 1)
+            st2.close()
+
+    def test_country(self):
+        self.assertEqual(country("OE3GAS-1"), "Austria")
+        self.assertEqual(country("OK1KZE-1"), "Czechia")
+        self.assertEqual(country("SR6NPK"), "Poland")
+        self.assertEqual(country("9A1DD-9"), "Croatia")
+        self.assertEqual(country("DB0RDH"), "Germany")
+        self.assertEqual(country("HG2PPA-2"), "Hungary")
+
+
+if __name__ == "__main__":
+    unittest.main()

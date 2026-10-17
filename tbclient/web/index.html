@@ -55,6 +55,7 @@
       <div class="nav-h sync-h"><span>Station</span><button id="nav-settings" class="sec-gear" aria-label="Settings" title="Settings">⚙&#xFE0E;</button></div>
       <button id="nav-terminal" class="nav-item" title="Type TinyBox commands (L, R, F, QSO ...) directly - the TinyBox of the chat channel"><span><span class="ic">▸</span> TinyBox terminal</span></button>
       <button id="nav-monitor" class="nav-item" title="Monitor: everything heard (Alt+0)"><span><span class="ic">▸</span> Monitor</span></button>
+      <button id="nav-stats" class="nav-item" title="APRS statistics of the channel: stations, devices, digipeaters, sins"><span><span class="ic">▸</span> APRS statistics</span></button>
     </section>
   </aside>
 
@@ -101,6 +102,8 @@
   </footer>
   <div id="hint" class="hint hidden"></div>
   </div>
+
+  <section id="statsview" class="statsview hidden" aria-label="APRS statistics"></section>
 
   <section id="mailview" class="mailview hidden lvl-list" aria-label="Mailbox">
     <div id="mv-folders" class="mv-pane mv-folders">
@@ -249,6 +252,7 @@
   </div>
 </div>
 <script src="/aprsview.js"></script>
+<script src="/aprsstats.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

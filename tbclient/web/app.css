@@ -527,6 +527,55 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .seg button { border: none; border-radius: 0; font-size: 13px; }
 .seg button.on { background: var(--accent); color: #fff; }
 #app.view-mail .main-col, #app.view-mail .people { display: none !important; }
+/* CR61: APRS statistics */
+#app.view-stats .main-col, #app.view-stats .people, #app.view-stats .mailview,
+#app.view-stats .termview { display: none !important; }
+#app.view-stats .statsview { display: flex; }
+.statsview { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+.statsview.hidden { display: none !important; }
+.st-bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px;
+  background: var(--surface); border-bottom: 1px solid var(--line); }
+.st-title { display: flex; flex-direction: column; line-height: 1.2; }
+.st-since { font-size: 12px; }
+.st-sp { flex: 1; }
+.st-win { font: inherit; font-size: 13px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); }
+.st-body { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.st-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.st-tile, .st-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.st-tlabel { font-size: 12px; color: var(--muted); }
+.st-tvalue { font: 600 24px/1.2 ui-monospace, Consolas, monospace; }
+.st-tnote { font-size: 12px; color: var(--muted); }
+.st-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.st-wide { grid-column: 1 / -1; }
+.st-h { margin: 0 0 8px; font-size: 14px; }
+.st-sub { font-weight: 400; color: var(--muted); font-size: 12px; }
+.st-h4 { margin: 12px 0 6px; font-size: 13px; font-weight: 600; }
+.st-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+.st-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.st-table th { position: sticky; top: 0; background: var(--surface); text-align: left; border-bottom: 1px solid var(--line); }
+.st-table th.num, .st-table td.num { text-align: right; }
+.st-table td { padding: 3px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.st-sort { border: none; background: none; padding: 4px 6px; font-weight: 600; font-size: 12px; color: var(--muted); }
+.st-call { border: none; background: none; padding: 0; color: var(--accent); font: 600 13px ui-monospace, Consolas, monospace; }
+.st-call:hover { text-decoration: underline; }
+.st-mono { font-family: ui-monospace, Consolas, monospace; }
+.st-sin { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 12px; white-space: nowrap;
+  background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+.st-empty { color: var(--muted); font-style: italic; }
+.st-bars { display: flex; flex-direction: column; gap: 4px; }
+.st-bar { display: grid; grid-template-columns: 9em minmax(0, 1fr) 7em; gap: 8px; align-items: center; font-size: 13px; }
+.st-track { height: 10px; background: color-mix(in srgb, var(--line) 60%, transparent); border-radius: 5px; overflow: hidden; }
+.st-fill { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+.st-bval { text-align: right; color: var(--muted); font-size: 12px; }
+.st-timeline { display: flex; align-items: flex-end; gap: 2px; height: 80px; }
+.st-tbar { flex: 1; min-height: 1px; background: var(--accent); border-radius: 2px 2px 0 0; opacity: .85; }
+.st-tlfoot { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.st-far p { margin: 2px 0 8px; font-size: 13px; }
+@media (max-width: 699px) {
+  .st-grid { grid-template-columns: 1fr; }
+  .st-bar { grid-template-columns: 7em minmax(0, 1fr) 5.5em; }
+}
 #app.view-mail .mailview { display: flex; }
 .mailview.hidden { display: none !important; }
 .nav-item .cnt { margin-left: 4px; }
