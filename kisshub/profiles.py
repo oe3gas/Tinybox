@@ -103,7 +103,11 @@ PK232 = Profile(
         line("RAWHDLC ON"),
         line("HPOLL OFF"),
         line("PPERSIST ON"),
-        line("KISS ON"),
+        # KISS ON gives no cmd: of its own on the device (17.10.2026): until then
+        # every answer was one step late, so KISS ON only matched the cmd: of
+        # PPERSIST; after a wake via 'CR after leaving KISS' the answers were in
+        # step and the init failed at KISS ON. So: just its echo.
+        line("KISS ON", timeout=1.0, expect=()),
         line("HOST ON", timeout=1.5, expect=()),       # from here on: KISS, no prompt
     ),
     exit_kiss=True,

@@ -130,6 +130,8 @@ class FakePK232:
             self.state = "kiss"
         elif text == "HOST ON":
             self.state = "host"
+        elif text == "KISS ON":
+            pass                     # the real PK-232 gives no cmd: here (17.10.2026)
         else:
             self.out(b"\r\ncmd:")
 
@@ -237,6 +239,20 @@ class TncDialogTests(HubTestBase):
         await self.start_hub(FakePK232("cmd"))
         await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
         await self.hub.tnc.stop()
+        await self.wait(lambda: self.fake.state == "cmd" and "KISS OFF" in self.fake.lines)
+
+    async def test_ctrl_c_still_leaves_kiss(self):
+        """Ctrl+C cancels the hub's tasks before stop() runs: the TNC task must not
+        close the port then, or stop() can no longer switch the TNC out of KISS."""
+        await self.start_hub(FakePK232("cmd"))
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        for t in self.hub._tasks:
+            t.cancel()
+        await asyncio.gather(*self.hub._tasks, return_exceptions=True)
+        self.assertEqual(self.hub.tnc.state, "kiss")
+        with self.assertLogs("kisshub.tnc", "INFO") as logs:
+            await self.hub.stop()
+        self.assertIn("leaving KISS mode", "\n".join(logs.output))
         await self.wait(lambda: self.fake.state == "cmd" and "KISS OFF" in self.fake.lines)
 
     async def test_tnc_lost_and_back(self):

@@ -108,6 +108,7 @@ class Tnc:
             warned = False
             log.info("TNC port open: %s", self.describe())
             self._set_state("init")
+            cancelled = False
             reader = asyncio.create_task(self._read_loop())
             try:
                 await self._wake()
@@ -129,11 +130,14 @@ class Tnc:
                     self.port_losses += 1
                 self.last_error = f"lost: {exc}"
             except asyncio.CancelledError:
+                # Ctrl+C: stop() comes next and must still find the port open and
+                # the state 'kiss', or it cannot switch the TNC back out of KISS
                 reader.cancel()
+                cancelled = True
                 raise
             finally:
                 reader.cancel()
-                if not self._stopping:
+                if not self._stopping and not cancelled:
                     self.transport.close()
                     self._set_state("down")
             if not self._stopping:
