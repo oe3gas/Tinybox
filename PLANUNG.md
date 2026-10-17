@@ -1115,11 +1115,50 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 Gezielt in Schritten, kein Großumbau. Sicherheitsnetz sind die bestehenden Tests (TinyBox und brocast).
 
 1. ✅ **`production/` aus dem Repo** (17.10.2026): Builds bleiben lokal (`.gitignore`), freigegebene Versionen werden mit Git-Tag `prod-<hash>` markiert. Der bisherige Build `f16d5a3` liegt im Tag `prod-f16d5a3` (Details in PRODUCTION.md).
-2. **Gemeinsames Paket** (Arbeitstitel `prcore`) für AX.25, KISS, AGW, APRS, chatimg und lzhuf, genutzt von TinyBox, tbclient, brocastd und kisshub. Heute mehrfach vorhanden bzw. greift der tbclient direkt auf TinyBox-Interna zu. Plan folgt vor dem Umbau.
+2. **Gemeinsames Paket `prcore`** für die Funk-Grundlagen (Plan 17.10.2026, siehe 17.1).
 3. **Config-Laden** auf eine gemeinsame, tabellengesteuerte Grundlage (heute vier eigene Lader, `tinybox/config.py: load` rund 200 Zeilen).
 4. **Lange Funktionen** (z. B. `aprs._mice`, `aprsstats.report`, tbclient `core._control`, `web._route`) nur aufteilen, wenn dort ohnehin CRs anstehen.
 
-Offen aus Schritt 1: `kisshub/` ist in `build_production.sh` weder in `INCLUDE` noch in `EXCLUDE` – klären, ob kisshub auf den NanoPi gehört.
+NanoPi-Produktionsschiene (`PRODUCTION.md`, `build_production.sh`, `deploy/`, von OE3TEC) bleibt vorerst unberührt (17.10.2026).
+
+### 17.1 Gemeinsames Paket `prcore` (Plan, 17.10.2026)
+
+**Ausgangslage (Bestand 17.10.2026):**
+- tbclient und kisshub importieren schon heute TinyBox-Interna (`tinybox.ax25`, `aprs`, `aprsstats`, `chatimg`, `fwd.lzhuf`). `tinybox/` ist damit stillschweigend auch die Bibliothek für Client und Hub. Ziel CR46 – Client als eigenständiges PR-Programm ohne TinyBox – passt dazu nicht.
+- Der **AGW-Kopf** (`HEADER = struct.Struct(...)`, Pack/Unpack, Rufzeichen dekodieren) ist viermal geschrieben: `tinybox/adapters/agw.py`, `tbclient/links.py`, `fwdsim/agw.py`, `brocast/brocast/agw.py`.
+- Der **KISS-Port** (Timer-Schleife der Links, Sendezeit, „Kanal belegt“ an die anderen Links, Frame → Link verteilen, kisshub-Status abfragen) steckt zweimal fast gleich in `tinybox/adapters/kiss.py` (`KissAdapter`) und `tbclient/kisslink.py` (`KissPort`); `_timer_loop`, `_airtime`, `now`, `fetch_hub_status` sind praktisch Kopien. Jede Änderung (VARA FM, Qualitätswerte) muss heute doppelt gemacht werden.
+- brocast hat für UI-Frames eigene kleine Kopien von AX.25-Adressen, KISS und AGW (zusammen rund 360 Zeilen).
+
+**Inhalt von `prcore/`** (neues Paket im Repo-Wurzelverzeichnis, neben `tinybox/`, `tbclient/`, `kisshub/`):
+
+| Neu | Bisher |
+|---|---|
+| `prcore/ax25/frame.py`, `link.py`, `xid.py` | `tinybox/ax25/` |
+| `prcore/kiss.py` | `tinybox/ax25/kissio.py` |
+| `prcore/agw.py` – nur der AGW-Kopf und seine Hilfsfunktionen | je eine Kopie in tinybox, tbclient, fwdsim |
+| `prcore/kissport.py` – gemeinsamer KISS-Port als Basisklasse | `KissAdapter` (tinybox) und `KissPort` (tbclient) |
+| `prcore/aprs.py` + `aprs_data.json`, `prcore/aprsstats.py` | `tinybox/` |
+| `prcore/chatimg.py` – nur die reinen Funktionen (Hash, Größe, Referenz parsen, Terminaltext); die Klasse `ChatImages` (braucht die BBS-Session) bleibt in tinybox | `tinybox/chatimg.py` |
+| `prcore/lzhuf.py` | `tinybox/fwd/lzhuf.py` |
+
+Regel: `prcore` importiert nie aus `tinybox`, `tbclient`, `kisshub` oder `brocast` – nur umgekehrt.
+
+**Reihenfolge** (jeder Teilschritt ein eigener Commit, Tests vorher und nachher grün):
+- **2a – Verschieben** der fertigen Module (ax25, kiss, aprs, aprsstats, lzhuf, chatimg-Funktionen). Rein mechanisch, kein Verhalten ändert sich; Importe in tinybox, tbclient, kisshub, fwdsim und den Tests werden angepasst, keine Umleitungs-Module in `tinybox/`.
+- **2b – AGW-Kopf** vereinheitlichen (tinybox, tbclient, fwdsim).
+- **2c – KISS-Port** zusammenführen: Basisklasse in `prcore/kissport.py`, `KissAdapter` und `KissPort` behalten nur ihr Eigenes (BBS-Sitzungen bzw. Client-Kanäle). Einziger Teilschritt mit echtem Verhaltensrisiko → danach **Funktest** auf PC1 mit PK-232 (und VARA FM, sobald es läuft), TinyBox und Client im KISS-Mode.
+- **2d – brocast** (Entscheidung offen, siehe unten).
+
+**Nebenwirkungen:**
+- tbclient: Version erhöhen und News-Datei („intern umgebaut, keine neuen Funktionen“) bei 2a und 2c.
+- `build_production.sh`: `prcore` muss in `INCLUDE`, sonst startet die TinyBox im NanoPi-Build nicht. Nur diese eine Zeile, sonst bleibt die NanoPi-Schiene unberührt.
+- Gestartet wird alles weiter aus dem Repo-Wurzelordner (`python -m tinybox`, `-m tbclient`, `-m kisshub`), dort ist `prcore` ohne weiteres importierbar.
+
+**Offene Entscheidungen:**
+- **brocast:** Bleibt es eigenständig (läuft aus `brocast/`, soll an andere Stationen weitergegeben werden können) mit seinen eigenen kleinen UI-Kopien, oder nutzt es auch `prcore`? Vorschlag: vorerst eigenständig lassen – die Kopien sind klein und stabil, und brocast braucht keinen Verbindungsbetrieb.
+- **Name** `prcore` (packet radio core) – oder ein anderer.
+
+Offen aus Schritt 1: `kisshub/` ist in `build_production.sh` weder in `INCLUDE` noch in `EXCLUDE`. Laut Abschnitt 15 ist der NanoPi kein Ziel für den KISS-Mode → bei Gelegenheit in `EXCLUDE` eintragen.
 
 ---
 
