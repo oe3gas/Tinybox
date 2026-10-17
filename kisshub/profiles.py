@@ -71,6 +71,8 @@ class Profile:
     settle_sec: float = 1.0            # after the last init line, before KISS frames
     notes: str = ""
     display: str = ""                  # name for status displays, e.g. "PK-232"
+    kiss_params: bool = True           # send TXDELAY/P/SlotTime ([kiss] send_params default)
+    tunnel: str = "no"                 # VARA: no | connected | all (see VARA_FM)
 
 
 PK232 = Profile(
@@ -133,7 +135,27 @@ TNC2_KISS = Profile(name="tnc2-kiss", display="TNC2", serial_baud=9600, exit_kis
                     notes="TNC2 with pure KISS EPROM")
 GENERIC = Profile(name="generic", display="KISS TNC", exit_kiss=False, notes="already in KISS")
 
-PROFILES = {p.name: p for p in (PK232, TM_D710, TH_D74, TH_D75, TNC2_KISS, GENERIC)}
+
+# VARA FM / VARA HF (EA5HVK): KISS-TCP on port 8100 ("KISS interface" in VARA Setup).
+# Not a transparent TNC: VARA takes the AX.25 header apart and accepts UI frames
+# only - SABM/SABME/I/RR are refused with "Wrong KISS frame" (tested 17.10.2026).
+# Frame type 2 ("Generic Data", C0 02 ... C0, up to 5000 bytes) carries any bytes,
+# so kisshub tunnels the other frames in it (TUNNEL_MAGIC + the AX.25 frame) and
+# unpacks them on the other side; TinyBox and the client do not notice. Both
+# stations need kisshub with the tunnel. VARA does its own channel access (DCD,
+# persistence 0.3): no KISS parameters are sent.
+#   tunnel = connected   UI frames as normal type 0 (readable for any VARA KISS
+#                        user), everything else through type 2
+#   tunnel = all         every frame through type 2
+VARA_FM = Profile(name="vara-fm", display="VARA FM", exit_kiss=False, kiss_params=False,
+                  tunnel="connected", settle_sec=0.2,
+                  notes="VARA FM KISS-TCP (port 8100), connected mode tunnelled in type 2")
+VARA_HF = dataclasses.replace(VARA_FM, name="vara-hf", display="VARA HF",
+                              notes="VARA HF KISS-TCP (port 8100), connected mode tunnelled in type 2")
+
+PROFILES = {p.name: p for p in (PK232, TM_D710, TH_D74, TH_D75, TNC2_KISS, GENERIC,
+                                VARA_FM, VARA_HF)}
+TUNNEL_MODES = ("no", "connected", "all")
 
 
 def with_init_lines(p: Profile, lines: list[str]) -> Profile:

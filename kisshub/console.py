@@ -172,6 +172,9 @@ class Console:
             self.hub.cfg = dataclasses.replace(self.hub.cfg, txdelay_sec=value / 100)
         shown = f"{value * unit}{' ms' if unit == 10 else ''}"
         log.info("%s %s %s", PARAM_NAMES.get(cmd, name), shown,
-                 "sent to the TNC" if sent else "set, goes to the TNC with the next init")
+                 "sent to the TNC" if sent
+                 else "not sent - this modem takes no KISS parameters (hub timing only)"
+                 if not self.tnc.profile.kiss_params
+                 else "set, goes to the TNC with the next init")
         if cmd == kiss.CMD_TXDELAY:
             self.out("TinyBox: set the same [kiss] txdelay_ms in tinybox.conf (T1 timing)")

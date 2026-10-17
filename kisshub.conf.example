@@ -3,6 +3,7 @@
 
 [tnc]
 profile   = pk232          ; pk232 | tm-d710 | th-d74 | th-d75 | tnc2-kiss | generic
+                           ; | vara-fm | vara-hf (see below)
 transport = serial         ; serial | tcp (TNC behind a network serial server)
 device    = COM3           ; Windows COM3, Raspberry Pi /dev/ttyUSB0, Bluetooth /dev/rfcomm0
 serial_baud = 9600         ; PC <-> TNC (PK-232: its TBAUD; 9600 as pk232py uses it)
@@ -10,6 +11,12 @@ serial_baud = 9600         ; PC <-> TNC (PK-232: its TBAUD; 9600 as pk232py uses
 ; port = 4001
 reconnect_sec = 10
 exit_kiss_on_stop = yes    ; on Ctrl+C: leave KISS, so pk232py / a terminal finds cmd:
+; VARA FM / HF (experiment, docs/kiss-mode-konzept.md 8c): profile = vara-fm,
+; transport = tcp, host = 127.0.0.1, port = 8100 ("KISS interface" in VARA Setup).
+; VARA takes only UI frames as KISS type 0; connected mode goes through VARA's
+; type 2 ("Generic Data") - the station on the other side needs kisshub too.
+; vara_tunnel = connected  ; no | connected (UI stays type 0) | all
+; [kiss] send_params must stay "no": VARA would send KISS commands 1/2 on the air
 ; init_lines = AWLEN 8 | PARITY 0 | RESTART | ... | KISS ON | HOST ON
 ;              replaces the profile's init; the last line enters KISS
 

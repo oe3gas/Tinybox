@@ -17,7 +17,7 @@ from pathlib import Path
 from kisshub import config as hubconfig
 from kisshub import profiles
 from kisshub.hub import PRIO_CONTROL, PRIO_I, PRIO_UI, Hub, HubCfg, priority
-from kisshub.tnc import Tnc
+from kisshub.tnc import TUNNEL_MAGIC, Tnc, is_ui
 from kisshub.transport import TcpTransport
 from prcore.ax25 import frame as ax
 from prcore import kiss
@@ -400,6 +400,104 @@ class HubConfigTests(unittest.TestCase):
                      "[tnc]\ndevice=COM1\n[kiss]\npersist=300\n"):
             with self.assertRaises(hubconfig.ConfigError, msg=text):
                 self.load(text)
+
+
+class FakeVara:
+    """VARA's KISS-TCP port as found on 17.10.2026: type 0 takes UI frames only
+    ("Wrong KISS frame" for the rest), type 2 takes any bytes."""
+
+    def __init__(self) -> None:
+        self.type0: list[bytes] = []
+        self.type2: list[bytes] = []
+        self.wrong = 0
+        self.writer: asyncio.StreamWriter | None = None
+        self._dec = kiss.Decoder()
+
+    async def handle(self, reader, writer) -> None:
+        self.writer = writer
+        try:
+            while data := await reader.read(4096):
+                for port, cmd, frame in self._dec.feed(data):
+                    if cmd == 0 and port == 0:
+                        if is_ui(frame):
+                            self.type0.append(frame)
+                        else:
+                            self.wrong += 1
+                    elif cmd == 2 and port == 0:
+                        self.type2.append(frame)
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            writer.close()
+
+    def out(self, kind: int, data: bytes) -> None:
+        self.writer.write(kiss.encode(data, 0, kind))
+
+
+class VaraTunnelTests(HubTestBase):
+    profile = profiles.VARA_FM
+
+    async def test_connected_frames_go_through_type_2(self):
+        vara = FakeVara()
+        await self.start_hub(vara)
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        w, got = await self.client()
+        sabme = ax.u_frame("SABME", "OE3GAS-1", "OE3GAS", pf=True).encode()
+        ui = ax.ui_frame("TEST", "OE3GAS", b"hello vara").encode()
+        w.write(kiss.encode(sabme) + kiss.encode(ui))
+        await self.wait(lambda: vara.type2 and vara.type0)
+        self.assertEqual(vara.type2, [TUNNEL_MAGIC + sabme])     # unchanged inside
+        self.assertEqual(vara.type0, [ui])                       # UI stays readable
+        self.assertEqual(vara.wrong, 0)
+        self.assertFalse(self.hub.tnc.set_param(kiss.CMD_P, 63))   # console: not to VARA
+        # the other station's answer comes back through type 2 -> a normal frame
+        ua = ax.u_frame("UA", "OE3GAS", "OE3GAS-1", command=False, pf=True).encode()
+        vara.out(2, TUNNEL_MAGIC + ua)
+        await self.wait(lambda: got == [ua])
+        # VARA hands our own frame back: dropped; type-2 data of others: ignored
+        vara.out(2, TUNNEL_MAGIC + sabme)
+        vara.out(2, b"HE0\rsomebody's VarAC data")
+        heard = ax.ui_frame("CQ", "OE1ABC", b"vara ui").encode()
+        vara.out(0, heard)
+        await self.wait(lambda: len(got) == 2)
+        self.assertEqual(got, [ua, heard])
+        st = self.hub.tnc.status()
+        self.assertEqual((st["tunnel"], st["tunnel_tx"], st["tunnel_rx"], st["echoes"],
+                          st["foreign"]), ("connected", 1, 1, 1, 1))
+
+    async def test_all_and_no(self):
+        vara = FakeVara()
+        self.profile = dataclasses.replace(profiles.VARA_FM, tunnel="all")
+        await self.start_hub(vara)
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        ui = ax.ui_frame("TEST", "OE3GAS", b"x").encode()
+        self.hub.enqueue(ui)
+        await self.wait(lambda: vara.type2)
+        self.assertEqual((vara.type2, vara.type0), ([TUNNEL_MAGIC + ui], []))
+        self.assertFalse(is_ui(ax.u_frame("SABM", "A1A", "B1B").encode()))
+        self.assertTrue(is_ui(ax.ui_frame("A1A", "B1B", b"", path=["C1C", "D1D"]).encode()))
+
+
+
+class VaraConfigTests(unittest.TestCase):
+    def test_config(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "k.conf"
+            p.write_text("[tnc]\nprofile=vara-fm\ntransport=tcp\nport=8100\n", encoding="utf-8")
+            cfg = hubconfig.load(p)
+            self.assertEqual((cfg.tnc.profile.tunnel, cfg.tnc.params), ("connected", {}))
+            p.write_text("[tnc]\nprofile=vara-fm\ntransport=tcp\nport=8100\nvara_tunnel=all\n",
+                         encoding="utf-8")
+            self.assertEqual(hubconfig.load(p).tnc.profile.tunnel, "all")
+            # KISS parameters would be VARA frames of type 1/2 on the air
+            p.write_text("[tnc]\nprofile=vara-fm\ntransport=tcp\nport=8100\n"
+                         "[kiss]\nsend_params=yes\n", encoding="utf-8")
+            with self.assertRaises(hubconfig.ConfigError):
+                hubconfig.load(p)
+            p.write_text("[tnc]\nprofile=vara-fm\ntransport=tcp\nport=8100\nvara_tunnel=maybe\n",
+                         encoding="utf-8")
+            with self.assertRaises(hubconfig.ConfigError):
+                hubconfig.load(p)
 
 
 if __name__ == "__main__":

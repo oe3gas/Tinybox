@@ -12,4 +12,4 @@ docs/kiss-mode-konzept.md section 4, PLANUNG.md section 15.
     console.py    commands in the kisshub window: LOG MARK/DEBUG/TRACE, TXDELAY ...
 """
 
-VERSION = "2026.10.17"
+VERSION = "2026.10.18"

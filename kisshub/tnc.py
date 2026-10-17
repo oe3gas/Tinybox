@@ -33,6 +33,21 @@ PARAM_NAMES = {kiss.CMD_TXDELAY: "TXDELAY", kiss.CMD_P: "PERSIST",
                kiss.CMD_SLOTTIME: "SLOTTIME", kiss.CMD_TXTAIL: "TXTAIL",
                kiss.CMD_FULLDUPLEX: "FULLDUPLEX"}
 
+# VARA tunnel (profiles.VARA_FM): KISS frame type 2 = "Generic Data" in VARA
+VARA_GENERIC = 0x02
+TUNNEL_MAGIC = b"AX"           # marks our tunnelled AX.25 frames among other type-2 data
+ECHO_SEC = 30.0                # a frame VARA hands back within this time is our own
+
+
+def is_ui(ax25: bytes) -> bool:
+    """UI frame? (control field after the address field, P/F bit ignored)"""
+    pos = 0
+    while pos + 7 <= len(ax25):
+        pos += 7
+        if ax25[pos - 1] & 0x01:
+            return pos < len(ax25) and ax25[pos] & 0xEF == 0x03
+    return False
+
 
 def _hex(data: bytes, limit: int = 400) -> str:
     text = data[:limit].hex(" ")
@@ -99,6 +114,11 @@ class Tnc:
         self.port_losses = 0                         # port lost while in KISS
         self.last_error: str | None = None
         self.init_log: deque[dict] = deque(maxlen=40)  # last wake/init lines with answers
+        # VARA tunnel (type 2) - profile.tunnel: no | connected | all
+        self.tunnel_tx = self.tunnel_rx = 0          # frames through type 2
+        self.foreign = 0                             # type-2 data that is not ours (VarAC ...)
+        self.echoes = 0                              # own frames handed back by the modem
+        self._sent: deque[tuple[float, bytes]] = deque()   # (time, AX.25) for the echo check
 
     def describe(self) -> str:
         return f"{self.profile.name} on {self.transport.describe()}"
@@ -142,6 +162,10 @@ class Tnc:
                 self.last_error = None
                 self._send_params()
                 log.info("TNC in KISS mode - ready")
+                if self.profile.tunnel != "no":
+                    log.info("VARA tunnel %s: %s through KISS type 2, no KISS parameters sent",
+                             self.profile.tunnel, "all frames" if self.profile.tunnel == "all"
+                             else "connected-mode frames (UI as type 0)")
                 await reader                             # until the port is lost
             except TncError as exc:
                 log.error("TNC init failed: %s", exc)
@@ -176,15 +200,40 @@ class Tnc:
                         log.info("<< TNC frame %s", summary(frame) if cmd == kiss.CMD_DATA
                                  else f"KISS command 0x{cmd:02x}")
                     if cmd == kiss.CMD_DATA:
-                        self.rx_frames += 1
-                        try:
-                            self.on_frame(port, frame)
-                        except Exception:
-                            log.exception("error handling a frame from the TNC")
+                        self._received(port, frame)
+                    elif cmd == VARA_GENERIC and port == 0 and self.profile.tunnel != "no":
+                        if frame.startswith(TUNNEL_MAGIC) and len(frame) >= len(TUNNEL_MAGIC) + 15:
+                            self._received(0, frame[len(TUNNEL_MAGIC):], tunnelled=True)
+                        else:
+                            self.foreign += 1
+                            log.debug("type-2 data that is not ours (%d bytes) ignored", len(frame))
             else:
                 self._term += data
                 del self._term[:-4096]                   # keep the tail only
                 self._term_event.set()
+
+    def _received(self, port: int, frame: bytes, tunnelled: bool = False) -> None:
+        if self.profile.tunnel != "no" and self._is_echo(frame):
+            self.echoes += 1                         # VARA gave us our own frame back
+            if self.trace:
+                log.info("<< own frame back from the modem - dropped")
+            return
+        self.rx_frames += 1
+        self.tunnel_rx += tunnelled
+        try:
+            self.on_frame(port, frame)
+        except Exception:
+            log.exception("error handling a frame from the TNC")
+
+    def _is_echo(self, frame: bytes) -> bool:
+        now = time.monotonic()
+        while self._sent and self._sent[0][0] < now - ECHO_SEC:
+            self._sent.popleft()
+        for i, (_, sent) in enumerate(self._sent):
+            if sent == frame:
+                del self._sent[i]
+                return True
+        return False
 
     # --- terminal dialog ------------------------------------------------------------------
 
@@ -248,9 +297,13 @@ class Tnc:
                 "since": self.state_since, "inits": self.inits,
                 "port_losses": self.port_losses, "last_error": self.last_error,
                 "rx_frames": self.rx_frames, "tx_frames": self.tx_frames,
+                "tunnel": self.profile.tunnel, "tunnel_tx": self.tunnel_tx,
+                "tunnel_rx": self.tunnel_rx, "foreign": self.foreign, "echoes": self.echoes,
                 "init_log": list(self.init_log)[-20:]}
 
     def _send_params(self) -> None:
+        if not self.profile.kiss_params:
+            return          # VARA: KISS command 1/2 are its frame types 1/2 - would go on air
         for cmd, value in self.params.items():
             self._write(kiss.encode_param(cmd, value), f"param {PARAM_NAMES.get(cmd, cmd)}={value}")
 
@@ -258,7 +311,7 @@ class Tnc:
         """Change a KISS parameter (TXDELAY, P, SLOTTIME ...) while running. It is
         kept for the next init too. True if it went to the TNC at once (in KISS)."""
         self.params[cmd] = value
-        if self.state != "kiss":
+        if self.state != "kiss" or not self.profile.kiss_params:
             return False
         self._write(kiss.encode_param(cmd, value), f"param {PARAM_NAMES.get(cmd, cmd)}={value}")
         return True
@@ -277,6 +330,22 @@ class Tnc:
         self._write(kiss_frame, summary(ax25) if ax25 is not None else "")
         self.tx_frames += 1
         return True
+
+    def send_ax25(self, ax25: bytes, port: int = 0) -> bool:
+        """One AX.25 frame to the TNC. With the VARA tunnel the frames VARA does not
+        take as KISS type 0 go as type 2 (TUNNEL_MAGIC + frame)."""
+        t = self.profile.tunnel
+        if t == "all" or (t == "connected" and not is_ui(ax25)):
+            ok = self.send(kiss.encode(TUNNEL_MAGIC + ax25, 0, VARA_GENERIC), ax25)
+            if ok:
+                self.tunnel_tx += 1
+        else:
+            ok = self.send(kiss.encode(ax25, port), ax25)
+        if ok and t != "no":
+            self._sent.append((time.monotonic(), ax25))
+            while len(self._sent) > 200:
+                self._sent.popleft()
+        return ok
 
     async def stop(self) -> None:
         """Leave KISS (if the profile wants that) and close the port."""

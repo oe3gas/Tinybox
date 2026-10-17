@@ -249,7 +249,7 @@ class Hub:
                 continue
             prio, _, frame, port, origin, queued = heapq.heappop(self._queue)
             now = self.now()
-            if now - queued > self.cfg.stale_sec or not self.tnc.send(kiss.encode(frame, port), frame):
+            if now - queued > self.cfg.stale_sec or not self.tnc.send_ax25(frame, port):
                 self.dropped += 1
                 continue
             self._waits.append((now, prio, now - queued))

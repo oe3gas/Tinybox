@@ -10,7 +10,7 @@ from pathlib import Path
 from prcore import kiss
 
 from .hub import HubCfg
-from .profiles import PROFILES, Profile, with_init_lines
+from .profiles import PROFILES, TUNNEL_MODES, Profile, with_init_lines
 
 
 class ConfigError(Exception):
@@ -63,7 +63,10 @@ def load(path: str | Path) -> Config:
     if lines:
         profile = with_init_lines(profile, lines)
     exit_kiss = get("tnc", "exit_kiss_on_stop", profile.exit_kiss, bool)
-    profile = dataclasses.replace(profile, exit_kiss=exit_kiss)
+    tunnel = get("tnc", "vara_tunnel", profile.tunnel).lower()
+    if tunnel not in TUNNEL_MODES:
+        raise ConfigError(f"[tnc] vara_tunnel: use {', '.join(TUNNEL_MODES)}")
+    profile = dataclasses.replace(profile, exit_kiss=exit_kiss, tunnel=tunnel)
 
     transport = get("tnc", "transport", "serial").lower()
     if transport not in ("serial", "tcp"):
@@ -75,7 +78,11 @@ def load(path: str | Path) -> Config:
     if transport == "tcp" and not 1 <= tport <= 65535:
         raise ConfigError("[tnc] port: the TCP port of the TNC")
 
-    send_params = get("kiss", "send_params", True, bool)
+    send_params = get("kiss", "send_params", profile.kiss_params, bool)
+    if send_params and not profile.kiss_params:
+        raise ConfigError(f"[kiss] send_params: must be no with profile {profile.name} - "
+                          "VARA reads KISS commands 1 and 2 as its frame types and would "
+                          "send them on the air")
     txdelay_ms = get("kiss", "txdelay_ms", 300, int)
     params = {}
     if send_params:

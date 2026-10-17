@@ -471,6 +471,39 @@ Abweichung sofort zuordnen.
 8. Ende: **Strg+C im kisshub-Fenster** – kisshub holt den PK-232 aus KISS
    (`C0 FF C0`) und schaltet `KISS OFF`; danach findet pk232py ihn wieder bei `cmd:`.
 
+## 8c. Experiment: VARA FM als KISS-TNC (17./18.10.2026)
+
+**Befund (Funktest 17.10.2026, VARA FM, KISS-Port 8100):** VARA ist kein transparenter KISS-TNC.
+UI-Frames (Typ 0) nimmt es an und sendet sie; SABM/SABME (und damit Connected Mode) lehnt es mit
+„Wrong KISS frame“ ab. Laut VARA-Changelog (v4.7.6/v4.7.9) ist das Byte nach `C0` bei VARA der
+**Rahmentyp**, nicht das KISS-Kommando:
+
+| Bytes | VARA |
+|---|---|
+| `C0 00 … C0` | AX.25-Frame (6-Zeichen-Rufzeichen) – VARA zerlegt den Kopf, nur UI |
+| `C0 01 … C0` | AX.25-Frame mit 7-Zeichen-Rufzeichen (VARA Chat/VarAC) |
+| `C0 02 … C0` | „Generic Data“, beliebige Bytes, bis 5000 Byte |
+
+Folge: KISS-Parameter (TXDELAY = Kommando 1, P = Kommando 2) wären bei VARA **Datenrahmen auf der
+Luft**. Das Profil `vara-fm`/`vara-hf` sendet keine Parameter; `[kiss] send_params = yes` wird mit
+Fehler abgewiesen, die Konsole (`TXDELAY …`) ändert dann nur den Sendetakt des Hubs.
+
+**Tunnel (kisshub):** Profil `vara-fm`, `[tnc] vara_tunnel = connected` (Standard): UI-Frames gehen
+wie bisher als Typ 0 (lesbar für jede VARA-KISS-Anwendung), alle anderen Frames als Typ 2 mit dem
+Kennzeichen `AX` vor dem unveränderten AX.25-Frame. Der kisshub der Gegenseite packt Typ-2-Rahmen
+mit `AX` wieder aus und gibt sie als normale KISS-Frames an TinyBox/Client – die merken nichts.
+`vara_tunnel = all` schickt auch UI-Frames durch den Tunnel. Typ-2-Daten anderer Programme ohne
+`AX` werden gezählt und verworfen (`foreign`). Gibt VARA eigene Frames zurück, verwirft kisshub
+sie (`echoes`, Vergleich mit den Frames der letzten 30 s). Zähler in `/status` unter `tnc`:
+`tunnel`, `tunnel_tx`, `tunnel_rx`, `foreign`, `echoes`.
+
+**Beide Stationen** brauchen kisshub mit Tunnel. Offen (Funktest): Gibt VARA Typ-2-Rahmen
+unverändert und mit Typ 2 zurück? Wie lange dauert ein Typ-2-Burst je Größe (für `air_baud`,
+`txdelay_ms`, T1)? Wie verhalten sich zwei Verbindungen gleichzeitig?
+
+Quellen: VARA-Changelog (Help → ChangeLog, zitiert in groups.io VARA-MODEM #7213), Mitschnitt
+VARA Chat (groups.io VARA-MODEM #6336).
+
 ## 9. Risiken
 
 - **Layer-2-Automat ist der Hauptaufwand**, v2.2 mit SREJ und XID deutlich
