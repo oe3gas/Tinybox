@@ -1,0 +1,2 @@
+- Monitor: "Send UI" sends one UI frame (To, Via, Text).
+- Useful to test a modem, e.g. VARA FM over KISS.

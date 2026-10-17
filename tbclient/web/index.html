@@ -147,6 +147,7 @@
   <section id="termview" class="termview hidden" aria-label="Terminal">
     <div class="term-bar"><b id="term-title">Terminal</b> <span id="term-to" class="muted small"></span><span class="sp"></span>
       <span id="mon-tools" class="mon-tools hidden">
+        <button id="mon-ui" class="sm" title="Send one UI frame (unproto), e.g. to test a modem">Send UI</button>
         <input id="mon-q" type="search" placeholder="Filter" aria-label="Show only lines with this text" autocomplete="off" spellcheck="false">
         <select id="mon-kind" aria-label="Which frames">
           <option value="">All frames</option>
@@ -162,6 +163,14 @@
         <button id="mon-clear" class="sm">Clear</button>
       </span>
       <button id="term-close" class="sm">Back to chat</button></div>
+    <form id="ui-form" class="ui-form hidden" autocomplete="off" aria-label="Send a UI frame">
+      <label>To <input id="ui-dest" type="text" value="CQ" maxlength="9" spellcheck="false" autocapitalize="characters" aria-label="Destination call"></label>
+      <label>Via <input id="ui-via" type="text" maxlength="90" spellcheck="false" autocapitalize="characters" placeholder="optional, e.g. OE3XBS-8" aria-label="Digipeaters, comma separated"></label>
+      <input id="ui-text" type="text" maxlength="1024" spellcheck="false" placeholder="Text of the UI frame (Enter = send)" aria-label="Text">
+      <span id="ui-n" class="muted small">0 B</span>
+      <button type="submit" class="primary sm">Send</button>
+      <span id="ui-msg" class="small"></span>
+    </form>
     <div class="term-split">
       <pre id="term-out" class="term-out" aria-live="polite"></pre>
       <aside id="aprs-lens" class="ar-lens" aria-label="APRS Lense" hidden></aside>

@@ -13,6 +13,9 @@ from collections import deque
 from prcore import aprs                  # APRS in plain language for the monitor (CR55)
 from prcore.aprsstats import AprsStats    # CR61
 from prcore import chatimg               # the image reference in a chat line (CR12)
+from prcore.agw import PID_NO_L3, via_data
+from prcore.ax25.frame import AX25Error, split_call
+from prcore.ax25.frame import ui_frame as ax25_ui_frame
 
 from . import VERSION, proto
 from .config import CALL_RE, Config
@@ -37,6 +40,30 @@ RECENT_MAX = 10           # CR42: targets remembered for the "Connect to" field
 MONITOR_MAX = 500         # CR45: frames kept for the monitor (channel 0)
 OUTSTANDING_SEC = 3       # CR45: how often the send queues of the channels are asked
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
+UI_MAX_BYTES = 1024       # CR66: info field of a UI frame from the monitor
+UI_MAX_VIA = 8            # AX.25 allows 8 digipeaters
+
+
+def ui_request(dest: str, via: str, text: str) -> tuple[str, list[str], bytes]:
+    """CR66: check what the monitor's UI form sent -> (dest, path, info).
+    Raises ValueError with a short reason for the GUI."""
+    def call(c: str) -> str:
+        try:
+            base, ssid = split_call(c)
+        except AX25Error:
+            raise ValueError(f"not a callsign: {c.strip() or '(empty)'}") from None
+        return f"{base}-{ssid}" if ssid else base
+
+    dest = call(dest or "CQ")
+    path = [call(c) for c in re.split(r"[\s,]+", via or "") if c]
+    if len(path) > UI_MAX_VIA:
+        raise ValueError(f"at most {UI_MAX_VIA} digipeaters")
+    info = (text or "").encode("utf-8")
+    if not info:
+        raise ValueError("no text")
+    if len(info) > UI_MAX_BYTES:
+        raise ValueError(f"text longer than {UI_MAX_BYTES} bytes")
+    return dest, path, info
 
 
 class ClientCore:
@@ -364,6 +391,30 @@ class ClientCore:
     def send_raw(self, text: str, ch: int | None = None) -> bool:
         chan = self.chan if ch is None else self.channels.get(ch)
         return chan.send_raw(text) if chan is not None else False
+
+    def send_ui(self, dest: str, via: str, text: str) -> str | None:
+        """CR66: one UI frame (unproto) from the monitor, e.g. to test a modem.
+        Returns None when it went to the TNC, otherwise the reason."""
+        try:
+            dest, path, info = ui_request(dest, via, text)
+        except ValueError as exc:
+            return str(exc)
+        if isinstance(self.port, KissPort):
+            if not self.port.agw_up.is_set():
+                return "kisshub not reachable"
+            self.port.transmit(ax25_ui_frame(dest, self.cfg.mycall, info, path=path), None)
+        elif isinstance(self.port, AgwPort):
+            if not self.port.agw_up.is_set():
+                return "Direwolf not reachable"
+            if path:
+                self.port.send("V", self.cfg.mycall, dest, via_data(path) + info, PID_NO_L3)
+            else:
+                self.port.send("M", self.cfg.mycall, dest, info, PID_NO_L3)
+        else:
+            return "no radio (telnet test link)"
+        log.info("UI %s>%s%s: %d bytes", self.cfg.mycall, dest,
+                 "," + ",".join(path) if path else "", len(info))
+        return None
 
     async def _poll_outstanding(self) -> None:
         """CR45: frames waiting in Direwolf per channel - all channels share the

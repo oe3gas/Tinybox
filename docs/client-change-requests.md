@@ -1738,3 +1738,23 @@ Punkte 1–10 (letzte Texte und Messwert-Verläufe später).
   `speed`, `alt`). API `GET /api/aprs/station?call=..&win=..`.
 - Tests `test_station_page`. Client-Version 2026.10.17.5.
 
+
+## CR66 – UI-Frame aus dem Monitor senden (✅ 17.10.2026)
+
+### Erfassung (OE3GAS, 17.10.2026)
+
+Der Client soll einen UI-Frame senden können, am besten in der Monitoransicht vor dem Filterfeld –
+für den Test von VARA FM als KISS-TNC über kisshub („Wrong KISS frame“ bei SABM/SABME).
+
+### Umsetzung
+
+- Knopf **Send UI** in der Monitorleiste vor dem Filterfeld klappt eine Zeile auf: **To** (Standard
+  `CQ`), **Via** (optional, Digipeater mit Komma oder Leerzeichen, höchstens 8), **Text** (bis
+  1024 Byte, Bytezähler), **Send** bzw. Enter. Die Antwort steht daneben („sent 23:45:12 (17 B)“
+  oder der Grund, z. B. „kisshub not reachable“, „not a callsign“). Der Text bleibt markiert stehen:
+  Enter sendet denselben Frame noch einmal. To/Via merkt sich der Browser.
+- Geht über KISS (eigener AX.25-Frame, PID F0, Command-Bit) und über AGW (Direwolf `M` bzw. `V`
+  mit Pfad). Über den Telnet-Testport nicht.
+- Der eigene Frame erscheint im Monitor wie gehört.
+- API `POST /api/ui {"dest", "via", "text"}`, `ClientCore.send_ui()`, Prüfung in `ui_request()`.
+- Tests `tests/test_tbclient_ui.py`. Client-Version 2026.10.17.8.

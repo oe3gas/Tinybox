@@ -169,6 +169,9 @@ Station
   der Statistik): Rolle, Geraet, Entfernung, Art der Frames, Frames/h,
   Aktivitaet nach Wochentag/Stunde, Bakenabstaende, Wege zu dir, Leistung als
   Digipeater und iGate, Kanalanteil, Bewegung, Suenden. "Back" fuehrt zurueck.
+- UI-Frame aus dem Monitor ("Send UI" vor dem Filterfeld): ein UI-Frame an
+  ein beliebiges Ziel (Standard CQ), optional ueber Digipeater, bis 1024 Byte.
+  Zum Testen eines Modems, z. B. VARA FM ueber KISS.
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu

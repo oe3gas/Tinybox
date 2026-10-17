@@ -14,6 +14,8 @@ API:
   POST /api/connect {"target": "CALL", "ch": n} (both optional, CR42/CR45)
   POST /api/disconnect {"ch": n} | /api/leave | /api/channel/close {"ch": n}
   POST /api/term   {"text": "...", "ch": n}   a raw line from the terminal view (CR43)
+  POST /api/ui     {"dest": "CQ", "via": "OE3XBS-8,WIDE2-1", "text": "..."}   one UI frame
+                   from the monitor (CR66) -> {"ok": true} or {"ok": false, "error": "..."}
   POST /api/join   {"board": n}
   POST /api/say    {"text": "..."}
   POST /api/react  {"seq": n, "emoji": ":+1"}
@@ -194,6 +196,11 @@ class WebServer:
                 core.aprs_stats.reset()
             elif path == "/api/monitor/clear":    # CR50
                 core.clear_monitor()
+            elif path == "/api/ui":               # CR66: one UI frame from the monitor
+                err = core.send_ui(str(data.get("dest", "")), str(data.get("via", "")),
+                                   str(data.get("text", "")))
+                return (200, {"ok": True}, None) if err is None \
+                    else (400, {"ok": False, "error": err}, None)
             elif path == "/api/channel/close":   # CR45: an offline channel goes away
                 ch = data.get("ch")
                 ok = core.close_channel(ch if isinstance(ch, int) else 0)

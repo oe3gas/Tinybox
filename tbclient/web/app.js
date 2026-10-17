@@ -2160,6 +2160,8 @@ function renderTerm() {
   $("term-close").classList.toggle("hidden", !c.chat || mon);
   $("term-form").classList.toggle("hidden", mon);
   $("mon-tools").classList.toggle("hidden", !mon);
+  $("ui-form").classList.toggle("hidden", !mon || !uiOpen);
+  $("mon-ui").classList.toggle("on", uiOpen);
   showLens();
   $("term-input").disabled = c.state !== "online";
   if (S.ch !== activeCh) return;                   // lines of another channel: wait
@@ -2243,6 +2245,50 @@ function renderMonitor() {
     while (out.childNodes.length > 600) out.firstChild.remove();
   }
   if (atBottom) out.scrollTop = out.scrollHeight;
+}
+
+// ---------------------------------------------------------------- UI frame (CR66)
+// "Send UI" in the monitor bar: one unproto frame to any call, optional via,
+// e.g. to test a modem (VARA FM KISS). The text stays for a quick repeat.
+var uiOpen = false;   // var: renderTerm may run before this line
+const UI_KEEP = "tbc.ui";     // last To / Via (this browser only)
+function uiBytes() { return new TextEncoder().encode($("ui-text").value).length; }
+function uiCount() {
+  const n = uiBytes();
+  $("ui-n").textContent = n + " B";
+  $("ui-n").classList.toggle("bad", n > 1024);
+}
+function uiToggle() {
+  uiOpen = !uiOpen;
+  if (uiOpen) {
+    try {
+      const k = JSON.parse(localStorage.getItem(UI_KEEP) || "{}");
+      if (k.dest) $("ui-dest").value = k.dest;
+      if (k.via !== undefined) $("ui-via").value = k.via;
+    } catch (e) { /* no storage: the defaults */ }
+    $("ui-msg").textContent = "";
+  }
+  renderTerm();
+  if (uiOpen) $("ui-text").focus();
+}
+async function uiSend(e) {
+  e.preventDefault();
+  const dest = $("ui-dest").value.trim().toUpperCase() || "CQ";
+  const via = $("ui-via").value.trim().toUpperCase();
+  const text = $("ui-text").value;
+  const msg = $("ui-msg");
+  msg.className = "small";
+  if (!text) { msg.textContent = "no text"; msg.classList.add("bad"); return; }
+  try { localStorage.setItem(UI_KEEP, JSON.stringify({ dest, via })); } catch (err) { /* fine */ }
+  const r = await postJson("ui", { dest, via, text });
+  if (r.ok) {
+    msg.textContent = `sent ${new Date().toLocaleTimeString()} (${uiBytes()} B)`;
+    msg.classList.add("good");
+    $("ui-text").select();                        // Enter again = the same frame once more
+  } else {
+    msg.textContent = (r.data && r.data.error) || "not sent";
+    msg.classList.add("bad");
+  }
 }
 
 async function termSend(e) {
@@ -2385,6 +2431,9 @@ async function start() {
   });
   $("btn-term").onclick = openTerm;
   const monRedraw = () => { monDirty = true; if (S && activeCh === 0) { renderMonitor(); $("term-out").scrollTop = $("term-out").scrollHeight; } };
+  $("mon-ui").onclick = uiToggle;                              // CR66
+  $("ui-form").addEventListener("submit", uiSend);
+  $("ui-text").addEventListener("input", uiCount);
   $("mon-q").addEventListener("input", monRedraw);
   $("mon-kind").addEventListener("change", monRedraw);
   $("mon-clear").onclick = async () => { await api("monitor/clear"); monLines = []; AprsView.forget(); monRedraw(); };

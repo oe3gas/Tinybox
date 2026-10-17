@@ -216,10 +216,18 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .term-out .mk.chat { background: #1c4a3a; } .term-out .mk.quality { background: #4a3a12; }
 .term-out .mk.mail { background: #4a1c3b; } .term-out .mk.beacon { background: #1c3b5c; }
 .term-out .mk.proto { background: #3a3a3a; }
+/* UI frame from the monitor (CR66) */
+.ui-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px;
+  background: var(--surface); border-bottom: 1px solid var(--line); font-size: 13px; }
+.ui-form label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.ui-form input { border-radius: 8px; padding: 4px 8px; font: 13px ui-monospace, Consolas, monospace; }
+#ui-dest { width: 7em; } #ui-via { width: 12em; } #ui-text { flex: 1; min-width: 12em; }
+.ui-form .bad { color: var(--bad); } .ui-form .good { color: var(--ok); }
 @media (max-width: 699px) {
   .term-bar { flex-wrap: wrap; }
   .mon-tools { order: 5; width: 100%; }
   .mon-tools input { flex: 1; width: auto; }
+  #ui-via { flex: 1; width: auto; } #ui-text { flex-basis: 100%; }
 }
 .term-out .sys { color: #8b959e; }
 .term-in { display: flex; gap: 8px; padding: 8px; background: var(--surface); border-top: 1px solid var(--line); }
