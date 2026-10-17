@@ -14,46 +14,14 @@ import asyncio
 import logging
 import struct
 from collections import deque
-from dataclasses import dataclass
 from typing import Awaitable, Callable
+
+from prcore.agw import PID_NO_L3, Frame, read_frame, via_data
 
 from .config import AgwCfg
 from .link import Link
 
 log = logging.getLogger("fwdsim.agw")
-
-HEADER = struct.Struct("<B3xcxBx10s10sII")
-PID_NO_L3 = 0xF0
-MAX_DATA = 65536
-
-
-@dataclass
-class Frame:
-    kind: str
-    port: int = 0
-    pid: int = 0
-    call_from: str = ""
-    call_to: str = ""
-    data: bytes = b""
-
-    def pack(self) -> bytes:
-        return HEADER.pack(self.port, self.kind.encode("ascii"), self.pid,
-                           self.call_from.encode("ascii"), self.call_to.encode("ascii"),
-                           len(self.data), 0) + self.data
-
-
-def _call(raw: bytes) -> str:
-    return raw.split(b"\0", 1)[0].decode("ascii", "replace").strip().upper()
-
-
-async def read_frame(reader: asyncio.StreamReader) -> Frame:
-    head = await reader.readexactly(HEADER.size)
-    port, kind, pid, cfrom, cto, length, _ = HEADER.unpack(head)
-    if length > MAX_DATA:
-        raise ConnectionError(f"AGW frame too large: {length}")
-    data = await reader.readexactly(length) if length else b""
-    return Frame(kind.decode("ascii", "replace"), port, pid, _call(cfrom), _call(cto), data)
-
 
 class AgwLink(Link):
     """One AX.25 connection, with simple flow control via 'Y'."""
@@ -217,8 +185,7 @@ class AgwClient:
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending[remote] = fut
         if via:
-            data = bytes([len(via)]) + b"".join(v.upper().encode("ascii").ljust(10, b"\0")
-                                                 for v in via)
+            data = via_data([v.upper() for v in via])
             self.send(Frame("v", self.cfg.radio_port, PID_NO_L3, self.mycall, remote, data))
         else:
             self.send(Frame("C", self.cfg.radio_port, PID_NO_L3, self.mycall, remote))

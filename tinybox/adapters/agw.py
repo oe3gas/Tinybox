@@ -27,7 +27,8 @@ import logging
 import struct
 import time
 from collections import deque
-from dataclasses import dataclass
+
+from prcore.agw import PID_NO_L3, AgwProtocolError, Frame, read_frame, via_data
 
 from .. import chatimg, linkq, logsetup, texts
 from ..app import App
@@ -36,45 +37,10 @@ from ..session import MAX_LINE, Session
 
 log = logging.getLogger(__name__)
 
-HEADER = struct.Struct("<B3xcxBx10s10sII")
-MAX_DATA = 65536
-PID_NO_L3 = 0xF0
 CTRL_Z = 0x1A
 DRAIN_TIMEOUT = 120  # s to wait for the last packets before disconnecting
 Y_TIMEOUT = 5
 Q_TIMEOUT = 5
-
-
-class AgwProtocolError(Exception):
-    pass
-
-
-@dataclass
-class Frame:
-    kind: str
-    port: int = 0
-    pid: int = 0
-    call_from: str = ""
-    call_to: str = ""
-    data: bytes = b""
-
-    def pack(self) -> bytes:
-        return HEADER.pack(self.port, self.kind.encode("ascii"), self.pid,
-                           self.call_from.encode("ascii"), self.call_to.encode("ascii"),
-                           len(self.data), 0) + self.data
-
-
-def _call(raw: bytes) -> str:
-    return raw.split(b"\0", 1)[0].decode("ascii", "replace").strip().upper()
-
-
-async def read_frame(reader: asyncio.StreamReader) -> Frame:
-    head = await reader.readexactly(HEADER.size)
-    port, kind, pid, cfrom, cto, length, _ = HEADER.unpack(head)
-    if length > MAX_DATA:
-        raise AgwProtocolError(f"frame too large: {length}")
-    data = await reader.readexactly(length) if length else b""
-    return Frame(kind.decode("ascii", "replace"), port, pid, _call(cfrom), _call(cto), data)
 
 
 def decode_line(raw: bytes) -> str:
@@ -263,8 +229,7 @@ class AgwAdapter:
         """One UI frame (unproto) from the mailbox call, e.g. to TBCHAT-1; with
         path through digipeaters (AGW 'V': count, 10 bytes per call, data)."""
         if path:
-            data = bytes([len(path)]) + b"".join(
-                normalize_call(c).encode("ascii").ljust(10, b"\0") for c in path)
+            data = via_data([normalize_call(c) for c in path])
             self.send(Frame("V", self.radio_port, PID_NO_L3, self.mycall, dest,
                             data + text.encode("utf-8")))
         else:
@@ -426,8 +391,7 @@ class AgwAdapter:
         self._pending[remote] = fut
         port = self.radio_port
         if via:
-            data = bytes([len(via)]) + b"".join(
-                normalize_call(v).encode("ascii").ljust(10, b"\0") for v in via)
+            data = via_data([normalize_call(v) for v in via])
             self.send(Frame("v", port, PID_NO_L3, self.mycall, remote, data))
         else:
             self.send(Frame("C", port, PID_NO_L3, self.mycall, remote))

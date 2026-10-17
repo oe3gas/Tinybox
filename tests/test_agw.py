@@ -8,6 +8,7 @@ import sqlite3
 import struct
 import unittest
 
+from prcore import agw as agwcodec
 from tinybox.adapters import agw
 from tinybox.adapters.agw import Frame
 
@@ -92,8 +93,8 @@ class AgwTests(unittest.TestCase):
     def test_frame_roundtrip(self):
         raw = Frame("D", 0, 0xF0, "OE3GAS-1", "OE1ABC", b"hello\r").pack()
         self.assertEqual(len(raw), 36 + 6)
-        port, kind, pid, cf, ct, length, _ = agw.HEADER.unpack(raw[:36])
-        self.assertEqual((kind, pid, agw._call(cf), agw._call(ct), length),
+        port, kind, pid, cf, ct, length, _ = agwcodec.HEADER.unpack(raw[:36])
+        self.assertEqual((kind, pid, agwcodec.decode_call(cf), agwcodec.decode_call(ct), length),
                          (b"D", 0xF0, "OE3GAS-1", "OE1ABC", 6))
 
     def test_session_over_agw(self):

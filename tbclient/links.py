@@ -19,20 +19,19 @@ import logging
 import struct
 from typing import Callable
 
+from prcore.agw import PID_NO_L3, Frame, read_frame
+
 from . import radio
 from .config import Config
 
 log = logging.getLogger(__name__)
 
-HEADER = struct.Struct("<B3xcxBx10s10sII")
-PID_NO_L3 = 0xF0
 # Bytes per AGW "D" frame = bytes per I-frame on air. Direwolf makes one or
 # more I-frames out of every "D" frame and never joins two, so this is what
 # decides the frame size, not direwolf.conf (whose PACLEN only splits further).
 # 256 = AX.25 and Direwolf default; 128 halved the data per frame and so
 # doubled the frames (and the overhead) of every picture.
 PACLEN = 256
-MAX_DATA = 65536
 IAC = 255
 
 
@@ -144,8 +143,7 @@ class AgwPort:
              data: bytes = b"", pid: int = 0) -> None:
         w = self._writer
         if w is not None and not w.is_closing():
-            w.write(HEADER.pack(self.cfg.radio_port, kind.encode(), pid, call_from.encode(),
-                                call_to.encode(), len(data), 0) + data)
+            w.write(Frame(kind, self.cfg.radio_port, pid, call_from, call_to, data).pack())
 
     async def run(self) -> None:
         """Keep the TCP link to Direwolf open (reconnects by itself)."""
@@ -170,13 +168,9 @@ class AgwPort:
             self.agw_up.set()
             try:
                 while True:
-                    head = await reader.readexactly(HEADER.size)
-                    _port, kind, _pid, cfrom, cto, length, _ = HEADER.unpack(head)
-                    if length > MAX_DATA:
-                        raise ConnectionError("AGW frame too large")
-                    data = await reader.readexactly(length) if length else b""
+                    f = await read_frame(reader)
                     try:
-                        self._dispatch(kind.decode("latin-1"), _c(cfrom), _c(cto), data)
+                        self._dispatch(f.kind, f.call_from, f.call_to, f.data)
                     except Exception:
                         log.exception("error handling AGW frame")
             except (asyncio.IncompleteReadError, ConnectionError, OSError) as exc:
@@ -288,10 +282,6 @@ class AgwLink(BaseLink):
         elif self.active:
             self.connecting = False
             self._set("offline", "Direwolf not reachable")
-
-
-def _c(raw: bytes) -> str:
-    return raw.split(b"\0", 1)[0].decode("ascii", "replace").strip().upper()
 
 
 class TelnetLink(BaseLink):

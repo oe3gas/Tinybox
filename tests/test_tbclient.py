@@ -18,6 +18,7 @@ from tbclient import channels as channels_mod
 from tbclient import core as core_mod
 from tbclient.core import ClientCore
 from tbclient.web import WebServer
+from prcore import agw as agwcodec
 from tinybox.adapters import agw as tb_agw
 from tinybox.adapters import telnet
 from tests.test_chat import chat_app
@@ -98,7 +99,7 @@ async def until(cond, timeout=5.0):
 
 # --- a fake Direwolf: AGW server, the "air" connects the AGW clients -------------
 
-H = tb_agw.HEADER
+H = agwcodec.HEADER
 
 
 class FakeDirewolf:
@@ -130,7 +131,7 @@ class FakeDirewolf:
             while True:
                 _p, kind, pid, cf, ct, n, _ = H.unpack(await r.readexactly(H.size))
                 data = await r.readexactly(n) if n else b""
-                kind, cf, ct = kind.decode(), tb_agw._call(cf), tb_agw._call(ct)
+                kind, cf, ct = kind.decode(), agwcodec.decode_call(cf), agwcodec.decode_call(ct)
                 if kind == "X":
                     me["calls"].add(cf)
                     self._put(me, "X", cf, data=b"\x01")
@@ -406,7 +407,7 @@ class ForeignBbs:
             while True:
                 _p, kind, _pid, cf, ct, n, _ = H.unpack(await r.readexactly(H.size))
                 data = await r.readexactly(n) if n else b""
-                kind, peer = kind.decode(), tb_agw._call(cf)
+                kind, peer = kind.decode(), agwcodec.decode_call(cf)
                 if kind == "C":
                     self._say(peer, b"[BPQ-6.0.24.1] OE3XBS-8\r#Stations heard\r//nonsense\r"
                                     b"OE3XBS:OE3XBS-8} BBS CHAT NODES\r")
