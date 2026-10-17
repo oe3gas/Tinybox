@@ -369,7 +369,12 @@ function messagesCard(opts) {
   const seg = h("div", { class: "seg", role: "group", "aria-label": "Filter" },
     filters.map(([key, label]) => (btns[key] = h("button", {
       type: "button", "aria-pressed": String(S.filter === key),
-      onclick: () => { S.filter = key; update(); },
+      onclick: () => {
+        S.filter = key;
+        // Rubrics hold only bulletins: "Private" with a rubric still set showed nothing.
+        if (key === "P" && S.rubric) { S.rubric = ""; renderRubricNav(); }
+        update();
+      },
     }, label))));
   const search = h("input", {
     type: "search", placeholder: "Search call, subject or text", value: S.search,
