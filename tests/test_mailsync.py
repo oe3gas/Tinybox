@@ -268,7 +268,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertFalse(core.sync.start("bulletins"))       # one at a time
                 await until(lambda: not core.sync.running, 30)
                 self.assertEqual(core.sync.status["error"], "")
-                self.assertIn("*** client mode, caps: CHAT,IMG,NUM,SHORT,SYNC,SYNC2,UI,Z", core.console)
+                self.assertIn("*** client mode, caps: CHAT,HAVE,IMG,NUM,SHORT,SYNC,SYNC2,UI,Z", core.console)
                 await until(lambda: core.state == "offline")
                 inbox = box.folder("inbox")
                 self.assertEqual([m["subject"] for m in inbox],
@@ -760,6 +760,27 @@ class MultiRecipientTests(unittest.TestCase):
         self.assertEqual(self.app.service.store.get(3).msgid, "tbc-abcdefgh14")   # as before
         self.assertEqual(self.app.service.store.get(3).body, "")                  # no To: line
 
+    def test_have_before_sending_again(self):
+        """CR69: //HAVE answers for a mail that is already stored - before its text."""
+        s, t = client(self.app, caps="CHAT,SYNC,HAVE")
+        type_lines(s, "//HAVE abcdefgh20 OE3TEC")
+        self.assertEqual(t.take(), "//HAVE abcdefgh20 -\r")           # not here: send it
+        type_lines(s, "//SEND P OE3TEC 0 mid=abcdefgh20", "Einzeln")
+        new = int(t.take().split()[1])
+        type_lines(s, "//HAVE abcdefgh20 OE3TEC")
+        self.assertEqual(t.take(), f"//HAVE abcdefgh20 {new}\r")
+        type_lines(s, "//SEND P OE3TEC,OE1ABC 0 mid=abcdefgh21", "Zwei")
+        ids = t.take().split()[1:]
+        type_lines(s, "//HAVE abcdefgh21 OE3TEC,OE1ABC")
+        self.assertEqual(t.take().split()[2:], ids)
+        type_lines(s, "//HAVE abcdefgh21 OE3TEC,OE3XYZ")               # one not there
+        self.assertEqual(t.take(), "//HAVE abcdefgh21 -\r")
+        s2, t2 = client(self.app, call="OE1ABC", caps="CHAT,SYNC,HAVE")
+        type_lines(s2, "//HAVE abcdefgh20 OE3TEC")                       # not his mail
+        self.assertEqual(t2.take(), "//HAVE abcdefgh20 -\r")
+        type_lines(s, "//HAVE bad OE3TEC")
+        self.assertEqual(t.take(), "//ERR have usage\r")
+
     def test_client_store(self):
         with tempfile.TemporaryDirectory() as tmp:
             box = MailStore(Path(tmp) / "m.db", "OE3GAS")
@@ -926,6 +947,26 @@ class SendAtOnceTests(unittest.TestCase):
                                   if m.subject == "Sofort"], ["gleich raus"])
                 self.assertEqual(box.folder("inbox"), [])          # "send" fetches nothing
                 self.assertEqual(list(core.channels), [1])         # its channel is gone again
+                # CR69: tried before, but the //SENT never came: the client asks
+                # first and does not send the text again
+                box.save_out(None, "P", "OE3TEC", "Schon da", "nur einmal")
+                item = box.folder("outbox")[0]
+                app.service.create(from_call="OE3GAS", to_call="OE3TEC", type="P",
+                                   subject="Schon da", body="nur einmal", origin="radio",
+                                   msgid=f"tbc-{item['mid']}")
+                box.put(f"out_try.{item['mid']}", 1)
+                from tinybox import clientsync
+                sends, orig = [], clientsync._send
+                clientsync._send = lambda s_, p_: (sends.append(p_), orig(s_, p_))
+                self.assertEqual(core.send_outbox(), "")
+                await until(lambda: not core.sync.running, 20)
+                clientsync._send = orig
+                self.assertEqual(sends, [])                         # the text never went out
+                self.assertEqual(box.folder("outbox"), [])
+                self.assertEqual(len([m for m in app.service.store.list_messages()
+                                      if m.subject == "Schon da"]), 1)
+                self.assertIsNone(box.get(f"out_try.{item['mid']}"))
+                await until(lambda: core.state == "offline", 10)
                 # connected to the own TinyBox: over that connection
                 await core.connect("OE3GAS-1")
                 await until(lambda: core.state == "online" and core.caps, 10)

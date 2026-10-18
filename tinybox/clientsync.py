@@ -39,6 +39,13 @@ mid= is a unique id made by the client: if the //SENT answer got lost and the
 client sends the same message again, the TinyBox answers with the old number
 instead of storing it twice.
 
+    //HAVE <mid> <to>[,<to>...][@<at>]     (cap HAVE, CR69)
+        -> //HAVE <mid> <id> [<id> ...]   already stored (one number per recipient)
+        -> //HAVE <mid> -                 not (completely) here: send it
+        Asked before a //SEND the client tried before (the //SENT answer did not
+        come): on a slow link the text then does not go over the air a second
+        time just to be told "had it already".
+
 Delta sync (cap SYNC2, CR26, PLANUNG.md 12.9) - one request for everything,
 only what changed since the client's last sync (change counter seq, store.py):
 
@@ -97,7 +104,7 @@ MAX_SEND_LINES = 2000
 MID_RE = re.compile(r"^[0-9A-Za-z-]{8,40}$")
 RUBRIC_RE = re.compile(r"^([A-Z0-9]{1,6})=(\d{1,9})$")
 COMMANDS = ("MLIST", "RUBRICS", "BLIST", "GET", "PART", "SEND", "KILL", "READ",
-            "SYNC", "BSYNC")
+            "SYNC", "BSYNC", "HAVE")
 MAX_PART = 8192
 ZSYNC_MIN = 200           # a delta answer this long goes as one LZHUF block (cap Z)
 HEADER_BYTES = 90         # rough size of one //M line, for paging by max=
@@ -133,7 +140,8 @@ def handle(s: Session, cmd: str, parts: list[str]) -> None:
         return
     started = time.monotonic()
     {"MLIST": _mlist, "RUBRICS": _rubrics, "BLIST": _blist, "GET": _get, "PART": _part,
-     "SEND": _send, "KILL": _kill, "READ": _read, "SYNC": _sync, "BSYNC": _bsync}[cmd](s, parts)
+     "SEND": _send, "KILL": _kill, "READ": _read, "SYNC": _sync, "BSYNC": _bsync,
+     "HAVE": _have}[cmd](s, parts)
     slow = logsetup.ms_if_slow(started)
     if slow:
         log.debug("//%s took %s", cmd, slow)
@@ -316,6 +324,30 @@ def _send(s: Session, parts: list[str]) -> None:
         s.out("//SENT " + " ".join(map(str, ids)))
 
     s.collect(n + 1, done)
+
+
+def _have(s: Session, parts: list[str]) -> None:
+    """CR69: is the mail with this mid already here? (only own mail is found)"""
+    if len(parts) != 2 or not MID_RE.match(parts[0]):
+        s.out("//ERR have usage")
+        return
+    mid = parts[0]
+    calls = [c for c in parts[1].partition("@")[0].split(",") if c.strip()]
+    if len(calls) > 1:              # the recipients as _send normalizes them
+        try:
+            calls = s.service.check_send_list(s.call, ",".join(calls), "P", False)
+        except ServiceError:
+            s.out(f"//HAVE {mid} -")
+            return
+    ids = []
+    for to in calls:
+        # the same msgid as _send makes it (single recipient: without the call)
+        m = s.service.store.get_by_msgid(f"tbc-{mid}" if len(calls) == 1 else f"tbc-{mid}-{to}")
+        if m is None or m.from_call != s.call:
+            s.out(f"//HAVE {mid} -")
+            return
+        ids.append(m.id)
+    s.out(f"//HAVE {mid} " + " ".join(map(str, ids)) if ids else f"//HAVE {mid} -")
 
 
 def _kill(s: Session, parts: list[str]) -> None:

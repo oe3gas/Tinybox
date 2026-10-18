@@ -1,0 +1,2 @@
+- Mail sent again after a lost answer: the client asks the
+  TinyBox first (//HAVE) - the text is not sent twice.

@@ -1921,3 +1921,24 @@ Frames unterwegs sind (`outstanding()`: noch nicht gesendet oder nicht quittiert
 eigenen AX.25-Automaten, AGW per Direwolf `Y`). Solange das so ist, wartet er weiter (höchstens
 `SEND_WAIT_MAX_SEC` = 30 min); „keine Antwort“ gilt erst, wenn nichts Eigenes mehr unterwegs ist.
 Tests `tests/test_sync_slowlink.py`. Client-Version 2026.10.18.
+
+## CR69 – Erst fragen, dann senden: bereits vorhandene Mail nicht nochmals übertragen (✅ 18.10.2026)
+
+### Erfassung (OE3GAS, 18.10.2026)
+
+Zu CR68: Wird eine Mail nach verlorener `//SENT`-Antwort nochmals gesendet, erkennt die TinyBox sie
+zwar an `mid=` – aber erst, nachdem der ganze Text nochmals übertragen wurde. Über VARA sind das
+Minuten. Die TinyBox soll vorher sagen „die hab ich schon“.
+
+### Umsetzung
+
+- **Neuer Befehl** (Cap `HAVE`) `//HAVE <mid> <to>[,<to>...][@<at>]` → `//HAVE <mid> <id> ...`
+  (schon gespeichert, eine Nummer je Empfänger) oder `//HAVE <mid> -` (senden). Es werden nur
+  eigene Mails gefunden; Empfänger werden wie bei `//SEND` normiert (`tinybox/clientsync.py`).
+- **Client** (`tbclient/sync.py`): Vor dem ersten Senden merkt er sich `out_try.<mid>`. Kommt
+  `//SENT`, wird die Marke gelöscht. Ist die Marke beim nächsten Sync noch da (Antwort ging verloren,
+  Sync abgebrochen, Client beendet), fragt er zuerst `//HAVE`: Ist die Mail schon da, wandert sie
+  sofort in „Sent“, **ohne** dass der Text nochmals gesendet wird. Beim ersten Versuch wird nicht
+  gefragt – das kostet keinen zusätzlichen Durchgang.
+- Ältere TinyBox ohne Cap `HAVE`: wie bisher (senden, Duplikat über `mid=`).
+- Tests in `tests/test_mailsync.py`. Client-Version 2026.10.18.2.

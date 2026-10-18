@@ -92,6 +92,10 @@ class MailStore:
         row = self.db.execute("SELECT value FROM kv WHERE key=?", (key,)).fetchone()
         return json.loads(row[0]) if row else default
 
+    def drop(self, key: str) -> None:
+        self.db.execute("DELETE FROM kv WHERE key=?", (key,))
+        self._changed()
+
     def put(self, key: str, value) -> None:
         self.db.execute("INSERT OR REPLACE INTO kv VALUES (?, ?)", (key, json.dumps(value)))
         self._changed()

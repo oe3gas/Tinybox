@@ -59,13 +59,13 @@ SEND_WAIT_MAX_SEC = 1800  # ... unless own frames are still on their way (at mos
 ABORT_GRACE_SEC = 30      # orderly abort: wait this long for the answer on the air (CR40)
 SCOPES = ("mail", "bulletins", "login", "fetch", "send")
 END_LINES = ("//SYNCEND", "//BSYNCEND", "//GEND", "//MEND", "//RUEND", "//KEND", "//REND",
-             "//SENT ", "//NOMSG ", "//ERR")
+             "//SENT ", "//NOMSG ", "//ERR", "//HAVE ")
 CONNECT_SEC = 90          # connect + handshake when the sync connects by itself
 MAX_LINE_OUT = 1000       # longer text lines are wrapped (TinyBox line limit 1024)
 CHUNK = 50                # ids per //KILL or //READ
 PREFIXES = ("//M ", "//MEND", "//RU ", "//RUEND", "//MSG ", "//ZMSG ", "//NOMSG ", "//GEND",
             "//P ",
-            "//SENT ", "//K ", "//KEND", "//REND", "//ERR",
+            "//SENT ", "//K ", "//KEND", "//REND", "//ERR", "//HAVE ",
             "//S ", "//D ", "//RL ", "//RN ", "//SYNCEND", "//BSYNCEND", "//ZSYNC ")
 
 
@@ -962,6 +962,24 @@ class Syncer:
 
     async def _send_one(self, item: dict) -> None:
         to = item["to_call"].replace(" ", "")
+        tried = f"out_try.{item['mid']}"
+        # CR69: tried before and no //SENT came - ask first, so the text does not
+        # go over the air again only to hear "had it already" (slow links: minutes)
+        if self.store.get(tried) and "HAVE" in self.core.caps:
+            await self._send(f"//HAVE {item['mid']} {to}")
+            while True:
+                entry = await self._next()
+                if entry[0] == "line" and entry[1].startswith(("//HAVE ", "//ERR")):
+                    break
+            p = entry[1].split()
+            ids = [int(x) for x in p[2:] if x.isdigit()] if p[0] == "//HAVE" else []
+            if ids:
+                log.info("mail %s was already in the TinyBox (%s) - not sent again",
+                         item["mid"], " ".join(map(str, ids)))
+                self._stored(item, to, ids)
+                self.store.drop(tried)
+                return
+        self.store.put(tried, int(time.time()))
         lines = []
         for line in item["body"].replace("\r", "").replace("\x1a", "").split("\n"):
             while len(line) > MAX_LINE_OUT:
@@ -979,20 +997,22 @@ class Syncer:
                 continue
             line = entry[1]
             if line.startswith("//SENT "):
-                ids = [int(x) for x in line.split()[1:] if x.isdigit()]
-                calls, _, at = to.partition("@")
-                # CR27: one number per recipient, in the order sent; the TinyBox
-                # puts "To: A, B" on top of every copy, so does the Sent folder
-                if len(ids) > 1:
-                    item = dict(item, body=f"To: {calls.upper().replace(',', ', ')}\n"
-                                           + item["body"])
-                for msg_id, call in zip(ids, calls.split(",")):
-                    self.store.add_sent(msg_id, item, self.core.cfg.mycall, call.upper(),
-                                        at.upper())
+                self._stored(item, to, [int(x) for x in line.split()[1:] if x.isdigit()])
+                self.store.drop(tried)
                 return
             if line.startswith("//ERR"):
                 self.store.out_error(item["oid"], line[2:].replace("ERR send ", ""))
                 return                              # stays in the outbox, the sync goes on
+
+    def _stored(self, item: dict, to: str, ids: list[int]) -> None:
+        """The TinyBox has the mail (//SENT or //HAVE): from the outbox to Sent."""
+        calls, _, at = to.partition("@")
+        # CR27: one number per recipient, in the order sent; the TinyBox
+        # puts "To: A, B" on top of every copy, so does the Sent folder
+        if len(ids) > 1:
+            item = dict(item, body=f"To: {calls.upper().replace(',', ', ')}\n" + item["body"])
+        for msg_id, call in zip(ids, calls.split(",")):
+            self.store.add_sent(msg_id, item, self.core.cfg.mycall, call.upper(), at.upper())
 
     async def _get(self, batch: list[int]) -> None:
         while True:
