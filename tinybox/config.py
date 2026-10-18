@@ -476,7 +476,9 @@ def _load_kiss(cp: configparser.ConfigParser,
     _check_range("kiss", "channel", kiss.channel, 0, 15)
     _check_range("kiss", "reconnect_sec", kiss.reconnect_sec, 1, 3600)
     _check_range("kiss", "air_baud", kiss.air_baud, 300, 1_000_000)
-    _check_range("kiss", "txdelay_ms", kiss.txdelay_ms, 0, 2550)
+    # only for TinyBox's own airtime estimate (T1); TinyBox never sends KISS parameters -
+    # kisshub does, with its own limit. VARA needs ~2700 ms (measured 18.10.2026)
+    _check_range("kiss", "txdelay_ms", kiss.txdelay_ms, 0, 10000)
     _check_range("kiss", "status_port", kiss.status_port, 0, 65535)
     ax25 = Ax25Cfg(
         version=_get(cp, "ax25", "version", "2.2").strip(),
