@@ -166,6 +166,7 @@ class Ax25Cfg:
     t3_sec: float = 300.0
     srt_init_sec: float = 2.5
     v20_digis: frozenset = frozenset()   # digis that know only modulo 8: v2.0 over them
+    v20_digi_paclen: int = 128      # longest I field over such a digi (they drop long frames)
 
 
 @dataclass
@@ -611,6 +612,7 @@ def _load_radio(cp: configparser.ConfigParser, base: Path) -> tuple:
         t3_sec=_get(cp, "ax25", "t3_sec", 300.0, float),
         srt_init_sec=_get(cp, "ax25", "srt_init_sec", 2.5, float),
         v20_digis=parse_calls(_get(cp, "ax25", "v20_digis", "")),
+        v20_digi_paclen=_get(cp, "ax25", "v20_digi_paclen", 128, int),
     )
     if ax25.version not in ("2.0", "2.2"):
         raise ConfigError(f"[ax25] version: '{ax25.version}' - use 2.0 or 2.2")
@@ -618,6 +620,7 @@ def _load_radio(cp: configparser.ConfigParser, base: Path) -> tuple:
         if not CALL_RE.match(d):
             raise ConfigError(f"[ax25] v20_digis: '{d}' is not a callsign")
     _check_range("ax25", "paclen", ax25.paclen, 16, 256)
+    _check_range("ax25", "v20_digi_paclen", ax25.v20_digi_paclen, 16, 256)
     _check_range("ax25", "maxframe", ax25.maxframe, 1, 7)
     _check_range("ax25", "maxframe_ext", ax25.maxframe_ext, 1, 127)
     _check_range("ax25", "n2", ax25.n2, 1, 50)

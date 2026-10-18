@@ -342,3 +342,20 @@ class V20DigiTests(unittest.TestCase):
         self.assertEqual(parse_calls("oe3xtc-5, OE1ABC-0  oe3xyz"),
                          frozenset({"OE3XTC-5", "OE1ABC", "OE3XYZ"}))
         self.assertEqual(parse_calls(""), frozenset())
+
+    def test_short_frames_over_v20_digi(self):
+        """The TM-D710E also drops 256-byte I frames: 128 at most over it."""
+        cfg = dataclasses.replace(self.CFG, paclen=256)
+        a, b, sim = self.make(V22, cfg, [self.DIGI])
+        connect(a, b, sim)
+        b.send(payload(1000), sim.now)
+        sim.run(until=sim.now + 3600, stop=lambda: b.is_idle and len(sim.rx["A"]) >= 1000)
+        self.assertEqual(bytes(sim.rx["A"]), payload(1000))
+        sizes = [len(f.info) for _, s, f in sim.sent if s == "B" and f.is_i]
+        self.assertTrue(sizes and max(sizes) == 128, sizes)
+
+    def test_full_frames_elsewhere(self):
+        cfg = dataclasses.replace(self.CFG, paclen=256)
+        a, b, sim = self.make(V22, cfg, ["OE3XYZ-2"])
+        connect(a, b, sim)
+        self.assertEqual(b.n1, 256)

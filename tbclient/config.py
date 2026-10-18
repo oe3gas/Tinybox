@@ -56,6 +56,7 @@ class Config:
     ax25_t2: float = 1.5
     ax25_t3: float = 300.0
     ax25_v20_digis: frozenset = frozenset()   # digis that know only modulo 8: v2.0 over them
+    ax25_v20_digi_paclen: int = 128           # longest I field over such a digi
     # CR70: one owner per value - over AGW direwolf.conf, over KISS kisshub
     direwolf_conf: str = ""           # resolved path, "" = not given
     img_rate_fixed: bool = False      # [images] bytes_per_sec set: no estimate
@@ -186,6 +187,9 @@ def load(path: str | Path) -> Config:
             fixed.add(lc)
     cfg.ax25_srej = get("ax25", "srej", "yes").lower() in ("yes", "true", "1", "on")
     cfg.ax25_v20_digis = parse_calls(get("ax25", "v20_digis", ""))
+    cfg.ax25_v20_digi_paclen = int(get("ax25", "v20_digi_paclen", "128"))
+    if not 16 <= cfg.ax25_v20_digi_paclen <= 256:
+        raise ConfigError("[ax25] v20_digi_paclen must be 16 ... 256")
     cfg.kiss_fixed = frozenset(fixed)
     if cfg.ax25_version not in ("2.0", "2.2"):
         raise ConfigError("[ax25] version must be 2.0 or 2.2")

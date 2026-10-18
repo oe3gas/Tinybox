@@ -1,0 +1,2 @@
+- KISS: shorter I frames over v20_digis
+  ([ax25] v20_digi_paclen, default 128).

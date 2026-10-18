@@ -17,6 +17,9 @@ v2.2 and the fall back to v2.0
     ever arrives (bug 18.10.2026, OE3GAS-2 via OE3XTC-5). A link over such a
     digi calls with SABM, and an incoming SABME over it is answered with DM,
     so the caller falls back to SABM. All other digis count as v2.2.
+    The same digi also drops long frames (256 info bytes never got through,
+    ~140 did - 18.10.2026): over a known v2.0 digi the I frames carry at most
+    cfg.v20_digi_paclen bytes.
     After a SABME/UA the caller sends XID: window, I field length and SREJ
     are negotiated (xid.py). The XID is repeated after T1, `xid_tries` times
     in all; without an answer: our window, REJ only.
@@ -101,6 +104,7 @@ class LinkCfg:
     maxframe_ext: int = 7        # k with modulo 128 (1..127); 7 is plenty at 1200 Bd
     srej: bool = True            # offer SREJ in the XID (v2.2 links only)
     v20_digis: frozenset = frozenset()   # digipeaters that know only modulo 8
+    v20_digi_paclen: int = 128   # longest I field over such a digi (they drop long frames)
     sabme_tries: int = 2         # unanswered SABMEs before calling with SABM
     xid_tries: int = 3           # XID commands before giving up (then REJ only)
 
@@ -131,7 +135,7 @@ class Ax25Link:
         self.state = State.DISCONNECTED
         self.modulo = 8
         self.k = self.cfg.maxframe
-        self.n1 = self.cfg.paclen              # max info bytes we send (XID may lower)
+        self.n1 = self._paclen()               # max info bytes we send (XID may lower)
         self.srej_on = False                   # SREJ agreed in the XID
         self.peer_v20 = peer_v20               # known v2.0 station: call with SABM
         self.peer_version: str | None = None   # "2.2" / "2.0" once connected
@@ -173,9 +177,18 @@ class Ax25Link:
             return
         self._establish(now, v22=self._v22() and not self.peer_v20)
 
+    def _via_v20_digi(self) -> bool:
+        return any(d in self.cfg.v20_digis for d in self.path)
+
+    def _paclen(self) -> int:
+        """Longest I field we send: smaller over a known v2.0 digi."""
+        if self._via_v20_digi():
+            return min(self.cfg.paclen, self.cfg.v20_digi_paclen)
+        return self.cfg.paclen
+
     def _v22(self) -> bool:
         """May this link use v2.2 (SABME, modulo 128)? Not over a known v2.0 digi."""
-        return self.cfg.version == "2.2" and not any(d in self.cfg.v20_digis for d in self.path)
+        return self.cfg.version == "2.2" and not self._via_v20_digi()
 
     def disconnect(self, now: float) -> None:
         """Release the link. Unsent data is dropped: the caller waits for
@@ -626,7 +639,7 @@ class Ax25Link:
         if agreed.k_rx:
             self.k = max(1, min(self.k, agreed.k_rx, self.modulo - 1))
         if agreed.n1_rx:
-            n1 = max(16, min(self.cfg.paclen, agreed.n1_rx))
+            n1 = max(16, min(self._paclen(), agreed.n1_rx))
             if n1 < self.n1:                           # cut what is queued to the new size
                 data = b"".join(self.queue)
                 self.queue = deque(data[i:i + n1] for i in range(0, len(data), n1))
@@ -759,7 +772,7 @@ class Ax25Link:
         self.modulo = modulo
         self.k = max(1, min(self.cfg.maxframe_ext if modulo == 128 else self.cfg.maxframe,
                             modulo - 1))
-        self.n1 = self.cfg.paclen
+        self.n1 = self._paclen()
         self.srej_on = False
         self._xid_waiting = False
         self.xid_at = None
