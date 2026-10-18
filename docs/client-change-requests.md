@@ -1758,3 +1758,109 @@ für den Test von VARA FM als KISS-TNC über kisshub („Wrong KISS frame“ bei
 - Der eigene Frame erscheint im Monitor wie gehört.
 - API `POST /api/ui {"dest", "via", "text"}`, `ClientCore.send_ui()`, Prüfung in `ui_request()`.
 - Tests `tests/test_tbclient_ui.py`. Client-Version 2026.10.17.8.
+
+## CR67 – VARA-Monitoring im kisshub: Werte aus 8300, 8100 und passive AX.25-Auswertung (offen, 18.10.2026)
+
+### Erfassung (OE3GAS, 18.10.2026)
+
+Mit VARA FM als KISS-TNC (Profil `vara-fm`, Tunnel, Konzept 8c) möglichst viele Werte über Kanal,
+Gegensignal und Verbindungszustand gewinnen. kisshub wertet aus und stellt die Werte TinyBox und
+Client zur Verfügung. Grundlage: statische Analyse VARA HF 4.9.0 / VARA FM 4.3.9 (Projekt „VARA
+verstehen“), VARA-Changelog, Pat-Vara, Mercury (VARA-kompatible TNC-Schnittstelle).
+
+**Reihenfolge:** zuerst der Funktest des Tunnels (vollwertiges AX.25 über VARA FM möglich?). CR67
+wird erst danach umgesetzt; ohne funktionierenden Tunnel bleibt nur Teil B für UI-Verkehr.
+
+**Regeln:** nur lesend beobachten. Am Befehlsport zunächst **kein Kommando** senden. Keine
+Auswertung oder Nachbildung von Lizenz- und Krypto-Meldungen (`REGISTERED`, `LINK (UN)REGISTERED`,
+`ENCRYPTION …`) – nur als Text protokollieren. Alle VARA-Ports nur über Loopback.
+
+### Quelle A – VARA-Befehlsport 8300 (neuer Teil `VaraMonitor` im kisshub)
+
+kisshub verbindet sich zusätzlich mit 8300, liest zeilenweise (CR-getrennt, ASCII), sendet nichts.
+Unbekannte Zeilen werden roh mit Zeitstempel geloggt. Wiederverbindung wie beim TNC.
+
+| Meldung | Format (Mercury, in VARA noch zu bestätigen) | Auswertung |
+|---|---|---|
+| `SN` | `SN 8.2` (dB, 1 Nachkomma) | laut HF-Changelog v4.7.2 auch je **empfangenem KISS-Frame**: dem Frame zuordnen, der innerhalb eines kurzen Fensters (Startwert 1 s, einstellbar) an 8100 ankommt → **SN je Gegenstation**. Ohne passenden Frame: als „SN ohne Frame“ zählen |
+| `PTT ON` / `PTT OFF` | so | **Sendedauer je Burst**; mit der Größe des zuletzt an 8100 übergebenen Frames → gemessene Rate und Aufwand je Burst (ersetzt die Schätzung `air_baud`/`txdelay`, Grundlage für T1). **Wartezeit bis TX**: Übergabe an 8100 → `PTT ON`. PTT länger als ein Grenzwert (z. B. 60 s) → **Alarm „PTT hängt“** |
+| `BUSY ON` / `BUSY OFF` | so | Kanal belegt: Anteil je Minute/Stunde, Zahl der Belegungen, längste Belegung |
+| `BITRATE` | `BITRATE (2) 600 BPS` (Speed Level, bps) | falls im KISS-Betrieb gesendet: Speed Level je Burst; Parser tolerant |
+| `BUFFER` | `BUFFER 0` | nur ARQ; mitloggen |
+| `IAMALIVE` | so | Lebenszeichen; bleibt es länger als 2 Intervalle aus → Warnung |
+| `MISSING SOUNDCARD` | so | **Alarm** (laut EA5HVK hilft nur ein PC-Neustart) |
+| `VERSION …` | so | im Status anzeigen |
+| `PENDING`, `CONNECTED …`, `DISCONNECTED`, `CANCELPENDING` | so | sollten im KISS-Betrieb nicht kommen: kommt doch eins, Warnung (jemand nutzt ARQ auf dem Gerät) |
+| alles andere | – | roh loggen, Zähler „unbekannt“ |
+
+SN wird **unverändert** gespeichert und angezeigt. Bezug bei VARA HF laut Analyse 2500 Hz; für VARA FM
+(Narrow 3 kHz / Wide 6 kHz NF) unbekannt – vergleichen nur innerhalb derselben Betriebsart.
+
+### Quelle B – KISS-Port 8100 und Tunnel (misst kisshub selbst)
+
+| Wert | Verarbeitung |
+|---|---|
+| Frames gesendet/empfangen | je Minute, getrennt Typ 0 (UI) und Typ 2 (Tunnel); Zeitreihe 60 min |
+| Framegrößen | Verteilung (Klassen bis 64, 128, 256, 512, 1024, darüber) gesendet/empfangen; mit der PTT-Dauer die **Schwellen für Speed Level 1/2/4** ermitteln |
+| `foreign`, `echoes`, unlesbare Frames | gibt es seit dem Tunnel; zusätzlich je Minute |
+| Gehörte Stationen | Rufzeichen, Frames, letzter/mittlerer/min./max. SN (aus A), zuletzt gehört, über Tunnel ja/nein |
+| TNC/Hub | bestehend (CR41): Zustand, Portverluste, Wiederanläufe, Wartezeit in der Hub-Queue |
+
+### Quelle C – passive AX.25-Auswertung im kisshub (je Stationspaar)
+
+Der Hub sieht alle Frames einer Verbindung in beide Richtungen (eigene Clients und Gegenstation).
+Je Paar (Rufzeichen A ↔ B, mit SSID) wird geführt:
+
+| Wert | Wie |
+|---|---|
+| Verbindungsstatus | SABM(E) gesehen → „im Aufbau“, UA → „verbunden“ (mit Version 2.0/2.2), DISC/DM → „getrennt“; Dauer der Verbindung |
+| I-Frames und Nutzbytes | je Richtung |
+| **Wiederholungen** | I-Frame mit gleichem N(S) und gleichem Inhalt erneut gesendet → Wiederholungsquote je Richtung |
+| REJ / SREJ / RNR | je Richtung zählen |
+| **Antwortzeit** | eigener I-/Poll-Frame bis zur ersten Quittung (RR/REJ/I mit passendem N(R)) → gemessene Laufzeit über VARA (Mittel, Min., Max.) |
+| Abbrüche | DM auf SABM, Verbindung ohne DISC verschwunden (Zeitüberschreitung) |
+| Durchsatz | Nutzbytes je Minute während der Verbindung |
+
+Damit lässt sich „AX.25 über PK-232“ und „AX.25 über VARA FM“ mit denselben Kennzahlen
+vergleichen, unabhängig davon, ob TinyBox oder Client die Verbindung führen.
+
+### Quelle D – VARA-Logdatei (optional, zweiter Schritt)
+
+kisshub liest `VARAFM.log` mit (Pfad in `kisshub.conf`, nur lesen, ab Dateiende). Ausgewertet:
+„Soundcard … missing in action“ (Alarm), „Wrong/Invalid KISS frame“, „Exceeded KISS buffer“,
+„KISS size too long“ (zählen – kommen nach bisheriger Erfahrung nicht über TCP), „VARA is not
+connected to any App via TCP Port 8300“. Inhalt im KISS-Betrieb erst nach dem Mitschnitt festlegen.
+
+### Weitergabe an TinyBox und Client
+
+- **`GET http://127.0.0.1:8102/status`** (bestehend, nur Loopback) bekommt die Blöcke
+  `vara` (Verbindung zu 8300, alive, Version, busy + Anteil, letzte/mittlere Sendedauer, Wartezeit
+  bis TX, gemessene Rate und Burst-Aufwand, Alarme), `stations` (Quelle B mit SN) und
+  `links` (Quelle C je Paar).
+- **Neu `GET http://127.0.0.1:8102/events`**: Datenstrom, eine JSON-Zeile je Ereignis
+  (`sn` mit Rufzeichen, `ptt`, `busy`, `alarm`, `link`), damit Monitor und Qualitätsanzeige live
+  sind statt alle 30 s abzufragen.
+- **TinyBox**: Web-GUI zeigt Kanal (busy-Anteil), SN je Station und Verbindungswerte; die
+  Qualitätsbalken der Verbindungen nutzen SN und Wiederholungsquote. Alarme in der Sysop-Konsole.
+- **Client**: im Monitor das SN neben jedem empfangenen Frame (falls zugeordnet), in der
+  Stationsseite der SN-Verlauf; Kopfzeile mit VARA-Zustand (alive, busy, Alarm).
+- Speicherung: Zeitreihen im Speicher (60 min Minutenwerte, 24 h Stundenwerte); Stationswerte wie
+  die APRS-Statistik bis 7 Tage in einer Datei.
+
+### Erster Schritt (nach dem Tunnel-Test): Mitschnitt
+
+`tools/vara_capture.py` (kommentiert): 30 min Betrieb, verbindet sich mit 8300 und sendet nichts,
+schreibt jede Zeile mit Zeitstempel (ms) in eine Datei; parallel kisshub-`/status` und das
+kisshub-Log mit `LOG TRACE`. Danach Formate festlegen, Parser schreiben, Teil A–C umsetzen.
+
+### Offene Fragen (im Mitschnitt klären)
+
+1. Liefert VARA **FM** 4.3.9 im KISS-Betrieb `SN` je empfangenem Frame (wie HF ab 4.7.2)? Auch für
+   Typ-2-Rahmen? Kommt `SN` vor oder nach dem Frame an 8100?
+2. Stört eine Verbindung am Port 8300 den KISS-Betrieb? (Bekannter Fehler 2023: PTT blieb mit
+   KISS plus Befehlsport hängen – beim ersten Test jemand am Funkgerät.) Schaltet sie KISS ab
+   (HF-Changelog 4.6.4: „KISS interface continue disabled with Winlink apps“)? Wie viele Clients
+   nimmt 8300?
+3. Kommen `PTT`, `BUSY`, `BITRATE` auch für KISS-Verkehr?
+4. Exakte Formate von `SN`, `BITRATE` in VARA selbst.
+5. Was schreibt `VARAFM.log` im KISS-Betrieb?
