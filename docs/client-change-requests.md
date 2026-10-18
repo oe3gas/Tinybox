@@ -1943,7 +1943,7 @@ Minuten. Die TinyBox soll vorher sagen „die hab ich schon“.
 - Ältere TinyBox ohne Cap `HAVE`: wie bisher (senden, Duplikat über `mid=`).
 - Tests in `tests/test_mailsync.py`. Client-Version 2026.10.18.2.
 
-## CR70 – Konfiguration ohne Doppelungen: ein Besitzer je Wert (offen, Konzept 18.10.2026)
+## CR70 – Konfiguration ohne Doppelungen: ein Besitzer je Wert ✅
 
 ### Erfassung (OE3GAS, 18.10.2026)
 
@@ -1956,3 +1956,23 @@ Zielordner von Direwolf bzw. die `direwolf.conf` wird unter `[agw]` erfasst. Ein
 
 `PLANUNG.md` 17.2, Zielaufbau aller confs und Tabelle alt → neu in `MANUAL.md` Abschnitt 2.
 Umsetzung in vier Schritten; alte Schlüssel bleiben lesbar.
+
+### Umsetzung (18.10.2026) ✅
+
+- `prcore/direwolfconf.py`: liest `direwolf.conf` (Ordner oder Datei; AGWPORT, KISSPORT, MODEM,
+  TXDELAY, PERSIST, SLOTTIME je CHANNEL/ADEVICE, PACLEN, MAXFRAME, EMAXFRAME, FRACK, RETRY).
+- kisshub 2026.10.18.7: Profile tragen air_baud/txdelay/max_lead/Port und eine AX.25-Empfehlung
+  (VARA FM gemessen: 350 / 2700 / 12000, 256 B, Fenster 4, T1 18–90 s, T2 0,3 s); neues Profil
+  `direwolf`; `[kiss]`/`[ax25]` nur Überschreibung; Status = Port + 1; `/status` mit Block
+  `radio` inkl. Herkunft; Startzeilen nennen die Quelle jedes Werts.
+- TinyBox: `[agw] direwolf_conf / host / port / channel / quality_*` (alt `[direwolf]`),
+  paclen/Fenster aus direwolf.conf, `[kiss] port`; KISS-Werte aus dem kisshub-Status für neue
+  Verbindungen, Werte aus tinybox.conf gewinnen; Startlog mit Quellen und `config hint`.
+- Client 2026.10.18.3: `[radio] interface` (alt `[tinybox] link`), `[agw]`, `[kiss] port`,
+  Werte vom kisshub; Bildschätzung aus der Funkrate, solange nichts gemessen ist.
+- brocastd: `[radio]/[agw]/[kiss]`, baud/TXDELAY aus direwolf.conf bzw. kisshub.
+- dxfeed: Inbox aus `tinybox.conf`; fwdsim: Mailbox-Call, haddress, Telnet-Port, DB aus
+  `tinybox.conf`, AGW-Werte aus direwolf.conf.
+- Alte Schlüssel gelten als Überschreibung, mit Hinweis beim Start. Tests:
+  `tests/test_direwolfconf.py`, `RadioValuesTests`, `KissConfigTests`, Client-/brocastd-/
+  dxfeed-/fwdsim-Konfigtests.

@@ -1168,7 +1168,7 @@ Offen aus Schritt 1: `kisshub/` ist in `build_production.sh` weder in `INCLUDE` 
 
 ---
 
-### 17.2 Konfiguration ohne Doppelungen (Konzept 18.10.2026, CR70)
+### 17.2 Konfiguration ohne Doppelungen (CR70, umgesetzt 18.10.2026)
 
 **Befund:** Funkrate und TXDELAY standen bis zu fünfmal (kisshub, tinybox, tbclient, brocastd,
 direwolf.conf), die kisshub-Adresse dreimal, AX.25-Werte doppelt (TinyBox `[ax25]` mit Rückfall
@@ -1194,6 +1194,9 @@ Zielaufbau und Tabelle alt → neu: `MANUAL.md` Abschnitt 2.
 
 **Schritte:** 1. kisshub liefert `radio`, TinyBox/Client übernehmen es, `direwolf_conf` lesen –
 2. einheitliche Abschnittsnamen – 3. kisshub-Profil `direwolf`, brocastd – 4. dxfeed, fwdsim.
+**Stand 18.10.2026: alle vier Schritte umgesetzt** (kisshub 2026.10.18.7, tbclient 2026.10.18.3).
+Die kisshub-Werte gelten für jede neue Verbindung ab dem ersten Status (alle 30 s); eine
+Verbindung, die schon läuft, behält ihre Werte.
 Passt zu Schritt 3 oben (gemeinsamer Config-Lader).
 
 ## Quellen

@@ -66,10 +66,9 @@ KISS:  TinyBox / Client ──KISS 8101──► kisshub ──► TNC ──►
 
 ## 2. Konfiguration
 
-> **Stand:** Die Abschnitte 2.1–2.7 beschreiben den **vereinfachten Aufbau** aus CR70
-> (`docs/client-change-requests.md`, `PLANUNG.md` 17.2). Er wird schrittweise umgesetzt;
-> bis dahin gelten die Namen aus den `*.conf.example` – die Tabelle in 2.8 zeigt alt → neu.
-> Alte Schlüssel werden auch danach weiter gelesen.
+> **Stand:** Der Aufbau aus CR70 ist umgesetzt (kisshub 2026.10.18.7, tbclient 2026.10.18.3,
+> TinyBox, brocastd, dxfeed, fwdsim; `PLANUNG.md` 17.2). Die `*.conf.example` folgen ihm.
+> Alte Schlüssel werden weiter gelesen – die Tabelle in 2.8 zeigt alt → neu.
 
 ### 2.1 Grundregel: jeder Wert hat genau einen Besitzer
 
@@ -209,10 +208,17 @@ sn_window_ms = 1500
 | `pk232` | seriell, Init-Dialog | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
 | `tm-d710`, `th-d74`, `th-d75`, `tnc2-kiss`, `generic` | seriell/tcp | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
 | `direwolf` | tcp, KISSPORT | aus MODEM | aus TXDELAY | no | 1500 | 1200-Bd-Werte |
-| `vara-fm`, `vara-hf` | tcp 8100, Tunnel | 350 | 2700 | **no** | 12000 | 256 B, Fenster 4, T1 ≥ 18 s, T2 0,3 s |
+| `vara-fm`, `vara-hf` | tcp 8100, Tunnel | 350 | 2700 | **no** | 12000 | 256 B, Fenster 4, T1 18–90 s, T2 0,3 s |
 
 *1200-Bd-Werte:* paclen 256, Fenster 4 (Modulo 8) / 7 (Modulo 128), T1 3–30 s, T2 1,5 s.
+Beim Profil `direwolf` kommen paclen und Fenster aus PACLEN/MAXFRAME/EMAXFRAME.
 Die VARA-Werte sind am 18.10.2026 gemessen (Konzept 8d).
+
+**So kommen die Werte bei TinyBox und Client an:** Beide fragen den kisshub-Status
+(`http://127.0.0.1:<port + 1>/status`, Block `radio`) alle 30 s ab und übernehmen Funkrate,
+TXDELAY und die AX.25-Empfehlung für jede **neue** Verbindung. Im Log steht dann
+`radio values from kisshub (profile vara-fm): air_baud 350, txdelay 2700 ms, …`. Was in der
+eigenen `[ax25]` steht (oder als alter Schlüssel in `[kiss]`), bleibt und gewinnt.
 
 ### 2.5 `brocastd.conf`
 
@@ -280,6 +286,8 @@ den kisshub-Wert 350 – kann entfernt werden`).
 | kisshub `[server] listen / status_port` | fest 127.0.0.1 / `port + 1` |
 | brocastd `[direwolf] interface / agw_port / kiss_port / channel` | `[radio] interface`, `[agw]`, `[kiss]` |
 | brocastd `[station] baud / txdelay_ms` | aus `direwolf.conf` bzw. kisshub |
+| tbclient `[images] bytes_per_sec` | geschätzt aus der Funkrate (70 %), danach gemessen |
+| fwdsim `[agw] radio_port / port / paclen / max_outstanding` | `[agw] channel`, Rest aus `direwolf.conf` |
 | dxfeed `[digest] inbox` | aus `tinybox.conf` |
 | fwdsim `[tinybox] call / haddress / ax25_call / telnet_* / db` | aus `tinybox.conf` |
 
@@ -310,9 +318,9 @@ Gleicher AX.25-Automat wie bei VARA, nur das Modem ist anders – dafür gedacht
 vergleichen.
 
 1. Direwolf läuft, KISSPORT 8001 offen. **VARA geschlossen** (gleiche Soundkarte!).
-2. `kisshub.conf`: `profile = direwolf`, `transport = tcp`, `direwolf_conf = E:\direwolf`
-   (bis zur Umsetzung von CR70: `profile = generic`, `port = 8001`, `send_params = no`,
-   `air_baud = 1200`, `txdelay_ms` = TXDELAY × 10).
+2. `kisshub.conf`: `profile = direwolf`, `direwolf_conf = E:\direwolf` – Port (KISSPORT),
+   Funkrate (MODEM), TXDELAY, PACLEN und Fenster kommen aus der `direwolf.conf`; die
+   Startzeilen des kisshub zeigen sie.
 3. TinyBox/Client auf `interface = kiss`, Port 8101.
 
 ### 3.4 KISS mit VARA FM
@@ -333,15 +341,10 @@ vergleichen.
 
 ```ini
 [tnc]
-profile   = vara-fm
-transport = tcp
-host      = 127.0.0.1
-port      = 8100
-
-[kiss]                         ; bis CR70 von Hand, danach Profil-Standard
-air_baud    = 350
-txdelay_ms  = 2700
-max_lead_ms = 12000
+profile   = vara-fm            ; transport tcp, Port 8100, air_baud 350, txdelay 2700 ms,
+                               ; max_lead 12000 ms und die AX.25-Empfehlung kommen vom Profil
+[server]
+port = 8101
 
 [log]
 file       = kisshub-vara.log
@@ -351,21 +354,15 @@ links_file = links-vara.jsonl
 monitor = yes                  ; beim ersten Mal jemand ans Funkgerät (PTT-Hänger möglich)
 ```
 
-Start: `python -m kisshub -c kisshub-varafm.conf`. Erwartet: `vara-fm`, „VARA tunnel
-connected …“, „VARA monitor: listening …“.
+Start: `python -m kisshub -c kisshub-varafm.conf`. Erwartet: `vara-fm`,
+`radio: air_baud 350 (profile vara-fm), txdelay 2700 ms …`, „VARA tunnel connected …“,
+„VARA monitor: listening …“.
 
-**TinyBox / Client** `[ax25]` (bis CR70 von Hand, danach aus dem kisshub-Profil):
-
-```ini
-[ax25]
-version      = 2.2
-paclen       = 256
-maxframe     = 4
-maxframe_ext = 4
-t1_min_sec   = 18
-t1_max_sec   = 60
-t2_sec       = 0.3
-```
+**TinyBox / Client:** nur `[radio] interface = kiss` und `[kiss] port = 8101` – **kein**
+`[ax25]` nötig. Die Werte (paclen 256, Fenster 4/4, T1 18–90 s, T2 0,3 s, Funkrate,
+TXDELAY) kommen vom kisshub; im Log erscheint `radio values from kisshub …`. Stehen noch
+alte Einträge (`[kiss] air_baud`, `[ax25] t1_min_sec` …) in der conf, gelten sie weiter und
+der Start meldet `config hint: …` – entfernen, damit der kisshub bestimmt.
 
 **Pegel:** Im VARA-Fenster S/N und Konstellation beobachten. Vier enge Punktwolken, S/N
 25–30 dB auf kurzer Strecke. Ein deutlich niedrigerer Wert in einer Richtung heißt meist:
@@ -408,8 +405,9 @@ einen eigenen Dateinamen setzen, auf **beiden** PCs.
 | Vergleich gesendet ↔ angekommen | Frames bei A gesendet, bei B empfangen | Verluste je Richtung (beide Logs nötig) |
 | S/N (VARA) | dem empfangenen Frame zugeordnet, Bezug 2500 Hz | Pegel/Hub, Reserve |
 
-Statusabfrage für Programme: `GET http://127.0.0.1:8102/status` (Blöcke `tnc`, `queue`,
-`quality`, `vara`).
+Statusabfrage für Programme: `GET http://127.0.0.1:8102/status` (Blöcke `tnc`, `radio`,
+`queue`, `quality`, `vara`). `radio` enthält Profil, `air_baud`, `txdelay_ms`, `max_lead_ms`,
+die AX.25-Empfehlung (`ax25`) und je Wert die Herkunft (`source`).
 
 ---
 
@@ -421,7 +419,9 @@ Statusabfrage für Programme: `GET http://127.0.0.1:8102/status` (Blöcke `tnc`,
 | VARA: „Wrong KISS frame“ | Verbindungs-Frames als Typ 0 an VARA | Profil `vara-fm` (Tunnel) auf **beiden** Seiten |
 | kisshub: „type-2 data that is not ours … ignored“ | Gegenseite sendet Bündel/Format, das diese Version nicht kennt | gleiche kisshub-Version auf beiden PCs |
 | VARA: „Soundcard … missing in action“ | Audio-Gerät nicht gefunden | Settings → Soundcard neu wählen, VARA neu starten |
-| Viele Polls, Quittungen über T1 | T1 zu kurz für das Modem | VARA: `air_baud`/`txdelay_ms` wie in 3.4, `t1_min_sec = 18` |
+| Viele Polls, Quittungen über T1 | T1 zu kurz für das Modem | Log: fehlt `radio values from kisshub`? kisshub ≥ 2026.10.18.7 und alte `[kiss]`/`[ax25]`-Werte entfernen |
+| Start meldet `config hint: … overrides …` | alter Schlüssel in der conf überschreibt den Besitzer | Schlüssel entfernen (Tabelle 2.8), außer die Überschreibung ist gewollt |
+| `[agw] direwolf_conf: direwolf.conf not readable` | Pfad falsch | Ordner oder Datei angeben, z. B. `E:\direwolf` |
 | `[kiss] txdelay_ms … must be between 0 and 2550` | alte TinyBox | `git pull` (Grenze jetzt 10 000 ms) |
 | Mail bleibt im Postausgang trotz Aussendung | alter Client (vor 2026.10.18) | `git pull`; CR68/CR69 |
 | `not reachable … 8100` | VARA nicht gestartet oder KISS-Interface aus | VARA starten, Häkchen „KISS interface“ |

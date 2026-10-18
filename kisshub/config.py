@@ -215,9 +215,10 @@ def radio_lines(cfg: Config) -> list[str]:
              f"txdelay {round(h.txdelay_sec * 1000)} ms ({src.get('txdelay_ms')}), "
              f"max_lead {round(h.max_lead_sec * 1000)} ms ({src.get('max_lead_ms')})",
              "AX.25 recommendation for TinyBox/client: "
-             + ", ".join(f"{k} {v}" for k, v in h.ax25.items()) + f" ({src.get('ax25')})",
-             f"status query http://127.0.0.1:{h.status_port}/status" if h.status_port
-             else "status query off ([server] status_port = 0)"]
+             + ", ".join(f"{k} {v}" for k, v in h.ax25.items()) + f" ({src.get('ax25')})"]
+    if not h.status_port:
+        lines.append("status query off ([server] status_port = 0) - TinyBox and client "
+                     "keep their own values")
     if cfg.direwolf:
         lines.insert(0, f"direwolf.conf {cfg.direwolf}")
     lines += [f"hint: {x}" for x in cfg.hints]
