@@ -1,0 +1,3 @@
+- Simpler tbclient.conf: [radio] interface, [agw] direwolf_conf,
+  [kiss] port. Bit rate, TXDELAY, AX.25 values come from
+  kisshub or direwolf.conf. Old keys still work (hint at start).

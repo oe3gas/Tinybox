@@ -21,10 +21,10 @@ import logging
 from prcore.ax25.frame import Frame
 from prcore.ax25.link import Ax25Link, LinkCfg
 from prcore.kissport import KissPort as SharedKissPort
-from prcore.kissport import norm_call, poll_hub
+from prcore.kissport import describe_changes, norm_call, poll_hub
 
 from . import radio
-from .config import Config
+from .config import Config, estimate_rate
 from .links import BaseLink
 
 log = logging.getLogger(__name__)
@@ -99,6 +99,11 @@ class KissPort(SharedKissPort):
         if status is None:
             self.hub = None
             return
+        changed = self.apply_hub_status(status, self.cfg.kiss_fixed)   # CR70
+        if changed:
+            log.info("radio values from kisshub: %s", describe_changes(changed))
+            if "air_baud" in changed and not self.cfg.img_rate_fixed:
+                self.cfg.img_rate = estimate_rate(self.link_cfg.air_baud)
         tnc = status.get("tnc") or {}
         self.hub = {"tnc": tnc.get("name"), "state": tnc.get("state"),
                     "error": tnc.get("last_error")}

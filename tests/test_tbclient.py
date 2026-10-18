@@ -82,6 +82,38 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual((cfg.mycall, cfg.tinybox_call, cfg.link, cfg.web_port),
                          ("OE3GAS", "OE3GAS-1", "agw", 7744))
         self.assertEqual(cfg.data_dir, ROOT / "data" / "tbclient")
+        self.assertEqual((cfg.hints, cfg.img_rate, cfg.img_rate_fixed), ([], 105, False))
+
+    def load(self, text: str, dw: str | None = None) -> ccfg.Config:
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            if dw is not None:
+                (Path(d) / "direwolf.conf").write_text(dw, encoding="utf-8")
+                text = text.replace("DWDIR", d)
+            p = Path(d) / "c.conf"
+            p.write_text("[station]\nmycall = OE3GAS\n" + text, encoding="utf-8")
+            return ccfg.load(p)
+
+    def test_cr70_new_and_old_names(self):
+        cfg = self.load("[radio]\ninterface = kiss\n[kiss]\nport = 8201\n")
+        self.assertEqual((cfg.link, cfg.kiss_status_port, cfg.hints), ("kiss", 8202, []))
+        cfg = self.load("[tinybox]\nlink = kiss\n[kiss]\nport = 8201\nair_baud = 350\n"
+                        "[ax25]\nt1_min_sec = 20\nt1_max_sec = 60\n")
+        self.assertEqual((cfg.link, cfg.kiss_air_baud), ("kiss", 350))
+        self.assertEqual(cfg.kiss_fixed, frozenset({"air_baud", "t1_min_sec", "t1_max_sec"}))
+        text = "\n".join(cfg.hints)
+        self.assertIn("[tinybox] link is the old name - use [radio] interface", text)
+        self.assertIn("air_baud = 350: overrides the kisshub value", text)
+        self.assertEqual(cfg.img_rate, 31)                     # estimated from 350 Bd
+
+    def test_cr70_agw_from_direwolf_conf(self):
+        cfg = self.load("[agw]\ndirewolf_conf = DWDIR\n[direwolf]\nradio_port = 0\n",
+                        "AGWPORT 8010\nMODEM 9600\n")
+        self.assertEqual((cfg.agw_port, cfg.img_rate), (8010, 840))
+        self.assertIn("old name", cfg.hints[0])
+        self.assertIn("MODEM 9600", "\n".join(ccfg.radio_lines(cfg)))
+        with self.assertRaises(ccfg.ConfigError):
+            self.load("[agw]\ndirewolf_conf = /nowhere/x\n")
 
 
 def client_cfg(tmp: str, **kw) -> ccfg.Config:

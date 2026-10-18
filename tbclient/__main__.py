@@ -29,6 +29,8 @@ def main() -> int:
     log = logging.getLogger("tbclient")
     log.info("TinyBox client %s - %s -> %s via %s", VERSION, cfg.mycall, cfg.tinybox_call,
              cfg.link)
+    for line in config.radio_lines(cfg):
+        log.info("%s", line)
 
     async def run() -> None:
         core = ClientCore(cfg)

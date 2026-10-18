@@ -172,6 +172,10 @@ Station
 - UI-Frame aus dem Monitor ("Send UI" vor dem Filterfeld): ein UI-Frame an
   ein beliebiges Ziel (Standard CQ), optional ueber Digipeater, bis 1024 Byte.
   Zum Testen eines Modems, z. B. VARA FM ueber KISS.
+- Schlanke tbclient.conf (CR70): [radio] interface, [agw] direwolf_conf,
+  [kiss] port. Funkrate, TXDELAY und AX.25-Werte kommen vom kisshub bzw.
+  aus direwolf.conf; [ax25] nur noch zum Ueberschreiben. Beim Start steht,
+  woher jeder Wert kommt. Alte Schluessel gelten weiter (mit Hinweis).
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu
