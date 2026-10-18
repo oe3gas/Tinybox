@@ -16,15 +16,20 @@ freq         =                 # MHz of the radio port, e.g. 144.800 - for the A
                                # the connection log (empty: no FREQ/BAND in the .adi)
 locator      =                 # your locator for the ADIF export, e.g. JN88EP
 
-[direwolf]
-agw_host        = 127.0.0.1    # Direwolf runs on the same PC
-agw_port        = 8000         # AGWPORT in direwolf.conf
-agw_radio_port  = 0            # Direwolf channel (0 = first radio)
-reconnect_sec   = 5
-paclen          = 256          # bytes per packet sent (= PACLEN in direwolf.conf; 256 is
-                               # the AX.25 default, 128 doubled the frames of every picture)
-max_outstanding = 6            # packets handed to Direwolf ahead of the acknowledgements;
-                               # set EMAXFRAME 6 in direwolf.conf, see PLANUNG.md 12.10a
+[radio]
+interface = agw                # agw = Direwolf does AX.25; kiss = TinyBox does AX.25
+                               # itself over kisshub (PLANUNG.md section 15)
+# CR70: every radio value has ONE owner - over AGW direwolf.conf, over KISS kisshub.
+# TinyBox reads them from there and shows at start where each one came from.
+# Example configurations: MANUAL.md section 2.
+
+[agw]                          # only with interface = agw
+# direwolf_conf = E:\direwolf  # Direwolf folder or its direwolf.conf; TinyBox reads AGWPORT,
+                               # PACLEN, EMAXFRAME/MAXFRAME from it (see PLANUNG.md 12.10a)
+# host    = 127.0.0.1          # default; only if Direwolf runs on another PC
+# port    = 8000               # default: AGWPORT from direwolf.conf, else 8000
+channel   = 0                  # Direwolf channel (0 = first radio)
+reconnect_sec = 5
 # Link quality - needs the TinyBox Direwolf fork (AGW 'Q'), PLANUNG.md section 14
 quality_poll_sec      = 30     # ask Direwolf every n seconds (0 = off)
 quality_window_frames = 50     # window per direction: last n frames ...
@@ -33,29 +38,19 @@ quality_min_frames    = 20     # fewer frames: no result yet (grey bars)
 quality_steps         = 5, 10, 20, 35, 50   # loss in % up to which 5/4/3/2/1 bars,
                                # above the last one a single red bar
 
-[radio]
-interface = agw                # agw = Direwolf does AX.25 (above); kiss = TinyBox does
-                               # AX.25 itself over a KISS TNC (PLANUNG.md section 15)
-
 [kiss]                         # only with interface = kiss
-host        = 127.0.0.1        # kisshub, or Direwolf's KISS port for tests
-port        = 8101             # 8101 = kisshub (TNC), 8001 = Direwolf's KISSPORT
-channel     = 0                # KISS port number of the radio
-air_baud    = 1200             # radio bit rate - TinyBox estimates its own air time
-txdelay_ms  = 300              # as set in the TNC
-status_port = 8102             # kisshub status for the web GUI (CR41), 0 = off
+port = 8101                    # kisshub; host is always 127.0.0.1, its status port + 1.
+                               # Bit rate, TXDELAY and the AX.25 values come from kisshub
 
-[ax25]                         # only with interface = kiss; missing values: see below
-version      = 2.2             # 2.2: SABME/SREJ/XID, falls back to 2.0 by itself; 2.0: SABM only
-# paclen     = 128             # default: [direwolf] paclen
-# maxframe   = 4               # window modulo 8 (1..7), default: [direwolf] max_outstanding
-maxframe_ext = 7               # window modulo 128 (v2.2); 7 is plenty at 1200 Bd
-srej         = yes
-n2           = 10              # retries
-t1_min_sec   = 3               # T1 adapts itself between these limits
-t1_max_sec   = 30
-t2_sec       = 1.5             # acknowledge after the other station's burst
-t3_sec       = 300             # check an idle link after n seconds
+[ax25]                         # OPTIONAL - only to override; empty = owner's values
+version = 2.2                  # kiss only: 2.2 = SABME/SREJ/XID, falls back to 2.0; 2.0 = SABM
+# paclen       =               # agw: default PACLEN from direwolf.conf (else 256)
+#                              # kiss: default from kisshub (1200 Bd: 256)
+# maxframe     =               # agw: packets handed to Direwolf ahead of the acks,
+#                              # default EMAXFRAME/MAXFRAME; kiss: window modulo 8
+# maxframe_ext =               # kiss only: window modulo 128
+# srej         = yes           # kiss only
+# n2 / t1_min_sec / t1_max_sec / t2_sec / t3_sec   # kiss only, default from kisshub
 
 [mailbox]
 welcome_enabled      = yes

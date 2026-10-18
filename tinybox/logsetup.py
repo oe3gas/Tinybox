@@ -507,11 +507,32 @@ def start_block(cfg, version: str, config_path: str | None,
          if cfg.radio.interface == "kiss" else
          f"radio agw {cfg.direwolf.agw_host}:{cfg.direwolf.agw_port} "
          f"port {cfg.direwolf.agw_radio_port}, max_users {cfg.mailbox.max_users}"),
+        *radio_lines(cfg),
         f"adapters: {adapters}",
         f"brocast token {_secret(cfg.brocast.token)}, "
         f"level {cfg.logging.level}, debug {','.join(sorted(debug)) or '-'}, "
         f"keep_days {cfg.logging.keep_days}",
     ]
+
+
+def radio_lines(cfg) -> list[str]:
+    """CR70: where the radio values come from, and old keys still in the file."""
+    src = cfg.sources or {}
+    if cfg.radio.interface == "kiss":
+        a = cfg.ax25
+        lines = [f"radio values: {src.get('kiss', '-')}; until the first status "
+                 f"air_baud {cfg.kiss.air_baud}, txdelay {cfg.kiss.txdelay_ms} ms, "
+                 f"paclen {a.paclen}, window {a.maxframe}/{a.maxframe_ext}, "
+                 f"T1 {a.t1_min_sec}-{a.t1_max_sec} s, T2 {a.t2_sec} s "
+                 f"(kisshub status 127.0.0.1:{cfg.kiss.status_port})"]
+    else:
+        d = cfg.direwolf
+        lines = [f"AGW values: port {d.agw_port} ({src.get('agw_port', '-')}), "
+                 f"paclen {d.paclen} ({src.get('agw_paclen', '-')}), "
+                 f"window {d.max_outstanding} ({src.get('agw_window', '-')})"]
+    if src.get("direwolf.conf"):
+        lines.append(f"direwolf.conf {src['direwolf.conf']}")
+    return lines + [f"config hint: {h}" for h in cfg.hints or ()]
 
 
 def stop_line(reason: str) -> str:

@@ -128,6 +128,7 @@ class DirewolfCfg:
     quality_window_min: int = 30
     quality_min_frames: int = 20
     quality_steps: tuple[float, ...] = (5.0, 10.0, 20.0, 35.0, 50.0)
+    direwolf_conf: str = ""               # CR70: [agw] direwolf_conf, resolved path or ""
 
 
 @dataclass(frozen=True)
@@ -383,6 +384,11 @@ class Config:
     radio: RadioCfg = field(default_factory=RadioCfg)
     kiss: KissCfg = field(default_factory=KissCfg)
     ax25: Ax25Cfg = field(default_factory=Ax25Cfg)
+    # CR70: where the radio values came from, old keys still in the file, and the
+    # LinkCfg fields set in tinybox.conf (they win over kisshub's values)
+    sources: dict = field(default_factory=dict)
+    hints: list = field(default_factory=list)
+    kiss_fixed: frozenset = frozenset()
 
 
 def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
@@ -406,7 +412,7 @@ def _steps(value: str) -> tuple[float, ...]:
     except ValueError:
         steps = ()
     if len(steps) != 5 or list(steps) != sorted(steps) or steps[0] <= 0:
-        raise ConfigError("[direwolf] quality_steps: five rising numbers, e.g. 5, 10, 20, 35, 50")
+        raise ConfigError("[agw] quality_steps: five rising numbers, e.g. 5, 10, 20, 35, 50")
     return steps
 
 
@@ -457,34 +463,142 @@ def _check_log_dir(value: str, base: Path) -> Path:
     return log_dir
 
 
-def _load_kiss(cp: configparser.ConfigParser,
-               direwolf: DirewolfCfg) -> tuple[RadioCfg, KissCfg, Ax25Cfg]:
-    """[radio], [kiss], [ax25] - all optional; without them TinyBox uses AGW as before."""
+class _Radio:
+    """CR70: read one value from its new place, else from the old one (with a hint)."""
+
+    def __init__(self, cp: configparser.ConfigParser) -> None:
+        self.cp = cp
+        self.hints: list[str] = []
+        self.sources: dict[str, str] = {}
+
+    def has(self, sec: str, key: str) -> bool:
+        return self.cp.has_option(sec, key)
+
+    def pick(self, places: list[tuple[str, str]], default, kind=str):
+        """First place that is set wins; the later places are the old names."""
+        for i, (sec, key) in enumerate(places):
+            if self.cp.has_option(sec, key):
+                if i:
+                    new = f"[{places[0][0]}] {places[0][1]}"
+                    self.hints.append(f"[{sec}] {key} is the old name - use {new}")
+                return _get(self.cp, sec, key, default, kind)
+        return default
+
+    def old(self, sec: str, key: str, default, kind, now: str, value_now=None):
+        """An old key that now has another owner: still read, as an override."""
+        if not self.cp.has_option(sec, key):
+            return default, False
+        value = _get(self.cp, sec, key, default, kind)
+        same = value_now is not None and value == value_now
+        self.hints.append(f"[{sec}] {key} = {value}: "
+                          + (f"same as {now} - can be removed" if same
+                             else f"overrides {now} - remove it to use that"))
+        return value, True
+
+
+def _load_radio(cp: configparser.ConfigParser, base: Path) -> tuple:
+    """[radio], [agw], [kiss], [ax25] (CR70). Old [direwolf] keys are still read."""
+    from prcore import direwolfconf
+    r = _Radio(cp)
     radio = RadioCfg(interface=_get(cp, "radio", "interface", "agw").strip().lower())
     if radio.interface not in ("agw", "kiss"):
         raise ConfigError(f"[radio] interface: '{radio.interface}' - use agw or kiss")
-    kiss = KissCfg(
-        host=_get(cp, "kiss", "host", "127.0.0.1").strip(),
-        port=_get(cp, "kiss", "port", 8101, int),
-        channel=_get(cp, "kiss", "channel", 0, int),
-        reconnect_sec=_get(cp, "kiss", "reconnect_sec", 5, int),
-        air_baud=_get(cp, "kiss", "air_baud", 1200, int),
-        txdelay_ms=_get(cp, "kiss", "txdelay_ms", 300, int),
-        status_port=_get(cp, "kiss", "status_port", 8102, int),
+
+    # --- AGW: Direwolf; its values come from direwolf.conf ---------------------------
+    dw = None
+    dw_path = _get(cp, "agw", "direwolf_conf", "").strip()
+    if dw_path:
+        p = Path(dw_path.strip('"'))
+        if not p.is_absolute() and not p.exists():
+            p = base / p
+        try:
+            dw = direwolfconf.read(p)
+        except direwolfconf.DirewolfConfError as exc:
+            raise ConfigError(f"[agw] direwolf_conf: {exc}") from None
+    agw_port_default = dw.agw_port if dw and dw.agw_port else 8000
+    agw_port = r.pick([("agw", "port"), ("direwolf", "agw_port")], agw_port_default, int)
+    r.sources["agw_port"] = ("tinybox.conf" if r.has("agw", "port") or r.has("direwolf", "agw_port")
+                             else "direwolf.conf" if dw and dw.agw_port else "default")
+    # paclen / window for AGW: direwolf.conf, then [ax25], old [direwolf] keys win
+    paclen = dw.paclen if dw and dw.paclen else 256     # Direwolf's own default
+    window = (dw.emaxframe or dw.maxframe) if dw else None
+    window = min(7, window) if window else 4
+    r.sources["agw_paclen"] = "direwolf.conf" if dw and dw.paclen else "default"
+    r.sources["agw_window"] = ("direwolf.conf" if dw and (dw.emaxframe or dw.maxframe)
+                               else "default")
+    if radio.interface == "agw":
+        if r.has("ax25", "paclen"):
+            paclen, r.sources["agw_paclen"] = _get(cp, "ax25", "paclen", paclen, int), "[ax25]"
+        if r.has("ax25", "maxframe"):
+            window, r.sources["agw_window"] = _get(cp, "ax25", "maxframe", window, int), "[ax25]"
+    src_now = "direwolf.conf" if dw else "the default"
+    v, ok = r.old("direwolf", "paclen", paclen, int, f"PACLEN from {src_now}", paclen)
+    if ok:
+        paclen, r.sources["agw_paclen"] = v, "[direwolf] paclen"
+    v, ok = r.old("direwolf", "max_outstanding", window, int,
+                  f"EMAXFRAME/MAXFRAME from {src_now}", window)
+    if ok:
+        window, r.sources["agw_window"] = v, "[direwolf] max_outstanding"
+
+    def q(key: str, default, kind=int):
+        return r.pick([("agw", key), ("direwolf", key)], default, kind)
+
+    direwolf = DirewolfCfg(
+        agw_host=r.pick([("agw", "host"), ("direwolf", "agw_host")], "127.0.0.1"),
+        agw_port=agw_port,
+        agw_radio_port=r.pick([("agw", "channel"), ("direwolf", "agw_radio_port")], 0, int),
+        reconnect_sec=q("reconnect_sec", 5),
+        paclen=paclen, max_outstanding=window,
+        quality_poll_sec=q("quality_poll_sec", 30),
+        quality_window_frames=q("quality_window_frames", 50),
+        quality_window_min=q("quality_window_min", 30),
+        quality_min_frames=q("quality_min_frames", 20),
+        quality_steps=_steps(q("quality_steps", "5, 10, 20, 35, 50", str)),
+        direwolf_conf=str(dw.path) if dw else "",
     )
-    _check_port("kiss", "port", kiss.port)
+    _check_port("agw", "port", direwolf.agw_port)
+    _check_range("agw", "paclen (PACLEN / [ax25] paclen)", direwolf.paclen, 32, 256)
+    _check_range("agw", "window (EMAXFRAME / [ax25] maxframe)", direwolf.max_outstanding, 1, 7)
+    _check_range("agw", "channel", direwolf.agw_radio_port, 0, 255)
+    _check_range("agw", "reconnect_sec", direwolf.reconnect_sec, 1, 3600)
+    _check_range("agw", "quality_poll_sec", direwolf.quality_poll_sec, 0, 3600)
+    _check_range("agw", "quality_window_frames", direwolf.quality_window_frames, 5, 1000)
+    _check_range("agw", "quality_window_min", direwolf.quality_window_min, 1, 1440)
+    _check_range("agw", "quality_min_frames", direwolf.quality_min_frames, 1,
+                 direwolf.quality_window_frames)
+
+    # --- KISS: kisshub; its values come from kisshub's status ------------------------
+    port = _get(cp, "kiss", "port", 8101, int)
+    _check_port("kiss", "port", port)
+    fixed: set[str] = set()
+    host, _ = r.old("kiss", "host", "127.0.0.1", str, "the fixed 127.0.0.1", "127.0.0.1")
+    status_port, _ = r.old("kiss", "status_port", port + 1, int, "port + 1", port + 1)
+    channel, _ = r.old("kiss", "channel", 0, int, "the fixed 0", 0)
+    air_baud, ok = r.old("kiss", "air_baud", 1200, int, "the kisshub value")
+    if ok:
+        fixed.add("air_baud")
+    txdelay_ms, ok = r.old("kiss", "txdelay_ms", 300, int, "the kisshub value")
+    if ok:
+        fixed.add("txdelay_sec")
+    kiss = KissCfg(host=host.strip(), port=port, channel=channel,
+                   reconnect_sec=_get(cp, "kiss", "reconnect_sec", 5, int),
+                   air_baud=air_baud, txdelay_ms=txdelay_ms, status_port=status_port)
     _check_range("kiss", "channel", kiss.channel, 0, 15)
     _check_range("kiss", "reconnect_sec", kiss.reconnect_sec, 1, 3600)
     _check_range("kiss", "air_baud", kiss.air_baud, 300, 1_000_000)
-    # only for TinyBox's own airtime estimate (T1); TinyBox never sends KISS parameters -
     # kisshub does, with its own limit. VARA needs ~2700 ms (measured 18.10.2026)
     _check_range("kiss", "txdelay_ms", kiss.txdelay_ms, 0, 10000)
     _check_range("kiss", "status_port", kiss.status_port, 0, 65535)
+
+    # [ax25]: only overrides. Without it the 1200 Bd values until kisshub tells its own.
+    for key in ("paclen", "maxframe", "maxframe_ext", "n2", "t1_min_sec", "t1_max_sec",
+                "t2_sec", "t3_sec"):
+        if r.has("ax25", key):
+            fixed.add(key)
     ax25 = Ax25Cfg(
         version=_get(cp, "ax25", "version", "2.2").strip(),
-        # without [ax25] the AGW values apply, so switching interface changes nothing else
-        paclen=_get(cp, "ax25", "paclen", direwolf.paclen, int),
-        maxframe=_get(cp, "ax25", "maxframe", min(7, direwolf.max_outstanding), int),
+        paclen=_get(cp, "ax25", "paclen", 256, int),
+        maxframe=_get(cp, "ax25", "maxframe", 4, int),
         maxframe_ext=_get(cp, "ax25", "maxframe_ext", 7, int),
         srej=_get(cp, "ax25", "srej", True, bool),
         n2=_get(cp, "ax25", "n2", 10, int),
@@ -505,7 +619,13 @@ def _load_kiss(cp: configparser.ConfigParser,
             raise ConfigError(f"[ax25] {key}: must be between 0 and 3600 seconds")
     if not 0 < ax25.t1_min_sec <= ax25.t1_max_sec:
         raise ConfigError("[ax25] t1_min_sec must be above 0 and not above t1_max_sec")
-    return radio, kiss, ax25
+    if radio.interface == "kiss":
+        r.sources["kiss"] = ("kisshub status" + (f", tinybox.conf: {', '.join(sorted(fixed))}"
+                                                 if fixed else "")
+                             if kiss.status_port > 0 else "tinybox.conf (status_port 0)")
+    if dw:
+        r.sources["direwolf.conf"] = dw.describe(direwolf.agw_radio_port)
+    return direwolf, radio, kiss, ax25, r, frozenset(fixed)
 
 
 def load(path: str | Path) -> Config:
@@ -547,31 +667,7 @@ def load(path: str | Path) -> Config:
                               "(the mailbox call without SSID)")
         station.haddress = haddress
 
-    direwolf = DirewolfCfg(
-        agw_host=_get(cp, "direwolf", "agw_host", "127.0.0.1"),
-        agw_port=_get(cp, "direwolf", "agw_port", 8000, int),
-        agw_radio_port=_get(cp, "direwolf", "agw_radio_port", 0, int),
-        reconnect_sec=_get(cp, "direwolf", "reconnect_sec", 5, int),
-        paclen=_get(cp, "direwolf", "paclen", 128, int),
-        max_outstanding=_get(cp, "direwolf", "max_outstanding", 4, int),
-        quality_poll_sec=_get(cp, "direwolf", "quality_poll_sec", 30, int),
-        quality_window_frames=_get(cp, "direwolf", "quality_window_frames", 50, int),
-        quality_window_min=_get(cp, "direwolf", "quality_window_min", 30, int),
-        quality_min_frames=_get(cp, "direwolf", "quality_min_frames", 20, int),
-        quality_steps=_steps(_get(cp, "direwolf", "quality_steps", "5, 10, 20, 35, 50")),
-    )
-    _check_port("direwolf", "agw_port", direwolf.agw_port)
-    _check_range("direwolf", "paclen", direwolf.paclen, 32, 256)
-    _check_range("direwolf", "max_outstanding", direwolf.max_outstanding, 1, 7)
-    _check_range("direwolf", "agw_radio_port", direwolf.agw_radio_port, 0, 255)
-    _check_range("direwolf", "reconnect_sec", direwolf.reconnect_sec, 1, 3600)
-    _check_range("direwolf", "quality_poll_sec", direwolf.quality_poll_sec, 0, 3600)
-    _check_range("direwolf", "quality_window_frames", direwolf.quality_window_frames, 5, 1000)
-    _check_range("direwolf", "quality_window_min", direwolf.quality_window_min, 1, 1440)
-    _check_range("direwolf", "quality_min_frames", direwolf.quality_min_frames, 1,
-                 direwolf.quality_window_frames)
-
-    radio, kiss, ax25 = _load_kiss(cp, direwolf)
+    direwolf, radio, kiss, ax25, rad, kiss_fixed = _load_radio(cp, path.parent)
 
     mailbox = MailboxCfg(
         welcome_enabled=_get(cp, "mailbox", "welcome_enabled", True, bool),
@@ -708,6 +804,7 @@ def load(path: str | Path) -> Config:
                   telnet=telnet, web=web, console=console, storage=storage, logging=logging_cfg,
                   mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp), rubrics=_load_rubrics(cp),
                   forward=forward, radio=radio, kiss=kiss, ax25=ax25,
+                  sources=rad.sources, hints=rad.hints, kiss_fixed=kiss_fixed,
                   client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)),
                   beacon=_load_beacon(cp))
 

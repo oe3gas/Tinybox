@@ -13,7 +13,7 @@ import dataclasses
 import random
 import unittest
 
-from tinybox import config
+from tinybox import config, logsetup
 from tinybox.adapters import kiss as kissadapter
 from prcore.ax25 import frame as ax
 from prcore import kiss
@@ -334,11 +334,61 @@ class KissConfigTests(unittest.TestCase):
                 cp.write(fh)
             return config.load(p)
 
-    def test_defaults_follow_agw(self):
+    def test_defaults(self):
         cfg = self.load("")
         self.assertEqual(cfg.radio.interface, "agw")
-        self.assertEqual(cfg.ax25.paclen, cfg.direwolf.paclen)
-        self.assertEqual(cfg.ax25.maxframe, min(7, cfg.direwolf.max_outstanding))
+        self.assertEqual((cfg.direwolf.agw_port, cfg.direwolf.paclen,
+                          cfg.direwolf.max_outstanding), (8000, 256, 4))
+        self.assertEqual((cfg.kiss.port, cfg.kiss.status_port, cfg.kiss.host),
+                         (8101, 8102, "127.0.0.1"))
+        self.assertEqual((cfg.hints, cfg.kiss_fixed), ([], frozenset()))
+
+    def test_agw_values_from_direwolf_conf(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "direwolf.conf").write_text(
+                "AGWPORT 8010\nPACLEN 200\nMAXFRAME 3\nEMAXFRAME 6\nMODEM 1200\n",
+                encoding="utf-8")
+            cfg = self.load(f"[agw]\ndirewolf_conf = {d}\nchannel = 1\n")
+            dw = cfg.direwolf
+            self.assertEqual((dw.agw_port, dw.paclen, dw.max_outstanding, dw.agw_radio_port),
+                             (8010, 200, 6, 1))
+            self.assertEqual(cfg.sources["agw_paclen"], "direwolf.conf")
+            # old keys still work - as an override, with a hint at start
+            cfg = self.load(f"[agw]\ndirewolf_conf = {d}\n"
+                            "[direwolf]\nagw_port = 8020\npaclen = 200\nmax_outstanding = 2\n")
+            self.assertEqual((cfg.direwolf.agw_port, cfg.direwolf.max_outstanding), (8020, 2))
+            text = "\n".join(cfg.hints)
+            self.assertIn("old name - use [agw] port", text)
+            self.assertIn("paclen = 200: same as PACLEN", text)
+            self.assertIn("max_outstanding = 2: overrides", text)
+            lines = "\n".join(logsetup.radio_lines(cfg))
+            self.assertIn("paclen 200 ([direwolf] paclen)", lines)
+            with self.assertRaises(config.ConfigError):
+                self.load("[agw]\ndirewolf_conf = /nowhere/at/all\n")
+
+    def test_kiss_old_keys_are_overrides(self):
+        cfg = self.load("[radio]\ninterface = kiss\n[kiss]\nport = 8201\nair_baud = 350\n")
+        self.assertEqual((cfg.kiss.status_port, cfg.kiss.air_baud), (8202, 350))
+        self.assertEqual(cfg.kiss_fixed, frozenset({"air_baud"}))
+        self.assertIn("overrides the kisshub value", cfg.hints[0])
+        self.assertIn("kisshub status", cfg.sources["kiss"])
+
+    def test_values_from_kisshub_status(self):
+        from prcore.kissport import hub_link_cfg
+        cfg = self.load("[radio]\ninterface = kiss\n[ax25]\nt2_sec = 1.0\n")
+        base = kissadapter.link_cfg(cfg)
+        status = {"radio": {"air_baud": 350, "txdelay_ms": 2700,
+                            "ax25": {"paclen": 256, "maxframe": 4, "t1_min_sec": 18.0,
+                                     "t1_max_sec": 90.0, "t2_sec": 0.3}}}
+        lc, changed = hub_link_cfg(base, status, cfg.kiss_fixed)
+        self.assertEqual((lc.air_baud, lc.txdelay_sec, lc.t1_min_sec, lc.t1_max_sec),
+                         (350, 2.7, 18.0, 90.0))
+        self.assertEqual(lc.t2_sec, 1.0)                  # set in tinybox.conf: stays
+        self.assertNotIn("t2_sec", changed)
+        self.assertEqual(hub_link_cfg(lc, status, cfg.kiss_fixed)[1], {})   # nothing new
+        self.assertEqual(hub_link_cfg(base, {"tnc": {}})[1], {})            # old kisshub
 
     def test_kiss_sections(self):
         cfg = self.load("[radio]\ninterface = KISS\n[kiss]\nport = 8100\nair_baud = 9600\n"

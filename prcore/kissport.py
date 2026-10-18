@@ -29,6 +29,7 @@ What each side adds, by overriding the hooks:
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import time
@@ -65,6 +66,13 @@ class KissPort:
         return time.monotonic()
 
     # --- hooks ---------------------------------------------------------------------
+
+    def apply_hub_status(self, status: dict | None,
+                         fixed: frozenset[str] | set[str] = frozenset()) -> dict:
+        """CR70: take kisshub's radio values for links opened from now on.
+        Returns the fields that changed ({} = nothing new)."""
+        self.link_cfg, changed = hub_link_cfg(self.link_cfg, status, fixed)
+        return changed
 
     def on_heard(self, data: bytes, peeked: tuple | None, target: Ax25Link | None) -> None:
         """Every frame heard. peeked: (dest, src, path, repeated) or None if the
@@ -220,6 +228,48 @@ class KissPort:
 
 
 # --- kisshub's status page -----------------------------------------------------------------
+
+# CR70: kisshub owns the radio values; its status ("radio" block) gives them to
+# the stations. LinkCfg field <- key in the radio block / its "ax25" part.
+HUB_AX25_KEYS = ("paclen", "maxframe", "maxframe_ext", "n2", "t1_min_sec", "t1_max_sec",
+                 "t2_sec", "t3_sec")
+
+
+def hub_link_cfg(base: LinkCfg, status: dict | None,
+                 fixed: frozenset[str] | set[str] = frozenset()) -> tuple[LinkCfg, dict]:
+    """The link values with kisshub's radio block applied. `fixed`: LinkCfg fields
+    set in the station's own conf - they stay. Returns (cfg, {field: new value})
+    with only the fields that changed."""
+    radio = (status or {}).get("radio")
+    if not isinstance(radio, dict):
+        return base, {}
+    new: dict = {}
+    if isinstance(radio.get("air_baud"), int) and radio["air_baud"] >= 300:
+        new["air_baud"] = radio["air_baud"]
+    if isinstance(radio.get("txdelay_ms"), (int, float)) and 0 <= radio["txdelay_ms"] <= 10000:
+        new["txdelay_sec"] = radio["txdelay_ms"] / 1000
+    ax25 = radio.get("ax25") if isinstance(radio.get("ax25"), dict) else {}
+    for key in HUB_AX25_KEYS:
+        v = ax25.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+            new[key] = type(getattr(base, key))(v)
+    if "maxframe" in new:
+        new["maxframe"] = min(7, new["maxframe"])
+    changed = {k: v for k, v in new.items() if k not in fixed and getattr(base, k) != v}
+    if not changed:
+        return base, {}
+    cfg = dataclasses.replace(base, **changed)
+    if cfg.t1_min_sec > cfg.t1_max_sec:                # a recommendation with T1 18 s
+        cfg = dataclasses.replace(cfg, t1_max_sec=cfg.t1_min_sec)
+    if "paclen" in changed:
+        cfg = dataclasses.replace(cfg, max_rx_info=max(cfg.max_rx_info, cfg.paclen))
+    return cfg, changed
+
+
+def describe_changes(changed: dict) -> str:
+    def show(k, v):
+        return f"txdelay {round(v * 1000)} ms" if k == "txdelay_sec" else f"{k} {v}"
+    return ", ".join(show(k, v) for k, v in changed.items())
 
 async def fetch_hub_status(host: str, port: int, timeout: float = 3.0) -> dict:
     """GET /status from kisshub (tiny HTTP/1.0, loopback only)."""

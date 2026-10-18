@@ -43,7 +43,7 @@ import time
 from prcore.ax25 import frame as ax
 from prcore.ax25.frame import AX25Error, Frame
 from prcore.ax25.link import Ax25Link, LinkCfg
-from prcore.kissport import KissPort, norm_call, poll_hub
+from prcore.kissport import KissPort, describe_changes, norm_call, poll_hub
 
 from .. import chanmon, framemon, logsetup
 from ..app import App
@@ -279,6 +279,12 @@ class KissAdapter(AgwAdapter):
             self.hub_status = status
             self.hub_status_at = time.monotonic()
             self.hub_error = None
+            changed = self.port.apply_hub_status(status, self.cfg.kiss_fixed)   # CR70
+            if changed:
+                self.link_cfg = self.port.link_cfg
+                src = ((status or {}).get("radio") or {}).get("source") or {}
+                log.info("radio values from kisshub (%s): %s", src.get("air_baud", "?"),
+                         describe_changes(changed))
         else:
             if self.hub_error is None:
                 log.info("kisshub status %s:%d not available (%s)", self.cfg.kiss.host,
