@@ -504,6 +504,58 @@ unverändert und mit Typ 2 zurück? Wie lange dauert ein Typ-2-Burst je Größe 
 Quellen: VARA-Changelog (Help → ChangeLog, zitiert in groups.io VARA-MODEM #7213), Mitschnitt
 VARA Chat (groups.io VARA-MODEM #6336).
 
+## 8d. Messung: VARA FM gegen Direwolf (1200 Bd) über KISS (18.10.2026)
+
+**Aufbau:** PC1 TinyBox (TS-790), PC2 Client (FT-818), kurze Strecke, VHF. Beide Läufe mit
+demselben AX.25-Automaten (TinyBox/Client über kisshub), gemessen von der passiven
+AX.25-Auswertung im kisshub (CR67) auf beiden PCs. Nur das Modem ist verschieden: VARA FM 4.4.0
+(Narrow, KISS-Port 8100, Tunnel) bzw. Direwolf als KISS-TNC (Port 8001, 1200 Bd AFSK).
+
+**Läufe mit VARA FM** (Szenario: Connect, Chatboard laden, Bulletin ~3000 Zeichen senden, Bye):
+
+| | Lauf 1 | Lauf 2 | Lauf 3 |
+|---|---|---|---|
+| AX.25 | 128 B, Fenster 1, T2 1,5 s, T1 10 s | wie 1 | **256 B, Fenster 4, T2 0,3 s, T1 18 s** |
+| Besonderheit | TX-Pegel TS-790 zu niedrig | Pegel korrigiert | dazu VARA-Monitor |
+| Verluste TinyBox → Client | 9 von 61 (15 %) | 0 | 0 |
+| Wiederholungen | 2 | 0 | 0 |
+| Polls Client / TinyBox | 5 / 6 | 2 / 2 | 3 / 2 |
+| Dauer der Verbindung | 790 s | 386 s | **208 s** |
+| Rate über die Verbindung | 6,4 B/s | 11,4 B/s | **21,2 B/s** |
+
+**VARA-Monitor (Lauf 3):** Aufwand je Burst 2,2 s (PC2) bzw. 3,2 s (PC1), Rate im Burst nur
+**370 bzw. 280 bit/s** – VARA wählt die Stufe nach der KISS-Framegröße, Frames um 256 Byte gehen
+in der langsamsten Stufe. VARA **bündelt** schnell aufeinander folgende KISS-Frames (2,4–3 Frames je
+Burst). S/N wird jedem empfangenen Frame zugeordnet (VARA FM meldet `SN` auch im KISS-Betrieb, Bezug
+2500 Hz): 29,1 dB vom FT-818, 13,2 dB vom TS-790. `PENDING`/`CANCELPENDING` kommen auch im
+KISS-Betrieb (ca. alle 2 s während der eigenen Sendephasen) – keine ARQ-Meldung.
+
+**Vergleich mit gleichen AX.25-Werten (Lauf 3 = VARA, Lauf 4 = Direwolf):**
+
+| | VARA FM | Direwolf 1200 Bd |
+|---|---|---|
+| Verbindungsaufbau | 6,5 s | 1,3 s |
+| Rate über die Verbindung | 21,2 B/s | **39,7 B/s** |
+| Ein Hin und Her (Antwortabstand der Gegenseite) | 5,5–6,1 s | **2,2–3,2 s** |
+| Quittung eines vollen Fensters (4 × 256 B) | 28,2 s | **7,9 s** |
+| Verlorene Frames (je Richtung) | **0 / 0** | 2 von 44 / 2 von 39 |
+| Wiederholungen / SREJ | **0 / 0** | 2 / 1 |
+
+**Bewertung:** Auf einer kurzen, starken Strecke ist 1200-Bd-AFSK über KISS rund **doppelt so
+schnell** wie VARA FM über KISS. Grund ist nicht die Funkstrecke, sondern wie VARA KISS-Verkehr
+sendet: 2–3 s Aufwand je Burst und die langsamste Stufe für kleine Frames. VARA war dafür
+**verlustfrei**, auch auf der schwächeren Richtung (~13 dB). Der Vorteil von VARA ist bei
+schwachen Signalen zu erwarten (eigener Test mit reduzierter Leistung offen).
+
+**Folgerungen:**
+- Für VARA in TinyBox/Client und kisshub `[kiss] air_baud = 350`, `txdelay_ms = 2700` (gemessen),
+  sonst startet T1 zu früh (unnötige Polls); T1-Untergrenze ≥ 18 s; T2 0,3 s; Fenster 4, 256 B.
+- kisshub `[kiss] max_lead_ms = 12000` bei VARA, damit ein ganzes Fenster auf einmal an VARA geht.
+- **Bündelung im Tunnel** (kisshub 2026.10.18.5, `[tnc] vara_bundle_ms`): mehrere AX.25-Frames
+  als **ein** Typ-2-Rahmen (`AB` + je 2 Byte Länge + Frame, bis `vara_bundle_max` Byte) – VARA soll
+  so größere Rahmen sehen und eine schnellere Stufe wählen. Einzelne Frames weiter als `AX` +
+  Frame. Beide Stationen brauchen die neue Version. Offen: Funktest (Lauf 5).
+
 ## 9. Risiken
 
 - **Layer-2-Automat ist der Hauptaufwand**, v2.2 mit SREJ und XID deutlich

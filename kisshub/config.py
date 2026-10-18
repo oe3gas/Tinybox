@@ -66,7 +66,16 @@ def load(path: str | Path) -> Config:
     tunnel = get("tnc", "vara_tunnel", profile.tunnel).lower()
     if tunnel not in TUNNEL_MODES:
         raise ConfigError(f"[tnc] vara_tunnel: use {', '.join(TUNNEL_MODES)}")
-    profile = dataclasses.replace(profile, exit_kiss=exit_kiss, tunnel=tunnel)
+    bundle_ms = get("tnc", "vara_bundle_ms", profile.bundle_ms, int)
+    bundle_max = get("tnc", "vara_bundle_max", profile.bundle_max, int)
+    if not 0 <= bundle_ms <= 2000:
+        raise ConfigError("[tnc] vara_bundle_ms: 0 (off) .. 2000")
+    if not 100 <= bundle_max <= 5000:
+        raise ConfigError("[tnc] vara_bundle_max: 100 .. 5000 (VARA's limit)")
+    if bundle_ms and tunnel == "no":
+        raise ConfigError("[tnc] vara_bundle_ms: only with the VARA tunnel (vara_tunnel)")
+    profile = dataclasses.replace(profile, exit_kiss=exit_kiss, tunnel=tunnel,
+                                  bundle_ms=bundle_ms, bundle_max=bundle_max)
 
     transport = get("tnc", "transport", "serial").lower()
     if transport not in ("serial", "tcp"):

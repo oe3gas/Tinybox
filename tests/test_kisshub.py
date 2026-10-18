@@ -17,7 +17,7 @@ from pathlib import Path
 from kisshub import config as hubconfig
 from kisshub import profiles
 from kisshub.hub import PRIO_CONTROL, PRIO_I, PRIO_UI, Hub, HubCfg, priority
-from kisshub.tnc import TUNNEL_MAGIC, Tnc, is_ui
+from kisshub.tnc import BUNDLE_MAGIC, TUNNEL_MAGIC, Tnc, is_ui, pack_bundle, unpack_bundle
 from kisshub.transport import TcpTransport
 from prcore.ax25 import frame as ax
 from prcore import kiss
@@ -464,6 +464,36 @@ class VaraTunnelTests(HubTestBase):
         st = self.hub.tnc.status()
         self.assertEqual((st["tunnel"], st["tunnel_tx"], st["tunnel_rx"], st["echoes"],
                           st["foreign"]), ("connected", 1, 1, 1, 1))
+
+    async def test_bundling(self):
+        vara = FakeVara()
+        self.profile = dataclasses.replace(profiles.VARA_FM, bundle_ms=100, bundle_max=250)
+        await self.start_hub(vara, max_lead_sec=60)
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        w, got = await self.client()
+        frames = [ax.i_frame("OE3GAS-1", "OE3GAS", n, 0, bytes([65 + n]) * 60,
+                             modulo=128).encode() for n in range(4)]
+        ui = ax.ui_frame("TEST", "OE3GAS", b"stays type 0").encode()
+        for f in frames:
+            self.hub.enqueue(f)
+        self.hub.enqueue(ui)
+        await self.wait(lambda: len(vara.type2) == 2 and vara.type0)
+        # 4 x (2 + 77) bytes: three fit into 250, the fourth goes alone
+        self.assertEqual(unpack_bundle(vara.type2[0]), frames[:3])
+        self.assertEqual(vara.type2[1], TUNNEL_MAGIC + frames[3])
+        self.assertEqual(vara.type0, [ui])
+        st = self.hub.tnc.status()
+        self.assertEqual((st["bundles_tx"], st["bundled_tx"], st["tunnel_tx"]), (1, 3, 4))
+        # the other station's bundle is unpacked into single frames for the clients
+        answers = [ax.s_frame("RR", "OE3GAS", "OE3GAS-1", n, modulo=128).encode()
+                   for n in (1, 2)]
+        vara.out(2, pack_bundle(answers))
+        vara.out(2, BUNDLE_MAGIC + b"\x00\x40broken")
+        await self.wait(lambda: len(got) >= 2)
+        await asyncio.sleep(0.05)
+        self.assertEqual(got[-2:], answers)
+        st = self.hub.tnc.status()
+        self.assertEqual((st["bundles_rx"], st["bundled_rx"], st["foreign"]), (1, 2, 1))
 
     async def test_all_and_no(self):
         vara = FakeVara()

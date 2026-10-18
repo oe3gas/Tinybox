@@ -36,6 +36,30 @@ PARAM_NAMES = {kiss.CMD_TXDELAY: "TXDELAY", kiss.CMD_P: "PERSIST",
 # VARA tunnel (profiles.VARA_FM): KISS frame type 2 = "Generic Data" in VARA
 VARA_GENERIC = 0x02
 TUNNEL_MAGIC = b"AX"           # marks our tunnelled AX.25 frames among other type-2 data
+BUNDLE_MAGIC = b"AB"           # several AX.25 frames in one type-2 frame (2-byte length each)
+
+
+def pack_bundle(frames: list[bytes]) -> bytes:
+    """One type-2 payload: a single frame as TUNNEL_MAGIC + frame (readable for
+    an older kisshub), several as BUNDLE_MAGIC + (length hi, lo, frame)..."""
+    if len(frames) == 1:
+        return TUNNEL_MAGIC + frames[0]
+    return BUNDLE_MAGIC + b"".join(len(f).to_bytes(2, "big") + f for f in frames)
+
+
+def unpack_bundle(data: bytes) -> list[bytes] | None:
+    """The AX.25 frames of a BUNDLE_MAGIC payload; None if it is damaged."""
+    frames, pos = [], len(BUNDLE_MAGIC)
+    while pos < len(data):
+        if pos + 2 > len(data):
+            return None
+        n = int.from_bytes(data[pos:pos + 2], "big")
+        f = data[pos + 2:pos + 2 + n]
+        if n < 15 or len(f) != n:
+            return None
+        frames.append(f)
+        pos += 2 + n
+    return frames or None
 ECHO_SEC = 30.0                # a frame VARA hands back within this time is our own
 
 
@@ -119,6 +143,12 @@ class Tnc:
         self.foreign = 0                             # type-2 data that is not ours (VarAC ...)
         self.echoes = 0                              # own frames handed back by the modem
         self._sent: deque[tuple[float, bytes]] = deque()   # (time, AX.25) for the echo check
+        # bundling (profile.bundle_ms > 0): frames waiting to go as one type-2 frame
+        self._bundle: list[bytes] = []
+        self._bundle_bytes = 0
+        self._bundle_timer: asyncio.TimerHandle | None = None
+        self.bundles_tx = self.bundles_rx = 0        # type-2 frames with more than 1 frame
+        self.bundled_tx = self.bundled_rx = 0        # AX.25 frames that went in a bundle
 
     def describe(self) -> str:
         return f"{self.profile.name} on {self.transport.describe()}"
@@ -166,6 +196,11 @@ class Tnc:
                     log.info("VARA tunnel %s: %s through KISS type 2, no KISS parameters sent",
                              self.profile.tunnel, "all frames" if self.profile.tunnel == "all"
                              else "connected-mode frames (UI as type 0)")
+                    if self.profile.bundle_ms:
+                        log.info("VARA tunnel bundling: frames within %d ms go as one type-2 "
+                                 "frame (max %d bytes) - the other station needs kisshub "
+                                 "2026.10.18.5 or newer", self.profile.bundle_ms,
+                                 self.profile.bundle_max)
                 await reader                             # until the port is lost
             except TncError as exc:
                 log.error("TNC init failed: %s", exc)
@@ -204,6 +239,12 @@ class Tnc:
                     elif cmd == VARA_GENERIC and port == 0 and self.profile.tunnel != "no":
                         if frame.startswith(TUNNEL_MAGIC) and len(frame) >= len(TUNNEL_MAGIC) + 15:
                             self._received(0, frame[len(TUNNEL_MAGIC):], tunnelled=True)
+                        elif frame.startswith(BUNDLE_MAGIC) and \
+                                (inner := unpack_bundle(frame)) is not None:
+                            self.bundles_rx += 1
+                            self.bundled_rx += len(inner)
+                            for f in inner:
+                                self._received(0, f, tunnelled=True)
                         else:
                             self.foreign += 1
                             log.debug("type-2 data that is not ours (%d bytes) ignored", len(frame))
@@ -299,6 +340,9 @@ class Tnc:
                 "rx_frames": self.rx_frames, "tx_frames": self.tx_frames,
                 "tunnel": self.profile.tunnel, "tunnel_tx": self.tunnel_tx,
                 "tunnel_rx": self.tunnel_rx, "foreign": self.foreign, "echoes": self.echoes,
+                "bundle_ms": self.profile.bundle_ms, "bundles_tx": self.bundles_tx,
+                "bundles_rx": self.bundles_rx, "bundled_tx": self.bundled_tx,
+                "bundled_rx": self.bundled_rx,
                 "init_log": list(self.init_log)[-20:]}
 
     def _send_params(self) -> None:
@@ -336,7 +380,10 @@ class Tnc:
         take as KISS type 0 go as type 2 (TUNNEL_MAGIC + frame)."""
         t = self.profile.tunnel
         if t == "all" or (t == "connected" and not is_ui(ax25)):
-            ok = self.send(kiss.encode(TUNNEL_MAGIC + ax25, 0, VARA_GENERIC), ax25)
+            if self.profile.bundle_ms > 0:
+                ok = self._add_to_bundle(ax25)
+            else:
+                ok = self.send(kiss.encode(TUNNEL_MAGIC + ax25, 0, VARA_GENERIC), ax25)
             if ok:
                 self.tunnel_tx += 1
         else:
@@ -347,9 +394,41 @@ class Tnc:
                 self._sent.popleft()
         return ok
 
+    def _add_to_bundle(self, ax25: bytes) -> bool:
+        """Collect a tunnelled frame; the bundle goes after bundle_ms, or at once
+        when the next frame would make it bigger than bundle_max."""
+        if self.state != "kiss":
+            return False
+        if self._bundle and self._bundle_bytes + 2 + len(ax25) > self.profile.bundle_max:
+            self.flush_bundle()
+        self._bundle.append(ax25)
+        self._bundle_bytes += 2 + len(ax25)
+        if self._bundle_timer is None:
+            self._bundle_timer = asyncio.get_running_loop().call_later(
+                self.profile.bundle_ms / 1000, self.flush_bundle)
+        return True
+
+    def flush_bundle(self) -> None:
+        if self._bundle_timer is not None:
+            self._bundle_timer.cancel()
+            self._bundle_timer = None
+        frames, self._bundle, self._bundle_bytes = self._bundle, [], 0
+        if not frames:
+            return
+        what = summary(frames[0]) + (f" +{len(frames) - 1} in bundle" if len(frames) > 1 else "")
+        if self.state != "kiss":
+            log.debug("bundle of %d frames dropped: TNC not in KISS", len(frames))
+            return
+        self._write(kiss.encode(pack_bundle(frames), 0, VARA_GENERIC), what)
+        self.tx_frames += 1
+        if len(frames) > 1:
+            self.bundles_tx += 1
+            self.bundled_tx += len(frames)
+
     async def stop(self) -> None:
         """Leave KISS (if the profile wants that) and close the port."""
         self._stopping = True
+        self.flush_bundle()
         if self.state == "kiss" and self.profile.exit_kiss:
             log.info("leaving KISS mode")
             self.state = "init"

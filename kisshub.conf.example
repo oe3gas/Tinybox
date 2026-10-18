@@ -16,6 +16,10 @@ exit_kiss_on_stop = yes    ; on Ctrl+C: leave KISS, so pk232py / a terminal find
 ; VARA takes only UI frames as KISS type 0; connected mode goes through VARA's
 ; type 2 ("Generic Data") - the station on the other side needs kisshub too.
 ; vara_tunnel = connected  ; no | connected (UI stays type 0) | all
+; vara_bundle_ms = 0       ; >0: tunnelled frames within this time go as ONE type-2 frame
+;                          ; (experiment; both stations need kisshub 2026.10.18.5+), e.g. 300
+; vara_bundle_max = 4000   ; bytes per bundle (VARA takes up to 5000)
+; With VARA also: [kiss] air_baud = 350, txdelay_ms = 2700, max_lead_ms = 12000 (measured)
 ; [kiss] send_params must stay "no": VARA would send KISS commands 1/2 on the air
 ; init_lines = AWLEN 8 | PARITY 0 | RESTART | ... | KISS ON | HOST ON
 ;              replaces the profile's init; the last line enters KISS

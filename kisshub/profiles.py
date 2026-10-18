@@ -73,6 +73,9 @@ class Profile:
     display: str = ""                  # name for status displays, e.g. "PK-232"
     kiss_params: bool = True           # send TXDELAY/P/SlotTime ([kiss] send_params default)
     tunnel: str = "no"                 # VARA: no | connected | all (see VARA_FM)
+    bundle_ms: int = 0                 # VARA tunnel: collect frames this long into one
+                                       # type-2 frame (0 = off) - see VARA_FM
+    bundle_max: int = 4000             # bytes per bundle (VARA takes up to 5000)
 
 
 PK232 = Profile(
@@ -147,6 +150,12 @@ GENERIC = Profile(name="generic", display="KISS TNC", exit_kiss=False, notes="al
 #   tunnel = connected   UI frames as normal type 0 (readable for any VARA KISS
 #                        user), everything else through type 2
 #   tunnel = all         every frame through type 2
+# Bundling (vara_bundle_ms > 0, experiment 18.10.2026): VARA picks its speed
+# level by the size of the KISS frame and sends small frames in the slowest
+# level. kisshub collects the tunnelled frames that arrive within bundle_ms and
+# sends them as ONE type-2 frame: BUNDLE_MAGIC + (2-byte length + AX.25 frame)...
+# A single frame still goes as TUNNEL_MAGIC + frame. Needs kisshub 2026.10.18.5
+# or newer on both stations.
 VARA_FM = Profile(name="vara-fm", display="VARA FM", exit_kiss=False, kiss_params=False,
                   tunnel="connected", settle_sec=0.2,
                   notes="VARA FM KISS-TCP (port 8100), connected mode tunnelled in type 2")
