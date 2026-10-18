@@ -8,6 +8,10 @@
     LOG TRACE [ON|OFF]    every byte to and from the TNC in hex, frames with calls
     LOG OFF               debug and trace off
     PARAMS                the KISS parameters
+    L / LINKS             AX.25 links: retransmissions, REJ, polls, ack times, answer
+                          gaps, goodput (CR67) - running and the last finished ones
+    V / VARA              what VARA reports on its command port (bursts, busy, SN)
+    STATIONS              stations heard (frames, SN)
     TXDELAY ms            change at once, without leaving KISS (also PERSIST n,
     PERSIST n             SLOTTIME ms, TXTAIL ms); kept until kisshub stops -
     SLOTTIME ms           put the value into kisshub.conf to keep it
@@ -41,6 +45,9 @@ HELP = """kisshub console:
   LOG TRACE [ON|OFF]   every byte to/from the TNC in hex
   LOG OFF              debug and trace off
   PARAMS               KISS parameters
+  L / LINKS            AX.25 link quality (running + last finished)
+  V / VARA             VARA command port: bursts, waiting, busy, SN
+  STATIONS             stations heard, with SN
   TXDELAY ms | PERSIST n | SLOTTIME ms | TXTAIL ms
                        change at once (stays until kisshub stops;
                        put it into kisshub.conf to keep it)
@@ -112,6 +119,14 @@ class Console:
                 self.cmd_log(arg)
             elif word == "PARAMS":
                 self.cmd_params()
+            elif word in ("L", "LINKS"):
+                self.out("\n".join(self.hub.stats.lines(self.hub.now())))
+            elif word in ("V", "VARA"):
+                v = self.hub.vara
+                self.out("\n".join(v.lines_text(self.hub.now())) if v is not None
+                         else "VARA monitor off ([vara] monitor = yes in kisshub.conf)")
+            elif word == "STATIONS":
+                self.cmd_stations()
             elif word in PARAMS:
                 self.cmd_set(word, arg)
             else:
@@ -119,6 +134,17 @@ class Console:
         except Exception as exc:                     # a typo must never stop the hub
             log.exception("console command failed")
             self.out(f"error: {exc}")
+
+    def cmd_stations(self) -> None:
+        st = self.hub.stats.status(self.hub.now())["stations"]
+        if not st:
+            self.out("no stations heard yet")
+            return
+        for call, h in st.items():
+            sn = h["sn_db"]
+            self.out(f"{call:<10} {h['frames']:>5} frames {h['bytes']:>7} B  last "
+                     f"{time.strftime('%H:%M:%S', time.localtime(h['last']))}"
+                     + (f"  SN {sn['avg']} dB ({sn['min']}..{sn['max']}, n={sn['n']})" if sn else ""))
 
     def cmd_log(self, arg: str) -> None:
         sub, _, rest = arg.partition(" ")

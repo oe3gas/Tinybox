@@ -1759,7 +1759,7 @@ für den Test von VARA FM als KISS-TNC über kisshub („Wrong KISS frame“ bei
 - API `POST /api/ui {"dest", "via", "text"}`, `ClientCore.send_ui()`, Prüfung in `ui_request()`.
 - Tests `tests/test_tbclient_ui.py`. Client-Version 2026.10.17.8.
 
-## CR67 – VARA-Monitoring im kisshub: Werte aus 8300, 8100 und passive AX.25-Auswertung (offen, 18.10.2026)
+## CR67 – VARA-Monitoring im kisshub: Werte aus 8300, 8100 und passive AX.25-Auswertung (kisshub-Teil umgesetzt 18.10.2026, Anzeige in TinyBox/Client offen)
 
 ### Erfassung (OE3GAS, 18.10.2026)
 
@@ -1864,3 +1864,35 @@ kisshub-Log mit `LOG TRACE`. Danach Formate festlegen, Parser schreiben, Teil A�
 3. Kommen `PTT`, `BUSY`, `BITRATE` auch für KISS-Verkehr?
 4. Exakte Formate von `SN`, `BITRATE` in VARA selbst.
 5. Was schreibt `VARAFM.log` im KISS-Betrieb?
+
+### Umsetzung im kisshub (18.10.2026, kisshub 2026.10.18.2)
+
+Tunnel-Funktest vorher erfolgreich: vollwertiges AX.25 (v2.2) zwischen TinyBox und Client über
+VARA FM, 1200 Bd. Auffällig: lange Pausen zwischen den Sendungen der beiden Stationen.
+
+- **`kisshub/linkstats.py` (Teil B + C, für jeden TNC – PK-232 genauso wie VARA):** je
+  Stationspaar Aufbau (Versuche, Dauer, v2.0/2.2, abgelehnt), je Richtung I-Frames, neue Bytes,
+  Wiederholungen (gleiche N(S) mit gleichem Inhalt vor der Quittung) mit Quote, RR/RNR/REJ/SREJ,
+  Polls (S-Kommando mit P=1 ≈ abgelaufener T1), **Quittungszeit** (I-Frame bis zur Quittung, nur
+  einmal gesendete – Karn), **Antwortabstand** (Frame von X nach dem letzten Frame von Y – die
+  „langen Pausen“), Goodput, Effizienz (neue Nutzbytes / alle Bytes), geschätzte Sendezeit;
+  gehörte Stationen, Framegrößen-Klassen, Minutenzähler, unlesbare Frames. Zeitpunkte: tx = an den
+  TNC übergeben, rx = vom TNC geliefert – für PK-232 und VARA gleich gemessen, also vergleichbar.
+- **`kisshub/varamon.py` (Teil A):** `[vara] monitor = yes` – zweite Verbindung zum Befehlsport,
+  **sendet nichts**. Wertet `PTT ON/OFF` (Burst-Dauer, Wartezeit von der Übergabe bis PTT, daraus
+  Ausgleichsgerade Aufwand je Burst + Rate), `BUSY ON/OFF` (Anteil 10/60 min), `SN` (dem Frame
+  zugeordnet, der im Fenster `sn_window_ms` ankommt → SN je Station und je Link-Richtung),
+  `BITRATE`, `IAMALIVE`, `VERSION`, `MISSING SOUNDCARD` aus; Alarme: PTT länger als 60 s, 180 s
+  nichts von VARA, Soundkarte weg; ARQ-Meldungen werden gewarnt, Lizenzzeilen nur geloggt,
+  unbekannte Zeilen roh geloggt.
+- **Links-Datei** `[log] links_file = kisshub-links.jsonl`: je beendeter Verbindung eine
+  JSON-Zeile mit TNC-Profil, Tunnel, air_baud, txdelay, VARA-Messwerten und allen Kennzahlen –
+  gleiche Sitzung über PK-232 und über VARA fahren und vergleichen. Beim Ende einer Verbindung
+  zusätzlich eine Zusammenfassung im kisshub-Log.
+- **Status** `GET /status`: neue Blöcke `quality` (laufende + letzte 5 Verbindungen, Stationen,
+  Größen, letzte 10 min) und `vara`.
+- **Konsole:** `L`/`LINKS`, `V`/`VARA`, `STATIONS`.
+- Tests `tests/test_kisshub_quality.py`.
+
+Offen: Anzeige in TinyBox-Web-GUI und Client, `/events`-Datenstrom, VARA-Logdatei (Teil D).
+

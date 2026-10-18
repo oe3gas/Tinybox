@@ -43,7 +43,9 @@ from dataclasses import dataclass, field
 
 from prcore import kiss
 
+from .linkstats import LinkStats, describe
 from .tnc import Tnc
+from .varamon import VaraMonitor
 
 log = logging.getLogger(__name__)
 
@@ -112,6 +114,11 @@ class HubCfg:
     status_every_sec: float = 600
     status_port: int = 8102          # 0 = no status query
     stale_sec: float = 30.0
+    links_file: str = ""             # CR67: one JSON line per finished AX.25 link ("" = off)
+    vara_monitor: bool = False       # CR67: listen on VARA's command port (read only)
+    vara_host: str = "127.0.0.1"
+    vara_cmd_port: int = 8300
+    sn_window_sec: float = 1.5       # VARA's SN line and the received frame belong together
 
 
 class Hub:
@@ -131,6 +138,13 @@ class Hub:
         self._tasks: list[asyncio.Task] = []
         self.dropped = 0
         self._names = itertools.count(1)
+        # CR67: link quality from the frames passing the hub, VARA's own reports
+        self.stats = LinkStats(airtime=self.airtime, on_closed=self._link_closed,
+                               sn_window_sec=cfg.sn_window_sec)
+        self.vara: VaraMonitor | None = None
+        if cfg.vara_monitor:
+            self.vara = VaraMonitor(cfg.vara_host, cfg.vara_cmd_port, clock=self.now,
+                                    on_sn=self.stats.sn)
 
     @property
     def port(self) -> int:
@@ -155,7 +169,12 @@ class Hub:
             log.info("status query on http://127.0.0.1:%d/status", self.status_port)
         self._tasks = [asyncio.create_task(self.tnc.run()),
                        asyncio.create_task(self._sender()),
-                       asyncio.create_task(self._status())]
+                       asyncio.create_task(self._status()),
+                       asyncio.create_task(self._tick())]
+        if self.vara is not None:
+            self._tasks.append(asyncio.create_task(self.vara.run()))
+        if self.cfg.links_file:
+            log.info("finished AX.25 links are written to %s", self.cfg.links_file)
 
     async def run(self) -> None:
         await self.start()
@@ -173,6 +192,7 @@ class Hub:
             self._server.close()
         for w in list(self.clients):
             w.close()
+        self.stats.close_all()                          # open links into the links file
         try:
             await self.tnc.stop()
         finally:
@@ -220,6 +240,7 @@ class Hub:
     def _from_tnc(self, port: int, frame: bytes) -> None:
         self._to_clients(port, frame)
         now = self.now()
+        self.stats.frame(frame, now, tx=False)           # CR67
         if self._busy_until > now:                       # it could not send meanwhile
             self._busy_until += self.airtime(len(frame))
 
@@ -253,6 +274,9 @@ class Hub:
                 self.dropped += 1
                 continue
             self._waits.append((now, prio, now - queued))
+            self.stats.frame(frame, now, tx=True)        # CR67: on the air (soon)
+            if self.vara is not None:
+                self.vara.handed(len(frame), now)
             while self._waits and self._waits[0][0] < now - WAIT_KEEP_SEC:
                 self._waits.popleft()
             air = self.airtime(len(frame))
@@ -263,6 +287,33 @@ class Hub:
             else:
                 self._busy_until += air - self.cfg.txdelay_sec
             self._to_clients(port, frame, skip=origin)    # the others "hear" it
+
+    # --- link quality (CR67) ------------------------------------------------------------------
+
+    async def _tick(self) -> None:
+        while True:
+            await asyncio.sleep(5)
+            now = self.now()
+            self.stats.tick(now)
+            if self.vara is not None:
+                self.vara.tick(now)
+
+    def _link_closed(self, rec: dict) -> None:
+        """A link ended: log it, and one JSON line into the links file - the same
+        line for PK-232 (HDLC) and VARA, so runs can be compared side by side."""
+        log.info("link ended: %s", describe(rec))
+        if not self.cfg.links_file:
+            return
+        from . import VERSION
+        p = self.tnc.profile
+        line = {"ended": time.time(), "kisshub": VERSION, "tnc": p.name, "tunnel": p.tunnel,
+                "air_baud": self.cfg.air_baud, "txdelay_ms": round(self.cfg.txdelay_sec * 1000),
+                "vara_fit": self.vara.burst_fit() if self.vara is not None else None, **rec}
+        try:
+            with open(self.cfg.links_file, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(line, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            log.warning("links file %s: %s", self.cfg.links_file, exc)
 
     # --- status ------------------------------------------------------------------------------
 
@@ -283,6 +334,8 @@ class Hub:
             "version": VERSION, "started": self.started, "now": time.time(),
             "kiss_port": self.port, "air_baud": self.cfg.air_baud,
             "tnc": self.tnc.status(),
+            "quality": self.stats.status(now),                       # CR67 B + C
+            "vara": self.vara.status(now) if self.vara is not None else None,   # CR67 A
             "queue": {"queued": queued, "wait_10min": waits, "dropped": self.dropped,
                       "backlog_ms": max(0, round((self._busy_until - now) * 1000)),
                       "max_lead_ms": round(self.cfg.max_lead_sec * 1000)},

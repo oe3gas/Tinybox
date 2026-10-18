@@ -39,3 +39,15 @@ level = INFO               ; DEBUG shows every byte of the TNC dialog
 file  =                    ; e.g. kisshub.log
 trace = no                 ; yes: every byte to/from the TNC in hex (console: LOG TRACE)
 status_every_sec = 600
+links_file = kisshub-links.jsonl   ; CR67: one JSON line per finished AX.25 link (quality),
+                           ; the same for PK-232 and VARA - compare runs; empty = off
+
+[vara]                     ; only with profile vara-fm / vara-hf (CR67)
+monitor  = no              ; yes: listen on VARA's command port - read only, sends nothing.
+                           ; Gives real PTT times per burst, waiting before PTT, BUSY share,
+                           ; SN per received frame. FIRST TIME WITH SOMEBODY AT THE RADIO:
+                           ; older VARA versions left the PTT keyed with KISS + command port.
+; host   = 127.0.0.1       ; default: [tnc] host
+cmd_port = 8300            ; VARA Setup "Command"
+sn_window_ms = 1500        ; an SN line belongs to a frame received this close to it
+

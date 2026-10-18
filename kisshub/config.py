@@ -103,11 +103,20 @@ def load(path: str | Path) -> Config:
                  txdelay_sec=txdelay_ms / 1000,
                  max_lead_sec=get("kiss", "max_lead_ms", 1500, int) / 1000,
                  status_every_sec=get("log", "status_every_sec", 600, int),
-                 status_port=get("server", "status_port", 8102, int))
+                 status_port=get("server", "status_port", 8102, int),
+                 links_file=get("log", "links_file", "kisshub-links.jsonl"),
+                 vara_monitor=get("vara", "monitor", False, bool),
+                 vara_host=get("vara", "host", get("tnc", "host", "127.0.0.1")),
+                 vara_cmd_port=get("vara", "cmd_port", 8300, int),
+                 sn_window_sec=get("vara", "sn_window_ms", 1500, int) / 1000)
     if not 1 <= hub.port <= 65535:
         raise ConfigError("[server] port: 1..65535")
     if not 0 <= hub.status_port <= 65535:
         raise ConfigError("[server] status_port: 0 (off) or 1..65535")
+    if hub.vara_monitor and not profile.name.startswith("vara"):
+        raise ConfigError("[vara] monitor: only with profile vara-fm or vara-hf")
+    if not 1 <= hub.vara_cmd_port <= 65535:
+        raise ConfigError("[vara] cmd_port: 1..65535")
     if hub.air_baud < 300:
         raise ConfigError("[kiss] air_baud: at least 300")
     return Config(tnc=tnc, hub=hub, log_level=get("log", "level", "INFO").upper(),
