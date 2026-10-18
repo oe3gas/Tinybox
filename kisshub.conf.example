@@ -3,10 +3,16 @@
 ; CR70: this is the ONE place for the radio values (bit rate, TXDELAY, AX.25 recommendation).
 ; TinyBox and the client read them from kisshub's status query - nothing to copy there.
 ; Example configurations: MANUAL.md section 2.4
+;
+; ONE FILE FOR ALL TNCs: start with -p to pick the profile, e.g.
+;   kisshub.bat -p pk232      kisshub.bat -p vara-fm      kisshub.bat -p direwolf
+; -p overrides [tnc] profile. [<section>.<profile>] (e.g. [kiss.pk232] or
+; [tnc.vara-fm]) overrides a section for that profile only, {profile} in the
+; [log] file names becomes the profile name. kisshub -h (or -?) shows the help.
 
 [tnc]
-profile   = pk232          ; pk232 | tm-d710 | th-d74 | th-d75 | tnc2-kiss | generic
-                           ; | vara-fm | vara-hf | direwolf (see below)
+profile   = pk232          ; default when started without -p: pk232 | tm-d710 | th-d74 |
+                           ; th-d75 | tnc2-kiss | generic | vara-fm | vara-hf | direwolf
 ; transport = serial       ; serial | tcp - default: tcp for vara-* / direwolf, else serial
 device    = COM3           ; serial only: Windows COM3, Raspberry Pi /dev/ttyUSB0
 serial_baud = 9600         ; PC <-> TNC (PK-232: its TBAUD; 9600 as pk232py uses it)
@@ -19,7 +25,7 @@ exit_kiss_on_stop = yes    ; on Ctrl+C: leave KISS, so pk232py / a terminal find
 ;
 ; profile = direwolf: Direwolf's KISS port. kisshub reads KISSPORT, MODEM, TXDELAY,
 ; PACLEN, MAXFRAME, EMAXFRAME from direwolf.conf (a folder or the file itself):
-; direwolf_conf = E:\direwolf
+direwolf_conf = C:\direwolf ; only used by profile direwolf
 ;
 ; profile = vara-fm / vara-hf (docs/kiss-mode-konzept.md 8c/8d): VARA Setup
 ; "KISS interface" on (port 8100). VARA takes only UI frames as KISS type 0;
@@ -51,17 +57,25 @@ port   = 8101              ; not 8001: that is Direwolf's KISS port
 
 [log]
 level = INFO               ; DEBUG shows every byte of the TNC dialog
-file  =                    ; e.g. kisshub.log (the start lines say where the log goes)
+file  = kisshub-{profile}.log   ; empty = console only; {profile} = the profile name,
+                           ; so every TNC gets its own log (the start lines name it)
 trace = no                 ; yes: every byte to/from the TNC in hex (console: LOG TRACE)
 status_every_sec = 600
-links_file = kisshub-links.jsonl   ; CR67: one JSON line per finished AX.25 link (quality),
+links_file = kisshub-links-{profile}.jsonl ; CR67: one JSON line per finished AX.25 link,
                            ; the same for PK-232 and VARA - compare runs; empty = off
 
 [vara]                     ; only with profile vara-fm / vara-hf (CR67)
 monitor  = no              ; yes: listen on VARA's command port - read only, sends nothing.
+                           ; Ignored (with a hint) when another profile is started.
                            ; Gives real PTT times per burst, waiting before PTT, BUSY share,
                            ; SN per received frame. FIRST TIME WITH SOMEBODY AT THE RADIO:
                            ; older VARA versions left the PTT keyed with KISS + command port.
 ; host   = 127.0.0.1       ; default: [tnc] host
 cmd_port = 8300            ; VARA Setup "Command"
 sn_window_ms = 1500        ; an SN line belongs to a frame received this close to it
+
+; Per-profile overrides - only what differs, e.g.
+; [kiss.pk232]
+; txdelay_ms = 400
+; [tnc.vara-fm]
+; host = 192.168.1.20      ; VARA on another PC

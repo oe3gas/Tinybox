@@ -201,6 +201,36 @@ cmd_port = 8300
 sn_window_ms = 1500
 ```
 
+**Eine Datei für alle TNCs** (kisshub 2026.10.18.8): Das Profil wird beim Start gewählt,
+die conf bleibt dieselbe.
+
+```ini
+[tnc]
+profile       = pk232          ; Standard ohne -p
+device        = COM3           ; nur pk232 (seriell)
+direwolf_conf = C:\direwolf    ; nur profile direwolf
+
+[server]
+port = 8101
+
+[log]
+file       = kisshub-{profile}.log            ; je Profil eine eigene Datei
+links_file = kisshub-links-{profile}.jsonl
+
+[vara]
+monitor = yes                  ; gilt nur bei vara-fm/vara-hf, sonst Hinweis und aus
+
+[kiss.pk232]                   ; optional: nur für dieses Profil
+txdelay_ms = 400
+```
+
+Start: `kisshub.bat -p pk232`, `kisshub.bat -p vara-fm`, `kisshub.bat -p direwolf`.
+`-p` schlägt `[tnc] profile`; `[<abschnitt>.<profil>]` (Abschnitte `tnc`, `kiss`, `ax25`,
+`server`, `log`, `vara`) überschreibt den normalen Abschnitt nur für dieses Profil;
+`{profile}` in Dateinamen wird zum Profilnamen. `kisshub -h` bzw. `-?` zeigt die Hilfe.
+Einen festen `[tnc] port` oder `transport` nur in `[tnc.<profil>]` eintragen, sonst gilt er
+für alle Profile.
+
 **Profile und ihre Standardwerte:**
 
 | Profil | Weg | air_baud | txdelay_ms | send_params | max_lead_ms | AX.25-Empfehlung |
@@ -337,7 +367,8 @@ vergleichen.
   Das Profil verhindert es; `send_params = yes` wird abgewiesen.
 - VARA FM und Direwolf **nie gleichzeitig** an derselben Soundkarte.
 
-**kisshub** (`kisshub-varafm.conf`, beide PCs):
+**kisshub** (beide PCs) – mit der gemeinsamen conf aus 2.4 einfach `kisshub.bat -p vara-fm`;
+als eigene Datei z. B. `kisshub-varafm.conf`:
 
 ```ini
 [tnc]

@@ -45,7 +45,14 @@ class Config:
     direwolf: str = ""                # CR70: what was read from direwolf.conf
 
 
-def load(path: str | Path) -> Config:
+SECTIONS = ("tnc", "kiss", "ax25", "server", "log", "vara")
+
+
+def load(path: str | Path, profile_name: str | None = None) -> Config:
+    """profile_name (command line -p) wins over [tnc] profile. One kisshub.conf
+    can serve several TNCs: [<section>.<profile>] (e.g. [kiss.pk232], [log.vara-fm])
+    overrides the plain section for that profile, and {profile} in file names
+    becomes the profile name."""
     path = Path(path)
     if not path.is_file():
         raise ConfigError(f"config file not found: {path}")
@@ -62,10 +69,27 @@ def load(path: str | Path) -> Config:
         except ValueError as exc:
             raise ConfigError(f"[{sec}] {key}: {exc}") from None
 
-    name = get("tnc", "profile", "generic").lower()
+    name = (profile_name or get("tnc", "profile", "generic")).strip().lower()
     if name not in PROFILES:
-        raise ConfigError(f"[tnc] profile: '{name}' - use one of {', '.join(PROFILES)}")
+        where = "-p" if profile_name else "[tnc] profile"
+        raise ConfigError(f"{where}: '{name}' - use one of {', '.join(PROFILES)}")
     profile = PROFILES[name]
+    for sec in SECTIONS:                     # [kiss.pk232] etc. over [kiss]
+        own = f"{sec}.{name}"
+        if cp.has_section(own):
+            if not cp.has_section(sec):
+                cp.add_section(sec)
+            for key, value in cp.items(own, raw=True):
+                if key not in cp.defaults():
+                    cp.set(sec, key, value)
+    for sec in cp.sections():
+        base, dot, other = sec.partition(".")
+        if dot and (base not in SECTIONS or other not in PROFILES):
+            raise ConfigError(f"[{sec}]: unknown - use [<section>.<profile>], sections "
+                              f"{', '.join(SECTIONS)}, profiles {', '.join(PROFILES)}")
+
+    def named(value: str) -> str:
+        return value.replace("{profile}", name)
     lines = [x.strip() for x in get("tnc", "init_lines", "").split("|") if x.strip()]
     if lines:
         profile = with_init_lines(profile, lines)
@@ -178,7 +202,7 @@ def load(path: str | Path) -> Config:
                  status_every_sec=get("log", "status_every_sec", 600, int),
                  status_port=get("server", "status_port", port + 1, int),
                  profile=profile.name, sources=sources, ax25=ax25,
-                 links_file=get("log", "links_file", "kisshub-links.jsonl"),
+                 links_file=named(get("log", "links_file", "kisshub-links.jsonl")),
                  vara_monitor=get("vara", "monitor", False, bool),
                  vara_host=get("vara", "host", get("tnc", "host", "127.0.0.1")),
                  vara_cmd_port=get("vara", "cmd_port", 8300, int),
@@ -188,7 +212,10 @@ def load(path: str | Path) -> Config:
     if not 0 <= hub.status_port <= 65535:
         raise ConfigError("[server] status_port: 0 (off) or 1..65535")
     if hub.vara_monitor and not profile.name.startswith("vara"):
-        raise ConfigError("[vara] monitor: only with profile vara-fm or vara-hf")
+        # one kisshub.conf for all TNCs: the VARA monitor simply stays off
+        hints.append(f"[vara] monitor = yes: ignored with profile {profile.name} "
+                     "(only vara-fm / vara-hf)")
+        hub = dataclasses.replace(hub, vara_monitor=False)
     if not 1 <= hub.vara_cmd_port <= 65535:
         raise ConfigError("[vara] cmd_port: 1..65535")
     if hub.air_baud < 300:
@@ -196,7 +223,7 @@ def load(path: str | Path) -> Config:
     if not 0 <= txdelay_ms <= 10000:
         raise ConfigError("[kiss] txdelay_ms: 0..10000")
     return Config(tnc=tnc, hub=hub, log_level=get("log", "level", "INFO").upper(),
-                  log_file=get("log", "file", ""), trace=get("log", "trace", False, bool),
+                  log_file=named(get("log", "file", "")), trace=get("log", "trace", False, bool),
                   hints=tuple(hints), direwolf=dw.describe() if dw else "")
 
 

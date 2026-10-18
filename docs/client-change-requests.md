@@ -1973,6 +1973,9 @@ Umsetzung in vier Schritten; alte Schlüssel bleiben lesbar.
 - brocastd: `[radio]/[agw]/[kiss]`, baud/TXDELAY aus direwolf.conf bzw. kisshub.
 - dxfeed: Inbox aus `tinybox.conf`; fwdsim: Mailbox-Call, haddress, Telnet-Port, DB aus
   `tinybox.conf`, AGW-Werte aus direwolf.conf.
+- kisshub 2026.10.18.8: **eine kisshub.conf für alle TNCs** – Startschalter `-p <profil>`,
+  Abschnitte `[<abschnitt>.<profil>]` nur für ein Profil, `{profile}` in Log-Dateinamen,
+  `[vara] monitor` bei anderen Profilen nur Hinweis; Hilfe mit `-h` / `-?`.
 - Alte Schlüssel gelten als Überschreibung, mit Hinweis beim Start. Tests:
   `tests/test_direwolfconf.py`, `RadioValuesTests`, `KissConfigTests`, Client-/brocastd-/
   dxfeed-/fwdsim-Konfigtests.
