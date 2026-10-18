@@ -554,7 +554,26 @@ schwachen Signalen zu erwarten (eigener Test mit reduzierter Leistung offen).
 - **Bündelung im Tunnel** (kisshub 2026.10.18.5, `[tnc] vara_bundle_ms`): mehrere AX.25-Frames
   als **ein** Typ-2-Rahmen (`AB` + je 2 Byte Länge + Frame, bis `vara_bundle_max` Byte) – VARA soll
   so größere Rahmen sehen und eine schnellere Stufe wählen. Einzelne Frames weiter als `AX` +
-  Frame. Beide Stationen brauchen die neue Version. Offen: Funktest (Lauf 5).
+  Frame. Beide Stationen brauchen die neue Version.
+
+**Lauf 5 (18.10.2026, 17:22, beide kisshub 2026.10.18.5, Bündelung 300 ms, `air_baud = 350`,
+`txdelay_ms = 2700`, sonst wie Lauf 3):**
+
+| | Lauf 3 | Lauf 5 |
+|---|---|---|
+| Verluste / Wiederholungen | 0 / 0 | 0 / 0 |
+| Polls Client / TinyBox | 3 / 2 | **0 / 0** |
+| Quittung eines Client-Fensters | 28,2 s | **20,4 s** |
+| Rate über die Verbindung | 21,2 B/s | 22,1 B/s |
+| VARA Client sendet: Aufwand / Rate / Frames je Burst | 2,2 s / 370 bit/s / 3,2 | 3,2 s / 487 bit/s / 2,6 |
+| VARA TinyBox sendet: Aufwand / Rate / Frames je Burst | 3,2 s / 280 bit/s / 2,4 | 4,5 s / 476 bit/s / 3,0 |
+
+Die gemessenen Zeitwerte beseitigen die unnötigen Polls vollständig. Mit Bündelung sendet VARA im
+Burst schneller (~480 statt 280–370 bit/s), der Aufwand je Burst steigt aber ebenso – unterm Strich
+**kein messbarer Gewinn** bei diesem Hin-und-Her-Verkehr (Lauf 5 ohne Bündelung auf der
+Client-Seite – erster Versuch, PC2 noch alte Version – lag bei 509 bit/s ebenso hoch). VARA FM über
+KISS bleibt auf dieser Strecke bei rund der Hälfte von Direwolf 1200 Bd (39,7 B/s). Der nächste Hebel
+ist VARA FM **Wide** über den 9600er-Datenport.
 
 ## 9. Risiken
 
