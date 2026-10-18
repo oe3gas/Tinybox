@@ -293,7 +293,7 @@ class Images:
                             up["known"] = True
                     break
                 if p[0] == "//IMGGO" and p[1:2] == [h] and len(p) == 3 and p[2].isdigit():
-                    progress = self._send_all(data, int(p[2]), job["line"], up)
+                    progress = await self._send_all(data, int(p[2]), job["line"], up)
                     continue
                 if p[0] == "//ERR":
                     raise ConnectionError(_reason(item[1]))
@@ -306,10 +306,17 @@ class Images:
             up.update(state="done", sent=len(data))
         self.core._touch()
 
-    def _send_all(self, data: bytes, offset: int, line: str, up: dict | None):
+    async def _send_all(self, data: bytes, offset: int, line: str, up: dict | None):
         """Hand the bytes from `offset` on to Direwolf in one go, the chat line
         right behind them (Direwolf keeps the order; the TinyBox reads the
-        line after the last image byte). Returns the progress poll."""
+        line after the last image byte). Returns the progress poll.
+
+        Progress (fix 18.10.2026): right after handing over, ask how many
+        frames are waiting - that is 100 % still to go. Every later answer
+        is set against this start value. Before, the client multiplied the
+        waiting frames with its own frame size (256); when Direwolf (or the
+        KISS link) cuts smaller frames, the bar stayed at 0.0 KB and jumped
+        to the end at once."""
         link = self.core.link
         total = len(data)
         link.send_bytes(data[offset:])
@@ -318,6 +325,7 @@ class Images:
         if up:
             up.update(state="sending", sent=offset)
         self.core._touch()
+        start = [await link.outstanding()]   # frames still to go = nothing sent yet
         last = [offset]
 
         async def progress() -> bool:
@@ -325,7 +333,11 @@ class Images:
             if self.core.state != "online":
                 raise ConnectionError("connection lost")
             waiting = await link.outstanding()
-            sent = max(last[0], min(total, total - waiting * link.paclen))
+            if waiting > start[0]:          # the first answer came too early
+                start[0] = waiting
+            sent = offset + (total - offset) * (start[0] - waiting) // start[0] \
+                if start[0] > 0 else total
+            sent = max(last[0], min(total, sent))
             moved = sent > last[0]
             last[0] = sent
             if up and moved:

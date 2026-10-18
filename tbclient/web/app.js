@@ -618,13 +618,18 @@ function renderMessages() {
     ol.append(bubble(m, prevCall === m.call));
     prevCall = m.call;
   }
+  const up = S.images && S.images.upload;         // CR12: the picture on its way up
+  const upBusy = up && up.state !== "done";
+  const upLine = upBusy && up.line ? up.line.replace(/[\r\n]/g, " ").trim().slice(0, 200) : null;
   for (const text of S.pending) {
+    // the chat line of the picture goes out right behind the bytes: while
+    // the upload bubble (with the progress) is shown, do not show it twice
+    if (upLine !== null && text === upLine) continue;
     ol.append(bubble({ id: "p", call: S.mycall, text, time: Date.now() / 1000, reactions: {}, pending: true },
                      prevCall === S.mycall));
     prevCall = S.mycall;
   }
-  const up = S.images && S.images.upload;         // CR12: the picture on its way up
-  if (up && up.state !== "done") ol.append(uploadBubble(up));
+  if (upBusy) ol.append(uploadBubble(up));
   for (const u of S.uploads || []) ol.append(uploadRow(u));      // CR30: the others' pictures
   if (atEnd) box.scrollTop = box.scrollHeight;
 }

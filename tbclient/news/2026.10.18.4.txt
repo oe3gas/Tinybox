@@ -1,0 +1,2 @@
+- Sending a picture: no longer shown twice in the chat
+- Upload progress now follows the acknowledged frames
