@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
 from . import VERSION
 from .config import ConfigError, load, make_transport
@@ -47,6 +48,25 @@ async def main(cfg) -> None:
         await asyncio.shield(hub.stop())
 
 
+def log_lines(config_path: str, cfg) -> list[str]:
+    """Where this run is logged - shown at every start, so a test run is never
+    lost because the log went nowhere (or somewhere unexpected)."""
+    trace = ", trace on" if cfg.trace else ""
+    lines = [f"config {Path(config_path).resolve()}"]
+    if cfg.log_file:
+        lines.append(f"log file {Path(cfg.log_file).resolve()} (level {cfg.log_level}{trace})")
+    else:
+        lines.append(f"log: console only - NO log file (level {cfg.log_level}{trace}); "
+                     "set [log] file = kisshub.log to keep it")
+    if cfg.hub.links_file:
+        lines.append(f"links file {Path(cfg.hub.links_file).resolve()} "
+                     "(one JSON line per finished AX.25 link)")
+    else:
+        lines.append("links file: off - finished AX.25 links are not written "
+                     "([log] links_file)")
+    return lines
+
+
 def run(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="kisshub", description="KISS TNC hub for TinyBox")
     ap.add_argument("-c", "--config", default="kisshub.conf")
@@ -60,6 +80,8 @@ def run(argv: list[str] | None = None) -> int:
     log = logging.getLogger("kisshub")
     log.info("kisshub %s: %s (%s), KISS-TCP %s:%d", VERSION, cfg.tnc.profile.name,
              cfg.tnc.profile.notes, cfg.hub.listen, cfg.hub.port)
+    for line in log_lines(args.config, cfg):
+        log.info("%s", line)
     try:
         asyncio.run(main(cfg))
     except KeyboardInterrupt:

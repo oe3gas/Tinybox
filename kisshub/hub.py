@@ -173,8 +173,6 @@ class Hub:
                        asyncio.create_task(self._tick())]
         if self.vara is not None:
             self._tasks.append(asyncio.create_task(self.vara.run()))
-        if self.cfg.links_file:
-            log.info("finished AX.25 links are written to %s", self.cfg.links_file)
 
     async def run(self) -> None:
         await self.start()
