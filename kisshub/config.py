@@ -7,10 +7,15 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
-from prcore import kiss
+from prcore import direwolfconf, kiss
 
 from .hub import HubCfg
-from .profiles import PROFILES, TUNNEL_MODES, Profile, with_init_lines
+from .profiles import PROFILES, TUNNEL_MODES, Profile, ax25_recommendation, with_init_lines
+
+# CR70: [ax25] in kisshub.conf may override the recommendation of the profile
+AX25_KEYS = {"paclen": (int, 16, 256), "maxframe": (int, 1, 7), "maxframe_ext": (int, 1, 127),
+             "n2": (int, 1, 50), "t1_min_sec": (float, 0.1, 3600), "t1_max_sec": (float, 0.1, 3600),
+             "t2_sec": (float, 0, 3600), "t3_sec": (float, 0, 3600)}
 
 
 class ConfigError(Exception):
@@ -36,6 +41,8 @@ class Config:
     log_level: str = "INFO"
     log_file: str = ""
     trace: bool = False               # [log] trace: every byte to/from the TNC in hex
+    hints: tuple[str, ...] = ()       # CR70: old keys still in the file, shown at start
+    direwolf: str = ""                # CR70: what was read from direwolf.conf
 
 
 def load(path: str | Path) -> Config:
@@ -77,13 +84,27 @@ def load(path: str | Path) -> Config:
     profile = dataclasses.replace(profile, exit_kiss=exit_kiss, tunnel=tunnel,
                                   bundle_ms=bundle_ms, bundle_max=bundle_max)
 
-    transport = get("tnc", "transport", "serial").lower()
+    hints: list[str] = []
+    dw = None
+    if profile.reads_direwolf_conf:
+        dpath = get("tnc", "direwolf_conf", "")
+        if not dpath:
+            raise ConfigError("[tnc] direwolf_conf: the Direwolf folder or its direwolf.conf "
+                              "(profile direwolf)")
+        try:
+            dw = direwolfconf.read(dpath)
+        except direwolfconf.DirewolfConfError as exc:
+            raise ConfigError(f"[tnc] direwolf_conf: {exc}") from None
+    dch = dw.channel(0) if dw else None
+
+    transport = get("tnc", "transport", "tcp" if profile.tcp_port else "serial").lower()
     if transport not in ("serial", "tcp"):
         raise ConfigError("[tnc] transport: use serial or tcp")
     device = get("tnc", "device", "")
     if transport == "serial" and not device:
         raise ConfigError("[tnc] device: the serial port, e.g. COM3 or /dev/ttyUSB0")
-    tport = get("tnc", "port", 0, int)
+    tport_default = (dw.kiss_port if dw and dw.kiss_port else profile.tcp_port)
+    tport = get("tnc", "port", tport_default, int)
     if transport == "tcp" and not 1 <= tport <= 65535:
         raise ConfigError("[tnc] port: the TCP port of the TNC")
 
@@ -92,7 +113,42 @@ def load(path: str | Path) -> Config:
         raise ConfigError(f"[kiss] send_params: must be no with profile {profile.name} - "
                           "VARA reads KISS commands 1 and 2 as its frame types and would "
                           "send them on the air")
-    txdelay_ms = get("kiss", "txdelay_ms", 300, int)
+    # CR70: radio values - profile, then direwolf.conf, then kisshub.conf [kiss]
+    sources: dict[str, str] = {}
+
+    def radio(key: str, profile_value: int, dw_value: int | None) -> int:
+        if cp.has_option("kiss", key):
+            sources[key] = "kisshub.conf"
+            return get("kiss", key, profile_value, int)
+        if dw_value is not None:
+            sources[key] = "direwolf.conf"
+            return dw_value
+        sources[key] = f"profile {profile.name}"
+        return profile_value
+
+    air_baud = radio("air_baud", profile.air_baud, dch.baud if dch else None)
+    txdelay_ms = radio("txdelay_ms", profile.txdelay_ms, dch.txdelay_ms if dch else None)
+    max_lead_ms = radio("max_lead_ms", profile.max_lead_ms, None)
+    ax25 = ax25_recommendation(profile)
+    if dw:                                   # Direwolf's own AX.25 values as the hint
+        if dw.paclen:
+            ax25["paclen"] = dw.paclen
+        if dw.maxframe:
+            ax25["maxframe"] = dw.maxframe
+        if dw.emaxframe:
+            ax25["maxframe_ext"] = dw.emaxframe
+    sources["ax25"] = "direwolf.conf" if dw else f"profile {profile.name}"
+    if cp.has_section("ax25"):
+        for key in cp.options("ax25"):
+            if key not in AX25_KEYS:
+                raise ConfigError(f"[ax25] {key}: unknown - use {', '.join(AX25_KEYS)}")
+            kind, lo, hi = AX25_KEYS[key]
+            value = get("ax25", key, 0, int) if kind is int else _float(cp, key)
+            if not lo <= value <= hi:
+                raise ConfigError(f"[ax25] {key}: {lo}..{hi}")
+            ax25[key] = value
+        if cp.options("ax25"):
+            sources["ax25"] += " + kisshub.conf [ax25]"
     params = {}
     if send_params:
         params = {kiss.CMD_TXDELAY: kiss.ms_to_units(txdelay_ms),
@@ -106,13 +162,22 @@ def load(path: str | Path) -> Config:
                  serial_baud=get("tnc", "serial_baud", profile.serial_baud, int),
                  host=get("tnc", "host", "127.0.0.1"), port=tport,
                  reconnect_sec=get("tnc", "reconnect_sec", 10, int), params=params)
+    port = get("server", "port", 8101, int)
+    # CR70: host fixed 127.0.0.1, status on port + 1; the old keys still work
+    for key, default in (("listen", "127.0.0.1"), ("status_port", str(port + 1))):
+        if cp.has_option("server", key):
+            hints.append(f"[server] {key} = {get('server', key, '')}: "
+                         + ("same as the default - can be removed"
+                            if get("server", key, "") == default
+                            else f"overrides the default {default}"))
     hub = HubCfg(listen=get("server", "listen", "127.0.0.1"),
-                 port=get("server", "port", 8101, int),
-                 air_baud=get("kiss", "air_baud", 1200, int),
+                 port=port,
+                 air_baud=air_baud,
                  txdelay_sec=txdelay_ms / 1000,
-                 max_lead_sec=get("kiss", "max_lead_ms", 1500, int) / 1000,
+                 max_lead_sec=max_lead_ms / 1000,
                  status_every_sec=get("log", "status_every_sec", 600, int),
-                 status_port=get("server", "status_port", 8102, int),
+                 status_port=get("server", "status_port", port + 1, int),
+                 profile=profile.name, sources=sources, ax25=ax25,
                  links_file=get("log", "links_file", "kisshub-links.jsonl"),
                  vara_monitor=get("vara", "monitor", False, bool),
                  vara_host=get("vara", "host", get("tnc", "host", "127.0.0.1")),
@@ -128,8 +193,35 @@ def load(path: str | Path) -> Config:
         raise ConfigError("[vara] cmd_port: 1..65535")
     if hub.air_baud < 300:
         raise ConfigError("[kiss] air_baud: at least 300")
+    if not 0 <= txdelay_ms <= 10000:
+        raise ConfigError("[kiss] txdelay_ms: 0..10000")
     return Config(tnc=tnc, hub=hub, log_level=get("log", "level", "INFO").upper(),
-                  log_file=get("log", "file", ""), trace=get("log", "trace", False, bool))
+                  log_file=get("log", "file", ""), trace=get("log", "trace", False, bool),
+                  hints=tuple(hints), direwolf=dw.describe() if dw else "")
+
+
+def _float(cp: configparser.ConfigParser, key: str) -> float:
+    try:
+        return cp.getfloat("ax25", key)
+    except ValueError as exc:
+        raise ConfigError(f"[ax25] {key}: {exc}") from None
+
+
+def radio_lines(cfg: Config) -> list[str]:
+    """CR70: where each radio value came from - shown at every start."""
+    h = cfg.hub
+    src = h.sources
+    lines = [f"radio: air_baud {h.air_baud} ({src.get('air_baud')}), "
+             f"txdelay {round(h.txdelay_sec * 1000)} ms ({src.get('txdelay_ms')}), "
+             f"max_lead {round(h.max_lead_sec * 1000)} ms ({src.get('max_lead_ms')})",
+             "AX.25 recommendation for TinyBox/client: "
+             + ", ".join(f"{k} {v}" for k, v in h.ax25.items()) + f" ({src.get('ax25')})",
+             f"status query http://127.0.0.1:{h.status_port}/status" if h.status_port
+             else "status query off ([server] status_port = 0)"]
+    if cfg.direwolf:
+        lines.insert(0, f"direwolf.conf {cfg.direwolf}")
+    lines += [f"hint: {x}" for x in cfg.hints]
+    return lines
 
 
 def make_transport(t: TncCfg):

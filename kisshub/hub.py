@@ -119,6 +119,10 @@ class HubCfg:
     vara_host: str = "127.0.0.1"
     vara_cmd_port: int = 8300
     sn_window_sec: float = 1.5       # VARA's SN line and the received frame belong together
+    # CR70: what TinyBox and the client take from the status query ("radio")
+    profile: str = "generic"
+    sources: dict = field(default_factory=dict)   # value -> where it came from
+    ax25: dict = field(default_factory=dict)      # AX.25 recommendation ([ax25] keys)
 
 
 class Hub:
@@ -337,6 +341,7 @@ class Hub:
         return {
             "version": VERSION, "started": self.started, "now": time.time(),
             "kiss_port": self.port, "air_baud": self.cfg.air_baud,
+            "radio": self.radio_dict(),                              # CR70
             "tnc": self.tnc.status(),
             "quality": self.stats.status(now),                       # CR67 B + C
             "vara": self.vara.status(now) if self.vara is not None else None,   # CR67 A
@@ -348,6 +353,14 @@ class Hub:
                          "calls": sorted(c.calls, key=c.calls.get, reverse=True)[:5]}
                         for c in self.clients.values()],
         }
+
+    def radio_dict(self) -> dict:
+        """CR70: the radio values the stations use instead of their own copies."""
+        c = self.cfg
+        return {"profile": c.profile, "air_baud": c.air_baud,
+                "txdelay_ms": round(c.txdelay_sec * 1000),
+                "max_lead_ms": round(c.max_lead_sec * 1000),
+                "ax25": dict(c.ax25), "source": dict(c.sources)}
 
     async def _status_client(self, reader: asyncio.StreamReader,
                              writer: asyncio.StreamWriter) -> None:

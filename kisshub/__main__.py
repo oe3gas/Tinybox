@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from . import VERSION
-from .config import ConfigError, load, make_transport
+from .config import ConfigError, load, make_transport, radio_lines
 from .console import Console, LogControl
 from .hub import Hub
 from .tnc import Tnc
@@ -80,7 +80,7 @@ def run(argv: list[str] | None = None) -> int:
     log = logging.getLogger("kisshub")
     log.info("kisshub %s: %s (%s), KISS-TCP %s:%d", VERSION, cfg.tnc.profile.name,
              cfg.tnc.profile.notes, cfg.hub.listen, cfg.hub.port)
-    for line in log_lines(args.config, cfg):
+    for line in log_lines(args.config, cfg) + radio_lines(cfg):
         log.info("%s", line)
     try:
         asyncio.run(main(cfg))

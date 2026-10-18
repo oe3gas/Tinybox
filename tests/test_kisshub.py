@@ -509,6 +509,69 @@ class VaraTunnelTests(HubTestBase):
 
 
 
+class RadioValuesTests(unittest.TestCase):
+    """CR70: kisshub owns the radio values and tells where each one came from."""
+
+    def load(self, text: str, dw: str | None = None):
+        with tempfile.TemporaryDirectory() as d:
+            if dw is not None:
+                (Path(d) / "direwolf.conf").write_text(dw, encoding="utf-8")
+                text = text.replace("DWDIR", d)
+            p = Path(d) / "k.conf"
+            p.write_text(text, encoding="utf-8")
+            return hubconfig.load(p)
+
+    def test_vara_profile_defaults(self):
+        cfg = self.load("[tnc]\nprofile=vara-fm\n")          # transport tcp, port 8100 implied
+        self.assertEqual((cfg.tnc.transport, cfg.tnc.port), ("tcp", 8100))
+        h = cfg.hub
+        self.assertEqual((h.air_baud, h.txdelay_sec, h.max_lead_sec), (350, 2.7, 12.0))
+        self.assertEqual(h.sources["air_baud"], "profile vara-fm")
+        self.assertEqual((h.ax25["paclen"], h.ax25["maxframe"], h.ax25["t1_min_sec"]),
+                         (256, 4, 18.0))
+        self.assertEqual((h.status_port, cfg.hints), (8102, ()))
+        text = "\n".join(hubconfig.radio_lines(cfg))
+        self.assertIn("air_baud 350 (profile vara-fm)", text)
+
+    def test_overrides_and_old_keys(self):
+        cfg = self.load("[tnc]\nprofile=vara-fm\n[kiss]\nair_baud=600\n"
+                        "[ax25]\nt1_min_sec=25\n[server]\nport=8201\nstatus_port=8202\n")
+        h = cfg.hub
+        self.assertEqual((h.air_baud, h.sources["air_baud"]), (600, "kisshub.conf"))
+        self.assertEqual(h.ax25["t1_min_sec"], 25.0)
+        self.assertIn("kisshub.conf [ax25]", h.sources["ax25"])
+        self.assertEqual(h.status_port, 8202)
+        self.assertIn("can be removed", cfg.hints[0])
+        self.assertEqual(self.load("[tnc]\nprofile=vara-fm\n[server]\nport=8201\n")
+                         .hub.status_port, 8202)
+        with self.assertRaises(hubconfig.ConfigError):
+            self.load("[tnc]\nprofile=vara-fm\n[ax25]\nwindow=3\n")
+
+    def test_direwolf_profile(self):
+        dw = "MODEM 9600\nTXDELAY 15\nKISSPORT 8011\nPACLEN 200\nEMAXFRAME 6\n"
+        cfg = self.load("[tnc]\nprofile=direwolf\ndirewolf_conf=DWDIR\n", dw)
+        self.assertEqual((cfg.tnc.transport, cfg.tnc.port, cfg.tnc.params), ("tcp", 8011, {}))
+        h = cfg.hub
+        self.assertEqual((h.air_baud, round(h.txdelay_sec * 1000)), (9600, 150))
+        self.assertEqual(h.sources["txdelay_ms"], "direwolf.conf")
+        self.assertEqual((h.ax25["paclen"], h.ax25["maxframe_ext"]), (200, 6))
+        self.assertIn("MODEM 9600", "\n".join(hubconfig.radio_lines(cfg)))
+        with self.assertRaises(hubconfig.ConfigError):
+            self.load("[tnc]\nprofile=direwolf\n")
+        with self.assertRaises(hubconfig.ConfigError):
+            self.load("[tnc]\nprofile=direwolf\ndirewolf_conf=/nowhere/x\n")
+
+    def test_status_has_radio_block(self):
+        cfg = self.load("[tnc]\nprofile=vara-fm\n")
+        from tests.test_kisshub_quality import _NoTnc
+        hub = Hub(dataclasses.replace(cfg.hub, port=0, status_port=0, links_file=""),
+                  lambda on_frame: _NoTnc())
+        r = hub.radio_dict()
+        self.assertEqual((r["air_baud"], r["txdelay_ms"], r["profile"]), (350, 2700, "vara-fm"))
+        self.assertEqual(r["ax25"]["t2_sec"], 0.3)
+        self.assertEqual(r["source"]["max_lead_ms"], "profile vara-fm")
+
+
 class VaraConfigTests(unittest.TestCase):
     def test_config(self):
         with tempfile.TemporaryDirectory() as d:

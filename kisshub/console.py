@@ -195,7 +195,9 @@ class Console:
             return
         sent = self.tnc.set_param(cmd, value)
         if cmd == kiss.CMD_TXDELAY:                  # the hub paces with it too
-            self.hub.cfg = dataclasses.replace(self.hub.cfg, txdelay_sec=value / 100)
+            self.hub.cfg = dataclasses.replace(
+                self.hub.cfg, txdelay_sec=value / 100,
+                sources={**self.hub.cfg.sources, "txdelay_ms": "console"})
         shown = f"{value * unit}{' ms' if unit == 10 else ''}"
         log.info("%s %s %s", PARAM_NAMES.get(cmd, name), shown,
                  "sent to the TNC" if sent
@@ -203,4 +205,5 @@ class Console:
                  if not self.tnc.profile.kiss_params
                  else "set, goes to the TNC with the next init")
         if cmd == kiss.CMD_TXDELAY:
-            self.out("TinyBox: set the same [kiss] txdelay_ms in tinybox.conf (T1 timing)")
+            self.out("TinyBox and client take it from the status query (CR70); "
+                     "for the next start put it into kisshub.conf [kiss] txdelay_ms")

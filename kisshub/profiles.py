@@ -76,6 +76,26 @@ class Profile:
     bundle_ms: int = 0                 # VARA tunnel: collect frames this long into one
                                        # type-2 frame (0 = off) - see VARA_FM
     bundle_max: int = 4000             # bytes per bundle (VARA takes up to 5000)
+    # CR70: the radio values belong to kisshub - TinyBox and the client read them
+    # from the status query ("radio" block); kisshub.conf [kiss] may override them
+    air_baud: int = 1200               # bit rate on the air (air time estimate)
+    txdelay_ms: int = 300              # key-up to data
+    max_lead_ms: int = 1500            # at most this much air time queued in the TNC
+    tcp_port: int = 0                  # default [tnc] port with transport = tcp
+    ax25: tuple[tuple[str, float | int | str], ...] = ()   # AX.25 recommendation
+                                       # (tinybox.conf [ax25] key names); () = AX25_1200
+    reads_direwolf_conf: bool = False  # profile direwolf: values from direwolf.conf
+
+
+# CR70: AX.25 recommendation for the stations, the same key names as [ax25] in
+# tinybox.conf / tbclient.conf. 1200 Bd: the values TinyBox used so far.
+AX25_1200 = (("paclen", 256), ("maxframe", 4), ("maxframe_ext", 7),
+             ("t1_min_sec", 3.0), ("t1_max_sec", 30.0), ("t2_sec", 1.5))
+# VARA FM Narrow over KISS, measured 18.10.2026 (docs/kiss-mode-konzept.md 8d):
+# about 350 bit/s net with 2.7 s from PTT to data - a window of 4 x 256 bytes
+# takes ~9 s, so T1 must not start below 18 s; T2 short, VARA is lossless
+AX25_VARA = (("paclen", 256), ("maxframe", 4), ("maxframe_ext", 4),
+             ("t1_min_sec", 18.0), ("t1_max_sec", 90.0), ("t2_sec", 0.3))
 
 
 PK232 = Profile(
@@ -157,13 +177,25 @@ GENERIC = Profile(name="generic", display="KISS TNC", exit_kiss=False, notes="al
 # A single frame still goes as TUNNEL_MAGIC + frame. Needs kisshub 2026.10.18.5
 # or newer on both stations.
 VARA_FM = Profile(name="vara-fm", display="VARA FM", exit_kiss=False, kiss_params=False,
-                  tunnel="connected", settle_sec=0.2,
+                  tunnel="connected", settle_sec=0.2, tcp_port=8100,
+                  air_baud=350, txdelay_ms=2700, max_lead_ms=12000, ax25=AX25_VARA,
                   notes="VARA FM KISS-TCP (port 8100), connected mode tunnelled in type 2")
 VARA_HF = dataclasses.replace(VARA_FM, name="vara-hf", display="VARA HF",
                               notes="VARA HF KISS-TCP (port 8100), connected mode tunnelled in type 2")
 
+# Direwolf's KISS port (CR70): a modem without a TNC dialog. kisshub reads
+# MODEM / TXDELAY / KISSPORT from direwolf.conf ([tnc] direwolf_conf) and does
+# not send KISS parameters - Direwolf keeps those from its own file.
+DIREWOLF = Profile(name="direwolf", display="Direwolf", exit_kiss=False, kiss_params=False,
+                   settle_sec=0.2, tcp_port=8001, reads_direwolf_conf=True,
+                   notes="Direwolf KISS-TCP (KISSPORT), values from direwolf.conf")
+
 PROFILES = {p.name: p for p in (PK232, TM_D710, TH_D74, TH_D75, TNC2_KISS, GENERIC,
-                                VARA_FM, VARA_HF)}
+                                VARA_FM, VARA_HF, DIREWOLF)}
+
+
+def ax25_recommendation(p: Profile) -> dict:
+    return dict(p.ax25 or AX25_1200)
 TUNNEL_MODES = ("no", "connected", "all")
 
 
