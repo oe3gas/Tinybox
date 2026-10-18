@@ -12,13 +12,22 @@ data_dir   = data
 dictionary = brocast-core.yaml
 log_level  = INFO
 
-[direwolf]
+; CR70: jeder Funkwert hat EINEN Besitzer – über AGW direwolf.conf, über KISS der
+; kisshub. brocastd liest Funkrate und TXDELAY von dort und meldet beim Start die Quelle.
+; Beispiele: MANUAL.md Abschnitt 2.5. Die alte Sektion [direwolf] gilt weiter (mit Hinweis).
+
+[radio]
 interface     = agw           ; agw (empfohlen) oder kiss – Unterschied: README, „Verbindung zu Direwolf“
-host          = 127.0.0.1
-agw_port      = 8000          ; Direwolf AGWPORT (TinyBox nutzt denselben Port, das geht)
-kiss_port     = 8001          ; Direwolf KISSPORT, nur bei interface = kiss
+
+[agw]                         ; nur bei interface = agw
+; direwolf_conf = E:\direwolf ; Ordner oder Datei: AGWPORT, MODEM, TXDELAY daraus
 channel       = 0             ; Direwolf-Funkkanal
+; host        = 127.0.0.1     ; Standard; nur wenn Direwolf auf einem anderen PC läuft
+; port        = 8000          ; Standard: AGWPORT aus direwolf.conf (TinyBox nutzt denselben Port)
 reconnect_sec = 5
+
+[kiss]                        ; nur bei interface = kiss
+port          = 8101          ; kisshub (Funkwerte aus seinem Status) – oder Direwolf-KISSPORT 8001
 
 [station]
 ingest_host        = 127.0.0.1
@@ -27,8 +36,7 @@ token              =           ; leer = kein Token nötig
 path               =           ; Digipeater, z. B. WIDE1-1 (leer = lokal)
 airtime_percent    = 15        ; Obergrenze Kanalbelegung durch brocast
 airtime_window_min = 10
-baud               = 1200
-txdelay_ms         = 300       ; wie TXDELAY in direwolf.conf
+; baud / txdelay_ms            ; entfallen: aus direwolf.conf bzw. kisshub (nur zum Überschreiben)
 burst_frames       = 4         ; höchstens n Frames pro Aussendung (PTT-Zyklus), 0 = keine Aufteilung
 burst_gap_s        = 3         ; Pause nach jeder Aussendung, Kanal frei für andere Stationen
 repeat_minutes     = 0,2,5,10  ; neue Revision sofort, dann nach 2, 5, 10 min ...

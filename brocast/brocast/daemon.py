@@ -298,6 +298,12 @@ class Daemon:
     async def run(self) -> None:
         log.info("brocastd %s, Modus %s, Rufzeichen %s, Direwolf über %s", VERSION,
                  self.cfg.mode, self.cfg.callsign or "-", self.cfg.direwolf.describe())
+        st = self.cfg.station
+        log.info("Funk: %s Bd (%s), TXDELAY %s ms (%s)", st.baud,
+                 self.cfg.sources.get("baud", "-"), st.txdelay_ms,
+                 self.cfg.sources.get("txdelay_ms", "-"))
+        for hint in self.cfg.hints:
+            log.info("Konfig-Hinweis: %s", hint)
         log.info("Preset-Wörterbuch: %s", self.zd.describe())
         if self.cfg.is_station:
             st = self.cfg.station

@@ -104,6 +104,23 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             self._load("[direwolf]\ninterface = serial\n")
 
+    def test_cr70_radio_sections(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "direwolf.conf").write_text("AGWPORT 8010\nMODEM 9600\nTXDELAY 20\n",
+                                                   encoding="utf-8")
+            cfg = self._load(f"[radio]\ninterface = agw\n[agw]\ndirewolf_conf = {d}\n")
+        self.assertEqual((cfg.direwolf.port, cfg.station.baud, cfg.station.txdelay_ms),
+                         (8010, 9600, 200))
+        self.assertEqual((cfg.sources["baud"], cfg.hints), ("direwolf.conf", []))
+        cfg = self._load("[radio]\ninterface = kiss\n[kiss]\nport = 1\n"
+                         "[station]\nbaud = 350\n")
+        self.assertEqual((cfg.direwolf.port, cfg.station.baud), (1, 350))
+        self.assertIn("überschreibt", cfg.hints[0])
+        cfg = self._load("[direwolf]\nagw_port = 8020\n")
+        self.assertEqual(cfg.direwolf.port, 8020)
+        self.assertIn("alte Name", cfg.hints[0])
+
     def test_listener_lan(self):
         from brocast.config import ConfigError
         cfg = self._load("")
