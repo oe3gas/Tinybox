@@ -1168,6 +1168,34 @@ Offen aus Schritt 1: `kisshub/` ist in `build_production.sh` weder in `INCLUDE` 
 
 ---
 
+### 17.2 Konfiguration ohne Doppelungen (Konzept 18.10.2026, CR70)
+
+**Befund:** Funkrate und TXDELAY standen bis zu fünfmal (kisshub, tinybox, tbclient, brocastd,
+direwolf.conf), die kisshub-Adresse dreimal, AX.25-Werte doppelt (TinyBox `[ax25]` mit Rückfall
+auf `[direwolf]`, Client „dieselben Werte wie die TinyBox“), Direwolf/AGW unter vier Namen
+(`agw_radio_port`, `radio_port`, `channel`), die Schnittstellenwahl unter drei Namen
+(`[radio] interface`, `[tinybox] link`, `[direwolf] interface`). Beim VARA-Test führte das zu
+Fehlern (vergessene Werte, T1 zu kurz).
+
+**Entscheidung (18.10.2026):** Jeder Wert hat genau einen Besitzer.
+- **AGW:** `direwolf.conf` ist die Quelle. Neuer Eintrag `[agw] direwolf_conf` (Ordner oder Datei);
+  gelesen werden AGWPORT, KISSPORT, MODEM, TXDELAY, PERSIST, SLOTTIME, PACLEN, MAXFRAME, EMAXFRAME,
+  FRACK, RETRY. Über AGW lassen sich die Werte nicht abfragen: Direwolf beantwortet `g` (Port
+  Capabilities) mit festen Fantasiewerten (Quellcode `server.c`).
+- **KISS:** der kisshub ist die Quelle. `/status` bekommt einen Block `radio` (air_baud, txdelay_ms,
+  Herkunft, AX.25-Empfehlung des Profils); TinyBox, Client, brocastd übernehmen ihn. Neues Profil
+  `direwolf` (liest direwolf.conf), VARA-Profile mit den gemessenen Werten als Standard.
+- Einheitliche Abschnitte `[radio] interface`, `[agw]`, `[kiss] port` in allen Programmen;
+  `host` fest 127.0.0.1, Status-Port = Port + 1. `[ax25]` nur noch zum Überschreiben.
+- dxfeed und fwdsim lesen `tinybox.conf` mit (`[tinybox] conf`).
+- Alte Schlüssel werden weiter gelesen (gelten als Überschreibung, Hinweis beim Start).
+
+Zielaufbau und Tabelle alt → neu: `MANUAL.md` Abschnitt 2.
+
+**Schritte:** 1. kisshub liefert `radio`, TinyBox/Client übernehmen es, `direwolf_conf` lesen –
+2. einheitliche Abschnittsnamen – 3. kisshub-Profil `direwolf`, brocastd – 4. dxfeed, fwdsim.
+Passt zu Schritt 3 oben (gemeinsamer Config-Lader).
+
 ## Quellen
 
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a

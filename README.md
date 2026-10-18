@@ -1,6 +1,6 @@
 # TinyBox
 
-Kleine lokale Packet-Radio-Mailbox für Direwolf. Planung: `PLANUNG.md`.
+Kleine lokale Packet-Radio-Mailbox für Direwolf. Handbuch (Teile, Konfiguration, Betrieb mit Direwolf, kisshub und VARA FM, Messungen): `MANUAL.md`. Planung: `PLANUNG.md`.
 
 ## Voraussetzung
 

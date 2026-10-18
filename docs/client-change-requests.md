@@ -1942,3 +1942,17 @@ Minuten. Die TinyBox soll vorher sagen „die hab ich schon“.
   gefragt – das kostet keinen zusätzlichen Durchgang.
 - Ältere TinyBox ohne Cap `HAVE`: wie bisher (senden, Duplikat über `mid=`).
 - Tests in `tests/test_mailsync.py`. Client-Version 2026.10.18.2.
+
+## CR70 – Konfiguration ohne Doppelungen: ein Besitzer je Wert (offen, Konzept 18.10.2026)
+
+### Erfassung (OE3GAS, 18.10.2026)
+
+Mehrere conf-Dateien enthalten Einträge, die andere Komponenten betreffen (z. B. `air_baud` in
+kisshub.conf und tinybox.conf). Die confs sollen schlanker und redundanzfrei werden. Der
+Zielordner von Direwolf bzw. die `direwolf.conf` wird unter `[agw]` erfasst. Ein Handbuch
+`MANUAL.md` mit den exemplarischen confs anlegen.
+
+### Konzept
+
+`PLANUNG.md` 17.2, Zielaufbau aller confs und Tabelle alt → neu in `MANUAL.md` Abschnitt 2.
+Umsetzung in vier Schritten; alte Schlüssel bleiben lesbar.
