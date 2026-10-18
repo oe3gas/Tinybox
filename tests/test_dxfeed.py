@@ -60,6 +60,30 @@ def make_cfg(d: str, port: int = 7300):
     return load(p)
 
 
+class InboxFromTinyboxTests(unittest.TestCase):
+    """CR70: the inbox folder is read from tinybox.conf."""
+
+    def test_inbox_from_tinybox_conf(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "tinybox.conf").write_text("[inbox]\ndir = in\n", encoding="utf-8")
+            p = Path(d) / "dxfeed.conf"
+            p.write_text("[cluster]\nlogin = oe3gas\n", encoding="utf-8")
+            cfg = load(p)
+            self.assertEqual(cfg.digest.inbox, Path(d) / "in")
+            self.assertIn("tinybox.conf", cfg.inbox_source)
+            p.write_text("[cluster]\nlogin = oe3gas\n[digest]\ninbox = other\n",
+                         encoding="utf-8")
+            cfg = load(p)
+            self.assertEqual((cfg.digest.inbox, cfg.inbox_source), (Path("other"), "dxfeed.conf"))
+            self.assertIn("overrides", cfg.hints[0])
+            p.write_text("[tinybox]\nconf = nix.conf\n[cluster]\nlogin = oe3gas\n",
+                         encoding="utf-8")
+            cfg = load(p)
+            self.assertEqual(cfg.digest.inbox, Path("eingang"))
+            self.assertIn("not found", cfg.hints[0])
+
+
 class SpotTests(unittest.TestCase):
     def test_parse_dxspider_line(self):
         s = parse("DX de OE3GAS:     14025.0  VP8ABC       CW 599 tnx QSO           1234Z")

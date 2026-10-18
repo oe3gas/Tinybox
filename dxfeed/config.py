@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import configparser
+import dataclasses
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,6 +72,8 @@ class Config:
     digest: DigestCfg = field(default_factory=DigestCfg)
     log_level: str = "INFO"
     log_file: str = ""
+    inbox_source: str = "default"     # CR70: tinybox.conf | dxfeed.conf | default
+    hints: tuple[str, ...] = ()
 
 
 def parse_nodes(text: str) -> tuple[tuple[str, int], ...]:
@@ -148,8 +151,45 @@ def load(path: str | Path) -> Config:
         max_lines=max(5, get("digest", "max_lines", 30, int)),
         max_bytes=max(800, get("digest", "max_bytes", 3000, int)),
         valid=valid,
-        inbox=Path(get("digest", "inbox", "eingang")))
+        inbox=Path("eingang"))
+
+    # CR70: the inbox folder belongs to tinybox.conf ([inbox] dir); [digest] inbox
+    # is only an override
+    hints: list[str] = []
+    tb_inbox = None
+    tb_name = get("tinybox", "conf", "")
+    tb_path = Path(tb_name or "tinybox.conf")
+    if not tb_path.is_absolute():
+        tb_path = path.parent / tb_path
+    if tb_path.is_file():
+        tb_inbox = tinybox_inbox(tb_path)
+    else:
+        hints.append(f"[tinybox] conf: {tb_path} not found - inbox from dxfeed.conf "
+                     "or the default")
+    inbox, source = tb_inbox, f"tinybox.conf {tb_path}"
+    if cp.has_option("digest", "inbox") and get("digest", "inbox", ""):
+        own = Path(get("digest", "inbox", ""))
+        if tb_inbox is not None:
+            same = own.resolve() == tb_inbox.resolve()
+            hints.append(f"[digest] inbox = {own}: " + ("same as [inbox] dir in tinybox.conf - "
+                                                        "can be removed" if same else
+                                                        f"overrides {tb_inbox} from tinybox.conf"))
+        inbox, source = own, "dxfeed.conf"
+    if inbox is None:
+        inbox, source = Path("eingang"), "default (no tinybox.conf found)"
+    digest = dataclasses.replace(digest, inbox=inbox)
 
     return Config(cluster=cluster, data=data, digest=digest,
                   log_level=get("log", "level", "INFO").upper(),
-                  log_file=get("log", "file", ""))
+                  log_file=get("log", "file", ""), inbox_source=source, hints=tuple(hints))
+
+
+def tinybox_inbox(tb_conf: Path) -> Path:
+    """[inbox] dir of tinybox.conf, relative to that file (as TinyBox reads it)."""
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+    try:
+        cp.read(tb_conf, encoding="utf-8")
+    except (configparser.Error, OSError) as exc:
+        raise ConfigError(f"[tinybox] conf: {tb_conf} not readable ({exc})") from None
+    d = Path(cp.get("inbox", "dir", fallback="eingang").strip() or "eingang")
+    return d if d.is_absolute() else tb_conf.parent / d

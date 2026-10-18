@@ -5,6 +5,9 @@
 ;   digest:     daily at 05:00 by dxfeed_aufgabe_einrichten.bat
 ;   check:      dxfeed.bat status  |  dxfeed.bat show  |  dxfeed.bat digest
 
+[tinybox]
+conf     = tinybox.conf                ; CR70: the inbox folder is read from it ([inbox] dir)
+
 [cluster]
 nodes         = dxc.hamserve.uk:7300   ; DXSpider; more nodes separated by spaces,
                                        ; tried in turn when one fails
@@ -38,7 +41,7 @@ min_spotters = 2                       ; fewer different spotters: only counted 
 max_lines    = 30
 max_bytes    = 3000                    ; bulletin text; brocast cuts at [brocast] max_bytes
 valid        = 7d                      ; deleted after this time (empty = rubric default)
-inbox        = eingang                 ; TinyBox [inbox] dir
+; inbox      =                         ; default: [inbox] dir from tinybox.conf (only to override)
 
 [log]
 level = INFO

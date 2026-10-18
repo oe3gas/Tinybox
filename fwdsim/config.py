@@ -56,6 +56,8 @@ class Config:
     tinybox: TinyboxCfg = field(default_factory=TinyboxCfg)
     agw: AgwCfg = field(default_factory=AgwCfg)
     base_dir: Path = field(default_factory=Path.cwd)
+    sources: dict = field(default_factory=dict)   # CR70: value -> where it came from
+    hints: list = field(default_factory=list)
 
     @property
     def db_path(self) -> Path:
@@ -95,6 +97,15 @@ def load(path: str | Path | None) -> Config:
         b.qth = get(sec, "qth", b.qth)
         b.bid_start = get(sec, "bid_start", b.bid_start, int)
     t = cfg.tinybox
+    a = cfg.agw
+    _from_tinybox(cfg, cp, path)            # CR70: tinybox.conf / direwolf.conf first
+    for key in ("call", "haddress", "ax25_call", "telnet_port", "db"):
+        if cp.has_option("tinybox", key) and cfg.sources.get(key, "").startswith("tinybox.conf"):
+            cfg.hints.append(f"[tinybox] {key}: overrides the value from tinybox.conf")
+            cfg.sources[key] = "fwdsim.conf"
+    for key in ("port", "paclen", "max_outstanding"):
+        if cp.has_option("agw", key) and cfg.sources.get(f"agw_{key}") == "direwolf.conf":
+            cfg.hints.append(f"[agw] {key}: overrides the value from direwolf.conf")
     t.call = get("tinybox", "call", t.call).upper()
     t.haddress = get("tinybox", "haddress", t.haddress).upper()
     t.ax25_call = get("tinybox", "ax25_call", t.ax25_call).upper()
@@ -105,12 +116,64 @@ def load(path: str | Path | None) -> Config:
     t.telnet_port = get("tinybox", "telnet_port", t.telnet_port, int)
     t.telnet_user = get("tinybox", "telnet_user", t.telnet_user).upper()
     t.db = get("tinybox", "db", t.db)
-    a = cfg.agw
     a.enabled = get("agw", "enabled", a.enabled, bool)
     a.host = get("agw", "host", a.host)
     a.port = get("agw", "port", a.port, int)
-    a.radio_port = get("agw", "radio_port", a.radio_port, int)
+    a.radio_port = get("agw", "channel", get("agw", "radio_port", a.radio_port, int), int)
     a.paclen = get("agw", "paclen", a.paclen, int)
     a.max_outstanding = get("agw", "max_outstanding", a.max_outstanding, int)
     a.via = get("agw", "via", a.via, list)
     return cfg
+
+
+def _from_tinybox(cfg: Config, cp: configparser.ConfigParser, path: Path) -> None:
+    """CR70: [tinybox] conf = tinybox.conf gives mailbox call, haddress, telnet
+    port and the database; [agw] direwolf_conf gives AGW port, PACLEN, window.
+    The keys in fwdsim.conf stay as overrides."""
+    t, a = cfg.tinybox, cfg.agw
+    name = cp.get("tinybox", "conf", fallback="").strip()
+    if name:
+        p = Path(name)
+        p = p if p.is_absolute() else path.parent / p
+        if not p.is_file():
+            cfg.hints.append(f"[tinybox] conf: {p} not found - fwdsim.conf values only")
+        else:
+            tb = configparser.ConfigParser(inline_comment_prefixes=(";", "#"))
+            tb.read(p, encoding="utf-8")
+            src = f"tinybox.conf {p}"
+            mbx = tb.get("station", "mailbox_call", fallback="").strip().upper()
+            if mbx:
+                t.ax25_call, cfg.sources["ax25_call"] = mbx, src
+                base = mbx.split("-")[0]
+                t.call, cfg.sources["call"] = base, src
+                t.telnet_user = base
+            had = tb.get("station", "haddress", fallback="").strip().upper()
+            if had:
+                t.haddress, cfg.sources["haddress"] = had, src
+            tp = tb.get("telnet", "port", fallback="").strip()
+            if tp.isdigit():
+                t.telnet_port, cfg.sources["telnet_port"] = int(tp), src
+            data = Path(tb.get("storage", "data_dir", fallback="data").strip() or "data")
+            data = data if data.is_absolute() else p.parent / data
+            t.db, cfg.sources["db"] = str(data / "tinybox.db"), src
+    dwp = cp.get("agw", "direwolf_conf", fallback="").strip().strip('"')
+    if dwp:
+        import sys
+        root = Path(__file__).resolve().parents[1]
+        if str(root) not in sys.path:
+            sys.path.append(str(root))
+        from prcore import direwolfconf
+        q = Path(dwp)
+        q = q if q.is_absolute() or q.exists() else path.parent / q
+        try:
+            dw = direwolfconf.read(q)
+        except direwolfconf.DirewolfConfError as exc:
+            cfg.hints.append(f"[agw] direwolf_conf: {exc}")
+            return
+        if dw.agw_port:
+            a.port, cfg.sources["agw_port"] = dw.agw_port, "direwolf.conf"
+        if dw.paclen:
+            a.paclen, cfg.sources["agw_paclen"] = dw.paclen, "direwolf.conf"
+        window = dw.emaxframe or dw.maxframe
+        if window:
+            a.max_outstanding, cfg.sources["agw_max_outstanding"] = min(7, window), "direwolf.conf"

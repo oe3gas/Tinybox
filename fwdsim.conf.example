@@ -24,6 +24,10 @@ haddress  = DL0XTC.#BAY.DEU.EU
 qth       = Muenchen
 
 [tinybox]
+# CR70: conf = tinybox.conf liefert mailbox_call (ax25_call, call ohne SSID),
+# haddress, Telnet-Port und die Datenbank. Die Schluessel unten gelten nur noch
+# als Ueberschreibung (Hinweis beim Start).
+# conf       = tinybox.conf
 call         = OE3XTC               # wie in Adressen/R:-Zeilen, ohne SSID
 haddress     = OE3XTC.#NOE.AUT.EU
 ax25_call    = OE3XTC-1             # = mailbox_call in tinybox.conf
@@ -37,9 +41,8 @@ db           =                      # z. B. data/tinybox.db - nur lesend, fuer d
 
 [agw]
 enabled         = no                # Funktest ueber Direwolf (Option --agw)
+# direwolf_conf = E:\direwolf       # AGWPORT, PACLEN, EMAXFRAME/MAXFRAME daraus
 host            = 127.0.0.1
-port            = 8000
-radio_port      = 0
-paclen          = 128
-max_outstanding = 4
+channel         = 0                 # Direwolf-Kanal (alt: radio_port)
+# port / paclen / max_outstanding   # nur zum Ueberschreiben (Standard 8000 / 128 / 4)
 via             =                   # Digis/Knoten zu TinyBox, z. B. OE3XNR

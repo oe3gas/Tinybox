@@ -177,6 +177,10 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
                         format="%(asctime)s %(name)s: %(message)s", datefmt="%H:%M:%S")
     cfg = config_mod.load(args.config)
+    for key, src in cfg.sources.items():
+        print(f"config: {key} from {src}")
+    for hint in cfg.hints:
+        print(f"config hint: {hint}")
     try:
         if args.cmd == "cases":
             return cmd_cases(args, cfg)

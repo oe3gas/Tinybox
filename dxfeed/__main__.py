@@ -96,6 +96,10 @@ def cmd_digest(cfg: Config, args) -> int:
         print(d.text, end="")
         print(f"\n[{len(d.text.encode('ascii', 'replace'))} Bytes, {d.lines} Zeilen]")
         return 0
+    if not args.tinybox:
+        log.info("inbox %s (%s)", cfg.digest.inbox, cfg.inbox_source)
+    for hint in cfg.hints:
+        log.info("config hint: %s", hint)
     target = write_inbox(args.tinybox or cfg.digest.inbox, d, cfg.digest)
     log.info("digest: %s -> %s (%d bytes, %d lines)", d.subject, target,
              len(d.text), d.lines)

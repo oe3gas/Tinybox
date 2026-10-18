@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import struct
 import unittest
+from pathlib import Path
 
 from fwdsim import agw as fagw
 from fwdsim.agw import AgwClient, Frame
@@ -177,6 +178,32 @@ class AgwTests(unittest.IsolatedAsyncioTestCase):
             await tb.stop()
             server.close()
 
+
+
+class FwdsimConfigTests(unittest.TestCase):
+    """CR70: fwdsim takes the TinyBox values from tinybox.conf."""
+
+    def test_values_from_tinybox_conf(self):
+        import tempfile
+        from fwdsim import config as fcfg
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "tinybox.conf").write_text(
+                "[station]\nmailbox_call = OE3GAS-1\nhaddress = OE3GAS.#NOE.AUT.EU\n"
+                "[telnet]\nport = 6400\n[storage]\ndata_dir = daten\n", encoding="utf-8")
+            (Path(d) / "direwolf.conf").write_text("AGWPORT 8010\nPACLEN 256\nEMAXFRAME 6\n",
+                                                   encoding="utf-8")
+            p = Path(d) / "fwdsim.conf"
+            p.write_text(f"[tinybox]\nconf = tinybox.conf\ntelnet_port = 6500\n"
+                         f"[agw]\ndirewolf_conf = {d}\n", encoding="utf-8")
+            cfg = fcfg.load(p)
+            t = cfg.tinybox
+            self.assertEqual((t.call, t.ax25_call, t.haddress), ("OE3GAS", "OE3GAS-1",
+                                                                 "OE3GAS.#NOE.AUT.EU"))
+            self.assertEqual(t.telnet_port, 6500)                 # fwdsim.conf overrides
+            self.assertEqual(Path(t.db), Path(d) / "daten" / "tinybox.db")
+            self.assertEqual((cfg.agw.port, cfg.agw.paclen, cfg.agw.max_outstanding),
+                             (8010, 256, 6))
+            self.assertIn("telnet_port", cfg.hints[0])
 
 if __name__ == "__main__":
     unittest.main()
