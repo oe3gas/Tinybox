@@ -33,6 +33,8 @@ port         = 8101            # kisshub ([server] port in kisshub.conf); host a
 
 [ax25]                         # OPTIONAL, only with interface = kiss - only to override
 version      = 2.2             # 2.2: SABME/SREJ/XID, falls back to 2.0 by itself; 2.0: SABM only
+# v20_digis  = OE3XTC-5        # digis that know only v2.0 (modulo 8, e.g. TM-D710E): links
+#                              # over them use v2.0, all other digis count as v2.2
 # paclen / maxframe / maxframe_ext / n2 / t1_min_sec / t1_max_sec / t2_sec / t3_sec
 #                              # default: from kisshub (1200 Bd: 256 / 4 / 7 / 10 / 3 / 30 / 1.5)
 # srej       = yes

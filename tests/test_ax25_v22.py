@@ -292,3 +292,53 @@ class SrejAnswerTests(unittest.TestCase):
             self.out()
         cap = min(self.box.cfg.t1_max_sec, 8 * self.box.srt)
         self.assertTrue(all(i <= cap + 1.0 for i in intervals), intervals)
+
+
+class V20DigiTests(unittest.TestCase):
+    """Known v2.0 digis (TM-D710E): modulo 128 I frames are dropped there,
+    so links over them use v2.0 (bug 18.10.2026, OE3GAS-2 via OE3XTC-5)."""
+
+    DIGI = "OE3XTC-5"
+    CFG = dataclasses.replace(V22, v20_digis=frozenset({"OE3XTC-5"}))
+
+    def make(self, cfg_a, cfg_b, path):
+        a = Ax25Link(A_CALL, B_CALL, path=path, cfg=cfg_a)
+        b = Ax25Link(B_CALL, A_CALL, path=list(reversed(path)), cfg=cfg_b)
+        return a, b, Sim(a, b)
+
+    def test_incoming_sabme_over_v20_digi_gets_dm(self):
+        """Direwolf calls with SABME, the mailbox says DM -> SABM, modulo 8."""
+        a, b, sim = self.make(V22, self.CFG, [self.DIGI])
+        connect(a, b, sim)
+        self.assertEqual(sim.kinds("A")[:2], ["SABME", "SABM"])
+        self.assertEqual(sim.kinds("B")[:2], ["DM", "UA"])
+        self.assertEqual((a.modulo, b.modulo), (8, 8))
+        send_all(a, b, sim, payload(500))
+        self.assertEqual(bytes(sim.rx["B"]), payload(500))
+
+    def test_outgoing_over_v20_digi_calls_with_sabm(self):
+        a, b, sim = self.make(self.CFG, V22, [self.DIGI])
+        connect(a, b, sim)
+        self.assertEqual(sim.kinds("A")[0], "SABM")
+        self.assertEqual(a.modulo, 8)
+
+    def test_other_digi_keeps_v22(self):
+        a, b, sim = self.make(V22, self.CFG, ["OE3XYZ-2"])
+        connect(a, b, sim)
+        self.assertEqual((a.modulo, b.modulo), (128, 128))
+
+    def test_direct_keeps_v22(self):
+        a, b, sim = self.make(V22, self.CFG, [])
+        connect(a, b, sim)
+        self.assertEqual(b.modulo, 128)
+
+    def test_v20_digi_anywhere_in_the_path(self):
+        a, b, sim = self.make(V22, self.CFG, ["OE3XYZ-2", self.DIGI])
+        connect(a, b, sim)
+        self.assertEqual(b.modulo, 8)
+
+    def test_parse_calls(self):
+        from prcore.ax25.link import parse_calls
+        self.assertEqual(parse_calls("oe3xtc-5, OE1ABC-0  oe3xyz"),
+                         frozenset({"OE3XTC-5", "OE1ABC", "OE3XYZ"}))
+        self.assertEqual(parse_calls(""), frozenset())

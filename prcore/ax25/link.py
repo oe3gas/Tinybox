@@ -10,6 +10,13 @@ v2.2 and the fall back to v2.0
     SABM (modulo 8). `peer_version` tells the caller what the station spoke,
     so the next connect can start with SABM directly (`peer_v20=True`).
     Incoming SABME is accepted with cfg.version "2.2", answered DM with "2.0".
+    Known v2.0 digipeaters (cfg.v20_digis, like V20 in direwolf.conf): some
+    digis (e.g. the TNC of a Kenwood TM-D710E) know only modulo 8. They repeat
+    SABME, UA, XID and RR, but read the second control byte of a modulo-128
+    I frame as PID 0x00 and drop the frame - the link comes up, but no data
+    ever arrives (bug 18.10.2026, OE3GAS-2 via OE3XTC-5). A link over such a
+    digi calls with SABM, and an incoming SABME over it is answered with DM,
+    so the caller falls back to SABM. All other digis count as v2.2.
     After a SABME/UA the caller sends XID: window, I field length and SREJ
     are negotiated (xid.py). The XID is repeated after T1, `xid_tries` times
     in all; without an answer: our window, REJ only.
@@ -93,6 +100,7 @@ class LinkCfg:
     version: str = "2.2"         # "2.2": call with SABME, accept SABME; "2.0": SABM only
     maxframe_ext: int = 7        # k with modulo 128 (1..127); 7 is plenty at 1200 Bd
     srej: bool = True            # offer SREJ in the XID (v2.2 links only)
+    v20_digis: frozenset = frozenset()   # digipeaters that know only modulo 8
     sabme_tries: int = 2         # unanswered SABMEs before calling with SABM
     xid_tries: int = 3           # XID commands before giving up (then REJ only)
 
@@ -101,6 +109,12 @@ class LinkCfg:
 class _Sent:
     info: bytes
     sends: int = 0
+
+
+def parse_calls(text: str) -> frozenset:
+    """'OE3XTC-5, OE1ABC' -> frozenset of upper case calls (config lists)."""
+    calls = (c.upper() for c in text.replace(",", " ").split())
+    return frozenset(c[:-2] if c.endswith("-0") else c for c in calls)
 
 
 class Ax25Link:
@@ -157,7 +171,11 @@ class Ax25Link:
         self._now = now
         if self.state != State.DISCONNECTED:
             return
-        self._establish(now, v22=self.cfg.version == "2.2" and not self.peer_v20)
+        self._establish(now, v22=self._v22() and not self.peer_v20)
+
+    def _v22(self) -> bool:
+        """May this link use v2.2 (SABME, modulo 128)? Not over a known v2.0 digi."""
+        return self.cfg.version == "2.2" and not any(d in self.cfg.v20_digis for d in self.path)
 
     def disconnect(self, now: float) -> None:
         """Release the link. Unsent data is dropped: the caller waits for
@@ -288,7 +306,7 @@ class Ax25Link:
         if f.kind == "SABM" and f.command:
             self._accept(f, now, 8)
             self._events.append(("connected", "incoming"))
-        elif f.kind == "SABME" and f.command and self.cfg.version == "2.2":
+        elif f.kind == "SABME" and f.command and self._v22():
             self._accept(f, now, 128)
             self._events.append(("connected", "incoming"))
         elif f.kind in ("SABME", "DISC"):
@@ -359,7 +377,7 @@ class Ax25Link:
             self.queue.clear()
             self._accept(f, now, 8)
             self._events.append(("reset", "remote"))
-        elif kind == "SABME" and f.command and self.cfg.version == "2.2":
+        elif kind == "SABME" and f.command and self._v22():
             self.queue.clear()
             self._accept(f, now, 128)
             self._events.append(("reset", "remote"))

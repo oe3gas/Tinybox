@@ -1,0 +1,2 @@
+- KISS: [ax25] v20_digis = digis that know only v2.0
+  (e.g. TM-D710E). Links over them use v2.0, else no data.

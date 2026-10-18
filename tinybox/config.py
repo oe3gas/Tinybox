@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from prcore.ax25.link import parse_calls
+
 # Amateur radio callsign as used in AX.25: 3-6 chars, letters and digits,
 # at least one digit and one letter, optional SSID 0-15.
 CALL_RE = re.compile(
@@ -163,6 +165,7 @@ class Ax25Cfg:
     t2_sec: float = 1.5
     t3_sec: float = 300.0
     srt_init_sec: float = 2.5
+    v20_digis: frozenset = frozenset()   # digis that know only modulo 8: v2.0 over them
 
 
 @dataclass
@@ -607,9 +610,13 @@ def _load_radio(cp: configparser.ConfigParser, base: Path) -> tuple:
         t2_sec=_get(cp, "ax25", "t2_sec", 1.5, float),
         t3_sec=_get(cp, "ax25", "t3_sec", 300.0, float),
         srt_init_sec=_get(cp, "ax25", "srt_init_sec", 2.5, float),
+        v20_digis=parse_calls(_get(cp, "ax25", "v20_digis", "")),
     )
     if ax25.version not in ("2.0", "2.2"):
         raise ConfigError(f"[ax25] version: '{ax25.version}' - use 2.0 or 2.2")
+    for d in sorted(ax25.v20_digis):
+        if not CALL_RE.match(d):
+            raise ConfigError(f"[ax25] v20_digis: '{d}' is not a callsign")
     _check_range("ax25", "paclen", ax25.paclen, 16, 256)
     _check_range("ax25", "maxframe", ax25.maxframe, 1, 7)
     _check_range("ax25", "maxframe_ext", ax25.maxframe_ext, 1, 127)

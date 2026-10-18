@@ -44,6 +44,8 @@ port = 8101                    # kisshub; host is always 127.0.0.1, its status p
 
 [ax25]                         # OPTIONAL - only to override; empty = owner's values
 version = 2.2                  # kiss only: 2.2 = SABME/SREJ/XID, falls back to 2.0; 2.0 = SABM
+# v20_digis = OE3XTC-5         # kiss only: digis that know only v2.0 (modulo 8, e.g. TM-D710E):
+#                              # links over them use v2.0, all other digis count as v2.2
 # paclen       =               # agw: default PACLEN from direwolf.conf (else 256)
 #                              # kiss: default from kisshub (1200 Bd: 256)
 # maxframe     =               # agw: packets handed to Direwolf ahead of the acks,

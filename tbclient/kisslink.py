@@ -43,6 +43,7 @@ def link_cfg(cfg: Config) -> LinkCfg:
                    maxframe_ext=cfg.ax25_maxframe_ext, srej=cfg.ax25_srej, n2=cfg.ax25_n2,
                    version=cfg.ax25_version, t1_min_sec=cfg.ax25_t1_min,
                    t1_max_sec=cfg.ax25_t1_max, t2_sec=cfg.ax25_t2, t3_sec=cfg.ax25_t3,
+                   v20_digis=cfg.ax25_v20_digis,
                    air_baud=cfg.kiss_air_baud, txdelay_sec=cfg.kiss_txdelay_ms / 1000,
                    max_rx_info=max(512, cfg.ax25_paclen))
 

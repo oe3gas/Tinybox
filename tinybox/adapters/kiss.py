@@ -59,7 +59,7 @@ def link_cfg(cfg: Config) -> LinkCfg:
     return LinkCfg(paclen=a.paclen, maxframe=a.maxframe, maxframe_ext=a.maxframe_ext,
                    srej=a.srej, n2=a.n2, version=a.version, srt_init_sec=a.srt_init_sec,
                    t1_min_sec=a.t1_min_sec, t1_max_sec=a.t1_max_sec, t2_sec=a.t2_sec,
-                   t3_sec=a.t3_sec, air_baud=k.air_baud, txdelay_sec=k.txdelay_ms / 1000,
+                   t3_sec=a.t3_sec, v20_digis=a.v20_digis, air_baud=k.air_baud, txdelay_sec=k.txdelay_ms / 1000,
                    max_rx_info=max(512, a.paclen))
 
 
