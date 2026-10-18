@@ -13,7 +13,8 @@ known - VARA changelog, Pat-Vara, Mercury; parser tolerant, the rest is logged):
     IAMALIVE               keepalive
     MISSING SOUNDCARD      USB audio gone - alarm (only a PC restart helps)
     VERSION ...            VARA version
-    PENDING / CONNECTED / DISCONNECTED   ARQ activity - should not happen in KISS mode
+    PENDING / CANCELPENDING   also in KISS mode: every ~2 s while sending, then CANCEL
+    CONNECTED / DISCONNECTED  an ARQ connection - should not happen in KISS mode
 
 Licence and encryption lines (REGISTERED, LINK ..., ENCRYPTION ...) are only
 logged as text, never evaluated.
@@ -105,6 +106,7 @@ class VaraMonitor:
         self.sn_last: tuple[float, float, str | None] | None = None   # (wall, dB, call)
         self.bitrate: tuple[int, int] | None = None              # (level, bps)
         self.arq_lines = 0
+        self.pending_lines = 0                     # PENDING/CANCELPENDING (KISS traffic)
         # alarms
         self.alarms: deque[dict] = deque(maxlen=ALARMS_KEEP)
         self._ptt_alarmed = False
@@ -192,9 +194,14 @@ class VaraMonitor:
             log.info("VARA version: %s", self.version)
         elif up.startswith("MISSING SOUNDCARD"):
             self._alarm("missing soundcard - VARA lost its USB audio (restart the PC)")
-        elif up.startswith(("PENDING", "CONNECTED", "DISCONNECTED", "CANCELPENDING")):
+        elif up in ("PENDING", "CANCELPENDING"):
+            # seen in KISS mode too (VARA FM 4.4.0, 18.10.2026): every ~2 s while the
+            # station sends KISS traffic, CANCELPENDING when done - not an ARQ call
+            self.pending_lines += 1
+            log.debug("VARA: %s", line)
+        elif up.startswith(("CONNECTED", "DISCONNECTED")):
             self.arq_lines += 1
-            log.warning("VARA reports ARQ activity in KISS mode: %s", line)
+            log.warning("VARA reports an ARQ connection in KISS mode: %s", line)
         elif up.startswith(QUIET):
             log.debug("VARA: %s", line)                  # licence/encryption: text only
         elif up.startswith(("BUFFER", "OK", "WRONG")):
@@ -262,6 +269,7 @@ class VaraMonitor:
         return {
             "connected": self.connected, "since": self.since, "version": self.version,
             "lines": self.lines, "unknown_lines": self.unknown, "arq_lines": self.arq_lines,
+            "pending_lines": self.pending_lines,
             "alive_age_sec": round(t - self.last_alive_t, 1) if self.last_alive_t else None,
             "ptt": self.ptt, "busy": self.busy, "busy_count": self.busy_count,
             "busy_share_10min": self.busy_share(t, 600),
