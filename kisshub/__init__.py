@@ -14,4 +14,4 @@ docs/kiss-mode-konzept.md section 4, PLANUNG.md section 15.
     varamon.py    VARA's command port, read only: PTT, BUSY, SN, alarms (CR67)
 """
 
-VERSION = "2026.10.18.5"
+VERSION = "2026.10.18.6"

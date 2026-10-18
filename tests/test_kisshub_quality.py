@@ -212,6 +212,10 @@ class _NoTnc:
     profile = _p.GENERIC
     ready = asyncio.Event
 
+    @staticmethod
+    def status() -> dict:
+        return {"tunnel_tx": 0, "bundles_tx": 0}
+
 
 if __name__ == "__main__":
     unittest.main()

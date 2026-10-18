@@ -306,7 +306,13 @@ class Hub:
         p = self.tnc.profile
         line = {"ended": time.time(), "kisshub": VERSION, "tnc": p.name, "tunnel": p.tunnel,
                 "air_baud": self.cfg.air_baud, "txdelay_ms": round(self.cfg.txdelay_sec * 1000),
-                "vara_fit": self.vara.burst_fit() if self.vara is not None else None, **rec}
+                "vara_fit": self.vara.burst_fit() if self.vara is not None else None,
+                # tunnel counters since kisshub started (bundles: did it bundle at all?)
+                "tunnel_counters": {k: v for k, v in self.tnc.status().items()
+                                    if k in ("tunnel_tx", "tunnel_rx", "bundles_tx",
+                                             "bundles_rx", "bundled_tx", "bundled_rx",
+                                             "foreign", "echoes")},
+                **rec}
         try:
             with open(self.cfg.links_file, "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(line, ensure_ascii=False) + "\n")
