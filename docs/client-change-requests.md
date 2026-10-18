@@ -2012,4 +2012,5 @@ Die Klarheit eines eigenen Felds liefert eine Vorschau unter dem Eingabefeld.
 - Verbindungslog: Spalte Station bleibt das Rufzeichen (ADIF), ohne Pfad.
 - Tests: `TargetParseTests`, `ConnectViaAgwTests` (AGW `'v'`), `ConnectViaTests` (Client →
   Digipeater → TinyBox über KISS, beide Richtungen durch den Digi). Client 2026.10.18.7.
+- **Funktest und Abnahme** (OE3GAS, 18.10.2026): getestet und abgenommen ✅
 
