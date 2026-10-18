@@ -54,7 +54,8 @@ log = logging.getLogger(__name__)
 HEADER_BYTES = 90        # about one //M line, to size the header pages
 BUSY_QUIET_SEC = 3       # the channel counts as free after this much silence
 BUSY_MAX_SEC = 30        # never wait longer than this for a free channel
-IDLE_SEC = 120            # no answer for this long: the sync gives up
+IDLE_SEC = 120            # no answer for this long: the sync gives up ...
+SEND_WAIT_MAX_SEC = 1800  # ... unless own frames are still on their way (at most this long)
 ABORT_GRACE_SEC = 30      # orderly abort: wait this long for the answer on the air (CR40)
 SCOPES = ("mail", "bulletins", "login", "fetch", "send")
 END_LINES = ("//SYNCEND", "//BSYNCEND", "//GEND", "//MEND", "//RUEND", "//KEND", "//REND",
@@ -522,15 +523,33 @@ class Syncer:
     # --- requests -------------------------------------------------------------------
 
     async def _next(self):
-        if self.core.state != "online":
-            raise SyncError("connection lost")
+        """The next answer. "No answer" only counts once our own request has left:
+        a long mail over a slow link (VARA FM: ~13 B/s) is still on its way for
+        minutes, and the TinyBox can answer //SENT only after the last line came
+        (lauf 5, 18.10.2026: the sync gave up after 120 s, the //SENT came later
+        and the mail stayed in the outbox)."""
+        waited = 0.0
+        while True:
+            if self.core.state != "online":
+                raise SyncError("connection lost")
+            try:
+                item = await asyncio.wait_for(self.queue.get(), IDLE_SEC)
+            except asyncio.TimeoutError:
+                waited += IDLE_SEC
+                if waited < SEND_WAIT_MAX_SEC and await self._still_sending():
+                    log.info("sync: own data still on its way, waiting for the answer")
+                    continue
+                raise SyncError("no answer from the TinyBox") from None
+            if item[0] == "lost":
+                raise SyncError("connection lost")
+            return item
+
+    async def _still_sending(self) -> bool:
+        """Frames of ours not yet sent or not yet acknowledged by the TinyBox."""
         try:
-            item = await asyncio.wait_for(self.queue.get(), IDLE_SEC)
-        except asyncio.TimeoutError:
-            raise SyncError("no answer from the TinyBox") from None
-        if item[0] == "lost":
-            raise SyncError("connection lost")
-        return item
+            return await self.core.link.outstanding() > 0
+        except Exception:                          # a link without the count: no
+            return False
 
     def link_lost(self) -> None:
         if self.queue is not None:

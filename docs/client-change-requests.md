@@ -1896,3 +1896,28 @@ VARA FM, 1200 Bd. Auffällig: lange Pausen zwischen den Sendungen der beiden Sta
 
 Offen: Anzeige in TinyBox-Web-GUI und Client, `/events`-Datenstrom, VARA-Logdatei (Teil D).
 
+
+## CR68 – Bug: Mail bleibt nach dem Senden über eine langsame Strecke im Postausgang (✅ 18.10.2026)
+
+### Erfassung (OE3GAS, 18.10.2026)
+
+VARA-Lauf 5: Antwort „Re: 2. Test Bulletin mit 3000 Zeichen“ (persönlich an OE3XYZ) wurde vom Client
+ausgesendet, blieb aber im Outbox stehen („1 change(s) waiting“).
+
+### Ursache
+
+Die kisshub-Auswertung zeigt: Alle 27 I-Frames (4013 Byte) kamen bei der TinyBox an und wurden
+quittiert, die TinyBox hat geantwortet. Die Übertragung dauerte über VARA FM (~13 B/s) aber mehrere
+Minuten. Der Sync wartet nach `//SEND` höchstens `IDLE_SEC` = 120 s auf eine Antwort – die TinyBox
+kann `//SENT` aber erst nach der letzten Zeile schicken. Der Sync gab nach 120 s mit „no answer from
+the TinyBox“ auf, das `//SENT` kam danach und wurde nicht mehr zugeordnet; die Mail blieb im
+Postausgang (beim nächsten Sync wäre sie erneut gesendet worden – die TinyBox erkennt sie über
+`mid=` und antwortet mit den alten Nummern, doppelt wird sie also nicht abgelegt).
+
+### Umsetzung
+
+`tbclient/sync.py` `_next()`: Läuft die Wartezeit ab, fragt der Sync die eigene Verbindung, ob noch
+Frames unterwegs sind (`outstanding()`: noch nicht gesendet oder nicht quittiert – KISS aus dem
+eigenen AX.25-Automaten, AGW per Direwolf `Y`). Solange das so ist, wartet er weiter (höchstens
+`SEND_WAIT_MAX_SEC` = 30 min); „keine Antwort“ gilt erst, wenn nichts Eigenes mehr unterwegs ist.
+Tests `tests/test_sync_slowlink.py`. Client-Version 2026.10.18.

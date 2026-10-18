@@ -1,0 +1,2 @@
+- Fix: a long mail over a slow link (VARA) no longer stays
+  in the outbox - the sync waits while it is still sent.
