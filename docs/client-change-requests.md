@@ -1979,3 +1979,37 @@ Umsetzung in vier Schritten; alte Schlüssel bleiben lesbar.
 - Alte Schlüssel gelten als Überschreibung, mit Hinweis beim Start. Tests:
   `tests/test_direwolfconf.py`, `RadioValuesTests`, `KissConfigTests`, Client-/brocastd-/
   dxfeed-/fwdsim-Konfigtests.
+
+## CR71 – Connect über Digipeater (✅ 18.10.2026)
+
+### Erfassung (OE3GAS, 17./18.10.2026)
+
+Der Client soll Stationen über einen oder mehrere Digipeater connecten können (Test über den
+TM-D710 OE3XTC-5). Frage: eigenes Via-Feld oder alles in das bestehende Eingabefeld?
+
+### Entscheidung
+
+Ein Feld mit der klassischen TNC-Syntax (`C OE3XYZ-1 V OE3XTC-5,OE3ABC`): gewohnt seit TNC2/BPQ,
+der Pfad gehört zum Ziel (Kopieren, Liste der letzten Ziele), kein zweites Feld zum Leeren.
+Die Klarheit eines eigenen Felds liefert eine Vorschau unter dem Eingabefeld.
+
+### Umsetzung
+
+- `tbclient/target.py`: `parse()` / `label()` – Rufzeichen, dann `V` oder `VIA`, Digis mit
+  Komma und/oder Leerzeichen, Groß/klein egal, höchstens 8 Digis (AX.25). Abgewiesen: fehlendes
+  `V`, Digi = Ziel oder eigenes Rufzeichen, Digi doppelt, ungültiges Rufzeichen.
+- Kanal (`channels.py`): `via` neben `target`; Statuszeile „connecting OE3XYZ-1 via …“;
+  Snapshot mit `via` und `label`. Ankommende Verbindungen haben keinen eigenen Pfad.
+- AGW (Direwolf): mit Pfad Frame `'v'` (Anzahl + je 10 Byte Rufzeichen), sonst `'C'` wie bisher.
+- KISS: `KissPort.open_link(remote, via)` – der eigene Layer 2 setzt den Pfad ins Adressfeld;
+  `[ax25] v20_digis` greift dort wie bei der TinyBox.
+- Web-GUI: Feld wächst mit dem Pfad (bis ~46 Zeichen), darunter beim Tippen „to OE3XYZ-1 · via
+  OE3XTC-5 → OE3ABC“ bzw. die Fehlermeldung (rot), ab 3 Digis Hinweis „many hops, slow“.
+  Titelleiste verbunden: Rufzeichen, daneben klein „via …“. Tooltip: Via ist nur Digipeating,
+  ein Node wird selbst connectet und dort mit C weiterverbunden.
+- Liste der letzten Ziele speichert den ganzen Pfad (`OE3XYZ-1 via OE3XTC-5`); leeres Feld
+  connectet das letzte Ziel samt Pfad. Telnet-Testport: Pfad wird ignoriert.
+- Verbindungslog: Spalte Station bleibt das Rufzeichen (ADIF), ohne Pfad.
+- Tests: `TargetParseTests`, `ConnectViaAgwTests` (AGW `'v'`), `ConnectViaTests` (Client →
+  Digipeater → TinyBox über KISS, beide Richtungen durch den Digi). Client 2026.10.18.7.
+

@@ -18,6 +18,7 @@ from prcore.ax25.frame import AX25Error, split_call
 from prcore.ax25.frame import ui_frame as ax25_ui_frame
 
 from . import VERSION, proto
+from . import target as tgt
 from .config import CALL_RE, Config
 from .images import Images, ImageStore
 from .channels import MAX_CHANNELS, TERM_SNAPSHOT, Channel
@@ -249,6 +250,7 @@ class ClientCore:
         if ch.state != "offline":
             return None
         ch.target = ch.link.target = remote
+        ch.via, ch.link.via = [], []          # their path is in their frames, not ours
         ch.incoming, ch.view, ch.auto, ch._user_disc = True, "term", False, False
         self.console.append(f"[{n}] *** {remote} connected to us")
         return ch.link
@@ -342,7 +344,7 @@ class ClientCore:
 
     @property
     def recent(self) -> list[str]:
-        r = [c for c in self.settings.get("recent", []) if isinstance(c, str) and CALL_RE.match(c)]
+        r = [c for c in self.settings.get("recent", []) if isinstance(c, str) and tgt.valid(c)]
         return r or [self.home]
 
     def free_channel(self) -> int | None:
@@ -366,20 +368,27 @@ class ClientCore:
         chan = self.channels.get(ch)
         if chan is not None and chan.state != "offline":
             return False
-        t = str(target if target is not None else
-                (chan.target if chan and chan.target else self.recent[0])).strip().upper()
-        if not CALL_RE.match(t) or t == self.cfg.mycall:
+        text = str(target if target is not None else
+                   (chan.label if chan and chan.target else self.recent[0]))
+        try:                                     # CR71: 'OE3XYZ-1 V OE3XTC-5,...'
+            t, via = tgt.parse(text, self.cfg.mycall)
+        except tgt.TargetError as exc:
+            log.info("connect %r refused: %s", text, exc)
             return False
+        if self.cfg.link == "telnet":
+            via = []
         if any(c.target == t and c.state != "offline" for c in self.channels.values()):
             return False
         chan = self.open_channel(ch)
         chan.auto = auto and chan.state == "offline" and not chan.term_n
         if chan.target != t:
             chan.view = "term"                   # its window starts as a terminal
-        recent = [t] + [c for c in self.settings.get("recent", []) if c != t]
+        shown = tgt.label(t, via)
+        recent = [shown] + [c for c in self.settings.get("recent", [])
+                            if isinstance(c, str) and c != shown]
         self.settings["recent"] = recent[:RECENT_MAX]
         self._save_settings()
-        await chan.connect(t)
+        await chan.connect(t, via)
         return True
 
     def disconnect(self, ch: int | None = None) -> None:

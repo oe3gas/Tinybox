@@ -19,7 +19,7 @@ import logging
 import struct
 from typing import Callable
 
-from prcore.agw import PID_NO_L3, Frame, read_frame
+from prcore.agw import PID_NO_L3, Frame, read_frame, via_data
 
 from . import radio
 from .config import Config
@@ -103,6 +103,7 @@ class BaseLink:
         self.online = False
         self.active = False               # anything but offline (connecting ... disconnecting)
         self.target = cfg.tinybox_call    # the station to connect to (set by the channel)
+        self.via: list[str] = []          # CR71: digipeater path of the next connect
         self.rx_bytes = 0                 # CR44: payload of the current connection
         self.tx_bytes = 0
 
@@ -252,7 +253,10 @@ class AgwLink(BaseLink):
         self.connecting = True
         self._fresh()
         self._set("connecting")
-        self.port.send("C", self.cfg.mycall, self.target, pid=PID_NO_L3)
+        if self.via:                      # CR71: AGW 'v' = connect via digipeaters
+            self.port.send("v", self.cfg.mycall, self.target, via_data(self.via), PID_NO_L3)
+        else:
+            self.port.send("C", self.cfg.mycall, self.target, pid=PID_NO_L3)
 
     def send_line(self, text: str) -> None:
         self.send_bytes((text + "\r").encode("utf-8"))

@@ -157,7 +157,7 @@ class KissLink(BaseLink):
             self._set("offline", f"already connected to {self.target}")
             return
         self._fresh()
-        self.ax = self.port.open_link(remote)
+        self.ax = self.port.open_link(remote, self.via)     # CR71: digipeater path
         self.port.chans[remote] = self
         self._set("connecting")
         self.ax.connect(self.port.now())

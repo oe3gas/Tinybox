@@ -139,6 +139,7 @@ class FakeDirewolf:
         self.clients: list[dict] = []
         self.ui_sent: list[tuple[str, str]] = []
         self.chat_iframes: list[bytes] = []
+        self.via_connects: list[tuple[str, list[str]]] = []      # CR71: AGW 'v'
 
     async def start(self) -> int:
         self.server = await asyncio.start_server(self._conn, "127.0.0.1", 0)
@@ -169,7 +170,11 @@ class FakeDirewolf:
                     self._put(me, "X", cf, data=b"\x01")
                 elif kind == "k":
                     me["mon"] = True
-                elif kind == "C":
+                elif kind in ("C", "v"):
+                    if kind == "v":                           # CR71: connect via digis
+                        n = data[0] if data else 0
+                        self.via_connects.append((ct, [agwcodec.decode_call(
+                            data[1 + 10 * i:11 + 10 * i]) for i in range(n)]))
                     other = self._owner(ct)
                     if other is None:                         # nobody answers (CR42)
                         self._put(me, "d", ct, cf)
@@ -978,3 +983,58 @@ class UploadNoticeTests(unittest.TestCase):
             line = f"~#a1b2c3{chatimg.size_code(5120)}BEHV6nWB2yk8pyo0"
             core._event(proto.Event(0x5B, "line", "OE1ABC", text=line))
             self.assertNotIn("OE1ABC", core.uploads)
+
+
+class TargetParseTests(unittest.TestCase):
+    """CR71: the connect field with digipeaters."""
+
+    def test_parse(self):
+        from tbclient.target import TargetError, label, parse
+        self.assertEqual(parse("oe3xyz-1"), ("OE3XYZ-1", []))
+        self.assertEqual(parse("OE3XYZ-1 v oe3xtc-5"), ("OE3XYZ-1", ["OE3XTC-5"]))
+        self.assertEqual(parse(" OE3XYZ-1  VIA A1,B2  C3 "), ("OE3XYZ-1", ["A1", "B2", "C3"]))
+        self.assertEqual(parse("OE3XYZ-1 V A1,,B2"), ("OE3XYZ-1", ["A1", "B2"]))
+        self.assertEqual(label("OE3XYZ-1", ["A1", "B2"]), "OE3XYZ-1 via A1,B2")
+        self.assertEqual(parse(label("OE3XYZ-1", ["A1"])), ("OE3XYZ-1", ["A1"]))
+        for bad in ("", "OE3XYZ-16", "OE3XYZ-1 OE3XTC-5", "OE3XYZ-1 V", "OE3XYZ-1 V OE3XYZ-1",
+                    "A V B,B", "A V " + ",".join(f"D{i}" for i in range(9)), "A V TOOLONG7"):
+            with self.subTest(bad=bad), self.assertRaises(TargetError):
+                parse(bad)
+        with self.assertRaises(TargetError):
+            parse("OE3XYZ V OE3GAS", mycall="OE3GAS")
+
+
+class ConnectViaAgwTests(unittest.TestCase):
+    """CR71: over Direwolf the connect with a path goes out as AGW 'v'."""
+
+    def test_agw_v_frame(self):
+        async def scenario():
+            dw = FakeDirewolf()
+            port = await dw.start()
+            bbs = ForeignBbs("OE3XBS-8", port)
+            tb = asyncio.create_task(bbs.run())
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp, agw_port=port))
+                t = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.port.agw_up.wait(), 5)
+                await until(lambda: any(c["calls"] == {"OE3XBS-8"} for c in dw.clients))
+                self.assertTrue(await core.connect("OE3XBS-8 V OE3XTC-5,OE3ABC", ch=1))
+                await until(lambda: core.channels[1].state == "online")
+                self.assertEqual(dw.via_connects, [("OE3XBS-8", ["OE3XTC-5", "OE3ABC"])])
+                ch1 = core.channels[1]
+                self.assertIn("*** connecting OE3XBS-8 via OE3XTC-5,OE3ABC",
+                              [x for _, k, x in ch1.term if k == "sys"])
+                core.disconnect(1)
+                await until(lambda: ch1.state == "offline")
+                # without a path: AGW 'C' as before
+                self.assertTrue(await core.connect("OE3XBS-8", ch=1))
+                await until(lambda: ch1.state == "online")
+                self.assertEqual(len(dw.via_connects), 1)
+                self.assertEqual(ch1.via, [])
+                self.assertEqual(core.recent[:2], ["OE3XBS-8", "OE3XBS-8 via OE3XTC-5,OE3ABC"])
+                core.disconnect(1)
+                await until(lambda: ch1.state == "offline")
+                t.cancel()
+            tb.cancel()
+            dw.server.close()
+        asyncio.run(scenario())

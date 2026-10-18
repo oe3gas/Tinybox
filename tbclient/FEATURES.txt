@@ -176,6 +176,12 @@ Station
   [kiss] port. Funkrate, TXDELAY und AX.25-Werte kommen vom kisshub bzw.
   aus direwolf.conf; [ax25] nur noch zum Ueberschreiben. Beim Start steht,
   woher jeder Wert kommt. Alte Schluessel gelten weiter (mit Hinweis).
+- Connect ueber Digipeater (CR71): im Feld "Connect to:" z. B.
+  OE3XYZ-1 V OE3XTC-5,OE3ABC (V oder VIA, Komma oder Leerzeichen, bis 8
+  Digis). Unter dem Feld steht beim Tippen, wie es verstanden wird, oder was
+  falsch ist. Der Pfad bleibt in der Liste der letzten Ziele. Via ist nur
+  Digipeating: einen Node (NET/ROM, BPQ, Xnet) connectet man selbst und gibt
+  dort C ein.
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu

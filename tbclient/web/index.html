@@ -22,8 +22,12 @@
     <img id="conn-ic" class="conn-ic" src="/conn/connect.png" alt="" width="22" height="22">
     <form id="to-form" class="to-form hidden" autocomplete="off">
       <label for="to-call" class="to-l">Connect to:</label>
-      <input id="to-call" class="to-call" list="to-recent" maxlength="9" spellcheck="false"
-             autocapitalize="characters" enterkeyhint="go" aria-label="Connect to">
+      <span class="to-wrap">
+      <input id="to-call" class="to-call" list="to-recent" maxlength="110" spellcheck="false"
+             autocapitalize="characters" enterkeyhint="go" aria-label="Connect to"
+             aria-describedby="to-hint">
+      <span id="to-hint" class="to-hint hidden" role="status"></span>
+      </span>
       <datalist id="to-recent"></datalist>
       <button id="to-go" type="submit" class="tb-btn" aria-label="Connect" title="Connect"><img src="/conn/connect.png" alt="" width="22" height="22"></button>
     </form>

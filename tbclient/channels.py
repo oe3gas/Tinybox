@@ -12,6 +12,8 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING
 
+from .target import label as target_label
+
 if TYPE_CHECKING:
     from .core import ClientCore
 
@@ -35,6 +37,7 @@ class Channel:
         link.on_state = self._on_state
         link.on_line = self._on_line
         self.target = ""
+        self.via: list[str] = []                  # CR71: digipeater path of the connection
         self.state = "offline"
         self.state_at = time.time()
         self.reason = ""
@@ -56,9 +59,16 @@ class Channel:
 
     # --- actions -----------------------------------------------------------------
 
-    async def connect(self, target: str) -> None:
+    @property
+    def label(self) -> str:
+        """'OE3XYZ-1' or 'OE3XYZ-1 via OE3XTC-5' (CR71)."""
+        return target_label(self.target, self.via)
+
+    async def connect(self, target: str, via: list[str] | None = None) -> None:
         self.target = target
+        self.via = list(via or [])
         self.link.target = target
+        self.link.via = list(self.via)
         self._user_disc = False
         self.incoming = False
         await self.link.connect()
@@ -125,11 +135,12 @@ class Channel:
                 self._detect_task.cancel()
             if prev != "offline":
                 self._log(prev, kind)
-        self.term_line("sys", f"*** {state} {self.target}" + (f" ({reason})" if reason else ""))
+        who = self.label if state == "connecting" else self.target   # CR71: path once
+        self.term_line("sys", f"*** {state} {who}" + (f" ({reason})" if reason else ""))
         if self.core.chan is self:
             self.core._chat_state(state, prev, reason)
         else:
-            self.core.console.append(f"[{self.n}] *** {state} {self.target}"
+            self.core.console.append(f"[{self.n}] *** {state} {who}"
                                      + (f" ({reason})" if reason else ""))
         if state == "offline" and self.auto:     # the sync's own connection: away again
             self.core.drop_channel(self)
@@ -194,7 +205,8 @@ class Channel:
     # --- for the GUI ------------------------------------------------------------------
 
     def summary(self, now: float) -> dict:
-        return {"n": self.n, "target": self.target, "state": self.state, "reason": self.reason,
+        return {"n": self.n, "target": self.target, "via": self.via, "label": self.label,
+                "state": self.state, "reason": self.reason,
                 "state_age": round(now - self.state_at, 1), "ended": self.ended,
                 "mode": self.mode, "view": self.view, "chat": self.core.chan is self,
                 "act": self.act_n, "term_n": self.term_n, "outstanding": self.outstanding}

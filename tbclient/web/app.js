@@ -2025,6 +2025,44 @@ let stateRecv = 0;            // performance.now() when the snapshot came in
 let recentShown = "";
 let lastEndAt = 0;
 const CALL_OK = /^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$/;
+const MAX_VIA = 8;            // AX.25: at most 8 digipeaters
+
+// CR71: "OE3XYZ-1 V OE3XTC-5,OE3ABC" -> {call, via} or {error}. Same rules as
+// tbclient/target.py: V or VIA, commas and/or spaces, at most 8 digipeaters.
+function parseTarget(text) {
+  const w = String(text || "").trim().toUpperCase().split(/[\s,]+/).filter(Boolean);
+  if (!w.length) return { error: "no call" };
+  const call = w[0];
+  let via = w.slice(1);
+  if (!CALL_OK.test(call)) return { error: `${call}: not a call (e.g. OE3XYZ-8)` };
+  if (S && call === S.mycall) return { error: "that is your own call" };
+  if (via.length && (via[0] === "V" || via[0] === "VIA")) {
+    via = via.slice(1);
+    if (!via.length) return { error: "digipeater missing after VIA" };
+  } else if (via.length) return { error: `after the call: V or VIA, not ${via[0]}` };
+  if (via.length > MAX_VIA) return { error: `at most ${MAX_VIA} digipeaters` };
+  for (const d of via) {
+    if (!CALL_OK.test(d)) return { error: `${d}: not a digipeater call` };
+    if (d === call || (S && d === S.mycall)) return { error: `${d} cannot be its own digipeater` };
+  }
+  if (new Set(via).size !== via.length) return { error: "a digipeater twice in the path" };
+  return { call, via };
+}
+const targetLabel = (call, via) => call + (via && via.length ? " via " + via.join(",") : "");
+
+// CR71: the field grows with the path; below it a preview (or what is wrong)
+function targetPreview() {
+  const inp = $("to-call"), hint = $("to-hint");
+  const v = inp.value.trim();
+  inp.style.width = `calc(${Math.max(9, v.length + 1)}ch + 20px)`;
+  if (!v || !/[\s,]/.test(v)) { hint.classList.add("hidden"); return; }
+  const p = parseTarget(v);
+  hint.classList.toggle("bad", !!p.error);
+  hint.textContent = p.error ? p.error
+    : p.via.length ? `to ${p.call} · via ${p.via.join(" → ")}`
+      + (p.via.length >= 3 ? " · many hops, slow" : "") : `to ${p.call}`;
+  hint.classList.remove("hidden");
+}
 
 function setConnIcon(name, cls) {
   const ic = $("conn-ic");
@@ -2086,16 +2124,20 @@ function renderTop() {
   $("me-call").textContent = S.mycall;
   $("to-form").classList.toggle("hidden", !off);
   $("tb-call").classList.toggle("hidden", off);
-  $("tb-call").textContent = mon ? "Monitor" : c.target;
+  $("tb-call").replaceChildren(mon ? "Monitor" : c.target || "");
+  if (!mon && c.via && c.via.length) {           // CR71: the path, smaller
+    $("tb-call").append(" ", el("span", "via", "via " + c.via.join(",")));
+  }
   $("tb-call").classList.toggle("dim", st === "disconnecting" || mon);
   $("btn-disc").classList.toggle("hidden", mon || st === "offline" || st === "disconnecting");
   $("btn-disc").title = st === "connecting" ? "Stop connecting" : "Disconnect";
   const inp = $("to-call");
-  const last = c.target || (S.recent || [])[0] || S.home;
+  const last = (c.target ? targetLabel(c.target, c.via) : "") || (S.recent || [])[0] || S.home;
   inp.placeholder = last;
   inp.readOnly = S.link === "telnet";          // the test port is always the own TinyBox
   inp.title = S.link === "telnet" ? "Telnet test port: always " + S.home
-    : "Call of the station (Enter = connect). Empty = " + last;
+    : "Call of the station, digipeaters with V: OE3XYZ-8 V OE3ABC-5 (Enter = connect). Empty = "
+      + last + ". Via is digipeating only - a node (NET/ROM, BPQ) is connected first, then C there.";
   const rec = (S.recent || []).join(",");
   if (rec !== recentShown) {
     recentShown = rec;
@@ -2114,17 +2156,20 @@ setInterval(() => { if (S && curCh().state === "connecting") $("status-text").te
 function connectTo(e) {
   e.preventDefault();
   const inp = $("to-call");
-  const t = (inp.value.trim() || inp.placeholder).toUpperCase();
-  if (!CALL_OK.test(t) || t === S.mycall) {
+  const p = parseTarget(inp.value.trim() || inp.placeholder);
+  if (p.error) {
     inp.classList.add("bad");
-    inp.title = t === S.mycall ? "That is your own call" : "Call with SSID, e.g. OE3XYZ-8";
+    inp.title = p.error;
+    targetPreview();
     return;
   }
+  const t = p.call;
   const busy = (S.channels || []).find((x) => x.target === t && x.state !== "offline");
   if (busy) { inp.classList.add("bad"); inp.title = `${t} is connected in channel ${busy.n}`; switchCh(busy.n); return; }
   inp.value = "";
+  targetPreview();
   inp.blur();
-  api("connect", { target: t, ch: activeCh || undefined });
+  api("connect", { target: targetLabel(t, p.via), ch: activeCh || undefined });
 }
 
 // ---------------------------------------------------------------- terminal (CR43)
@@ -2159,7 +2204,7 @@ function renderTerm() {
   const c = curCh(), mon = activeCh === 0;
   $("term-title").textContent = mon ? "Monitor" : "Terminal";
   $("term-to").textContent = mon ? "everything heard on the channel"
-    : c.state === "online" ? `${S.mycall} ↔ ${c.target}`
+    : c.state === "online" ? `${S.mycall} ↔ ${targetLabel(c.target, c.via)}`
       + (c.chat ? " (TinyBox: lines go to it as typed)" : "")
     : c.target ? `${c.target} - not connected` : "not connected - enter a call in the top bar";
   $("term-close").classList.toggle("hidden", !c.chat || mon);
@@ -2423,7 +2468,9 @@ async function start() {
   $("btn-disconnect").onclick = () => api("disconnect");
   $("btn-disc").onclick = () => api("disconnect", { ch: activeCh });
   $("to-form").onsubmit = connectTo;
-  $("to-call").oninput = (e) => { e.target.classList.remove("bad"); };
+  $("to-call").oninput = (e) => { e.target.classList.remove("bad"); targetPreview(); };
+  $("to-call").onblur = () => $("to-hint").classList.add("hidden");
+  $("to-call").onfocus = targetPreview;
   $("term-form").onsubmit = termSend;
   $("term-input").addEventListener("keydown", termKey);
   $("term-close").onclick = () => { manualTerm = false; setView("chat"); };

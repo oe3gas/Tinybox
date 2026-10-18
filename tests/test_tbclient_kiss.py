@@ -16,6 +16,7 @@ from pathlib import Path
 from tinybox import config
 from tinybox.adapters import kiss as kissadapter
 from prcore import kiss
+from prcore.ax25 import frame as ax
 
 from tbclient import config as ccfg
 from tbclient import core as core_mod
@@ -169,3 +170,95 @@ class KissClientTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DigiHub(FakeHub):
+    """CR71: the hub plus one digipeater on the channel. A frame whose next
+    unrepeated digipeater is DIGI comes back once more with its H bit set -
+    as a real digipeater sends it. Frames not yet through the digi stay as
+    they are (the TinyBox and the client must ignore them)."""
+
+    def __init__(self, digi: str) -> None:
+        super().__init__()
+        self.digi = digi
+        self.repeated = 0
+
+    async def _conn(self, r, w) -> None:
+        self.clients.append(w)
+        dec = kiss.Decoder()
+        try:
+            while chunk := await r.read(4096):
+                for port, cmd, data in dec.feed(chunk):
+                    if cmd != kiss.CMD_DATA:
+                        continue
+                    for other in self.clients:
+                        if other is not w and not other.is_closing():
+                            other.write(kiss.encode(data, port))
+                    again = self._digipeat(data)
+                    if again is not None:
+                        self.repeated += 1
+                        for other in self.clients:
+                            if not other.is_closing():
+                                other.write(kiss.encode(again, port))
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            self.clients.remove(w)
+
+    def _digipeat(self, data: bytes) -> bytes | None:
+        try:
+            _dest, _src, path, rep = ax.peek(data)
+        except Exception:
+            return None
+        for i, (call, h) in enumerate(zip(path, rep)):
+            if not h:
+                if call != self.digi:
+                    return None
+                raw = bytearray(data)
+                raw[14 + 7 * i + 6] |= 0x80               # H bit of this digipeater
+                return bytes(raw)
+        return None
+
+
+class ConnectViaTests(unittest.TestCase):
+    """CR71: 'Connect to: OE3GAS-1 V OE3XTC-5' - client over KISS through a
+    digipeater to the TinyBox."""
+
+    def test_client_to_tinybox_via_digipeater(self):
+        async def scenario():
+            hub = DigiHub("OE3XTC-5")
+            port = await hub.start()
+            app = chat_app()
+            app.cfg.radio = config.RadioCfg(interface="kiss")
+            app.cfg.kiss = config.KissCfg(port=port, reconnect_sec=1, air_baud=1_000_000,
+                                          txdelay_ms=0, status_port=0)
+            app.cfg.ax25 = dataclasses.replace(app.cfg.ax25, paclen=128, n2=5, **FAST)
+            adapter = kissadapter.KissAdapter(app)
+            app.agw = adapter
+            t1 = asyncio.create_task(adapter.run())
+            await asyncio.wait_for(adapter.connected.wait(), 5)
+            with tempfile.TemporaryDirectory() as tmp:
+                core = kiss_client(tmp, port, "OE3TEC")
+                t2 = asyncio.create_task(core.run())
+                await asyncio.wait_for(core.port.agw_up.wait(), 5)
+                self.assertFalse(await core.connect("OE3GAS-1 OE3XTC-5"))     # V missing
+                self.assertFalse(await core.connect("OE3GAS-1 V OE3GAS-1"))   # itself
+                self.assertTrue(await core.connect("oe3gas-1 v oe3xtc-5"))
+                await until(lambda: core.boards, 10)
+                chan = core.chan
+                self.assertEqual((chan.target, chan.via), ("OE3GAS-1", ["OE3XTC-5"]))
+                self.assertEqual(core.snapshot()["recent"][0], "OE3GAS-1 via OE3XTC-5")
+                summary = core.snapshot()["channels"][0]
+                self.assertEqual(summary["label"], "OE3GAS-1 via OE3XTC-5")
+                self.assertGreater(hub.repeated, 3)                 # both ways through the digi
+                # the TinyBox answers through the digi too: its link has the path
+                link = adapter.links["OE3TEC"]
+                self.assertEqual(link.path, ["OE3XTC-5"])
+                core.disconnect()
+                await until(lambda: core.state == "offline", 10)
+                # the next connect without text uses the whole last target
+                self.assertEqual(core.recent[0], "OE3GAS-1 via OE3XTC-5")
+                t2.cancel()
+            t1.cancel()
+            hub.close()
+        asyncio.run(scenario())
