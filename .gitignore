@@ -10,6 +10,8 @@ data/
 !brocast/tests/data/
 brocast/data/
 brocast/logs/
+# Sicherungen alter Dictionary-Versionen (entstehen beim Installieren)
+brocast/brocast-core.v*.yaml
 logs/
 brocast/funktest/data/
 brocast/funktest/ergebnis_listener.txt
