@@ -20,7 +20,6 @@ const state = {
   raw: false,
   view: "flow",           // page view: flow | teletext
   graphic: true,          // weather pages and tables: graphic view (false = plain text/table)
-  part: 1,                // selected subpage in teletext view
   rxFilter: null,         // receive log: {org, id} of one page, or null = all
   rxForeign: false,       // receive log: also show non-brocast frames
   settings: {},
@@ -357,7 +356,6 @@ async function renderList() {
     const sel = state.selected && state.selected.org === p.org && state.selected.id === p.id;
     const r = el("div", "row" + (p.status === "unread" ? " unread" : "") + (sel ? " on" : ""));
     r.tabIndex = 0;
-    r.append(el("div", "pno", p.id));
     const ti = el("div", "ti");
     if (p.alert) ti.append(el("span", "tag alarm", "Warnung"), " ");
     ti.append(p.ti || p.typ_name);
@@ -429,8 +427,6 @@ async function openPage(org, id) {
     toast(e.status === 404 ? `Seite ${id} von ${org} ist (noch) nicht empfangen.` : e.message, true);
     return;
   }
-  const samePage = state.selected && state.selected.org === org && state.selected.id === id;
-  if (!samePage) state.part = 1;                   // a new page starts at subpage 1
   state.selected = { org, id };
   state.screen = "pages";
   renderPage(page);
@@ -503,9 +499,7 @@ function renderPage(p) {
   w.append(a);
 
   const holder = el("div");
-  const draw = () => holder.replaceChildren(...partsBar(p, draw), renderContent(p));
-  if (!state.part || state.part > p.sub_total) state.part = 1;
-  draw();
+  holder.replaceChildren(...viewBar(p), renderContent(p));
   w.append(holder);
   if (state.raw && p.raw) w.append(rawView(p.raw));
   v.replaceChildren(tt, w);
@@ -514,8 +508,7 @@ function renderPage(p) {
 
 /* A page can be shown in two ways (remembered in this browser):
  *   flow     – one continuous text in the normal page layout
- *   teletext – a teletext screen: pixel font on black, 40 columns, one subpage
- *              at a time with chips and ◀ ▶ to turn pages
+ *   teletext – a teletext screen: pixel font on black, whole page
  */
 const VIEWS = [["flow", "Fließtext"], ["teletext", "Teletext"]];
 
@@ -543,35 +536,10 @@ function hasGraphic(p) {
     || p.blocks.some(b => b.k === "table" && wxgCols(b) !== null);
 }
 
-/* The bar above the page: the view switch, and in the teletext view the chips
- * for the subpages. In the flow view all subpages are below one another, so
- * there is nothing to turn and no chips are shown. */
-function partsBar(p, redraw) {
+/* The bar above the page: the view switch. Both views show the whole page
+ * (all subpages below one another) - there is no turning of subpages any more. */
+function viewBar(p) {
   const bar = el("div", "subnav");
-
-  if (state.view === "teletext" && p.sub_total > 1) {
-    const missing = new Set(p.blocks.filter(b => b.k === "missing").map(b => b.sub));
-    const turn = (delta) => {
-      state.part = Math.min(p.sub_total, Math.max(1, state.part + delta));
-      redraw();
-    };
-    const prev = el("button", "chip", "◀");
-    prev.type = "button"; prev.title = "vorheriger Teil"; prev.disabled = state.part <= 1;
-    prev.onclick = () => turn(-1);
-    bar.append("Teile ", prev);
-    for (let i = 1; i <= p.sub_total; i++) {
-      const chip = el("button", "chip" + (missing.has(i) ? " miss" : "") + (i === state.part ? " on" : ""),
-                      `${i}/${p.sub_total}`);
-      chip.type = "button";
-      chip.title = missing.has(i) ? `Teil ${i} noch nicht empfangen` : `Teil ${i} anzeigen`;
-      chip.onclick = () => { state.part = i; redraw(); };
-      bar.append(chip);
-    }
-    const next = el("button", "chip", "▶");
-    next.type = "button"; next.title = "nächster Teil"; next.disabled = state.part >= p.sub_total;
-    next.onclick = () => turn(1);
-    bar.append(next);
-  }
 
   const views = el("div", "segment");
   for (const [key, label] of VIEWS) {
@@ -606,8 +574,7 @@ function renderContent(p) {
     c.append(el("div", "note warn", `Diese Seite verwendet Dictionary-Version ${p.dv}, installiert ist Version ${local}. ` +
       "Unbekannte Felder werden roh angezeigt."));
   }
-  const turn = teletext && p.sub_total > 1;             // only this subpage is shown
-  const showFirst = !turn || state.part === 1;          // txt and data live on subpage 1
+  const showFirst = true;                               // whole page in both views
   if (teletext) c.append(...ttHead(p), el("div", "ttitle", p.ti || `${p.typ_name} – Seite ${p.id}`));
   if (showFirst && p.txt) c.append(linkified("p", null, p.txt));
   let used = new Set();                                 // blocks already shown by a special view
@@ -622,7 +589,7 @@ function renderContent(p) {
   }
   // teletext: no weather grid either (no column semantics -> the plain table)
   const semantics = teletext ? null : tableSemantics(p.blocks);
-  let blocks = turn ? p.blocks.filter(b => b.sub === state.part) : p.blocks;
+  let blocks = p.blocks;
   if (used.size) blocks = blocks.filter(b => !used.has(b));
   renderBlocks(c, blocks, p.sub_total, semantics);
   if (Array.isArray(p.lnk) && p.lnk.length && showFirst) {
