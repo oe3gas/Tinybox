@@ -1199,6 +1199,21 @@ Die kisshub-Werte gelten für jede neue Verbindung ab dem ersten Status (alle 30
 Verbindung, die schon läuft, behält ihre Werte.
 Passt zu Schritt 3 oben (gemeinsamer Config-Lader).
 
+## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
+
+Anlass: Die Wetterseite trug bei jeder Aussendung den Text „GeoSphere Austria, TAWES
+(CC BY 4.0)“ – 39 B von rund 120 B je Frame. Der Lizenzhinweis muss bleiben, muss aber
+nicht jedes Mal als Text über die Luft.
+
+- Neue Liste `src` im Dictionary **Version 3**: `0 geosphere` (voller Lizenztext),
+  `1 tinybox`. Umschlag-Key 21 `src` ist ab v3 `enums` mit `free_text: 60` – wie `cat`:
+  Listen-Eintrag (1 B) oder freier Text (z. B. Rufzeichen des Autors).
+- `geosphere_station.py` sendet `src: ["geosphere"]`, der TinyBox-Adapter `["tinybox", <Rufzeichen>]`.
+- Ersparnis Wetterseite: **122 → 85 B** (−37 B, rund 0,25 s bei 1200 Bd).
+- Listener mit v2 zeigen bis zur Dictionary-Übernahme (kommt über Funk) „0“ als Quelle.
+- Die Zahlenmatrix mit Stationsnummern (Abschnitt 6e, dort „v3“ genannt) kommt damit
+  in eine spätere Version (v4).
+
 ## Quellen
 
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a

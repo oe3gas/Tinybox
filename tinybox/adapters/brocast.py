@@ -21,7 +21,7 @@ before the first page arrives and drop rubrics the sysop removed. Without a
 Mapping bulletin -> page (agreed 02.10.2026):
     ti   subject (max 40 chars; longer: full subject as heading)
     cat  from the destination via [brocast] rubrics (unknown: own rubric)
-    to   destination, src ["TinyBox", author], exp = bulletin lifetime
+    to   destination, src ["tinybox", author] (Liste src, ab Dictionary v3), exp = bulletin lifetime
     blk  body, paragraphs split at blank lines; cut at max_bytes with a
          hint "Vollständig in der Mailbox <call>: R <n>"
 
@@ -124,7 +124,7 @@ def text_page(msg: Message, app: App) -> dict[str, Any]:
         "ti": title,
         "cat": [cfg.rubrics.get(msg.to_call, msg.to_call)],
         "to": msg.to_call,
-        "src": ["TinyBox", msg.from_call],
+        "src": ["tinybox", msg.from_call],
         "exp": _exp(msg, app),
         "blk": blocks,
     }

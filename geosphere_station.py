@@ -375,7 +375,7 @@ def brocast_ueberblick(daten: dict[str, dict], zeit: str, gueltig_min: int) -> d
             for i in range(1, len(rows), TABELLE_ZEILEN)]
     return {"typ": "text", "cat": ["wx"], "exp": gueltig_min,
             "ti": f"Wetter Wein- & Waldviertel {lokalzeit(zeit)[-5:]}",
-            "src": "GeoSphere Austria, TAWES (CC BY 4.0)", "blk": blk}
+            "src": ["geosphere"], "blk": blk}
 
 
 # ---------------------------------------------------------------------------
@@ -442,7 +442,7 @@ def brocast_seite(d: dict, stunden: int, gueltig_min: int) -> dict:
 
     seite = {"typ": "wx", "cat": ["wx"], "exp": gueltig_min,
              "ti": f"Wetter {stationsname(d)} {lokalzeit(d['zeit'])[-5:]}"[:40],
-             "src": "GeoSphere Austria, TAWES (CC BY 4.0)",
+             "src": ["geosphere"],
              "dat": dat}
     if info and info.get("lat") is not None and info.get("lon") is not None:
         seite["pos"] = [round(info["lat"], 4), round(info["lon"], 4)]

@@ -145,7 +145,7 @@ class AssembleTests(unittest.TestCase):
 
     def test_one_fragment(self):
         p = page([{"k": "para", "x": "Kurz und gut."}])
-        self.assertEqual(self.roundtrip(p), {**p, "dv": 2})
+        self.assertEqual(self.roundtrip(p), {**p, "dv": self.c.d.version})
 
     def test_many_fragments(self):
         # echter Text plus etwas Unpackbares: so entstehen mehrere Fragmente

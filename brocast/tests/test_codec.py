@@ -51,6 +51,21 @@ class DictionaryTests(unittest.TestCase):
         back = codec.decode(codec.encode(page))
         self.assertEqual(back["dat"], page["dat"])
 
+    def test_v3_source_list(self):
+        """src aus der Liste kostet 1 Byte statt des Textes; Rufzeichen bleibt Text."""
+        codec = Codec()
+        base = {"id": 31, "t": 1790000000, "typ": "wx", "dat": {"temp": 12.5}}
+        wire = codec.to_wire(dict(base, src=["geosphere"]))
+        self.assertEqual(wire[21], [0])
+        self.assertEqual(codec.to_wire(dict(base, src="geosphere"))[21], [0])   # einzeln geht auch
+        long = len(codec.encode(dict(base, src=["GeoSphere Austria, TAWES (CC BY 4.0)"])))
+        short = len(codec.encode(dict(base, src=["geosphere"])))
+        self.assertGreaterEqual(long - short, 35)
+        back = codec.decode(codec.encode(dict(base, src=["tinybox", "OE3XYZ"])))
+        self.assertEqual(back["src"], ["tinybox", "OE3XYZ"])
+        lines = codec.describe(codec.decode(codec.encode(dict(base, src=["geosphere"]))))
+        self.assertIn("Quelle: GeoSphere Austria, TAWES (CC BY 4.0)", lines)
+
     def test_all_short_keys_fit_in_one_byte(self):
         d = Dictionary.load()
         for num in list(d.envelope.by_num) + list(d.blocks.by_num):

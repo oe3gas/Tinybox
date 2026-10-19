@@ -199,6 +199,8 @@ class Codec:
         if kind == "enum":
             return self._enum(spec["enum"], value, what)
         if kind == "enums":
+            if isinstance(value, (str, int)) and not isinstance(value, bool):
+                value = [value]                     # a single entry (src: "geosphere")
             return [self._enum_or_text(spec, v, what) for v in value]
         if kind == "subpage":
             if (not isinstance(value, (list, tuple)) or len(value) != 2
@@ -363,6 +365,10 @@ class Codec:
                 table = self.d.enums["cat"]
                 value = ", ".join(table.by_name[v].text(lang) if v in table.by_name
                                   else f"{v} (eigene)" for v in value)
+            elif entry.name == "src" and isinstance(value, list) and "src" in self.d.enums:
+                table = self.d.enums["src"]
+                value = ", ".join(table.by_name[v].text(lang) if v in table.by_name
+                                  else str(v) for v in value)
             elif entry.name == "t" and isinstance(value, int):
                 value = datetime.fromtimestamp(value, timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             elif entry.spec.get("type") == "enum":

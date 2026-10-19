@@ -31,7 +31,7 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(page["ti"], "3B8 Mauritius")
         self.assertEqual(page["cat"], ["dx"])
         self.assertEqual(page["to"], "DX")
-        self.assertEqual(page["src"], ["TinyBox", "OE3XYZ"])
+        self.assertEqual(page["src"], ["tinybox", "OE3XYZ"])
         self.assertEqual(page["exp"], 30 * 1440)
         self.assertEqual(page["blk"], [{"k": "para", "x": "Zeile 1\nZeile 2"},
                                        {"k": "para", "x": "Absatz 2"}])
@@ -164,7 +164,7 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
         await self.fake.wait(2)
         method, path, body = self.last()
         self.assertEqual((method, path), ("PUT", f"/api/v1/pages/tinybox/{msg_id}"))
-        self.assertEqual((body["ti"], body["cat"], body["src"]), ("3B8", ["dx"], ["TinyBox", "OE3XYZ"]))
+        self.assertEqual((body["ti"], body["cat"], body["src"]), ("3B8", ["dx"], ["tinybox", "OE3XYZ"]))
         self.svc.delete(msg_id, "OE3XYZ", sysop=False)
         await self.fake.wait(3)
         self.assertEqual(self.last()[:2], ("DELETE", f"/api/v1/pages/tinybox/{msg_id}"))

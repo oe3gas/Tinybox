@@ -719,7 +719,7 @@ class Listener:
         out.update({
             "txt": first.get("txt"), "to": first.get("to"), "area": first.get("area"),
             "pos": first.get("pos"), "sym": first.get("sym"), "lnk": first.get("lnk"),
-            "ref": first.get("ref"), "src": first.get("src"),
+            "ref": first.get("ref"), "src": self._src_text(first.get("src"), lang),
             "exp_min": p["exp_min"], "lang": first.get("lang"),
             "flags": [self._enum_text("flg", f, lang) for f in first.get("flg") or []],
             "pri_name": self._enum_text("pri", out["pri"], lang),
@@ -754,6 +754,12 @@ class Listener:
         if mark_read and p["status"] == "unread":
             self.store.update_lpage(org, page_id, status="read", updated=0)
         return out
+
+    def _src_text(self, src: Any, lang: str) -> Any:
+        """Quelle: Einträge der Liste src (ab Dictionary v3) als Text, sonst wie gesendet."""
+        if not isinstance(src, list) or "src" not in self.d.enums:
+            return src
+        return [self._enum_text("src", v, lang) if isinstance(v, str) else v for v in src]
 
     def _enum_text(self, enum: str, name: Any, lang: str) -> Any:
         entry = self.d.enums[enum].by_name.get(name)

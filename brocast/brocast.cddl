@@ -25,7 +25,7 @@ brocast-page = {
   ? cat   => [+ uint / tstr .size (1..20)],   ; Kern-Rubrik oder eigene als Text
   ? blk   => [+ block],
   ? dat   => { * int => any },
-  ? src   => [+ any],
+  ? src   => [+ uint / tstr .size (1..60)],  ; ab v3: Liste src (0 geosphere, 1 tinybox) oder Text
   ? crit  => [+ int],
   ? sub   => [uint, uint],               ; Unterseite [n, gesamt]
   * int => any                      ; unbekannte Keys erlaubt
