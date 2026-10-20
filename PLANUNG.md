@@ -1214,6 +1214,23 @@ nicht jedes Mal als Text über die Luft.
 - Die Zahlenmatrix mit Stationsnummern (Abschnitt 6e, dort „v3“ genannt) kommt damit
   in eine spätere Version (v4).
 
+## 19. Content-Lieferanten: Sofortmaßnahmen (entschieden 20.10.2026)
+
+Anlass: Prüfung der Lieferanten dxfeed, GeoSphere (Wetter, Warnungen) und TBNEWS.
+
+- **TBNEWS nie über brocast.** Wer die TinyBox nutzt, bekommt die Client-News per
+  Connect oder über den Client; reine brocast-Listener brauchen sie nicht. Der
+  brocast-Adapter meldet die Systemrubrik TBNEWS nicht mehr (auch nicht, wenn sie in
+  `[brocast] destinations` steht); die nächste Vollsynchronisation zieht schon
+  gesendete TBNEWS-Seiten bei brocastd zurück.
+- **TLS-Prüfung bei GeoSphere ein.** Die Daten gehen über Funk weiter, Warnungen als
+  Warnseite, die jeder Listener anzeigt – die Quelle muss echt sein (Integrität, nicht
+  Vertraulichkeit). Fehlende Stammzertifikate unter Windows: Paket `truststore`
+  (nutzt die Windows-Zertifikatsprüfung), sonst `certifi`, sonst der Systemspeicher.
+  `geosphere_aufgaben_einrichten.bat` installiert `truststore` bei Bedarf.
+- Weitere Punkte der Prüfung (gemeinsames Paket für Lieferanten, einheitliche
+  Konfiguration, dxfeed als Tabellenseite, DX-News als zweiter Inhalt) folgen gesondert.
+
 ## Quellen
 
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a

@@ -25,6 +25,13 @@ if not defined PYW (
 echo Python ohne Konsole: %PYW%
 if not exist "%~dp0logs" mkdir "%~dp0logs"
 
+rem TLS-Pruefung (seit 20.10.2026 ein): truststore nutzt die Windows-Zertifikatspruefung
+py -3 -c "import truststore" >nul 2>nul
+if errorlevel 1 (
+    echo Installiere truststore fuer die Zertifikatspruefung ...
+    py -3 -m pip install --user truststore
+)
+
 schtasks /Create /F /TN "brocast\GeoSphere Wetter" /SC HOURLY /MO 1 /ST 00:05 ^
   /TR "\"%PYW%\" -3 \"%~dp0geosphere_station.py\" --region --tinybox --log \"%~dp0logs\geosphere.log\""
 if errorlevel 1 goto fehler

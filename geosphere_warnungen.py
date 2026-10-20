@@ -61,18 +61,41 @@ def hole_warnungen(lat: float, lon: float, lang: str = "de", timeout: int = 20) 
         return json.load(resp)
 
 
-# Zertifikatspruefung bewusst aus (Entscheidung OE3GAS, 03.10.2026): oeffentliche
-# Warndaten, nicht sensibel; erspart auf Windows fehlende Stammzertifikate/certifi.
-# Wieder einschalten: SSL_PRUEFEN = True
-SSL_PRUEFEN = False
+# Zertifikatspruefung ein (Entscheidung OE3GAS, 20.10.2026): die Daten gehen ueber
+# Funk weiter, Warnungen sogar als Warnseite, die jeder Listener anzeigt - die Quelle
+# muss daher echt sein. Vorher (03.10.2026) aus wegen fehlender Stammzertifikate unter
+# Windows. Dafuer: ist das Paket "truststore" installiert (py -3 -m pip install
+# truststore), prueft Windows selbst und laedt fehlende Stammzertifikate nach; sonst
+# certifi, falls vorhanden; sonst der Zertifikatsspeicher des Systems.
+SSL_PRUEFEN = True
 
 
 def ssl_kontext() -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
     if not SSL_PRUEFEN:
+        ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+        return ctx
+    try:
+        import truststore
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except ImportError:
+        pass
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+TLS_HINWEIS = ("Zertifikat nicht pruefbar - unter Windows hilft meist: "
+               "py -3 -m pip install truststore")
+
+
+def tls_fehler(e: BaseException) -> bool:
+    """True, wenn ein Abruf an der Zertifikatspruefung gescheitert ist."""
+    grund = getattr(e, "reason", e)
+    return isinstance(grund, ssl.SSLCertVerificationError) or isinstance(e, ssl.SSLCertVerificationError)
 
 
 def ts(epoch) -> str:
@@ -217,8 +240,9 @@ def main() -> int:
         protokoll(args.log, f"Fehler: {msg}")
         return 2
     except (urllib.error.URLError, TimeoutError, ValueError) as e:
-        print(f"Fehler beim Abruf: {e}", file=sys.stderr)
-        protokoll(args.log, f"Fehler beim Abruf: {e}")
+        msg = f"{e}" + (f" - {TLS_HINWEIS}" if tls_fehler(e) else "")
+        print(f"Fehler beim Abruf: {msg}", file=sys.stderr)
+        protokoll(args.log, f"Fehler beim Abruf: {msg}")
         return 2
 
     props = data.get("properties", {})

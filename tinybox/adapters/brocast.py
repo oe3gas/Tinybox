@@ -7,7 +7,9 @@ and calls brocastd's ingest API on the same PC (standard library only):
     bulletin deleted / expired  -> DELETE /pages/tinybox/<msg number>
     at start and every sync_min -> PUT    /pages/tinybox   (full list)
 
-Private messages (type P) are never reported. If brocastd is not running,
+Private messages (type P) and the system rubric TBNEWS (client news) are
+never reported: TinyBox users get TBNEWS by connecting or via the client,
+pure brocast listeners do not need it. If brocastd is not running,
 TinyBox logs one warning and goes on; the next full sync catches up.
 
 The full sync also carries the sysop's rubric list ([rubrics], CR19) as
@@ -39,6 +41,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..config import NEWS_RUBRIC
 from ..store import Message
 
 if TYPE_CHECKING:
@@ -180,6 +183,8 @@ def wanted(msg: Message, app: App) -> bool:
         return False                    # bulletins from other mailboxes stay off the air
     if msg.fwd == "H":
         return False                    # held for the sysop (e.g. new rubric, CR19)
+    if msg.to_call == NEWS_RUBRIC:
+        return False                    # client news: for TinyBox users only, not on brocast
     return msg.type == "B" and (not dests or msg.to_call in dests)
 
 

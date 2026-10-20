@@ -81,18 +81,41 @@ REGION_IDS = [sid for liste in REGION.values() for sid, _ in liste]
 REGION_NAME = {sid: kurz for liste in REGION.values() for sid, kurz in liste}
 
 
-# Zertifikatspruefung bewusst aus (Entscheidung OE3GAS, 03.10.2026): oeffentliche
-# Wetterdaten, nicht sensibel; erspart auf Windows fehlende Stammzertifikate/certifi.
-# Wieder einschalten: SSL_PRUEFEN = True
-SSL_PRUEFEN = False
+# Zertifikatspruefung ein (Entscheidung OE3GAS, 20.10.2026): die Daten gehen ueber
+# Funk weiter, Warnungen sogar als Warnseite, die jeder Listener anzeigt - die Quelle
+# muss daher echt sein. Vorher (03.10.2026) aus wegen fehlender Stammzertifikate unter
+# Windows. Dafuer: ist das Paket "truststore" installiert (py -3 -m pip install
+# truststore), prueft Windows selbst und laedt fehlende Stammzertifikate nach; sonst
+# certifi, falls vorhanden; sonst der Zertifikatsspeicher des Systems.
+SSL_PRUEFEN = True
 
 
 def ssl_kontext() -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
     if not SSL_PRUEFEN:
+        ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+        return ctx
+    try:
+        import truststore
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except ImportError:
+        pass
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+TLS_HINWEIS = ("Zertifikat nicht pruefbar - unter Windows hilft meist: "
+               "py -3 -m pip install truststore")
+
+
+def tls_fehler(e: BaseException) -> bool:
+    """True, wenn ein Abruf an der Zertifikatspruefung gescheitert ist."""
+    grund = getattr(e, "reason", e)
+    return isinstance(grund, ssl.SSLCertVerificationError) or isinstance(e, ssl.SSLCertVerificationError)
 
 
 def api_get(pfad: str, params: dict, timeout: int = 20) -> dict:
@@ -610,7 +633,7 @@ def main() -> int:
     except urllib.error.HTTPError as e:
         meldung = f"HTTP {e.code} - {e.read().decode(errors='replace')[:200]}"
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError, OSError) as e:
-        meldung = f"Abruf/Auswertung: {e}"
+        meldung = f"Abruf/Auswertung: {e}" + (f" - {TLS_HINWEIS}" if tls_fehler(e) else "")
     except Exception as e:                    # unerwartet: ohne Konsole (pyw) sonst unsichtbar
         import traceback
         meldung = f"unerwarteter Fehler: {e!r}\n{traceback.format_exc()}"

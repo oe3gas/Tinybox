@@ -69,6 +69,12 @@ class MappingTests(unittest.TestCase):
         self.assertFalse(brocast.wanted(msg(), self.app))
         self.assertTrue(brocast.wanted(msg(to_call="WX"), self.app))
 
+    def test_tbnews_never_on_brocast(self):
+        news = msg(to_call="TBNEWS", origin="sysop", subject="Client 2026.10.18")
+        self.assertFalse(brocast.wanted(news, self.app))
+        self.app.cfg.brocast.destinations = ["TBNEWS"]          # not even when listed
+        self.assertFalse(brocast.wanted(news, self.app))
+
     def test_rubric_list_for_brocastd(self):
         self.assertEqual(brocast.rubric_list(self.app), [])          # no [rubrics]: free
         self.app.cfg.rubrics = [Rubric("WX", "Weather and warnings"), Rubric("FUCHS", "Fuchsjagd"),
