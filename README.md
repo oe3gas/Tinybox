@@ -25,22 +25,54 @@ browser-based client. Documentation is in German; questions in English are welco
 
 ## Schnellstart
 
-1. **Python 3.10 oder neuer** installieren (https://www.python.org, bei Windows
-   „Add python.exe to PATH“ anhaken).
+TinyBox läuft unter **Windows** und **Linux** (z. B. Debian, Ubuntu, Raspberry Pi OS).
+
+1. **Python 3.10 oder neuer** installieren.
+   - Windows: https://www.python.org, beim Installieren „Add python.exe to PATH“ anhaken.
+   - Linux: meist schon da, prüfen mit `python3 --version`; sonst
+     `sudo apt install python3`.
 2. **TinyBox holen:** unter [Releases](https://github.com/oe3gas/Tinybox/releases)
    das ZIP der neuesten Version laden und entpacken – oder
    `git clone https://github.com/oe3gas/Tinybox.git`
 3. **Konfiguration anlegen:** `tinybox.conf.example` nach `tinybox.conf` kopieren
    (für den Client: `tbclient.conf.example` nach `tbclient.conf`) und überall `OE3GAS` (das
    Rufzeichen des Autors) durch das eigene ersetzen. Die `.example`-Dateien erklären jeden Wert.
-4. **Starten:** `tinybox.bat` bzw. `tbclient.bat` doppelklicken. Die Web-GUI des
-   Clients: http://127.0.0.1:7744/
-5. **Ohne Funk ausprobieren:** mit PuTTY per Telnet auf `127.0.0.1`, Port `6300`
-   (siehe unten).
+   Unter Linux: `cp tinybox.conf.example tinybox.conf` (bzw. `tbclient`).
+4. **Starten:**
+   - Windows: `tinybox.bat` bzw. `tbclient.bat` doppelklicken.
+   - Linux: im TinyBox-Ordner im Terminal
+     ```
+     python3 -m tinybox -c tinybox.conf      # die Mailbox
+     python3 -m tbclient -c tbclient.conf    # der Client
+     ```
+   Die Web-GUI des Clients: http://127.0.0.1:7744/
+5. **Ohne Funk ausprobieren:** per Telnet auf `127.0.0.1`, Port `6300` – unter
+   Windows mit PuTTY, unter Linux mit `telnet 127.0.0.1 6300` (siehe unten).
 
 Für TinyBox und den Client sind keine Zusatzpakete nötig. Nur kisshub (serieller
 TNC: `pip install pyserial`) und brocast (`pip install -r brocast/requirements.txt`)
-brauchen welche.
+brauchen welche. Unter Debian/Ubuntu/Raspberry Pi OS gibt es sie auch als Pakete:
+`sudo apt install python3-serial python3-cbor2 python3-yaml`.
+
+**Linux-Hinweise**
+- Die `.bat`-Dateien sind nur für Windows. Unter Linux startet man jedes Programm
+  wie oben mit `python3 -m <programm> -c <programm>.conf` (`kisshub` und `dxfeed`
+  genauso, fwdsim mit `python3 -m fwdsim`; brocastd aus dem Ordner `brocast/` mit `python3 -m brocast.daemon -c brocastd.conf`).
+- Pfade in den Beispielen wie `C:\Tinybox` oder `data\` sind unter Linux einfach
+  `~/Tinybox` bzw. `data/`.
+- Direwolf: `sudo apt install direwolf`, Konfiguration wie unten bei „Mit Direwolf“.
+- Serieller TNC (PK-232, TM-D710 über kisshub): in `kisshub.conf` bei `device`
+  z. B. `/dev/ttyUSB0` eintragen und den eigenen Benutzer einmal in die Gruppe
+  `dialout` aufnehmen: `sudo usermod -aG dialout $USER` (danach neu anmelden).
+- `RESTART` in der Sysop-Konsole funktioniert auch unter Linux: TinyBox startet
+  sich im selben Terminal selbst neu.
+- VARA FM gibt es nur für Windows. Unter Linux die Betriebsarten mit Direwolf oder
+  einem Hardware-TNC nutzen.
+- dxfeed: Statt der Windows-Aufgabenplanung (`dxfeed_aufgabe_einrichten.bat`)
+  übernehmen unter Linux `deploy/systemd/dxfeed.service` und `dxfeed-digest.timer`
+  den Tagesablauf.
+- Dauerbetrieb als Dienst: Fertige systemd-Units liegen in `deploy/systemd/`,
+  die Installation beschreibt [`PRODUCTION.md`](PRODUCTION.md).
 
 **Weiterlesen:** [`MANUAL.md`](MANUAL.md) – Handbuch mit allen Teilen, Konfiguration,
 Betrieb mit Direwolf, KISS-TNC und VARA FM, Fehlersuche ·
@@ -71,14 +103,21 @@ Python 3.10 oder neuer (https://www.python.org). Für M1 sind keine Zusatzpakete
 
 ## Starten
 
-Doppelklick auf `tinybox.bat`, oder in der Eingabeaufforderung:
+Windows: Doppelklick auf `tinybox.bat`, oder in der Eingabeaufforderung:
 
 ```
 cd /d C:\Tinybox          (dein TinyBox-Ordner)
 py -3 -m tinybox -c tinybox.conf
 ```
 
-Beenden mit `SHUTDOWN` (verbundene Stationen werden 60 s vorher gewarnt) oder sofort mit `SHUTDOWN NOW` bzw. Ctrl+C. Die Daten liegen unter `data\`.
+Linux:
+
+```
+cd ~/Tinybox              (dein TinyBox-Ordner)
+python3 -m tinybox -c tinybox.conf
+```
+
+Beenden mit `SHUTDOWN` (verbundene Stationen werden 60 s vorher gewarnt) oder sofort mit `SHUTDOWN NOW` bzw. Ctrl+C. Die Daten liegen unter `data\` (Linux: `data/`).
 
 ## Log-Datei
 
@@ -119,7 +158,8 @@ Arbeitsablauf, um einen Fehler mit Claude zu debuggen.
 
 ## Ohne Funk testen (Telnet-Testport)
 
-PuTTY: Host `127.0.0.1`, Port `6300`, Connection type **Telnet**.
+Windows mit PuTTY: Host `127.0.0.1`, Port `6300`, Connection type **Telnet**.
+Linux: `telnet 127.0.0.1 6300` (falls nötig `sudo apt install telnet`).
 Als Rufzeichen z. B. `OE1ABC` eingeben. Mit dem Sysop-Call aus `tinybox.conf` hast du Sysop-Rechte.
 
 ## Mit Direwolf
@@ -223,7 +263,8 @@ Zusammenfassung nur an). Meldungen in `logs\dxfeed.log`.
 
 ## Tests
 
-Doppelklick auf `runtests.bat`.
+Windows: Doppelklick auf `runtests.bat`. Linux:
+`python3 -m unittest discover -s tests -t .`
 
 ## Stand
 
