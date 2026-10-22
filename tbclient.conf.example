@@ -1,5 +1,7 @@
 # TinyBox client - copy to tbclient.conf and adapt.
 # Start with tbclient.bat, then open http://<this PC>:7744 in a browser (also on the phone).
+# WICHTIG / IMPORTANT: OE3GAS ist das Rufzeichen des Autors - ueberall durch
+# das eigene Rufzeichen ersetzen. Replace OE3GAS with your own callsign everywhere.
 
 [station]
 mycall       = OE3GAS          # your call, with SSID if wanted (OE3GAS-9 = mobile)

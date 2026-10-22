@@ -1,6 +1,69 @@
 # TinyBox
 
-Kleine lokale Packet-Radio-Mailbox für Direwolf. Handbuch (Teile, Konfiguration, Betrieb mit Direwolf, kisshub und VARA FM, Messungen): `MANUAL.md`. Planung: `PLANUNG.md`.
+**Eine kleine Packet-Radio-Mailbox (BBS) mit eigenem Client – damit Packet Radio wieder Spaß macht.**
+
+TinyBox ist eine schlanke BBS für AX.25 Packet Radio, geschrieben in Python. Sie
+läuft auf einem normalen Windows-PC neben [Direwolf](https://github.com/wb2osz/direwolf)
+oder an einem KISS-TNC und bietet Post, Bulletins, Chat-Boards, Forwarding und eine
+Sysop-Weboberfläche. Dazu gibt es den **TinyBox-Client** (`tbclient`): ein
+Packet-Radio-Programm im Browser mit Chat, Mailbox (auch offline), Monitor und
+Terminal – der Client funktioniert auch ganz ohne eigene TinyBox.
+
+*English: TinyBox is a small AX.25 packet radio BBS (mail, bulletins, chat boards,
+FBB-style forwarding, sysop web GUI) for Direwolf (AGW) or KISS TNCs, plus a
+browser-based client. Documentation is in German; questions in English are welcome.*
+
+## Was ist drin?
+
+| Teil | Wofür |
+|---|---|
+| **TinyBox** | die Mailbox: Post, Bulletins, Chat (`C`), Forwarding (FBB/B1, mit LinBPQ getestet), Sysop-Konsole und Web-GUI |
+| **TinyBox-Client** (`tbclient`) | für Benutzer: Chat, Mailbox mit Offline-Abgleich, bis 5 Verbindungen, Monitor, Terminal, Verbindungslogbuch (CSV/ADIF) – im Browser, auch am Handy |
+| **kisshub** | teilt einen KISS-TNC (PK-232, TM-D710, Direwolf-KISS, VARA FM) zwischen mehreren Programmen und misst die Verbindungsqualität |
+| **brocast** | kompaktes Seitenprotokoll (Wetter, Warnungen, Bilder) als UI-Frames |
+| **dxfeed** | täglich eine DX-Zusammenfassung als Bulletin statt Live-Spots |
+
+## Schnellstart
+
+1. **Python 3.10 oder neuer** installieren (https://www.python.org, bei Windows
+   „Add python.exe to PATH“ anhaken).
+2. **TinyBox holen:** unter [Releases](https://github.com/oe3gas/Tinybox/releases)
+   das ZIP der neuesten Version laden und entpacken – oder
+   `git clone https://github.com/oe3gas/Tinybox.git`
+3. **Konfiguration anlegen:** `tinybox.conf.example` nach `tinybox.conf` kopieren
+   (für den Client: `tbclient.conf.example` nach `tbclient.conf`) und überall `OE3GAS` (das
+   Rufzeichen des Autors) durch das eigene ersetzen. Die `.example`-Dateien erklären jeden Wert.
+4. **Starten:** `tinybox.bat` bzw. `tbclient.bat` doppelklicken. Die Web-GUI des
+   Clients: http://127.0.0.1:7744/
+5. **Ohne Funk ausprobieren:** mit PuTTY per Telnet auf `127.0.0.1`, Port `6300`
+   (siehe unten).
+
+Für TinyBox und den Client sind keine Zusatzpakete nötig. Nur kisshub (serieller
+TNC: `pip install pyserial`) und brocast (`pip install -r brocast/requirements.txt`)
+brauchen welche.
+
+**Weiterlesen:** [`MANUAL.md`](MANUAL.md) – Handbuch mit allen Teilen, Konfiguration,
+Betrieb mit Direwolf, KISS-TNC und VARA FM, Fehlersuche ·
+[`tbclient/FEATURES.txt`](tbclient/FEATURES.txt) – was der Client kann ·
+[`logging_manual.md`](logging_manual.md) – Log lesen ·
+[`PLANUNG.md`](PLANUNG.md) – Entscheidungen und Ausblick ·
+[`CHANGELOG.md`](CHANGELOG.md) – Versionen.
+
+## Mitmachen und Kontakt
+
+Rückmeldungen, Fehlerberichte und Ideen gerne als
+[Issue](https://github.com/oe3gas/Tinybox/issues). Wer eine TinyBox in die Luft
+bringt: Bescheid sagen, dann connecten wir uns!
+
+73 de **OE3GAS** (Gerhard) und **OE3TEC** (Tobias)
+
+## Lizenz
+
+GNU General Public License v3.0 – siehe [`LICENSE`](LICENSE).
+
+---
+
+# Betrieb im Detail
 
 ## Voraussetzung
 
@@ -11,7 +74,7 @@ Python 3.10 oder neuer (https://www.python.org). Für M1 sind keine Zusatzpakete
 Doppelklick auf `tinybox.bat`, oder in der Eingabeaufforderung:
 
 ```
-cd /d E:\Tinybox
+cd /d C:\Tinybox          (dein TinyBox-Ordner)
 py -3 -m tinybox -c tinybox.conf
 ```
 
@@ -57,7 +120,7 @@ Arbeitsablauf, um einen Fehler mit Claude zu debuggen.
 ## Ohne Funk testen (Telnet-Testport)
 
 PuTTY: Host `127.0.0.1`, Port `6300`, Connection type **Telnet**.
-Als Rufzeichen z. B. `OE1ABC` eingeben. Mit dem Sysop-Call (`OE3GAS`) hast du Sysop-Rechte.
+Als Rufzeichen z. B. `OE1ABC` eingeben. Mit dem Sysop-Call aus `tinybox.conf` hast du Sysop-Rechte.
 
 ## Mit Direwolf
 

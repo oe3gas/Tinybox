@@ -1,5 +1,7 @@
 # Vorlage. Kopieren nach tinybox.conf und pro PC anpassen.
 # tinybox.conf selbst ist nicht im Repo (.gitignore).
+# WICHTIG / IMPORTANT: OE3GAS ist das Rufzeichen des Autors - ueberall durch
+# das eigene Rufzeichen ersetzen. Replace OE3GAS with your own callsign everywhere.
 
 # TinyBox configuration
 # Relative paths are relative to this file.
