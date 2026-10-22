@@ -22,10 +22,13 @@ devices there (firmware 30.DEC.88, 01.AUG.91, 13.SEP.95):
       Tested on the air 14.10.2026 with device A, firmware Release 13.SEP.95
       (VHF, 1200 Bd). Other devices / firmware not yet.
 
-Kenwood TM-D710: the TNC must be in packet mode (TNC key on the panel), then
-"KISS ON" + "RESTART" in terminal mode. TH-D74 / TH-D75: KISS is switched on in
+Kenwood TM-D710: the TNC must be in packet mode (TNC key on the panel until
+PACKET shows - in APRS mode the TNC gives no cmd:), then in terminal mode
+"HBAUD 1200" + "KISS ON" + "RESTART" (tested by Gerhard in a terminal,
+22.10.2026, COM7 at 9600 Bd). Leaving: C0 FF C0, then KISS OFF.
+TH-D74 / TH-D75: KISS is switched on in
 the radio's menu - nothing to send. TNC2 with a pure KISS EPROM: nothing to send.
-All Kenwood/TNC2 lines are from the manuals and still to be tried (K9/K10).
+TH-D74/D75/TNC2 lines are from the manuals and still to be tried (K9/K10).
 """
 
 from __future__ import annotations
@@ -70,6 +73,7 @@ class Profile:
     exit_lines: tuple[Step, ...] = ()  # sent after leaving KISS
     settle_sec: float = 1.0            # after the last init line, before KISS frames
     notes: str = ""
+    hint: str = ""                     # added to the error when the TNC does not answer
     display: str = ""                  # name for status displays, e.g. "PK-232"
     kiss_params: bool = True           # send TXDELAY/P/SlotTime ([kiss] send_params default)
     tunnel: str = "no"                 # VARA: no | connected | all (see VARA_FM)
@@ -142,12 +146,26 @@ PK232 = Profile(
 
 TM_D710 = Profile(
     name="tm-d710", display="TM-D710",
-    serial_baud=9600,
+    serial_baud=9600,                  # COM port of the radio (Gerhard: COM7, 9600 Bd)
     wake=(Step(CR, (CMD_PROMPT,), 2.0, "CR"),
-          Step(KISS_EXIT + CR, (CMD_PROMPT,), 3.0, "leave KISS")),
-    init=(line("KISS ON"), line("RESTART", timeout=2.0, expect=())),
+          Step(KISS_EXIT + CR, (CMD_PROMPT,), 3.0, "leave KISS"),
+          Step(CTRL_C + CR, (CMD_PROMPT,), 2.0, "Ctrl-C (Converse)"),
+          Step(XON + CR, (CMD_PROMPT,), 2.0, "XON (stopped by XOFF)")),
+    init=(
+        # tested by Gerhard in a terminal on the device (22.10.2026):
+        # HBAUD 1200 / KISS ON / RESTART. KISS ON is taken with or without a
+        # cmd: (the PK-232 gave none, 17.10.2026); RESTART reboots the TNC into
+        # KISS - no prompt any more, settle_sec gives it time to come up
+        line("HBAUD 1200"),
+        line("KISS ON", timeout=1.0, expect=()),
+        line("RESTART", timeout=2.0, expect=()),
+    ),
     exit_kiss=True,
-    notes="Kenwood TM-D710: TNC key -> packet mode first",
+    exit_lines=(line("KISS OFF"),),    # a terminal finds cmd: again, also after RESTART
+    settle_sec=2.0,
+    hint="TM-D710: press the TNC key until PACKET shows (not APRS), PC port = COM "
+         "speed of the radio menu (9600)",
+    notes="Kenwood TM-D710: TNC key -> packet mode first, 1200 Bd on the data band",
 )
 
 TH_D74 = Profile(name="th-d74", display="TH-D74", serial_baud=9600, exit_kiss=False,

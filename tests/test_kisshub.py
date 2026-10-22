@@ -375,6 +375,75 @@ class EndToEndTests(HubTestBase):
         self.assertEqual(kinds, ["UA"])                # v2.0 station called with SABM
 
 
+class FakeTMD710(FakePK232):
+    """Kenwood TM-D710 TNC in PACKET mode: HBAUD, KISS ON, RESTART (Gerhard,
+    22.10.2026). 'aprs': TNC key in APRS position - the TNC gives no cmd:."""
+
+    def __init__(self, state: str = "cmd") -> None:
+        super().__init__(state)
+        self.kiss_on = False
+        self.hbaud = 9600
+
+    def _byte(self, b: int) -> None:
+        if self.state == "aprs":
+            return
+        super()._byte(b)
+
+    def _command(self, text: str) -> None:
+        if not text:
+            self.out(b"\r\ncmd:")
+            return
+        self.lines.append(text)
+        word, _, arg = text.partition(" ")
+        if word == "HBAUD":
+            self.out(f"\r\nHBAUD was {self.hbaud}\r\ncmd:".encode())
+            self.hbaud = int(arg)
+        elif text == "KISS ON":
+            self.out(b"\r\nKISS was OFF\r\ncmd:")
+            self.kiss_on = True
+        elif text == "KISS OFF":
+            self.out(b"\r\nKISS was ON\r\ncmd:")
+            self.kiss_on = False
+        elif text == "RESTART":
+            if self.kiss_on:
+                self.state = "kiss"
+            else:
+                self.out(b"\r\nTM-D710 TNC\r\ncmd:")
+        else:
+            self.out(b"\r\n?EH\r\ncmd:")
+
+
+class TmD710Tests(HubTestBase):
+    profile = fast(profiles.TM_D710)
+
+    async def test_init_hbaud_kiss_restart(self):
+        await self.start_hub(FakeTMD710("cmd"))
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        self.assertEqual(self.fake.lines, ["HBAUD 1200", "KISS ON", "RESTART"])
+        self.assertEqual((self.fake.state, self.fake.hbaud), ("kiss", 1200))
+        await self.wait(lambda: len(self.fake.params) == 2)
+
+    async def test_wakes_from_kiss_and_converse(self):
+        for state in ("kiss", "converse", "xoff"):
+            with self.subTest(state=state):
+                await self.start_hub(FakeTMD710(state))
+                await asyncio.wait_for(self.hub.tnc.ready.wait(), 10)
+                self.assertEqual(self.fake.lines[-1], "RESTART")
+                await self.asyncTearDown()
+
+    async def test_aprs_mode_gives_the_hint(self):
+        with self.assertLogs("kisshub.tnc", "ERROR") as logs:
+            await self.start_hub(FakeTMD710("aprs"))
+            await self.wait(lambda: any("PACKET" in o for o in logs.output), 10)
+        self.assertFalse(self.hub.tnc.ready.is_set())
+
+    async def test_stop_leaves_kiss_and_switches_it_off(self):
+        await self.start_hub(FakeTMD710("cmd"))
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        await self.hub.tnc.stop()
+        await self.wait(lambda: self.fake.state == "cmd" and not self.fake.kiss_on)
+
+
 class HubConfigTests(unittest.TestCase):
     def load(self, text: str):
         with tempfile.TemporaryDirectory() as d:
@@ -387,6 +456,17 @@ class HubConfigTests(unittest.TestCase):
         self.assertEqual((cfg.tnc.profile.name, cfg.tnc.device, cfg.hub.port),
                          ("pk232", "COM3", 8101))
         self.assertEqual(cfg.tnc.params[kiss.CMD_TXDELAY], 30)
+
+    def test_example_tm_d710(self):
+        text = (ROOT / "kisshub.conf.example").read_text(encoding="utf-8")
+        text = text.replace("; [tnc.tm-d710]", "[tnc.tm-d710]").replace("; device = COM7", "device = COM7")
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "k.conf"
+            p.write_text(text, encoding="utf-8")
+            cfg = hubconfig.load(p, "tm-d710")
+        self.assertEqual((cfg.tnc.profile.name, cfg.tnc.device, cfg.tnc.serial_baud),
+                         ("tm-d710", "COM7", 9600))
+        self.assertEqual([s.note for s in cfg.tnc.profile.init], ["HBAUD 1200", "KISS ON", "RESTART"])
 
     def test_init_lines_override(self):
         cfg = self.load("[tnc]\nprofile=generic\ntransport=tcp\nport=4001\n"

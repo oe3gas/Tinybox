@@ -75,6 +75,9 @@ cmd_port = 8300            ; VARA Setup "Command"
 sn_window_ms = 1500        ; an SN line belongs to a frame received this close to it
 
 ; Per-profile overrides - only what differs, e.g.
+; [tnc.tm-d710]            ; Kenwood TM-D710: kisshub.bat -p tm-d710
+; device = COM7            ; TNC key -> PACKET first; kisshub sends HBAUD 1200 /
+;                          ; KISS ON / RESTART, on stop C0 FF C0 + KISS OFF
 ; [kiss.pk232]
 ; txdelay_ms = 400
 ; [tnc.vara-fm]

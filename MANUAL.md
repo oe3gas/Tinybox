@@ -231,6 +231,17 @@ Start: `kisshub.bat -p pk232`, `kisshub.bat -p vara-fm`, `kisshub.bat -p direwol
 Einen festen `[tnc] port` oder `transport` nur in `[tnc.<profil>]` eintragen, sonst gilt er
 für alle Profile.
 
+**Kenwood TM-D710** (`kisshub.bat -p tm-d710`): Am Funkgerät die TNC-Taste drücken, bis
+**PACKET** im Display steht (im APRS-Modus antwortet der TNC nicht). In `kisshub.conf`:
+
+```ini
+[tnc.tm-d710]
+device = COM7                  ; COM-Port des Funkgeräts, 9600 Bd
+```
+
+kisshub schickt `HBAUD 1200`, `KISS ON`, `RESTART` und beim Beenden `C0 FF C0` + `KISS OFF`.
+Antwortet der TNC nicht, steht der Hinweis auf die TNC-Taste im Log.
+
 **Profile und ihre Standardwerte:**
 
 | Profil | Weg | air_baud | txdelay_ms | send_params | max_lead_ms | AX.25-Empfehlung |

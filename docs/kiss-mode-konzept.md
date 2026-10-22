@@ -287,7 +287,7 @@ TinyBox müsste zwei völlig verschiedene Wege pflegen.
 |---|---|---|---|---|
 | **PK-232 / PK-232MBX** (AEA/Timewave) | RS-232 | Terminal: `KISS ON`, dann `RESTART` | `C0 FF C0` | zwei Funkports (HF/VHF): Port vor dem Umschalten wählen, im Test prüfen; Firmware-Stand prüfen |
 | **TNC2** (bzw. Nachbauten) – nur der Vollständigkeit halber | RS-232 | **reines KISS-EPROM vorausgesetzt**: TNC ist nach dem Einschalten sofort in KISS, keine Init-Zeilen | – | andere EPROMs (TAPR mit `KISS ON`, TheFirmware/Hostmode) werden nicht unterstützt |
-| **Kenwood TM-D710** | COM-Buchse am Bedienteil (PG-5G) | TNC in Packet-Mode schalten, dann Terminal: `KISS ON` + `RESTART` | `C0 FF C0` | 1200/9600 Bd; Datenband A/B im Menü; kleiner Puffer → PACLEN/Fenster vorsichtig |
+| **Kenwood TM-D710** | COM-Buchse am Bedienteil (PG-5G), 9600 Bd (bei Gerhard COM7) | TNC-Taste bis PACKET (nicht APRS), dann Terminal: `HBAUD 1200` + `KISS ON` + `RESTART` – von Gerhard am Gerät geprüft (22.10.2026) | `C0 FF C0`, dann `KISS OFF` | 1200/9600 Bd; Datenband A/B im Menü; kleiner Puffer → PACLEN/Fenster vorsichtig |
 | **Kenwood TH-D74** | USB (virtueller COM) oder Bluetooth-SPP | im Gerätemenü KISS-Mode einschalten (keine Init-Zeilen) | Menü | 1200/9600 Bd; Datenband im Menü; Bluetooth-Abbrüche → Hub muss neu verbinden |
 | **Kenwood TH-D75** | USB oder Bluetooth-SPP | wie TH-D74, Menü | Menü | Firmware-Stand prüfen (KISS-Verhalten über USB) |
 
@@ -390,7 +390,7 @@ Fassungen gegen dieselben Testfälle.
 | K6 ⏸ | Qualitätszähler aus dem Automaten | Balken wie mit Fork – ruht (15.10.2026), Funktest steht aus |
 | K7 ✅ | `kisshub` (eigener Prozess): Geräteprofile, Weck-/Init-Dialog, KISS-TCP-Server, Sendewarteschlange mit Prioritäten, Spiegeln an andere Clients (14.10.2026) | 13 Tests mit simuliertem PK-232 (alle Ausgangszustände), Ende-zu-Ende TinyBox → kisshub → PK-232 → Station |
 | K8 ⏸ | Geräteprofil + Funktest **PK-232** (erstes Gerät) | Erster Funktest erfolgreich (14.10.2026, Gerät A, Firmware Release 13.SEP.95); Dauerlauf und Raspi ruhen (15.10.2026) |
-| K9 ⏸ | Geräteprofile + Funktest TM-D710, TH-D74, TH-D75 | je Gerät – ruht, Zugriff auf die Geräte steht aus |
+| K9 | Geräteprofile + Funktest TM-D710, TH-D74, TH-D75 | **TM-D710:** Profil `tm-d710` auf die am Gerät geprüften Befehle umgestellt (kisshub 2026.10.22, 4 Tests mit simuliertem D710), Funktest steht aus; TH-D74/D75 ruhen, Zugriff steht aus |
 | K10 ⏸ | TNC2 mit KISS-EPROM (Profil `generic`/`tnc2-kiss`) | Kurztest – ruht, Zugriff auf das Gerät steht aus |
 
 **Testtrick für K1–K6 ohne Hardware-TNC:** Direwolf auf PC2 mit KISS-TCP-Port

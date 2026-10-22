@@ -311,7 +311,8 @@ class Tnc:
                 log.info("TNC answers (%s)", step.note or _show(step.send))
                 return
         raise TncError("no answer from the TNC - wrong port/baud rate, TNC off or "
-                       "hanging (switch it off and on)")
+                       "hanging (switch it off and on)"
+                       + (f" - {self.profile.hint}" if self.profile.hint else ""))
 
     async def _init(self) -> None:
         for step in self.profile.init:
