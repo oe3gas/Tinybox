@@ -3,11 +3,13 @@
 Betrieb von TinyBox, TinyBox-Client, kisshub und den Hilfsprogrammen: welche Teile es gibt,
 wie sie zusammenhängen, wie man sie konfiguriert und wie man die Funkstrecke misst.
 
-Weitere Unterlagen: `README.md` (Start, Telnet-Test, Sysop-Konsole), `logging_manual.md`
-(Log-Datei lesen), `docs/kiss-mode-konzept.md` (KISS-Mode, VARA, Messungen),
+Weitere Unterlagen: `README.md` (Start, Telnet-Test, Sysop-Konsole), `brocast/README.md`
+(brocastd im Detail: Frames, Listener, Bilder, Wetter, Dictionary), `logging_manual.md`
+(Log-Datei lesen), `tbclient/FEATURES.txt` (was der Client kann),
+`docs/kiss-mode-konzept.md` (KISS-Mode, VARA, Messungen),
 `docs/client-change-requests.md` (alle Änderungen), `PLANUNG.md` (Entscheidungen).
 
-Stand: 18.10.2026
+Stand: 22.10.2026 (kisshub 2026.10.22, tbclient 2026.10.18.7)
 
 ---
 
@@ -17,10 +19,10 @@ Stand: 18.10.2026
 |---|---|---|---|
 | **TinyBox** | die Mailbox (BBS): Post, Bulletins, Chat, Forwarding, Web-GUI für den Sysop | `tinybox.bat` | `tinybox.conf` |
 | **TinyBox-Client** (`tbclient`) | Programm für Benutzer: Chat, Post, Monitor, APRS – im Browser | `tbclient.bat` | `tbclient.conf` |
-| **kisshub** | besitzt den KISS-TNC (PK-232, Kenwood, Direwolf-KISS, VARA FM) und teilt ihn per KISS-TCP; misst die Verbindungsqualität | `kisshub.bat` bzw. `python -m kisshub -c <datei>` | `kisshub.conf` |
+| **kisshub** | besitzt den KISS-TNC (PK-232, Kenwood TM-D710, Direwolf-KISS, VARA FM) und teilt ihn per KISS-TCP; misst die Verbindungsqualität | `kisshub.bat -p <profil>` bzw. `python -m kisshub -c <datei> -p <profil>` | `kisshub.conf` (eine Datei für alle TNCs) |
 | **Direwolf** | Soundkarten-Modem (AFSK 1200/9600) mit eigenem AX.25 (AGW) oder als reiner KISS-TNC | `direwolf.exe` | `direwolf.conf` (eigener Ordner, z. B. `E:\direwolf`) |
 | **VARA FM** | Soundkarten-Modem von EA5HVK, hier als KISS-TNC (Port 8100) | `VARAFM.exe` | im Programm (Settings → VARA Setup) |
-| **brocastd** | sendet/empfängt brocast-Seiten (UI-Frames) | `brocast\…` | `brocast\brocastd.conf` |
+| **brocastd** | sendet/empfängt brocast-Seiten (UI-Frames); Einzelheiten in `brocast/README.md` | `brocast\brocastd.bat` | `brocast\brocastd.conf` |
 | **dxfeed** | DX-Cluster → tägliches DX-Bulletin in die TinyBox | `dxfeed.bat` | `dxfeed.conf` |
 | **fwdsim** | Testpartner für das Forwarding | `fwdsim.bat` | `fwdsim.conf` |
 
@@ -35,7 +37,7 @@ Die `*.conf` gehören nie ins Repo; im Repo liegen nur die `*.conf.example`.
 AGW:   TinyBox / Client ──AGW 8000──► Direwolf (macht AX.25 selbst) ──► Funkgerät
 
 KISS:  TinyBox / Client ──KISS 8101──► kisshub ──► TNC ──► Funkgerät
-       (machen AX.25 selbst)                       ├─ PK-232 / Kenwood (seriell)
+       (machen AX.25 selbst)                       ├─ PK-232 / TM-D710 (seriell)
                                                    ├─ Direwolf (KISS-TCP 8001)
                                                    └─ VARA FM  (KISS-TCP 8100, Tunnel)
 ```
@@ -116,8 +118,12 @@ port = 8101                    ; kisshub; Status automatisch auf port + 1, Host 
 ;                              ; kiss: Standard aus dem kisshub-Profil
 ; maxframe     =               ; agw: = max_outstanding, Standard EMAXFRAME/MAXFRAME
 ; maxframe_ext =               ; nur kiss (Modulo 128)
-; version      = 2.2           ; nur kiss: 2.2 | 2.0
+; version      = 2.2           ; nur kiss: 2.2 (SABME/SREJ/XID, fällt selbst auf 2.0 zurück) | 2.0
 ; srej         = yes           ; nur kiss
+; v20_digis    = OE3XTC-5      ; nur kiss: Digis, die nur v2.0 können (z. B. TM-D710E) –
+;                              ; Verbindungen über sie mit SABM/Modulo 8, alle anderen Digis = v2.2
+; v20_digi_paclen = 128        ; nur kiss: längster I-Frame über einen solchen Digi
+;                              ; (TM-D710E: 256 nein, 128 ja)
 ; n2 / t1_min_sec / t1_max_sec / t2_sec / t3_sec   ; nur kiss, Standard aus dem kisshub-Profil
 ```
 
@@ -149,7 +155,8 @@ channel   = 0
 [kiss]                         ; nur bei interface = kiss
 port = 8101
 
-[ax25]                         ; OPTIONAL, wie bei der TinyBox (nur kiss)
+[ax25]                         ; OPTIONAL, wie bei der TinyBox (nur kiss),
+; v20_digis = OE3XTC-5         ; auch v20_digi_paclen – gilt für Connects über Digis (3.6)
 
 [images]
 target_bytes  = 4096
@@ -160,100 +167,96 @@ target_bytes  = 4096
 
 ### 2.4 `kisshub.conf` – der einzige Ort für TNC und Modem
 
-```ini
-[tnc]
-profile   = vara-fm            ; pk232 | tm-d710 | th-d74 | th-d75 | tnc2-kiss | generic
-                               ; | vara-fm | vara-hf | direwolf (liest direwolf.conf)
-transport = tcp                ; serial | tcp
-; device / serial_baud         ; nur serial (z. B. COM3 / 9600)
-; host = 127.0.0.1             ; nur tcp
-; port                         ; nur tcp; Standard je Profil: vara 8100, direwolf = KISSPORT
-; direwolf_conf = E:\direwolf  ; nur profile = direwolf
-; vara_tunnel = connected      ; nur VARA: no | connected | all
-; vara_bundle_ms = 0           ; nur VARA: Bündelung (Experiment, bringt bei Narrow nichts)
-; vara_bundle_max = 4000
-; exit_kiss_on_stop / init_lines / reconnect_sec   ; siehe kisshub.conf.example
+**Eine Datei für alle TNCs** (seit kisshub 2026.10.18.8): welches Gerät läuft, entscheidet der
+Start mit `-p`, nicht die Datei.
 
-[kiss]                         ; alle Werte OPTIONAL, Standard aus dem Profil
-; air_baud    =                ; vara-fm: 350 | direwolf: aus MODEM | pk232: 1200
-; txdelay_ms  =                ; vara-fm: 2700 | direwolf: TXDELAY | sonst 300
-; persist / slottime_ms        ; nur Hardware-TNC
-; send_params =                ; Standard je Profil (vara/direwolf: no – bei VARA verboten)
-; max_lead_ms =                ; vara: 12000 | sonst 1500
-
-[ax25]                         ; OPTIONAL: Empfehlung an TinyBox/Client überschreiben
-; paclen / maxframe / maxframe_ext / t1_min_sec / t2_sec ...
-;                              ; Standard je Profil, z. B. vara-fm: 256 / 4 / 4 / 18 / 0.3
-
-[server]
-port = 8101                    ; Status automatisch auf 8102
-
-[log]
-level = INFO                   ; DEBUG: jedes Byte des TNC-Dialogs
-file  = kisshub.log            ; leer = nur Konsole (wird beim Start gemeldet)
-trace = no                     ; yes: jedes Byte zum/vom TNC in hex (Konsole: LOG TRACE)
-status_every_sec = 600
-links_file = kisshub-links.jsonl   ; eine JSON-Zeile je beendeter Verbindung; leer = aus
-
-[vara]                         ; nur Profil vara-fm / vara-hf
-monitor  = no                  ; yes: VARA-Befehlsport mitlesen (sendet nichts) – SN, PTT, BUSY
-cmd_port = 8300
-sn_window_ms = 1500
+```
+kisshub.bat -p pk232        kisshub.bat -p tm-d710
+kisshub.bat -p vara-fm      kisshub.bat -p direwolf
 ```
 
-**Eine Datei für alle TNCs** (kisshub 2026.10.18.8): Das Profil wird beim Start gewählt,
-die conf bleibt dieselbe.
+Regeln:
+- `-p` schlägt `[tnc] profile` (das ist nur der Standard ohne `-p`).
+- **Allgemeine Abschnitte** (`[tnc]`, `[kiss]`, `[ax25]`, `[server]`, `[log]`, `[vara]`) gelten
+  für **alle** Profile. Dort nur hinein, was wirklich für jedes Gerät stimmt.
+- **`[<abschnitt>.<profil>]`** (z. B. `[tnc.pk232]`, `[kiss.pk232]`, `[tnc.vara-fm]`) gilt nur für
+  dieses Profil und überschreibt den allgemeinen Abschnitt Schlüssel für Schlüssel.
+- Gerätebezogenes gehört **immer** in den Profil-Abschnitt: `device`, `serial_baud`,
+  `transport`, `port`, `host` und die `[kiss]`-Werte eines Hardware-TNC. Steht z. B.
+  `send_params = yes` im allgemeinen `[kiss]`, bricht `-p vara-fm` mit einem Fehler ab; steht
+  `air_baud = 1200` dort, überschreibt es die VARA-Messwerte.
+- `{profile}` in Dateinamen (`[log] file`, `links_file`) wird zum Profilnamen – jedes Gerät hat
+  sein eigenes Log.
+- `kisshub -h` (oder `-?`) zeigt die Hilfe.
+
+**Beispiel** (PC1 mit PK-232 an COM6 und TM-D710 an COM7):
 
 ```ini
 [tnc]
 profile       = pk232          ; Standard ohne -p
-device        = COM3           ; nur pk232 (seriell)
-direwolf_conf = C:\direwolf    ; nur profile direwolf
+reconnect_sec = 10
+exit_kiss_on_stop = yes        ; Strg+C: TNC verlässt KISS (Terminal/pk232py findet cmd:)
+direwolf_conf = E:\direwolf    ; nur Profil direwolf
 
 [server]
-port = 8101
+port = 8101                    ; Status automatisch auf 8102, Host immer 127.0.0.1
 
 [log]
-file       = kisshub-{profile}.log            ; je Profil eine eigene Datei
+level = INFO                   ; DEBUG: jedes Byte des TNC-Dialogs
+file  = kisshub-{profile}.log
 links_file = kisshub-links-{profile}.jsonl
+status_every_sec = 600
 
-[vara]
-monitor = yes                  ; gilt nur bei vara-fm/vara-hf, sonst Hinweis und aus
+[vara]                         ; gilt nur bei vara-fm/vara-hf, sonst Hinweis und aus
+monitor  = no
+cmd_port = 8300
 
-[kiss.pk232]                   ; optional: nur für dieses Profil
-txdelay_ms = 400
+[tnc.pk232]
+device      = COM6
+serial_baud = 9600             ; TBAUD des PK-232
+
+[kiss.pk232]
+txdelay_ms  = 600              ; Profil-Standard 300
+
+[tnc.tm-d710]                  ; TNC-Taste auf PACKET (3.3)
+device      = COM7
+serial_baud = 9600
 ```
 
-Start: `kisshub.bat -p pk232`, `kisshub.bat -p vara-fm`, `kisshub.bat -p direwolf`.
-`-p` schlägt `[tnc] profile`; `[<abschnitt>.<profil>]` (Abschnitte `tnc`, `kiss`, `ax25`,
-`server`, `log`, `vara`) überschreibt den normalen Abschnitt nur für dieses Profil;
-`{profile}` in Dateinamen wird zum Profilnamen. `kisshub -h` bzw. `-?` zeigt die Hilfe.
-Einen festen `[tnc] port` oder `transport` nur in `[tnc.<profil>]` eintragen, sonst gilt er
-für alle Profile.
+**Alle Schlüssel:**
 
-**Kenwood TM-D710** (`kisshub.bat -p tm-d710`): Am Funkgerät die TNC-Taste drücken, bis
-**PACKET** im Display steht (im APRS-Modus antwortet der TNC nicht). In `kisshub.conf`:
-
-```ini
-[tnc.tm-d710]
-device = COM7                  ; COM-Port des Funkgeräts, 9600 Bd
-```
-
-kisshub schickt `HBAUD 1200`, `KISS ON`, `RESTART` und beim Beenden `C0 FF C0` + `KISS OFF`.
-Antwortet der TNC nicht, steht der Hinweis auf die TNC-Taste im Log.
+| Abschnitt | Schlüssel | Bedeutung |
+|---|---|---|
+| `[tnc]` | `profile` | Standardprofil ohne `-p`: `pk232`, `tm-d710`, `th-d74`, `th-d75`, `tnc2-kiss`, `generic`, `vara-fm`, `vara-hf`, `direwolf` |
+| | `transport` | `serial` \| `tcp` – Standard je Profil (tcp bei vara-*/direwolf) |
+| | `device`, `serial_baud` | nur seriell, z. B. `COM6` / `9600`, Raspberry Pi `/dev/ttyUSB0` |
+| | `host`, `port` | nur tcp; Standard 127.0.0.1, vara 8100, direwolf = KISSPORT |
+| | `reconnect_sec` | Wartezeit bis zum nächsten Versuch (Standard 10) |
+| | `exit_kiss_on_stop` | beim Beenden KISS verlassen (Standard je Profil) |
+| | `init_lines` | ersetzt den Init-Dialog: `A \| B \| … \| KISS ON`, die letzte Zeile schaltet in KISS |
+| | `direwolf_conf` | nur Profil `direwolf`: Ordner oder Datei |
+| | `vara_tunnel`, `vara_bundle_ms`, `vara_bundle_max` | nur VARA (3.5) |
+| `[kiss]` | `air_baud`, `txdelay_ms`, `max_lead_ms` | Funkwerte – nur zum Überschreiben, Standard aus dem Profil |
+| | `persist`, `slottime_ms`, `send_params` | nur Hardware-TNC (KISS-Parameter); bei VARA/Direwolf muss `send_params` no bleiben |
+| `[ax25]` | `paclen`, `maxframe`, `maxframe_ext`, `n2`, `t1_min_sec`, `t1_max_sec`, `t2_sec`, `t3_sec` | Empfehlung an TinyBox und Client überschreiben |
+| `[server]` | `port` | KISS-TCP für TinyBox, Client, brocastd (Standard 8101) |
+| `[log]` | `level`, `file`, `trace`, `status_every_sec`, `links_file` | Logging, Links-Datei (Kapitel 4) |
+| `[vara]` | `monitor`, `host`, `cmd_port`, `sn_window_ms` | VARA-Befehlsport mitlesen (Kapitel 4) |
 
 **Profile und ihre Standardwerte:**
 
 | Profil | Weg | air_baud | txdelay_ms | send_params | max_lead_ms | AX.25-Empfehlung |
 |---|---|---|---|---|---|---|
 | `pk232` | seriell, Init-Dialog | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
-| `tm-d710`, `th-d74`, `th-d75`, `tnc2-kiss`, `generic` | seriell/tcp | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
+| `tm-d710` | seriell, Init-Dialog (`HBAUD 1200`, `KISS ON`, `RESTART`) | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
+| `th-d74`, `th-d75`, `tnc2-kiss`, `generic` | seriell/tcp, schon in KISS (kein Dialog) | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
 | `direwolf` | tcp, KISSPORT | aus MODEM | aus TXDELAY | no | 1500 | 1200-Bd-Werte |
 | `vara-fm`, `vara-hf` | tcp 8100, Tunnel | 350 | 2700 | **no** | 12000 | 256 B, Fenster 4, T1 18–90 s, T2 0,3 s |
 
 *1200-Bd-Werte:* paclen 256, Fenster 4 (Modulo 8) / 7 (Modulo 128), T1 3–30 s, T2 1,5 s.
 Beim Profil `direwolf` kommen paclen und Fenster aus PACLEN/MAXFRAME/EMAXFRAME.
-Die VARA-Werte sind am 18.10.2026 gemessen (Konzept 8d).
+Die VARA-Werte sind am 18.10.2026 gemessen (Konzept 8d). `th-d74`, `th-d75` und `tnc2-kiss`
+sind noch nicht am Gerät getestet.
 
 **So kommen die Werte bei TinyBox und Client an:** Beide fragen den kisshub-Status
 (`http://127.0.0.1:<port + 1>/status`, Block `radio`) alle 30 s ab und übernehmen Funkrate,
@@ -278,6 +281,11 @@ port = 8101                    ; kisshub (oder Direwolf-KISSPORT direkt, z. B. 8
 ; baud / txdelay_ms            ; entfallen: aus direwolf.conf bzw. kisshub
 airtime_percent = 15           ; Rest wie in brocastd.conf.example
 ```
+
+Die Systemrubrik **TBNEWS** (Client-News) geht nie über brocast – auch nicht, wenn sie in
+`[brocast] destinations` der TinyBox steht (entschieden 20.10.2026, `PLANUNG.md` 19). Was
+brocastd sendet und wie Listener, Bilder, Wetterseite und Dictionary funktionieren, steht in
+`brocast/README.md`.
 
 ### 2.6 `dxfeed.conf`
 
@@ -325,6 +333,9 @@ den kisshub-Wert 350 – kann entfernt werden`).
 | tbclient `[tinybox] link` | `[radio] interface` |
 | tbclient `[direwolf] agw_host / agw_port / radio_port` | `[agw] host / port / channel` |
 | kisshub `[server] listen / status_port` | fest 127.0.0.1 / `port + 1` |
+| kisshub: je TNC eine eigene conf | eine `kisshub.conf`, Start mit `-p <profil>` |
+| kisshub `[tnc] device / transport / serial_baud` (gerätebezogen) | `[tnc.<profil>]` |
+| kisshub `[kiss] txdelay_ms / persist / send_params …` eines Hardware-TNC | `[kiss.<profil>]` |
 | brocastd `[direwolf] interface / agw_port / kiss_port / channel` | `[radio] interface`, `[agw]`, `[kiss]` |
 | brocastd `[station] baud / txdelay_ms` | aus `direwolf.conf` bzw. kisshub |
 | tbclient `[images] bytes_per_sec` | geschätzt aus der Funkrate (70 %), danach gemessen |
@@ -346,25 +357,50 @@ den kisshub-Wert 350 – kann entfernt werden`).
 AX.25-Einstellungen (PACLEN, MAXFRAME, EMAXFRAME, FRACK, RETRY, TXDELAY) stehen hier nur in
 der `direwolf.conf`.
 
-### 3.2 KISS mit Hardware-TNC (PK-232)
+### 3.2 KISS mit Hardware-TNC: PK-232
 
-1. `kisshub.conf`: `profile = pk232`, `transport = serial`, `device = COM3`.
-2. kisshub starten → „TNC answers …“, die Init-Zeilen, „TNC in KISS mode – ready“.
+1. `kisshub.conf`: `[tnc.pk232] device = COM6` (Beispiel 2.4).
+2. `kisshub.bat -p pk232` → „TNC answers …“, die Init-Zeilen, „TNC in KISS mode – ready“.
 3. TinyBox/Client: `[radio] interface = kiss`, `[kiss] port = 8101`.
-4. Ende mit Strg+C im kisshub-Fenster: der PK-232 verlässt KISS (pk232py findet ihn wieder).
+4. Ende mit Strg+C im kisshub-Fenster: der PK-232 verlässt KISS (`KISS OFF`, pk232py findet
+   ihn wieder).
 
-### 3.3 KISS mit Direwolf als Modem (für Messungen und den Vergleich mit VARA)
+Der Init-Dialog (am Gerät geprüft, 14./17.10.2026): `EXPERT ON` zuerst (sonst `?EXPERT
+command`), `VHF ON`, `HBAUD 1200`, `AWLEN 8`, `PARITY 0`, …, `KISS ON`, `HOST ON`. Der kisshub
+weckt den PK-232 aus jedem Zustand (Autobaud, Converse, XOFF, Host Mode, KISS).
+
+### 3.3 KISS mit Hardware-TNC: Kenwood TM-D710
+
+1. Am Funkgerät die **TNC-Taste** drücken, bis **PACKET** im Display steht. Im APRS-Modus
+   antwortet der TNC nicht. Datenband (A/B) und 1200 Bd im Menü des Funkgeräts prüfen.
+2. `kisshub.conf`: `[tnc.tm-d710] device = COM7`, `serial_baud = 9600` (Beispiel 2.4).
+3. `kisshub.bat -p tm-d710`. Der kisshub schickt `HBAUD 1200`, `KISS ON`, `RESTART` (von
+   OE3GAS am Gerät geprüft, 22.10.2026) und wartet 2 s, bis der TNC in KISS hochgefahren ist.
+4. TinyBox/Client: `[radio] interface = kiss`, `[kiss] port = 8101`.
+5. Ende mit Strg+C: `C0 FF C0` und `KISS OFF` – ein Terminal findet wieder `cmd:`.
+
+Antwortet der TNC nicht, nennt die Fehlermeldung im Log die TNC-Taste. Für den ersten Lauf
+`[log] level = DEBUG`: dann steht jedes Byte des Dialogs im Log.
+
+**Stand:** Profil und Dialog mit simuliertem TNC getestet, Funktest steht aus (Konzept K9).
+Offen: RTS/CTS-Flusssteuerung (der kisshub nutzt keine) und der kleine Puffer des D710 –
+gehen lange Frames verloren, zuerst `[ax25.tm-d710] paclen = 128` versuchen.
+
+Als **KISS-TNC** sendet der D710 nur, was TinyBox oder Client liefern – AX.25 v2.2 geht daher
+durch ihn. Die v2.0-Grenze betrifft den D710 nur als **Digipeater** (3.6).
+
+### 3.4 KISS mit Direwolf als Modem (für Messungen und den Vergleich mit VARA)
 
 Gleicher AX.25-Automat wie bei VARA, nur das Modem ist anders – dafür gedacht, Modems zu
 vergleichen.
 
 1. Direwolf läuft, KISSPORT 8001 offen. **VARA geschlossen** (gleiche Soundkarte!).
-2. `kisshub.conf`: `profile = direwolf`, `direwolf_conf = E:\direwolf` – Port (KISSPORT),
-   Funkrate (MODEM), TXDELAY, PACLEN und Fenster kommen aus der `direwolf.conf`; die
-   Startzeilen des kisshub zeigen sie.
+2. `kisshub.conf`: `[tnc] direwolf_conf = E:\direwolf`; Start `kisshub.bat -p direwolf`. Port
+   (KISSPORT), Funkrate (MODEM), TXDELAY, PACLEN und Fenster kommen aus der `direwolf.conf`;
+   die Startzeilen des kisshub zeigen sie.
 3. TinyBox/Client auf `interface = kiss`, Port 8101.
 
-### 3.4 KISS mit VARA FM
+### 3.5 KISS mit VARA FM
 
 **VARA einrichten** (beide PCs): Settings → VARA Setup → **KISS interface** anhaken, KISS-Port
 **8100**; Soundkarte und PTT einstellen; FM System NARROW (Mikrofon/Lautsprecher) bzw. WIDE
@@ -378,27 +414,21 @@ vergleichen.
   Das Profil verhindert es; `send_params = yes` wird abgewiesen.
 - VARA FM und Direwolf **nie gleichzeitig** an derselben Soundkarte.
 
-**kisshub** (beide PCs) – mit der gemeinsamen conf aus 2.4 einfach `kisshub.bat -p vara-fm`;
-als eigene Datei z. B. `kisshub-varafm.conf`:
+**kisshub** (beide PCs): Start `kisshub.bat -p vara-fm`. Das Profil bringt alles mit
+(transport tcp, Port 8100, air_baud 350, txdelay 2700 ms, max_lead 12000 ms, AX.25-Empfehlung).
+In der gemeinsamen `kisshub.conf` (2.4) ist nichts nötig; wer will, ergänzt:
 
 ```ini
-[tnc]
-profile   = vara-fm            ; transport tcp, Port 8100, air_baud 350, txdelay 2700 ms,
-                               ; max_lead 12000 ms und die AX.25-Empfehlung kommen vom Profil
-[server]
-port = 8101
-
-[log]
-file       = kisshub-vara.log
-links_file = links-vara.jsonl
-
-[vara]
+[vara.vara-fm]
 monitor = yes                  ; beim ersten Mal jemand ans Funkgerät (PTT-Hänger möglich)
+
+[tnc.vara-fm]
+; host = 192.168.1.20          ; nur wenn VARA auf einem anderen PC läuft
+; vara_tunnel = connected      ; Standard; all = auch UI-Frames durch den Tunnel
 ```
 
-Start: `python -m kisshub -c kisshub-varafm.conf`. Erwartet: `vara-fm`,
-`radio: air_baud 350 (profile vara-fm), txdelay 2700 ms …`, „VARA tunnel connected …“,
-„VARA monitor: listening …“.
+Erwartet beim Start: `vara-fm`, `radio: air_baud 350 (profile vara-fm), txdelay 2700 ms …`,
+„VARA tunnel connected …“, „VARA monitor: listening …“. Das Log heißt `kisshub-vara-fm.log`.
 
 **TinyBox / Client:** nur `[radio] interface = kiss` und `[kiss] port = 8101` – **kein**
 `[ax25]` nötig. Die Werte (paclen 256, Fenster 4/4, T1 18–90 s, T2 0,3 s, Funkrate,
@@ -413,6 +443,26 @@ TX-Pegel des sendenden Geräts zu niedrig (Lauf 1: TS-790, 15 % Frameverlust).
 **Was zu erwarten ist** (18.10.2026, kurze Strecke, VHF): VARA FM Narrow über KISS ist
 verlustfrei, aber rund halb so schnell wie Direwolf 1200 Bd (22 gegen 40 B/s): VARA sendet
 KISS-Verkehr mit ~300–500 bit/s und 2–4 s Aufwand je Burst.
+
+### 3.6 Connect über Digipeater (Client, CR71)
+
+Im Client ins Connect-Feld die klassische TNC-Syntax: `OE3XYZ-1 V OE3XTC-5` (mehrere Digis mit
+Komma oder Leerzeichen, höchstens 8). Unter dem Feld zeigt eine Vorschau den Pfad. Die Liste der
+letzten Ziele merkt sich den ganzen Pfad. Via ist nur Digipeating – einen Node connectet man
+selbst und verbindet dort mit `C` weiter.
+
+**v2.0-Digis** (nur bei `interface = kiss`): Ältere Hardware-Digis wie der TM-D710E OE3XTC-5
+kennen nur AX.25 v2.0. Über sie scheitern SABME/Modulo 128 und 256-Byte-Frames. Deshalb in
+`tinybox.conf` **und** `tbclient.conf`:
+
+```ini
+[ax25]
+v20_digis       = OE3XTC-5     ; Verbindungen über diese Digis: SABM, Modulo 8
+v20_digi_paclen = 128          ; längster I-Frame über sie
+```
+
+Alle anderen Digis gelten als v2.2 (aktuelle Digis laufen meist über Software-TNC), wie bei
+Direwolf (`V20`). Bei AGW entscheidet Direwolf selbst.
 
 ---
 
@@ -468,3 +518,9 @@ die AX.25-Empfehlung (`ax25`) und je Wert die Herkunft (`source`).
 | Mail bleibt im Postausgang trotz Aussendung | alter Client (vor 2026.10.18) | `git pull`; CR68/CR69 |
 | `not reachable … 8100` | VARA nicht gestartet oder KISS-Interface aus | VARA starten, Häkchen „KISS interface“ |
 | PTT bleibt gedrückt | bekannter VARA-Fehler mit KISS + Befehlsport | kisshub mit Strg+C beenden, `[vara] monitor = no` |
+| kisshub: `no answer from the TNC … TM-D710: press the TNC key …` | TNC im APRS-Modus, falscher COM-Port oder falsche Baudrate | TNC-Taste bis PACKET, `[tnc.tm-d710] device`, COM-Geschwindigkeit im Menü |
+| kisshub: `[tnc] device: the serial port …` | serielles Profil gestartet, aber kein `device` für dieses Profil | `[tnc.<profil>] device = COMx` |
+| kisshub: `[kiss] send_params: must be no with profile vara-fm` | `send_params = yes` im allgemeinen `[kiss]` | nach `[kiss.pk232]` verschieben (2.4) |
+| VARA zu schnell/zu langsame Timer, obwohl Profil vara-fm | `air_baud`/`txdelay_ms` im allgemeinen `[kiss]` überschreibt die Messwerte | nach `[kiss.<hardware-profil>]` verschieben |
+| Connect über OE3XTC-5 kommt nicht zustande oder hängt bei langen Texten | Digi kann nur v2.0 bzw. verwirft 256-Byte-Frames | `[ax25] v20_digis` und `v20_digi_paclen = 128` (3.6) |
+| GeoSphere: Zertifikatsfehler (`CERTIFICATE_VERIFY_FAILED`) | Stammzertifikate fehlen unter Windows (TLS-Prüfung seit 20.10.2026 ein) | `geosphere_aufgaben_einrichten.bat` erneut oder `py -3 -m pip install truststore` |
