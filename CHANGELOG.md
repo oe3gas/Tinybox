@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- brocast Dictionary v4: Seitentyp `dxsum` (DX-Zusammenfassung), Listen `band`,
+  `mode` und `dxcc` (alle DXCC-Gebiete mit ADIF-Nummer), Feldtyp `rows`,
+  Blockart `data` (PLANUNG 16b). dxfeed sendet Stationen und Bandaktivität als
+  zwei Bulletins mit je einer Seite in einem Frame (vorher drei Frames); der
+  Most-Wanted-Rang findet jetzt auch Gebiete, die Club Log anders schreibt (1A0, IS0 ...).
 - dxfeed: Relevanz der DX-Meldungen nach Club Log Most Wanted und Spotterzahl
   (Stufen A/B/C, PLANUNG 16a), neuer Befehl `mw-update`; Tabelle alphabetisch,
   Bandaktivität je Mode mit den anderen Modes namentlich. Das DX-Bulletin trägt

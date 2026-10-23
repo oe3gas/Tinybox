@@ -534,7 +534,8 @@ function saveGraphic(on) {
 function hasGraphic(p) {
   if (state.view === "teletext") return false;            // the teletext screen is always text
   return (p.typ === "wx" && Array.isArray(p.data) && p.data.length > 0)
-    || p.blocks.some(b => b.k === "table" && (wxgCols(b) !== null || dxKind(b) !== null));
+    || (p.typ === "dxsum" && dxData(p) !== null)
+    || p.blocks.some(b => b.k === "table" && wxgCols(b) !== null);
 }
 
 /* The bar above the page: the view switch. Both views show the whole page
@@ -583,13 +584,15 @@ function renderContent(p) {
     const wx = weatherView(p);
     c.append(wx.node);
     used = wx.used;
+  } else if (p.typ === "dxsum" && dxData(p) !== null) {
+    c.append(dxSummaryView(p, !teletext && state.graphic));
   } else if (showFirst && p.data && p.data.length) {
     const cards = el("div", "cards");
     for (const d of p.data) cards.append(card(d.label, d.value, d.unit));
     c.append(cards);
   }
-  // teletext: no weather or DX grid (renderBlocks draws plain tables there)
-  const semantics = tableSemantics(p.blocks);
+  // teletext: no weather grid either (no column semantics -> the plain table)
+  const semantics = teletext ? null : tableSemantics(p.blocks);
   let blocks = p.blocks;
   if (used.size) blocks = blocks.filter(b => !used.has(b));
   renderBlocks(c, blocks, p.sub_total, semantics);
@@ -646,7 +649,7 @@ function tableSemantics(blocks) {
   let current = null;
   for (const b of blocks) {
     if (b.k !== "table") { current = null; continue; }
-    if (b.hdr) current = { cols: wxgCols(b), dx: dxKind(b), n: b.n, v: b.v, hdr: b.hdr };
+    if (b.hdr) current = { cols: wxgCols(b), hdr: b.hdr };
     if (current) sem.set(b, current);
   }
   return sem;
@@ -675,8 +678,7 @@ function isMosaic(text) {
 }
 
 function renderBlocks(c, blocks, total, semantics) {
-  let cards = null, lastTable = null, lastGrid = null, lastMosaic = null, lastDx = null;
-  const graphic = state.graphic && state.view !== "teletext";
+  let cards = null, lastTable = null, lastGrid = null, lastMosaic = null;
   for (const b of blocks) {
     if (b.k === "value") {
       if (!cards) { cards = el("div", "cards"); c.append(cards); }
@@ -698,23 +700,9 @@ function renderBlocks(c, blocks, total, semantics) {
       continue;
     }
     lastMosaic = null;
-    const sem = b.k === "table" && semantics ? semantics.get(b) : null;
-    // DX digest (dxfeed): station table and band activity - grid in graphic mode,
-    // otherwise a plain table with the bit masks turned into band and mode lists
-    if (sem && sem.dx) {
-      lastTable = null;
-      lastGrid = null;
-      if (!b.hdr && lastDx) lastDx.rows.push(...(b.rows || []));
-      else {
-        lastDx = { sem, rows: [...(b.rows || [])], node: el("div") };
-        c.append(lastDx.node);
-      }
-      drawDx(lastDx, graphic);
-      continue;
-    }
-    lastDx = null;
     // a table with column semantics (n) is drawn as a weather grid in graphic mode
-    if (sem && sem.cols && graphic) {
+    const sem = b.k === "table" && semantics ? semantics.get(b) : null;
+    if (sem && sem.cols && state.graphic) {
       lastTable = null;
       if (!b.hdr && lastGrid) {                                  // continuation: redraw with all rows
         lastGrid.rows.push(...scaledRows(b));
@@ -1250,61 +1238,80 @@ function wxGrid(rows, cols, hdr, withSummary) {
   return wrap;
 }
 
-/* ---------- DX digest (dxfeed, PLANUNG 16a) ----------
- * Two table blocks whose "n" names the columns:
- *   stations  n = rel call ent sp mw t0 t1 cw ssb ft8 oth om
- *             rel 0/1/2 = relevance A/B/C (dxfeed decides), mw = Club Log Most
- *             Wanted rank, t0/t1 = minutes before the end of the window (v of the
- *             first block, Unix time), cw..oth = bands as bit masks (bit i =
- *             DX_BANDS[i]), om = names of the other modes ("FT4 RTTY")
- *   activity  n = band cw ssb ft8 oth peak om
- *             spots per mode group, peak hour (UTC), other modes with counts
- * Continuation blocks (no hdr) add rows. Nothing extra goes over the air: the
- * grid, the heat map and the plain lists are all computed here. */
+/* ---------- DX summary (typ dxsum, dictionary v4, PLANUNG 16a/16b) ----------
+ * dxfeed sends two pages, both with their data in p.data (the listener has
+ * already turned the numbers into names and adds display texts):
+ *   st   stations: tier call dxcc sp mw t0 t1 cw ssb ft8 oth om
+ *        dxcc = dictionary name ("7P", texts.dxcc["7P"].t = "Lesotho") or text,
+ *        t0/t1 = minutes before end, cw..oth = bands as bit masks (bits.cw = band
+ *        names by bit), om = other modes
+ *   act  band activity: band cw ssb ft8 oth peak om (om = [[mode, count], ...])
+ *   end calls spots conts tiers cov win: the frame around it
+ * Grid, heat map and plain lists are all drawn here; nothing extra goes over the air. */
 
 const DX_BANDS = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m",
                   "6m", "4m", "2m", "70cm"];
 const DX_MODES = [["cw", "CW"], ["ssb", "SSB"], ["ft8", "FT8"], ["oth", "Andere"]];
 const DX_TIERS = ["A", "B", "C"];
 
-function dxKind(b) {
-  if (!Array.isArray(b.n)) return null;
-  if (b.n.includes("call") && b.n.includes("rel") && b.n.includes("cw")) return "stations";
-  if (b.n[0] === "band" && b.n.includes("oth")) return "activity";
-  return null;
+function dxData(p) {
+  if (!Array.isArray(p.data)) return null;
+  const by = Object.fromEntries(p.data.map(d => [d.key, d]));
+  if (!by.st && !by.act) return null;
+  const val = k => by[k] ? by[k].value : undefined;
+  return { st: by.st, act: by.act, end: val("end"), calls: val("calls"), spots: val("spots"),
+           conts: val("conts"), tiers: val("tiers"), cov: val("cov"), win: val("win") || 1440 };
 }
 
-function dxBandLabel(band) { return band === "70cm" ? "70c" : band.replace(/m$/, ""); }
-
-/* row -> object by the column names of n */
-function dxRecord(n, r) {
-  const o = {};
-  n.forEach((k, i) => { o[k] = Array.isArray(r) ? r[i] : undefined; });
-  return o;
+/* rows of a rows item -> objects by column name */
+function dxRecords(item) {
+  if (!item || !Array.isArray(item.value) || !Array.isArray(item.cols)) return [];
+  return item.value.filter(r => Array.isArray(r)).map(r => {
+    const o = {};
+    item.cols.forEach((k, i) => { o[k] = r[i] ?? null; });
+    return o;
+  });
 }
 
-function dxBandsOf(o) {             // bands of all mode groups, in band order
+function dxText(item, col, v) {                 // display text of a list value
+  const t = item && item.texts && item.texts[col] ? item.texts[col][v] : null;
+  if (t && t.t) return t.t;
+  return typeof v === "number" ? `#${v}` : String(v ?? "");
+}
+
+function dxBands(item) {                        // band names by bit, from the dictionary
+  const b = item && item.bits && Array.isArray(item.bits.cw) ? item.bits.cw : null;
+  return b && b.length ? b : DX_BANDS;
+}
+
+function dxBandLabel(band) { return band === "70cm" ? "70c" : String(band).replace(/m$/, ""); }
+
+function dxTier(o) { return typeof o.tier === "string" ? o.tier : (DX_TIERS[o.tier] || "?"); }
+
+function dxBandsOf(o, bands) {
   const all = DX_MODES.reduce((m, [k]) => m | (Number(o[k]) || 0), 0);
-  return DX_BANDS.filter((_, i) => all & (1 << i));
+  return bands.filter((_, i) => all & (1 << i));
 }
 
-function dxModesOn(o, i) {          // mode names on band i
+function dxOthers(item, o) {
+  return (Array.isArray(o.om) ? o.om : []).map(m => dxText(item, "om", m)).join(" ") || "Andere";
+}
+
+function dxModesOn(item, o, i) {
   const out = [];
-  for (const [k, name] of DX_MODES) {
-    if (!((Number(o[k]) || 0) & (1 << i))) continue;
-    out.push(k === "oth" ? (o.om || "Andere") : name);
-  }
+  for (const [k, name] of DX_MODES)
+    if ((Number(o[k]) || 0) & (1 << i)) out.push(k === "oth" ? dxOthers(item, o) : name);
   return out;
 }
 
-function dxModeList(o) {
+function dxModeList(item, o) {
   const out = DX_MODES.slice(0, 3).filter(([k]) => Number(o[k])).map(([, name]) => name);
-  if (Number(o.oth)) out.push(o.om || "Andere");
+  if (Number(o.oth)) out.push(dxOthers(item, o));
   return out.join(" ");
 }
 
 function dxTime(end, minutesBefore) {
-  if (typeof end !== "number" || typeof minutesBefore !== "number") return "";
+  if (typeof end !== "number" || typeof minutesBefore !== "number") return null;
   const d = new Date((end - minutesBefore * 60) * 1000);
   const p2 = x => String(x).padStart(2, "0");
   return { day: p2(d.getUTCDate()), hm: p2(d.getUTCHours()) + p2(d.getUTCMinutes()) };
@@ -1317,16 +1324,14 @@ function dxSpan(end, o) {
   return a.day === b.day ? `${a.day}/${a.hm}-${b.hm}` : `${a.day}/${a.hm}-${b.day}/${b.hm}`;
 }
 
-function dxTierBadge(rel) {
-  const t = DX_TIERS[rel] || "?";
+function dxTierBadge(t) {
   const s = el("span", "dx-tier t" + t, t);
   s.title = { A: "Relevanz A: selten – sofort hinschauen", B: "Relevanz B: interessant",
               C: "Relevanz C: Alltag" }[t] || "Relevanz unbekannt";
   return s;
 }
 
-/* the score of dxfeed (mostwanted.py): rarity from the Most Wanted rank times
- * log2(1 + spotters) - only for the order; the tier itself comes from dxfeed */
+/* the score of dxfeed (mostwanted.py), only for the order; the tier comes from dxfeed */
 function dxScore(o) {
   const r = typeof o.mw === "number" ? Math.min(340, Math.max(1, o.mw)) : 170;
   return (1 + 9 * ((341 - r) / 340) ** 2) * Math.log2(1 + (Number(o.sp) || 0));
@@ -1335,14 +1340,35 @@ function dxScore(o) {
 function dxSorted(recs) {
   const byCall = (a, b) => String(a.call).localeCompare(String(b.call));
   if (state.dxSort !== "rel") return [...recs].sort(byCall);
-  return [...recs].sort((a, b) => (a.rel ?? 9) - (b.rel ?? 9) || dxScore(b) - dxScore(a) || byCall(a, b));
+  const rank = o => DX_TIERS.indexOf(dxTier(o)) + 1 || 9;
+  return [...recs].sort((a, b) => rank(a) - rank(b) || dxScore(b) - dxScore(a) || byCall(a, b));
 }
 
-function drawDx(dx, graphic) {
-  const { sem } = dx;
-  const recs = dx.rows.filter(r => Array.isArray(r)).map(r => dxRecord(sem.n, r));
-  if (sem.dx === "stations") dx.node.replaceChildren(graphic ? dxStationGrid(dx, recs) : dxStationPlain(sem, recs));
-  else dx.node.replaceChildren(graphic ? dxActivityGrid(recs) : dxActivityPlain(recs));
+function dxSummaryView(p, graphic) {
+  const dx = dxData(p);
+  const box = el("div", "dxsum");
+  const conts = dx.conts ? ` aus ${dx.conts}` : "";
+  const parts = [];
+  if (typeof dx.calls === "number") parts.push(`${dx.calls} DX-Rufzeichen`);
+  if (typeof dx.spots === "number") parts.push(`${dx.spots} Spots${conts}`);
+  if (dx.st) parts.push(dx.tiers ? `gezeigt: Relevanz ${dx.tiers.split("").join("/")}`
+                                  : "ohne Most-Wanted-Liste (nur nach Spottern)");
+  if (dx.end) {
+    const fmt = t => new Date(t * 1000).toLocaleString("de-AT", { day: "2-digit", month: "2-digit",
+                                                                  hour: "2-digit", minute: "2-digit" });
+    parts.unshift(`${fmt(dx.end - dx.win * 60)} – ${fmt(dx.end)}`);
+  }
+  if (parts.length) box.append(el("p", "dimtext", parts.join(" · ")));
+  if (typeof dx.cov === "number")
+    box.append(el("div", "note warn", `Cluster nur ${(dx.cov / 60).toFixed(1)} von ${dx.win / 60} h verbunden – unvollständig.`));
+  if (dx.st) {
+    const node = el("div");
+    const draw = () => node.replaceChildren(graphic ? dxStationGrid(dx, draw) : dxStationPlain(dx));
+    draw();
+    box.append(node);
+  }
+  if (dx.act) box.append(graphic ? dxActivityGrid(dx.act) : dxActivityPlain(dx.act));
+  return box;
 }
 
 function dxPlainTable(head, rows) {
@@ -1360,34 +1386,43 @@ function dxPlainTable(head, rows) {
 
 /* plain table; the teletext screen has 40 columns, so there only R, call,
  * entity (12 characters) and bands - modes and times stay in the flow view */
-function dxStationPlain(sem, recs) {
-  const bands = o => dxBandsOf(o).map(dxBandLabel).join(" ");
+function dxStationPlain(dx) {
+  const item = dx.st, bands = dxBands(item), recs = dxRecords(item);
+  const bandText = o => dxBandsOf(o, bands).map(dxBandLabel).join(" ");
+  const ent = o => dxText(item, "dxcc", o.dxcc);
   if (state.view === "teletext") {
     return dxPlainTable(["R", "Call", "Gebiet", "Bänder"],
-      dxSorted(recs).map(o => [DX_TIERS[o.rel] || "?", o.call, String(o.ent || "").slice(0, 12), bands(o)]));
+      dxSorted(recs).map(o => [dxTier(o), o.call, ent(o).slice(0, 12), bandText(o)]));
   }
   return dxPlainTable(["R", "Call", "Gebiet", "Bänder", "Modes", "Zeit UTC", "Sp", "MW"],
-    dxSorted(recs).map(o => [DX_TIERS[o.rel] || "?", o.call, o.ent || "", bands(o), dxModeList(o),
-                             dxSpan(sem.v, o), o.sp, o.mw ?? "–"]));
+    dxSorted(recs).map(o => [dxTier(o), o.call, ent(o), bandText(o), dxModeList(item, o),
+                             dxSpan(dx.end, o), o.sp, o.mw ?? "–"]));
 }
 
-function dxActivityPlain(recs) {
+function dxOtherCounts(item, o) {
+  return (Array.isArray(o.om) ? o.om : []).map(x => Array.isArray(x)
+    ? `${dxText(item, "om", x[0])} ${x[1]}` : String(x)).join(" ");
+}
+
+function dxActivityPlain(item) {
+  const recs = dxRecords(item);
   const peak = o => typeof o.peak === "number" ? String(o.peak).padStart(2, "0") + "z" : "";
+  const band = o => dxText(item, "band", o.band);
   if (state.view === "teletext") {
     const box = el("div");
     box.append(dxPlainTable(["Band", "CW", "SSB", "FT8", "And", "Spz"],
-                            recs.map(o => [o.band, o.cw, o.ssb, o.ft8, o.oth, peak(o)])));
-    const others = recs.filter(o => o.om);
+                            recs.map(o => [band(o), o.cw, o.ssb, o.ft8, o.oth, peak(o)])));
+    const others = recs.filter(o => Array.isArray(o.om) && o.om.length);
     if (others.length) {
       box.append(el("h4", null, "Andere Modes"));
       const ul = el("ul");
-      for (const o of others) ul.append(el("li", null, `${o.band} ${o.om}`));
+      for (const o of others) ul.append(el("li", null, `${band(o)} ${dxOtherCounts(item, o)}`));
       box.append(ul);
     }
     return box;
   }
   return dxPlainTable(["Band", "CW", "SSB", "FT8", "Andere", "Spitze UTC", "Andere Modes"],
-    recs.map(o => [o.band, o.cw, o.ssb, o.ft8, o.oth, peak(o), o.om || ""]));
+    recs.map(o => [band(o), o.cw, o.ssb, o.ft8, o.oth, peak(o), dxOtherCounts(item, o)]));
 }
 
 function dxLegend() {
@@ -1400,14 +1435,14 @@ function dxLegend() {
   return l;
 }
 
-function dxStationGrid(dx, recs) {
-  const { sem } = dx;
+function dxStationGrid(dx, redraw) {
+  const item = dx.st, bands = dxBands(item), recs = dxRecords(item);
   const wrap = el("div", "dxg");
   const bar = el("div", "dxg-bar");
   const sortBtn = (key, label) => {
     const b = el("button", "btn sm" + (state.dxSort === key ? " on" : ""), label);
     b.type = "button";
-    b.onclick = () => { state.dxSort = key; saveDxSort(key); drawDx(dx, true); };
+    b.onclick = () => { state.dxSort = key; saveDxSort(key); redraw(); };
     return b;
   };
   bar.append(el("span", "dxg-cap", "Sortierung"), sortBtn("abc", "Alphabetisch"), sortBtn("rel", "Relevanz"),
@@ -1417,28 +1452,32 @@ function dxStationGrid(dx, recs) {
   const t = el("table", "dxg-tbl");
   const head = el("tr");
   head.append(el("th", "dx-r", "R"), el("th", "dx-call", "Call"), el("th", "dx-ent", "Gebiet"));
-  DX_BANDS.forEach(b => head.append(el("th", "dx-b" + (b === "6m" ? " vhf" : ""), dxBandLabel(b))));
-  head.append(el("th", "dx-num", "MW"), el("th", "dx-time", "Zeit UTC"), el("th", "dx-num", "Sp"));
+  bands.forEach(b => head.append(el("th", "dx-b" + (b === "6m" ? " vhf" : ""), dxBandLabel(b))));
+  head.append(el("th", "dx-num mw", "MW"), el("th", "dx-time", "Zeit UTC"), el("th", "dx-num", "Sp"));
   t.append(head);
   for (const o of dxSorted(recs)) {
-    const tr = el("tr", "dx-row t" + (DX_TIERS[o.rel] || "x"));
+    const tier = dxTier(o);
+    const tr = el("tr", "dx-row t" + tier);
     const r = el("td", "dx-r");
-    r.append(dxTierBadge(o.rel));
-    const ent = el("td", "dx-ent", o.ent || "");
-    ent.title = o.ent || "";
+    r.append(dxTierBadge(tier));
+    const entName = dxText(item, "dxcc", o.dxcc);
+    const info = item.texts && item.texts.dxcc ? item.texts.dxcc[o.dxcc] : null;
+    const ent = el("td", "dx-ent", entName);
+    ent.title = info ? `${entName} (${o.dxcc}, ${info.cont || "?"}, CQ ${info.cq ?? "?"})` : entName;
     const call = el("td", "dx-call", String(o.call ?? ""));
-    call.title = `${o.call}: ${dxSpan(sem.v, o)} UTC, ${o.sp ?? "?"} Spotter, Most Wanted ${o.mw ?? "unbekannt"}`;
+    call.title = `${o.call}: ${dxSpan(dx.end, o)} UTC, ${o.sp ?? "?"} Spotter, Most Wanted ${o.mw ?? "unbekannt"}`;
     tr.append(r, call, ent);
-    DX_BANDS.forEach((band, i) => {
+    bands.forEach((band, i) => {
       const td = el("td", "dx-b" + (band === "6m" ? " vhf" : ""));
       const q = el("span", "dx-q");
-      const modes = dxModesOn(o, i);
       for (const [k] of DX_MODES) q.append(el("i", ((Number(o[k]) || 0) & (1 << i)) ? "dx-m " + k : null));
+      const modes = dxModesOn(item, o, i);
       if (modes.length) td.title = `${band}: ${modes.join(", ")}`;
       td.append(q);
       tr.append(td);
     });
-    tr.append(el("td", "dx-num", o.mw ?? "–"), el("td", "dx-time", dxSpan(sem.v, o)), el("td", "dx-num sp", String(o.sp ?? "")));
+    tr.append(el("td", "dx-num mw", o.mw ?? "–"), el("td", "dx-time", dxSpan(dx.end, o)),
+              el("td", "dx-num sp", String(o.sp ?? "")));
     t.append(tr);
   }
   const scroll = el("div", "dxg-scroll");
@@ -1448,16 +1487,18 @@ function dxStationGrid(dx, recs) {
   return wrap;
 }
 
-function dxActivityGrid(recs) {
+function dxActivityGrid(item) {
+  const recs = dxRecords(item);
   const wrap = el("div", "dxa");
   wrap.append(el("h4", null, "Bandaktivität nach Mode"));
   const byBand = new Map(recs.map(o => [o.band, o]));
   const counts = DX_BANDS.map(b => byBand.get(b) || {});
   const top = Math.max(1, ...counts.flatMap(o => DX_MODES.map(([k]) => Number(o[k]) || 0)));
+  const vhf = i => DX_BANDS[i] === "6m" ? "vhf" : null;
   const t = el("table", "dxa-tbl");
   const head = el("tr");
   head.append(el("th"));
-  DX_BANDS.forEach(b => head.append(el("th", b === "6m" ? "vhf" : null, dxBandLabel(b))));
+  DX_BANDS.forEach((b, i) => head.append(el("th", vhf(i), dxBandLabel(b))));
   t.append(head);
   for (const [k, name] of DX_MODES) {
     const tr = el("tr");
@@ -1466,12 +1507,13 @@ function dxActivityGrid(recs) {
     tr.append(lab);
     counts.forEach((o, i) => {
       const n = Number(o[k]) || 0;
-      const td = el("td", DX_BANDS[i] === "6m" ? "vhf" : null);
+      const td = el("td", vhf(i));
       const cell = el("span", "dxa-cell " + k);
       // log scale, so 3 spots on 4 m do not vanish next to 600 on 20 m
       if (n) cell.style.setProperty("--a", Math.round(Math.max(0.14, Math.log(n + 1) / Math.log(top + 1)) * 100) + "%");
       else cell.classList.add("zero");
-      td.title = `${DX_BANDS[i]} ${name}: ${n} Spots` + (k === "oth" && o.om ? ` (${o.om})` : "");
+      const others = k === "oth" ? dxOtherCounts(item, o) : "";
+      td.title = `${DX_BANDS[i]} ${name}: ${n} Spots` + (others ? ` (${others})` : "");
       td.append(cell);
       tr.append(td);
     });
@@ -1479,23 +1521,23 @@ function dxActivityGrid(recs) {
   }
   const sum = el("tr", "dxa-sum");
   sum.append(el("th", null, "Summe"));
-  counts.forEach((o, i) => sum.append(el("td", DX_BANDS[i] === "6m" ? "vhf" : null,
+  counts.forEach((o, i) => sum.append(el("td", vhf(i),
     String(DX_MODES.reduce((s, [k]) => s + (Number(o[k]) || 0), 0) || ""))));
   const peak = el("tr", "dxa-peak");
   peak.append(el("th", null, "Spitze UTC"));
-  counts.forEach((o, i) => peak.append(el("td", DX_BANDS[i] === "6m" ? "vhf" : null,
+  counts.forEach((o, i) => peak.append(el("td", vhf(i),
     typeof o.peak === "number" ? String(o.peak).padStart(2, "0") : "")));
   t.append(sum, peak);
   const scroll = el("div", "dxg-scroll");
   scroll.append(t);
   wrap.append(scroll);
-  const others = recs.filter(o => o.om);
+  const others = recs.filter(o => Array.isArray(o.om) && o.om.length);
   if (others.length) {
     wrap.append(el("div", "dxa-cap", "Andere Modes im Detail"));
     const list = el("div", "dxa-others");
     for (const o of others) {
       const i = el("div");
-      i.append(el("b", null, o.band), " " + o.om);
+      i.append(el("b", null, dxText(item, "band", o.band)), " " + dxOtherCounts(item, o));
       list.append(i);
     }
     wrap.append(list);

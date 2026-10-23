@@ -362,3 +362,24 @@ class ListenerApiTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DxSummaryViewTests(Base):
+    """Dictionary v4: the data block becomes page data with display texts."""
+
+    def test_data_block_with_texts(self):
+        self.rx(page_id=412, typ="dxsum", cat=["dx"], blk=[{"k": "data", "v": {
+            "end": T0, "calls": 2, "st": [["A", "6O2M", "T5", 13, 40, 300, 10, 0, 0, 64, 128, ["RTTY"]],
+                                         ["B", "X1ABC", "Neuland", 3]]}}])
+        page = self.li.page(ST, 412)
+        self.assertEqual(page["blocks"], [])                    # der Datenblock ist keine Anzeige
+        data = {d["key"]: d for d in page["data"]}
+        st = data["st"]
+        self.assertEqual(st["cols"][:3], ["tier", "call", "dxcc"])
+        self.assertEqual(st["texts"]["dxcc"]["T5"]["t"], "Somalia")
+        self.assertEqual(st["texts"]["dxcc"]["T5"]["cont"], "AF")
+        self.assertNotIn("Neuland", st["texts"]["dxcc"])        # Text bleibt Text
+        self.assertEqual(st["texts"]["om"]["RTTY"]["t"], "RTTY")
+        self.assertEqual(st["bits"]["cw"][0], "160m")
+        self.assertEqual(st["bits"]["cw"][13], "70cm")
+        self.assertEqual(data["calls"]["value"], 2)

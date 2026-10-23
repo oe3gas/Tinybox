@@ -784,6 +784,9 @@ class EndToEndTests(unittest.IsolatedAsyncioTestCase):
                    **station) -> "FakeDirewolf":
         dw = FakeDirewolf()
         port = await dw.start()
+        # the packed dictionary (v4: 56 frames with the DXCC list) would go out
+        # first and delay the page; these tests are about the page transport
+        station.setdefault("dict_broadcast_hours", 0)
         st_cfg = make_cfg("station", "OE3GAS-5", **station)
         li_cfg = make_cfg("listener", "")
         for cfg, iface in ((st_cfg, st_iface), (li_cfg, li_iface)):

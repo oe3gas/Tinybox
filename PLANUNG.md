@@ -1116,8 +1116,20 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - **Score = Seltenheit × log₂(1 + Spotter)**. Seltenheit 1 … 10 aus dem **Club Log Most Wanted**-Rang: `1 + 9·((341 − Rang)/340)²`. Stufen **A** (ab `relevance_a` = 25, sofort hinschauen), **B** (ab `relevance_b` = 12, interessant), **C** (Alltag). Schwellen sind Startwerte, nach ein paar Tagen echter Daten nachjustieren.
 - Most-Wanted-Liste als JSON (`mostwanted.php?api=1`), Datei `data/mostwanted.json`, alle 7 Tage erneuert (`dxfeed.bat mw-update` von Hand). Fehlt sie, gilt für alle Gebiete Rang 170 (nur Spotterzahl zählt), der Digest läuft weiter.
 - **Mailbox-Text:** alle Calls ab `min_spotters`, alphabetisch, mit Spalten R (Stufe) und MW (Rang); bei Platzmangel fallen die am wenigsten relevanten zuerst weg. Bandaktivität jetzt je Mode-Gruppe (CW, SSB, FT8, Andere), die anderen Modes mit Namen und Anzahl.
-- **brocast-Seite** im Kopf `Brocast:` (6d), Rubrik dx: nur die Stufen aus `brocast_tiers` (Standard A+B), höchstens `brocast_max_rows`. Bänder je Mode-Gruppe als Bitmaske (Bit i = Band i, 160 m … 70 cm), Zeiten als Minuten vor Fensterende. Score und Stufe rechnet dxfeed, der Listener zeichnet daraus Band/Mode-Raster (4 Punkte je Band), Heatmap der Bandaktivität und die anderen Modes im Detail; sortierbar alphabetisch (Standard) oder nach Relevanz. Teletext-Ansicht: einfache Tabelle.
-- **Größe (Beispiel 23.10.2026, 8 Stationen A+B):** 735 B Nutzdaten in 3 Frames (Stationen und Bandaktivität je etwa die Hälfte); alle 25 Stationen wären 5 Frames.
+- **brocast-Seite:** abgelöst durch 16b (Dictionary v4). Die erste Fassung (Tabellenblöcke mit Spaltennamen und Gebietsnamen als Text) brauchte für 8 Stationen A+B 735 B in 3 Frames.
+- Die Most-Wanted-Liste nennt Club-Log-Präfixe (1A0, IS0, KL7 …), cty.dat die AD1C-Präfixe (1A, IS, KL …). Die Zuordnung läuft über die DXCC-Liste des Dictionarys (16b, Feld `cl`).
+
+### 16b. DX-Zusammenfassung im Dictionary v4 (entschieden und umgesetzt 23.10.2026)
+
+- **Seitentyp `13 dxsum`** mit eigenem Namensraum `types.dxsum` (12 bleibt frei: war im Entwurf Pull). Der Namensraum ersetzt Spaltennamen und -köpfe auf der Luft.
+- **Neue Listen in `enums`**, für alle Seitentypen nutzbar: `band` (160 m … 70 cm, auch als Bitnummer), `mode` (CW, SSB, FT8, FT4, RTTY …), `dxtier` (A/B/C) und **`dxcc`: alle 402 DXCC-Gebiete, Nummer = ADIF-Code** (340 aktiv, gelöschte mit `del: true`). Je Eintrag AD1C-Präfix als Name, englischer Name, Kontinent, CQ-/ITU-Zone, `cl` = Club-Log-Präfix, wo er abweicht. Erzeugt mit `brocast/tools/build_dxcc.py` aus Club Log cty.xml, AD1C cty.plist und k0swe/dxcc-json (Apache 2.0).
+- **Neuer Feldtyp `rows`** (Zeilen mit Spaltenbeschreibung `cols`): Spalten mit `enum`/`enums` (Nummer, unbekannt als Text bis `free_text`), `bits` (Bitmaske über eine Liste), `counts` ([Nummer, Anzahl, …]).
+- **Neue Blockart `11 data`:** `v` wie `dat` im Namensraum des Seitentyps. Nötig, weil der Umschlag mit `dat` im Format 2 in den ersten Frame passen muss, die Blockliste dagegen gepackt und fragmentiert wird.
+- **Zwei Bulletins, zwei Seiten:** „DX-Zusammenfassung“ (Stationen, Seite `st`) und „DX-Bandaktivitaet“ (Seite `act`, `Replace: dxfeed-act-JJJJMMTT`). In der Mailbox ebenso getrennt.
+- **Größe (Beispiel 23.10.2026):** Stationen A+B (8) **247 B in 1 Frame**, Bandaktivität (14 Bänder) **239 B in 1 Frame**; alle 25 Stationen 540 B in 3 Frames. Vorher (16a): 735 B in 3 Frames für Stationen und Bandaktivität zusammen.
+- **Preis:** Das Dictionary wächst durch die Gebietsnamen auf rund 42 kB Text (`DICT`: 629 Zeilen) bzw. 11 kB gepackt über Funk (56 Frames statt rund 15). Bei `dict_broadcast_hours = 24` etwa 1,5–2 min Sendezeit pro Tag.
+- dxfeed liest die DXCC-Liste direkt aus `brocast/brocast-core.yaml` (`[data] dictionary`, braucht PyYAML). Fehlt sie, geht das Gebiet als Text und der Most-Wanted-Rang wird über den AD1C-Präfix gesucht. `dxfeed status` zeigt cty.dat-Gebiete ohne DXCC-Nummer.
+- Listener: zeichnet Raster, Heatmap und Listen aus `p.data`; Gebiets- und Mode-Namen liefert der Listener aus dem Dictionary (`texts`, `bits`).
 
 ## 17. Refactoring (entschieden 17.10.2026)
 

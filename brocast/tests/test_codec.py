@@ -304,3 +304,60 @@ class CddlTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DxSummaryV4Tests(unittest.TestCase):
+    """Dictionary v4: typ dxsum, rows with list columns, block k data, DXCC list."""
+
+    PAGE = {"id": 412, "t": 1761022800, "typ": "dxsum", "cat": ["dx"],
+            "blk": [{"k": "data", "v": {
+                "end": 1761022800, "calls": 426, "spots": 2624, "conts": "EU", "tiers": "AB",
+                "st": [["A", "6O2M", "T5", 13, 40, 300, 10, 0, 0, 1 << 6, 1 << 7, ["RTTY"]],
+                       ["B", "7P8GE", "7P", 55, 150, 1400, 4, 1, 0, 0, 0],
+                       ["C", "X1ABC", "Neuland", 3, None, 5, 1, ["40m", "20m"], 0, 0, 0]],
+                "act": [["40m", 150, 120, 250, 42, 17, {"FT4": 28, "RTTY": 9, "XYZ": 1}]]}}]}
+
+    def setUp(self):
+        self.codec = Codec()
+
+    def test_dictionary_v4_lists(self):
+        d = self.codec.d
+        self.assertGreaterEqual(d.version, 4)
+        self.assertEqual(d.enums["typ"].num("dxsum"), 13)
+        self.assertNotIn(12, d.enums["typ"].by_num)            # Pull bleibt frei
+        dxcc = d.enums["dxcc"]
+        self.assertEqual(dxcc.num("7P"), 432)                   # ADIF-Nummern
+        self.assertEqual(dxcc.num("OE"), 206)
+        self.assertEqual(dxcc.by_num[246].spec["cl"], "1A0")    # Club Log schreibt 1A0
+        self.assertEqual(sum(not e.spec.get("del") for e in dxcc.by_num.values()), 340)
+        self.assertEqual(d.enums["band"].num("70cm"), 13)
+        self.assertEqual(d.enums["block"].num("data"), 11)
+
+    def test_rows_go_as_numbers_and_come_back_as_names(self):
+        wire = self.codec.to_wire(self.PAGE)
+        v = wire[19][0][-3]
+        st, act = v[7], v[8]
+        self.assertEqual(st[0][:3], [0, "6O2M", 232])           # A, Somalia T5 = 232
+        self.assertEqual(st[0][-1], [4])                        # RTTY
+        self.assertEqual(len(st[1]), 11)                        # leere Spalte am Ende entfällt
+        self.assertEqual(st[2][2], "Neuland")                   # unbekanntes Gebiet als Text
+        self.assertEqual(st[2][7], (1 << 3) | (1 << 5))         # Bänder als Bitmaske
+        self.assertEqual(act[0][0], 3)
+        self.assertEqual(act[0][-1], [3, 28, 4, 9, "XYZ", 1])
+        back = self.codec.decode(cbor2.dumps(wire))
+        data = back["blk"][0]["v"]
+        self.assertEqual(back["typ"], "dxsum")
+        self.assertEqual(data["st"][0][:3], ["A", "6O2M", "T5"])
+        self.assertEqual(data["act"][0][-1], [["FT4", 28], ["RTTY", 9], ["XYZ", 1]])
+
+    def test_unknown_list_value_without_free_text_is_refused(self):
+        page = {**self.PAGE, "blk": [{"k": "data", "v": {"act": [["11m", 1]]}}]}
+        with self.assertRaises(BrocastError):
+            self.codec.to_wire(page)
+
+    def test_rows_need_cols_in_dictionary(self):
+        import yaml
+        data = yaml.safe_load((ROOT / "brocast-core.yaml").read_text(encoding="utf-8"))
+        del data["types"]["dxsum"][7]["cols"]
+        with self.assertRaises(DictionaryError):
+            Dictionary(data)

@@ -29,6 +29,7 @@ keep_days       = 7
 mostwanted      = data/mostwanted.json ; Club Log DXCC Most Wanted (relevance), fetched by
 mostwanted_url  = https://clublog.org/mostwanted.php?api=1   ; the digest when older than
 mostwanted_update_days = 7             ; this; missing list: relevance by spotters only
+; dictionary = brocast/brocast-core.yaml ; DXCC list (ADIF numbers) for the brocast page
 
 [digest]
 to       = DX                          ; rubric; no @ address = this mailbox only.
@@ -48,9 +49,9 @@ valid        = 7d                      ; deleted after this time (empty = rubric
 ; relevance: score = rarity (Club Log rank, 1 ... 10) x log2(1 + spotters), PLANUNG 16a
 relevance_a  = 25                      ; score from here: tier A (look now)
 relevance_b  = 12                      ; from here: tier B (interesting), below: C
-brocast      = yes                     ; bulletin carries a brocast table page (header Brocast:)
+brocast      = yes                     ; both bulletins carry a brocast page dxsum (header Brocast:)
 brocast_tiers    = AB                  ; tiers that go over the air (mailbox text: all)
-brocast_max_rows = 12                  ; 8 stations ~ 1 frame, 12 ~ 2 frames
+brocast_max_rows = 12                  ; stations page: 8 stations ~ 1 frame, 12 ~ 2 frames
 ; inbox      =                         ; default: [inbox] dir from tinybox.conf (only to override)
 
 [log]

@@ -10,7 +10,7 @@ https://claude.ai/code/artifact/bf4b91a7-7807-42d7-b72e-5739d9c257bd
 
 | Datei | Inhalt |
 | --- | --- |
-| `brocast-core.yaml` | Kern-Dictionary Version 3 (Umschlag, Bausteine, Enums, Wetter, Quellen-Liste `src`); v1 als Referenz in `tests\data` |
+| `brocast-core.yaml` | Kern-Dictionary Version 4 (Umschlag, Bausteine, Enums, Wetter, Quellen-Liste `src`; ab v4 DX-Zusammenfassung `dxsum`, Listen `band`, `mode`, `dxcc` mit ADIF-Nummern, Blockart `data`); v1 als Referenz in `tests\data`. Die DXCC-Liste erzeugt `tools/build_dxcc.py` |
 | `brocast.cddl` | Schema zur Validierung |
 | `brocast/` | Codec (`codec.py`) und brocastd (`daemon.py`, `station.py`, `carousel.py`, `ingest.py`, `agw.py`, `kiss.py`, `ax25.py`, `store.py`, `fragment.py`, `splitter.py`, `zdict.py`) |
 | `brocastd.conf`, `brocastd.bat` | Konfiguration und Start |

@@ -16,6 +16,11 @@ import yaml
 
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "brocast-core.yaml"
 
+# Spalten einer rows-Tabelle (ab v4), die auf eine Liste in enums zeigen:
+# enum = eine Nummer, enums = Liste von Nummern, bits = Bitmaske,
+# counts = [Nummer, Anzahl, Nummer, Anzahl ...]
+COLUMN_ENUM_KINDS = ("enum", "enums", "bits", "counts")
+
 
 class DictionaryError(ValueError):
     """The dictionary file is inconsistent."""
@@ -119,6 +124,20 @@ class Dictionary:
         for name in self.types:
             if name not in self.enums["typ"].by_name:
                 raise DictionaryError(f"Themen-Dictionary {name!r} hat keinen typ")
+        for table in self.types.values():               # ab v4: type rows mit Spalten
+            for entry in table.by_num.values():
+                if entry.spec.get("type") != "rows":
+                    continue
+                cols = entry.spec.get("cols")
+                if not isinstance(cols, list) or not cols:
+                    raise DictionaryError(f"{table.title}.{entry.name}: rows ohne cols")
+                for col in cols:
+                    if not isinstance(col, dict) or not col.get("name"):
+                        raise DictionaryError(f"{table.title}.{entry.name}: Spalte ohne Namen")
+                    for kind in COLUMN_ENUM_KINDS:
+                        if kind in col and col[kind] not in self.enums:
+                            raise DictionaryError(
+                                f"{table.title}.{entry.name}.{col['name']}: Liste {col[kind]!r} fehlt")
 
     def typ_entry(self, typ: int) -> Entry | None:
         return self.enums["typ"].by_num.get(typ)

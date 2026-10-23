@@ -24,6 +24,7 @@ from pathlib import Path
 
 from . import VERSION
 from . import cty as ctymod
+from . import dxcc as dxccmod
 from . import mostwanted as mwmod
 from .collector import Collector
 from .config import Config, ConfigError, load
@@ -99,7 +100,8 @@ def cmd_digest(cfg: Config, args) -> int:
         rows = store.spots(since, until)
         cov = store.coverage(since, until)
         node = " ".join(f"{h}:{p}" for h, p in cfg.cluster.nodes[:1])
-        d = build(rows, cfg.digest, since, until, cov, node, load_mostwanted(cfg))
+        d = build(rows, cfg.digest, since, until, cov, node, load_mostwanted(cfg),
+                  dxccmod.load_or_none(cfg.data.dictionary))
     finally:
         store.close()
     if d is None:
@@ -107,22 +109,26 @@ def cmd_digest(cfg: Config, args) -> int:
                   datetime.fromtimestamp(since), datetime.fromtimestamp(until))
         return 1
     if args.tinybox is None:
-        print(f"Subject: {d.subject}\n")
-        print(d.text, end="")
-        print(f"\n[{len(d.text.encode('ascii', 'replace'))} Bytes, {d.lines} Zeilen]")
-        if d.page is not None:
-            n = sum(len(b.get("rows", [])) for b in d.page["blk"] if "n" in b and
-                    b["n"] and b["n"][0] == "rel")
-            size = len(json.dumps(d.page, separators=(",", ":")))
-            print(f"[brocast-Seite: {n} Stationen, JSON {size} Bytes]")
+        for i, b in enumerate(d.bulletins()):
+            if i:
+                print("\n" + "=" * 73 + "\n")
+            print(f"Subject: {b.subject}\n")
+            print(b.text, end="")
+            print(f"\n[{len(b.text.encode('ascii', 'replace'))} Bytes]")
+            if b.page is not None:
+                dat = b.page["blk"][0]["v"]
+                what = (f"{len(dat['st'])} Stationen" if "st" in dat
+                        else f"{len(dat.get('act', []))} Baender")
+                size = len(json.dumps(b.page, separators=(",", ":")))
+                print(f"[brocast-Seite dxsum: {what}, JSON {size} Bytes]")
         return 0
     if not args.tinybox:
         log.info("inbox %s (%s)", cfg.digest.inbox, cfg.inbox_source)
     for hint in cfg.hints:
         log.info("config hint: %s", hint)
-    target = write_inbox(args.tinybox or cfg.digest.inbox, d, cfg.digest)
-    log.info("digest: %s -> %s (%d bytes, %d lines)", d.subject, target,
-             len(d.text), d.lines)
+    for target in write_inbox(args.tinybox or cfg.digest.inbox, d, cfg.digest):
+        log.info("digest: %s -> %s", target.stem, target)
+    log.info("digest: %s, %d lines", d.subject, d.lines)
     return 0
 
 
@@ -170,6 +176,19 @@ def cmd_status(cfg: Config, args) -> int:
         print(line)
     except (mwmod.MostWantedError, OSError):
         print(f"Most Wanted: fehlt ({cfg.data.mostwanted}) - python -m dxfeed mw-update")
+    dx = dxccmod.load_or_none(cfg.data.dictionary)
+    if dx is None:
+        print(f"DXCC-Liste:  fehlt ({cfg.data.dictionary}, ab Dictionary v4, PyYAML) - "
+              "brocast-Seite mit Gebietsnamen als Text")
+    else:
+        line = f"DXCC-Liste:  {len(dx)} Gebiete (Dictionary v{dx.version})"
+        if cty is not None:
+            ents = {(e.prefix, e.name) for e, _ in cty.prefixes.values()}
+            missing = sorted(p for p, n in ents if dx.find(p, n) is None)
+            if missing:
+                line += (f"; ohne DXCC-Nummer: {' '.join(missing[:12])}"
+                         + (" ..." if len(missing) > 12 else ""))
+        print(line)
     return 0
 
 

@@ -420,7 +420,7 @@ a.extlink:hover { color: var(--accent-dark); }
 .dx-m.ft8 { background: var(--m-ft8); } .dx-m.oth { background: var(--m-oth); }
 .dxg-scroll { overflow-x: auto; }
 .dxg-tbl, .dxa-tbl { border-collapse: collapse; background: #fff; border: 2px solid var(--ink); font-size: 14px; }
-.dxg-tbl { min-width: 600px; width: 100%; }
+.dxg-tbl { width: 100%; }
 .dxg-tbl th { background: var(--paper-2); font-size: 12px; font-weight: 700; padding: 6px 4px; text-align: left;
               border-bottom: 2px solid var(--ink); white-space: nowrap; }
 .dxg-tbl td { padding: 5px 4px; border-top: 1px solid var(--rule); vertical-align: middle; }
@@ -460,7 +460,13 @@ a.extlink:hover { color: var(--accent-dark); }
 /* narrow page pane: the time span moves into the tooltip of the call */
 @container (max-width: 780px) {
   .dxg-tbl .dx-time { display: none; }
-  .dxg-tbl .dx-ent { max-width: 130px; }
+  .dxg-tbl .dx-ent { max-width: 120px; }
+}
+/* still narrower: the Most Wanted rank also goes into the tooltip, slimmer band columns */
+@container (max-width: 620px) {
+  .dxg-tbl .mw { display: none; }
+  .dxg-tbl .dx-ent { max-width: 96px; }
+  .dxg-tbl th.dx-b, .dxg-tbl td.dx-b { width: 19px; padding-left: 0; padding-right: 0; }
 }
 
 .wx-wrap { container-type: inline-size; }

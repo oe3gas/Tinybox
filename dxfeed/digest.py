@@ -17,9 +17,12 @@ Relevance (PLANUNG.md 16a, mostwanted.py): score = rarity x log2(1 + spotters),
 tier A/B/C by relevance_a / relevance_b. The table keeps the most relevant
 calls and shows them in alphabetical order.
 
-With [digest] brocast = yes the bulletin carries a brocast page as well
-(header "Brocast:", PLANUNG 6d): only the tiers in brocast_tiers, bands and
-modes as bit masks, the listener draws the band/mode grid from them.
+Two bulletins (PLANUNG 16a/16b): "DX-Zusammenfassung" (the stations) and
+"DX-Bandaktivitaet". With [digest] brocast = yes each carries a brocast page
+(header "Brocast:", PLANUNG 6d) of typ dxsum (dictionary v4): the stations
+page only the tiers in brocast_tiers, entity as ADIF DXCC number, bands per
+mode group as bit masks; the listener draws the band/mode grid and the heat
+map from them. Each page fits into one or two frames.
 
 The text stays below max_bytes (it goes over the air via brocast): table lines
 are dropped from the end until it fits. Plain ASCII, lines below 80 columns.
@@ -35,19 +38,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from . import dxcc as dxccmod
 from . import mostwanted as mwmod
 from .config import DigestCfg
 from .spots import BAND_ORDER
 
 MODE_GROUPS = ("CW", "SSB", "FT8")          # everything else is "other"
-# brocast: every block must fit into one frame (frame format 1, splitter), so the
-# first block of a table carries hdr and n with one row only (as geosphere_station)
-STATION_ROWS_PER_BLOCK = 3
-ACTIVITY_ROWS_PER_BLOCK = 5
-STATION_N = ["rel", "call", "ent", "sp", "mw", "t0", "t1", "cw", "ssb", "ft8", "oth", "om"]
-STATION_HDR = ["R", "Call", "Gebiet", "Sp", "MW", "ab", "bis", "CW", "SSB", "FT8", "And", "Andere"]
-ACTIVITY_N = ["band", "cw", "ssb", "ft8", "oth", "peak", "om"]
-ACTIVITY_HDR = ["Band", "CW", "SSB", "FT8", "And", "Spitze", "Andere"]
+ENTITY_TEXT_MAX = 30                        # dictionary: dxcc free_text
 
 
 def mode_group(mode: str) -> int:
@@ -72,6 +69,7 @@ class DxLine:
     last: int = 0
     count: int = 0
     rank: int | None = None         # Club Log Most Wanted, None = unknown
+    dxcc: int | None = None         # ADIF DXCC number (brocast dictionary v4), None = unknown
     score: float = 0.0
     tier: str = "C"
 
@@ -95,18 +93,29 @@ class BandActivity:
 
 
 @dataclass
+class Bulletin:
+    subject: str
+    text: str
+    replace: str
+    page: dict | None = None    # brocast page (header "Brocast:"), None = text only
+
+
+@dataclass
 class Digest:
     subject: str
     text: str
     replace: str
     lines: int          # table lines shown
     spots: int          # spots in the window (all)
-    page: dict | None = None    # brocast page (header "Brocast:"), None = text only
+    page: dict | None = None    # brocast page of the stations, None = text only
+    act: Bulletin | None = None  # second bulletin: band activity (PLANUNG 16b)
+
+    def bulletins(self) -> list[Bulletin]:
+        out = [Bulletin(self.subject, self.text, self.replace, self.page)]
+        return out + ([self.act] if self.act is not None else [])
 
 
 HF_BANDS = {"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"}
-
-
 def _short_band(band: str) -> str:
     """HF without unit (20 17 15), VHF/UHF with it (6m 2m 70cm) - "2" would be unclear."""
     return band[:-1] if band in HF_BANDS else band
@@ -157,10 +166,20 @@ def aggregate(rows, cfg: DigestCfg) -> tuple[list[DxLine], int]:
     return lines, n
 
 
-def rate(lines: list[DxLine], cfg: DigestCfg, mw: mwmod.MostWanted | None) -> None:
-    """Most Wanted rank, score and tier for every line (in place)."""
+def rate(lines: list[DxLine], cfg: DigestCfg, mw: mwmod.MostWanted | None,
+         dxcc: dxccmod.DxccList | None = None) -> None:
+    """DXCC number, Most Wanted rank, score and tier for every line (in place).
+    Club Log writes some prefixes differently from AD1C (1A0 for 1A): the
+    dictionary's DXCC list knows both."""
     for d in lines:
-        d.rank = mw.rank(d.prefix) if mw is not None else None
+        ent = dxcc.find(d.prefix, d.name) if dxcc is not None else None
+        d.dxcc = ent.code if ent else None
+        if mw is not None:
+            d.rank = mw.rank(ent.clublog) if ent else None
+            if d.rank is None:
+                d.rank = mw.rank(d.prefix)
+        else:
+            d.rank = None
         d.score = mwmod.score(d.rank, len(d.spotters))
         d.tier = mwmod.tier(d.score, cfg.relevance_a, cfg.relevance_b)
 
@@ -231,54 +250,69 @@ def _mask(d: DxLine, group: int) -> int:
     return m
 
 
-def brocast_page(sel: list[DxLine], acts: list[BandActivity], cfg: DigestCfg, until: float,
-                 n_calls: int, n_rel: int, coverage_note: str, rated: bool = True) -> dict:
-    """Table page (typ text, cat dx) for brocastd - names as in the ingest API.
+def _dat_head(cfg: DigestCfg, until: float, since: float) -> dict:
+    dat = {"end": int(until)}
+    win = round((until - since) / 60)
+    if win != 1440:
+        dat["win"] = win
+    if cfg.spotter_continents:
+        dat["conts"] = "/".join(sorted(cfg.spotter_continents))
+    return dat
 
-    Station table: one row per call, bands per mode group as bit masks
-    (bit i = BAND_ORDER[i]), times as minutes before the end of the window,
-    which the first block carries as v (Unix time). n names the columns, the
-    listener draws the band/mode grid from them (app.js dxGrid). Activity
-    table: spots per band and mode group, peak hour, other modes named."""
-    conts = "/".join(sorted(cfg.spotter_continents)) or "allen Kontinenten"
-    tiers = "/".join(cfg.brocast_tiers)
-    which = f"Relevanz {tiers}" if rated else "ohne Most-Wanted-Liste"
-    blk: list[dict] = [{"k": "para", "x": f"{n_calls} DX-Calls, {n_rel} Spots aus {conts}; "
-                                          f"{which}: {len(sel)}"}]
-    if coverage_note:
-        blk.append({"k": "note", "st": "warn", "x": coverage_note})
-    rows = []
-    for d in sel:
-        om = sorted({other_name(m) for b in d.band_modes.values() for m in b if mode_group(m) == 3})
-        rows.append([mwmod.TIERS.index(d.tier), d.call, d.name[:20], len(d.spotters), d.rank,
-                     max(0, round((until - d.first) / 60)), max(0, round((until - d.last) / 60)),
-                     _mask(d, 0), _mask(d, 1), _mask(d, 2), _mask(d, 3),
-                     " ".join(om) or None])
-    if rows:
-        blk.append({"k": "table", "v": int(until), "hdr": STATION_HDR, "n": STATION_N,
-                    "rows": rows[:1]})
-        blk += [{"k": "table", "rows": rows[i:i + STATION_ROWS_PER_BLOCK]}
-                for i in range(1, len(rows), STATION_ROWS_PER_BLOCK)]
-    arows = [[a.band, *a.by_group, a.peak, a.other_text() or None] for a in acts if a.spots]
-    if arows:
-        blk.append({"k": "table", "hdr": ACTIVITY_HDR, "n": ACTIVITY_N, "rows": arows[:1]})
-        blk += [{"k": "table", "rows": arows[i:i + ACTIVITY_ROWS_PER_BLOCK]}
-                for i in range(1, len(arows), ACTIVITY_ROWS_PER_BLOCK)]
-    page = {"typ": "text", "cat": ["dx"], "src": ["tinybox", "dxfeed"],
-            "ti": f"DX-Cluster {datetime.fromtimestamp(until):%d.%m.%Y}", "blk": blk}
+
+def _page(title: str, dat: dict, cfg: DigestCfg) -> dict:
+    # the data go into a block k data, not into dat: the envelope (with dat) has
+    # to fit into the first frame, the block list is packed and fragmented
+    page = {"typ": "dxsum", "cat": ["dx"], "src": ["tinybox"], "ti": title,
+            "blk": [{"k": "data", "v": dat}]}
     exp = valid_minutes(cfg.valid)
     if exp:
         page["exp"] = exp
     return page
 
 
+def station_page(sel: list[DxLine], cfg: DigestCfg, since: float, until: float,
+                 n_calls: int, n_spots: int, coverage_min: int | None, rated: bool) -> dict:
+    """brocast page typ dxsum (dictionary v4) with the DX stations.
+
+    st rows: tier, call, entity (ADIF number, else name as text), spotters,
+    Most Wanted rank, first/last spot as minutes before end, bands per mode
+    group as bit masks (bit i = band i of the dictionary list band), other
+    modes. Names go as dictionary names, the codec turns them into numbers."""
+    dat = _dat_head(cfg, until, since)
+    dat.update({"calls": n_calls, "spots": n_spots,
+                "tiers": "".join(cfg.brocast_tiers) if rated else ""})
+    if coverage_min is not None:
+        dat["cov"] = coverage_min
+    rows = []
+    for d in sel:
+        om = sorted({other_name(m) for b in d.band_modes.values() for m in b if mode_group(m) == 3})
+        rows.append([d.tier, d.call, d.dxcc if d.dxcc is not None else d.name[:ENTITY_TEXT_MAX],
+                     len(d.spotters), d.rank,
+                     max(0, round((until - d.first) / 60)), max(0, round((until - d.last) / 60)),
+                     _mask(d, 0), _mask(d, 1), _mask(d, 2), _mask(d, 3), om or None])
+    dat["st"] = rows
+    return _page(f"DX-Cluster {datetime.fromtimestamp(until):%d.%m.}", dat, cfg)
+
+
+def activity_page(acts: list[BandActivity], cfg: DigestCfg, since: float, until: float) -> dict:
+    """brocast page typ dxsum with the band activity: spots per band and mode
+    group, peak hour (UTC), other modes with counts. Bands without spots stay off."""
+    dat = _dat_head(cfg, until, since)
+    dat["act"] = [[a.band, *a.by_group, a.peak,
+                   sorted(a.others.items(), key=lambda x: (-x[1], x[0])) or None]
+                  for a in acts if a.spots]
+    return _page(f"DX-Bandaktivität {datetime.fromtimestamp(until):%d.%m.}", dat, cfg)
+
+
 def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
-          node: str = "", mw: mwmod.MostWanted | None = None) -> Digest | None:
+          node: str = "", mw: mwmod.MostWanted | None = None,
+          dxcc: dxccmod.DxccList | None = None) -> Digest | None:
     """None if there is nothing to report (no spots at all in the window)."""
     if not rows:
         return None
     lines, n_rel = aggregate(rows, cfg)
-    rate(lines, cfg, mw)
+    rate(lines, cfg, mw, dxcc)
     shown = by_relevance([d for d in lines if len(d.spotters) >= cfg.min_spotters])
     single = len(lines) - len(shown)
     entities = len({d.name for d in lines})
@@ -307,10 +341,10 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
     if table_head[2] == "":
         del table_head[2]
     table_head.insert(len(table_head) - 2, "")
-    tail_parts = ["", "Bandaktivitaet (alle Spots, Spitze in UTC):", *band_activity(rows, cfg),
-                  "", "Quelle: DX-Cluster" + (f" {node}" if node else "")
-                  + ", Laenderdaten AD1C cty.dat"
-                  + (", Club Log Most Wanted" if mw is not None else "") + ". TinyBox dxfeed."]
+    source = ("Quelle: DX-Cluster" + (f" {node}" if node else "")
+              + ", Laenderdaten AD1C cty.dat"
+              + (", Club Log Most Wanted" if mw is not None else "") + ". TinyBox dxfeed.")
+    tail_parts = ["", "Bandaktivitaet: eigenes Bulletin \"DX-Bandaktivitaet\".", "", source]
 
     kept = shown[:cfg.max_lines]                 # most relevant first
     hidden = len(shown) - len(kept)
@@ -337,34 +371,46 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
         hidden += 1
         text = compose()
 
-    page = None
+    acts = activity(rows, cfg)
+    act_text = "\n".join([f"DX-Bandaktivitaet {t0:%d.%m.%Y %H:%M} - {t1:%d.%m.%Y %H:%M} Lokalzeit",
+                          f"Alle Spots von Stationen in {conts}, Spitze = Stunde (UTC) mit den",
+                          "meisten Spots. Andere: FT4, RTTY, FM ... (Anzahl).", "",
+                          *band_activity(rows, cfg), "", source]) + "\n"
+    page = act_page = None
     if cfg.brocast:
         # without the Most Wanted list every entity has the same rarity and the
         # tiers say little: then the most relevant by spotters, up to the limit
         sel = shown if mw is None else [d for d in shown if d.tier in cfg.brocast_tiers]
         sel = sel[:cfg.brocast_max_rows]
-        page = brocast_page(sorted(sel, key=lambda d: d.call), activity(rows, cfg), cfg,
-                            until, len(lines), n_rel, coverage_note, mw is not None)
+        cov = round(coverage_sec / 60) if coverage_note else None
+        page = station_page(sorted(sel, key=lambda d: d.call), cfg, since, until,
+                            len(lines), n_rel, cov, mw is not None)
+        act_page = activity_page(acts, cfg, since, until)
 
+    act = Bulletin(subject=f"DX-Bandaktivitaet {t1:%d.%m.%Y}", text=act_text,
+                   replace=f"dxfeed-act-{t1:%Y%m%d}", page=act_page)
     return Digest(subject=f"DX-Zusammenfassung {t1:%d.%m.%Y}",
                   text=text, replace=f"dxfeed-{t1:%Y%m%d}",
-                  lines=len(kept), spots=len(rows), page=page)
+                  lines=len(kept), spots=len(rows), page=page, act=act)
 
 
-def write_inbox(directory: str | Path, d: Digest, cfg: DigestCfg) -> Path:
-    """Bulletin file for the TinyBox inbox folder: .tmp first, then rename.
-    No @ address: the bulletin stays in this mailbox (local only)."""
+def write_inbox(directory: str | Path, d: Digest | Bulletin, cfg: DigestCfg) -> list[Path]:
+    """Bulletin files for the TinyBox inbox folder (.tmp first, then rename):
+    the stations and the band activity. No @ address: they stay in this mailbox."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    head = {"To": cfg.to, "Subject": d.subject, "Replace": d.replace}
-    if cfg.valid:
-        head["Valid"] = cfg.valid
-    if d.page is not None:
-        head["Brocast"] = json.dumps(d.page, ensure_ascii=True, separators=(",", ":"))
-    content = "".join(f"{k}: {v}\n" for k, v in head.items()) + "\n" + d.text
-    name = d.replace.replace("-", "_")
-    tmp = directory / f"{name}.tmp"
-    tmp.write_text(content, encoding="ascii", errors="replace")
-    target = directory / f"{name}.txt"
-    os.replace(tmp, target)
-    return target
+    out = []
+    for b in d.bulletins() if isinstance(d, Digest) else [d]:
+        head = {"To": cfg.to, "Subject": b.subject, "Replace": b.replace}
+        if cfg.valid:
+            head["Valid"] = cfg.valid
+        if b.page is not None:
+            head["Brocast"] = json.dumps(b.page, ensure_ascii=True, separators=(",", ":"))
+        content = "".join(f"{k}: {v}\n" for k, v in head.items()) + "\n" + b.text
+        name = b.replace.replace("-", "_")
+        tmp = directory / f"{name}.tmp"
+        tmp.write_text(content, encoding="ascii", errors="replace")
+        target = directory / f"{name}.txt"
+        os.replace(tmp, target)
+        out.append(target)
+    return out

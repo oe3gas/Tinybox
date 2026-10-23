@@ -37,7 +37,7 @@ ti = 8  txt = 9  to = 10  area = 11  pos = 12  sym = 13  lnk = 14
 ref = 15  pri = 16  lang = 17  cat = 18  blk = 19  dat = 20  src = 21  crit = 22  sub = 23
 
 page-type = &(text: 0, wx: 1, tlm: 2, msg: 3, ack: 4, obj: 5, node: 6,
-              dx: 7, alert: 8, index: 9, dict: 10) / uint
+              dx: 7, alert: 8, index: 9, dict: 10, dxsum: 13) / uint   ; 12 frei (Pull entfallen)
 page-flags = &(withdrawn: 0, test: 1, exercise: 2, reply-wanted: 3)
 
 callsign = tstr .regexp "([A-Z0-9]{1,4}/)?[A-Z0-9]{3,8}(/[A-Z0-9]{1,4})?(-[0-9]{1,2})?"  ; z. B. DL/OE3GAS/P, OE3GAS/MM, OE3GAS-10
@@ -81,3 +81,37 @@ dict-data = {
   * int => any
 }
 version = 0  hash = 1  source = 2  zdata = 3  zlen = 4  zint = 5
+
+; ---------------------------------------------------------------------------
+; ab Dictionary-Version 4 (23.10.2026)
+; ---------------------------------------------------------------------------
+; Blockart 11 data: v = Map wie dat, im Namensraum des typ. Für große Daten:
+; die Blockliste wird gepackt und fragmentiert, dat dagegen steht im ersten Frame.
+data-block = { k => 11, v => { * int => any } }
+
+; Themen-Dictionary DX-Zusammenfassung (typ 13 dxsum, dxfeed)
+dxsum-data = {
+  ? end => uint, ? win => uint, ? calls => uint, ? spots => uint,
+  ? conts => tstr, ? tiers => tstr, ? cov => uint,
+  ? st => [* dx-station], ? act => [* dx-band],
+  * int => any
+}
+end = 0  win = 1  calls = 2  spots = 3  conts = 4  tiers = 5  cov = 6  st = 7  act = 8
+
+; Zeilen (type rows): leere Spalten am Ende entfallen. Listenwerte als Nummer,
+; unbekannte als Text (Gebiet bis 30, Mode bis 10 Zeichen).
+dx-station = [
+  tier: 0..2,                 ; Liste dxtier: A B C
+  call: tstr,
+  ? dxcc: uint / tstr,        ; Liste dxcc = ADIF-DXCC-Nummer
+  ? sp: uint, ? mw: uint / null,
+  ? t0: uint, ? t1: uint,     ; Minuten vor end
+  ? cw: uint, ? ssb: uint, ? ft8: uint, ? oth: uint,   ; Bitmaske über Liste band
+  ? om: [* uint / tstr] / null                         ; Liste mode
+]
+dx-band = [
+  band: uint,                 ; Liste band (0 = 160m ... 13 = 70cm)
+  ? cw: uint, ? ssb: uint, ? ft8: uint, ? oth: uint,
+  ? peak: 0..23,              ; Stunde (UTC) mit den meisten Spots
+  ? om: [* (uint / tstr, uint)] / null                 ; [Mode, Anzahl, ...]
+]

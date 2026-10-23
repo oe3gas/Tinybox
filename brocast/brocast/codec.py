@@ -153,6 +153,9 @@ class Codec:
                 raise BrocastError(f"unbekanntes Umschlag-Feld {key!r}")
             if key == "dat":
                 out[entry.num] = self._dat_to_wire(value, typ_num)
+            elif key == "blk":
+                out[entry.num] = [self._block_to_wire(b, f"blk[{i}]", typ_num)
+                                  for i, b in enumerate(value)]
             else:
                 out[entry.num] = self._value_to_wire(value, entry.spec, key)
 
@@ -225,8 +228,10 @@ class Codec:
             return [self._block_to_wire(b, f"{what}[{i}]") for i, b in enumerate(value)]
         return value  # any
 
-    def _block_to_wire(self, block: dict[str, Any], what: str) -> dict[int, Any]:
+    def _block_to_wire(self, block: dict[str, Any], what: str,
+                       typ_num: int | None = None) -> dict[int, Any]:
         out: dict[int, Any] = {}
+        is_data = block.get("k") == "data"         # ab v4: v wie dat des typ
         for key, value in block.items():
             if isinstance(key, int):
                 out[key] = value
@@ -234,7 +239,10 @@ class Codec:
             entry = self.d.blocks.by_name.get(key)
             if entry is None:
                 raise BrocastError(f"{what}: unbekannter Baustein-Key {key!r}")
-            out[entry.num] = self._value_to_wire(value, entry.spec, f"{what}.{key}")
+            if is_data and key == "v" and isinstance(value, dict):
+                out[entry.num] = self._dat_to_wire(value, typ_num)
+            else:
+                out[entry.num] = self._value_to_wire(value, entry.spec, f"{what}.{key}")
         return out
 
     def _dat_to_wire(self, dat: dict[Any, Any], typ_num: int | None) -> dict[int, Any]:
@@ -247,7 +255,90 @@ class Codec:
             entry = topic.by_name.get(key) if topic else None
             if entry is None:
                 raise BrocastError(f"dat: Feld {key!r} ist für diesen typ nicht definiert")
-            out[entry.num] = _scaled_to_wire(value, entry.spec, f"dat.{key}")
+            if entry.spec.get("type") == "rows":
+                out[entry.num] = self._rows_to_wire(value, entry.spec, f"dat.{key}")
+            elif entry.spec.get("type") == "time":
+                out[entry.num] = _time_to_wire(value, f"dat.{key}")
+            else:
+                out[entry.num] = _scaled_to_wire(value, entry.spec, f"dat.{key}")
+        return out
+
+    # -- rows (ab Dictionary v4): Zeilen einer Tabelle, Spalten laut cols ------
+
+    def _list_num(self, enum: str, value: Any, col: dict[str, Any], what: str) -> int | str:
+        """Name/Nummer aus der Liste, sonst Text (wenn die Spalte free_text erlaubt)."""
+        table = self.d.enums[enum]
+        if isinstance(value, str) and value not in table.by_name:
+            limit = col.get("free_text")
+            text = value.strip()
+            if not limit or not 1 <= len(text) <= limit:
+                raise BrocastError(f"{what}: {value!r} steht nicht in der Liste {enum}")
+            return text
+        return self._enum(enum, value, what)
+
+    def _cell_to_wire(self, value: Any, col: dict[str, Any], what: str) -> Any:
+        if value is None:
+            return None
+        if "enum" in col:
+            return self._list_num(col["enum"], value, col, what)
+        if "enums" in col:
+            items = [value] if isinstance(value, (str, int)) else value
+            return [self._list_num(col["enums"], v, col, what) for v in items]
+        if "bits" in col:
+            if isinstance(value, int) and not isinstance(value, bool):
+                return _uint(value, what)
+            bits = 0
+            for name in value:
+                bits |= 1 << self._enum(col["bits"], name, what)
+            return bits
+        if "counts" in col:
+            pairs = value.items() if isinstance(value, dict) else value
+            out: list[Any] = []
+            for name, n in pairs:
+                out += [self._list_num(col["counts"], name, col, what), _uint(n, what)]
+            return out
+        return value
+
+    def _rows_to_wire(self, rows: Any, spec: dict[str, Any], what: str) -> list[list[Any]]:
+        cols = spec["cols"]
+        if not isinstance(rows, list):
+            raise BrocastError(f"{what}: Liste von Zeilen erwartet")
+        out = []
+        for i, row in enumerate(rows):
+            if isinstance(row, dict):                     # {Spaltenname: Wert}
+                row = [row.get(c["name"]) for c in cols]
+            if not isinstance(row, (list, tuple)) or len(row) > len(cols):
+                raise BrocastError(f"{what}[{i}]: höchstens {len(cols)} Spalten erwartet")
+            cells = [self._cell_to_wire(v, c, f"{what}[{i}].{c['name']}")
+                     for v, c in zip(row, cols)]
+            while cells and cells[-1] is None:            # leere Spalten am Ende kosten nichts
+                cells.pop()
+            out.append(cells)
+        return out
+
+    def _cell_from_wire(self, value: Any, col: dict[str, Any]) -> Any:
+        if "enum" in col and isinstance(value, int):
+            return self.d.enums[col["enum"]].name(value)
+        if "enums" in col and isinstance(value, list):
+            return [self.d.enums[col["enums"]].name(v) if isinstance(v, int) else v for v in value]
+        if "counts" in col and isinstance(value, list):
+            table = self.d.enums[col["counts"]]
+            return [[table.name(k) if isinstance(k, int) else k, n]
+                    for k, n in zip(value[0::2], value[1::2])]
+        return value
+
+    def _rows_from_wire(self, rows: Any, spec: dict[str, Any]) -> Any:
+        if not isinstance(rows, list):
+            return rows
+        cols = spec["cols"]
+        out = []
+        for row in rows:
+            if not isinstance(row, list):
+                out.append(row)
+                continue
+            cells = [self._cell_from_wire(v, c) for v, c in zip(row, cols)]
+            cells += [None] * (len(cols) - len(cells)) + row[len(cols):]
+            out.append(cells)
         return out
 
     # -- wire -> named ------------------------------------------------------
@@ -271,6 +362,8 @@ class Codec:
                 page[num] = value              # unknown key, kept raw
             elif entry.name == "dat":
                 page["dat"] = self._dat_from_wire(value, typ_num)
+            elif entry.name == "blk" and isinstance(value, list):
+                page["blk"] = [self._block_from_wire(b, typ_num) for b in value]
             else:
                 page[entry.name] = self._value_from_wire(value, entry.spec)
 
@@ -297,7 +390,7 @@ class Codec:
             return [self._block_from_wire(b) for b in value]
         return value
 
-    def _block_from_wire(self, block: Any) -> Any:
+    def _block_from_wire(self, block: Any, typ_num: Any = None) -> Any:
         if not isinstance(block, dict):
             return block
         out: dict[Any, Any] = {}
@@ -307,6 +400,8 @@ class Codec:
                 out[num] = value
             else:
                 out[entry.name] = self._value_from_wire(value, entry.spec)
+        if out.get("k") == "data" and isinstance(out.get("v"), dict):
+            out["v"] = self._dat_from_wire(out["v"], typ_num)
         return out
 
     def _dat_from_wire(self, dat: Any, typ_num: Any) -> Any:
@@ -318,6 +413,8 @@ class Codec:
             entry = topic.by_num.get(num)
             if entry is None:
                 out[num] = value
+            elif entry.spec.get("type") == "rows":
+                out[entry.name] = self._rows_from_wire(value, entry.spec)
             else:
                 out[entry.name] = _scaled_from_wire(value, entry.spec)
         return out

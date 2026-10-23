@@ -725,13 +725,18 @@ class Listener:
             "pri_name": self._enum_text("pri", out["pri"], lang),
             "blocks": [], "data": [],
         })
+        dat = dict(first["dat"]) if isinstance(first.get("dat"), dict) else {}
         for n in range(1, p["sub_total"] + 1):
             if n not in decoded:
                 out["blocks"].append({"k": "missing", "sub": n})
                 continue
             for block in decoded[n].get("blk") or []:
+                if isinstance(block, dict) and block.get("k") == "data" \
+                        and isinstance(block.get("v"), dict):
+                    dat.update(block["v"])          # ab v4: Themen-Daten als Block
+                    continue
                 out["blocks"].append(self._block(block, n))
-        out["data"] = self._data(first, lang)
+        out["data"] = self._data({"typ": first.get("typ"), "dat": dat or first.get("dat")}, lang)
         out["dv"] = first.get("dv")
         out["dict_newer"] = isinstance(first.get("dv"), int) and first["dv"] > self.d.version
         # rough time on air of all frames sent back to back (no digipeater path):
@@ -784,10 +789,38 @@ class Listener:
         out = []
         for key, value in dat.items():
             entry = topic.by_name.get(key) if topic and isinstance(key, str) else None
-            out.append({"key": str(key), "label": entry.text(lang) if entry else str(key),
-                        "value": value,
-                        "unit": self.d.unit_symbol(entry.spec.get("unit")) if entry else ""})
+            item = {"key": str(key), "label": entry.text(lang) if entry else str(key),
+                    "value": value,
+                    "unit": self.d.unit_symbol(entry.spec.get("unit")) if entry else ""}
+            if entry and entry.spec.get("type") == "rows":
+                item.update(self._rows_view(entry.spec["cols"], value, lang))
+            out.append(item)
         return out
+
+    def _rows_view(self, cols: list[dict[str, Any]], rows: Any, lang: str) -> dict[str, Any]:
+        """rows-Tabelle (ab Dictionary v4) für die Web-GUI: Spaltennamen und für
+        jede Listen-Spalte die Anzeigetexte der vorkommenden Werte, z. B.
+        texts.dxcc["7P"] = {"t": "Lesotho", "cont": "AF", "cq": 38, "itu": 57}."""
+        texts: dict[str, dict[str, Any]] = {}
+        for i, col in enumerate(cols):
+            enum = next((col[k] for k in ("enum", "enums", "counts") if k in col), None)
+            if enum is None or enum not in self.d.enums:
+                continue
+            table = self.d.enums[enum]
+            seen: dict[str, Any] = {}
+            for row in rows if isinstance(rows, list) else []:
+                cell = row[i] if isinstance(row, list) and i < len(row) else None
+                values = [cell] if "enum" in col else (cell or [])
+                for v in values:
+                    name = v[0] if isinstance(v, list) and v else v   # counts: [Name, Anzahl]
+                    e = table.by_name.get(name) if isinstance(name, str) else None
+                    if e is not None and name not in seen:
+                        extra = {k: x for k, x in e.spec.items() if k not in ("name", "de", "en")}
+                        seen[name] = {"t": e.text(lang), **extra}
+            texts[col["name"]] = seen
+        bits = {c["name"]: [e.name for _, e in sorted(self.d.enums[c["bits"]].by_num.items())]
+                for c in cols if "bits" in c and c["bits"] in self.d.enums}
+        return {"cols": [c["name"] for c in cols], "texts": texts, "bits": bits}
 
     # -- user actions -------------------------------------------------------
 

@@ -12,10 +12,11 @@ import json
 import sys
 
 from dxfeed import cty as ctymod
+from dxfeed import dxcc as dxccmod
 from dxfeed import mostwanted as mwmod
 from dxfeed.collector import Collector, TelnetFilter
 from dxfeed.config import ConfigError, load
-from dxfeed.digest import build, write_inbox
+from dxfeed.digest import DxLine, build, rate, write_inbox
 from dxfeed import spots as spots_mod
 from dxfeed.spots import band_of, clean_text, mode_of, parse
 from dxfeed.store import Store
@@ -245,7 +246,9 @@ class DigestTests(unittest.TestCase):
 
     def test_band_activity(self):
         d = self.digest()
-        act = d.text.split("Bandaktivitaet")[1]
+        self.assertIn('eigenes Bulletin "DX-Bandaktivitaet"', d.text)
+        self.assertTrue(d.act.subject.startswith("DX-Bandaktivitaet "))
+        act = d.act.text
         self.assertRegex(act, r"20m\s+4\s+4\s+0\s+0\s+0 09z")   # W1AW is NA -> not counted
         self.assertRegex(act, r"70cm\s+1\s+0\s+1\s+0\s+0 09z")  # SSB
         self.assertRegex(act, r"160m\s+0\n")                # AF spotter not counted
@@ -286,10 +289,13 @@ class DigestTests(unittest.TestCase):
 
     def test_inbox_file_is_accepted_by_tinybox(self):
         d = self.digest()
-        f = write_inbox(self.cfg.digest.inbox, d, self.cfg.digest)
-        b = inbox.parse(f.read_bytes())
+        files = write_inbox(self.cfg.digest.inbox, d, self.cfg.digest)
+        self.assertEqual(len(files), 2)                     # stations + band activity
+        b, a = (inbox.parse(f.read_bytes()) for f in files)
         self.assertEqual((b.to, b.subject, b.valid_min), ("DX", d.subject, 7 * 1440))
-        self.assertTrue(b.replace.startswith("dxfeed-"))
+        self.assertTrue(b.replace.startswith("dxfeed-2"))
+        self.assertTrue(a.replace.startswith("dxfeed-act-"))
+        self.assertEqual((a.to, a.subject), ("DX", d.act.subject))
         self.assertIsNone(b.sender)
         self.assertEqual(list(Path(self.cfg.digest.inbox).glob("*.tmp")), [])
 
@@ -343,6 +349,7 @@ class BrocastPageTests(unittest.TestCase):
         from brocast import fragment, zdict
         cls.codec, cls.fragment = Codec(), fragment
         cls.zd = zdict.load()
+        cls.dxcc = dxccmod.load_or_none()
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -360,51 +367,59 @@ class BrocastPageTests(unittest.TestCase):
         self.st.close()
         self.tmp.cleanup()
 
-    def build(self, mw):
+    def build(self, mw, dxcc="default"):
+        dx = self.dxcc if dxcc == "default" else dxcc
         return build(self.st.spots(self.since, self.until), self.cfg.digest, self.since,
-                     self.until, self.st.coverage(self.since, self.until), "", mw)
+                     self.until, self.st.coverage(self.since, self.until), "", mw, dx)
 
-    def tables(self, page):
-        return [b for b in page["blk"] if b["k"] == "table"]
-
-    def merged(self, page):
-        """Tables with their continuation blocks (no hdr) joined: [{n, rows}, ...]."""
-        out = []
-        for b in self.tables(page):
-            if "hdr" in b:
-                out.append({"n": b["n"], "rows": list(b["rows"])})
-            else:
-                out[-1]["rows"] += b["rows"]
-        return out
+    @classmethod
+    def data(cls, page):
+        """The dxsum data (dictionary v4: block k data)."""
+        self_blk = page["blk"]
+        assert page["typ"] == "dxsum" and self_blk[0]["k"] == "data"
+        return self_blk[0]["v"]
 
     def test_only_relevant_tiers_go_over_the_air(self):
         d = self.build(mw_sample(VP8=50, **{"3B8": 300}))     # VP8 rare, 3B8 common
-        st = self.tables(d.page)[0]
-        self.assertEqual(st["n"][:2], ["rel", "call"])
-        self.assertEqual([r[1] for r in st["rows"]], ["VP8ABC"])    # 3B8XY is tier C
-        rel, call, ent, sp, mw, t0, t1, cw, ssb, ft8, oth, om = st["rows"][0]
-        self.assertEqual((rel, ent, sp, mw), (1, "Falkland Islands", 3, 50))   # tier B
+        dat = self.data(d.page)
+        self.assertEqual([r[1] for r in dat["st"]], ["VP8ABC"])    # 3B8XY is tier C
+        tier, call, ent, sp, mw, t0, t1, cw, ssb, ft8, oth, om = dat["st"][0]
+        self.assertEqual((tier, ent, sp, mw), ("B", 141, 3, 50))     # Falkland = ADIF 141
         bit = {b: 1 << i for i, b in enumerate(spots_mod.BAND_ORDER)}
         self.assertEqual((cw, ssb, ft8, oth, om), (bit["20m"], 0, bit["17m"], 0, None))
-        self.assertEqual(st["v"], int(self.until))
+        self.assertEqual(dat["end"], int(self.until))
         self.assertEqual(t0 - t1, 120)                      # 0900 .. 1100
-        self.assertIn("Relevanz A/B: 1", d.page["blk"][0]["x"])
+        self.assertEqual((dat["tiers"], dat["calls"]), ("AB", 4))   # 4 DX calls, 2 shown
         # the mailbox text still shows both, tier C included, alphabetically
         rows = [l for l in d.text.splitlines() if l[2:].startswith(("VP8", "3B8"))]
         self.assertEqual([(r[0], r.split()[1]) for r in rows], [("C", "3B8XY"), ("B", "VP8ABC")])
 
     def test_activity_names_the_other_modes(self):
         d = self.build(None)
-        st, act = self.merged(d.page)
-        self.assertEqual(act["n"][0], "band")
-        rows = {r[0]: r for r in act["rows"]}
-        self.assertEqual(rows["40m"][1:], [0, 0, 0, 2, 10, "RTTY 2"])
+        act = self.data(d.act.page)["act"]
+        rows = {r[0]: r for r in act}
+        self.assertEqual(rows["40m"][1:], [0, 0, 0, 2, 10, [("RTTY", 2)]])
         self.assertNotIn("160m", rows)                     # bands without spots stay off air
-        self.assertRegex(d.text, r"40m\s+2\s+0\s+0\s+0\s+2 10z\s+RTTY 2")
+        self.assertRegex(d.act.text, r"40m\s+2\s+0\s+0\s+0\s+2 10z\s+RTTY 2")
         # without the list: the most relevant by spotters, all tiers
-        self.assertEqual([r[1] for r in st["rows"]], ["3B8XY", "VP8ABC"])
-        self.assertEqual(st["rows"][0][10:], [1 << spots_mod.BAND_ORDER.index("40m"), "RTTY"])
-        self.assertIn("ohne Most-Wanted-Liste", d.page["blk"][0]["x"])
+        st = self.data(d.page)
+        self.assertEqual([r[1] for r in st["st"]], ["3B8XY", "VP8ABC"])
+        self.assertEqual(st["st"][0][10:], [1 << spots_mod.BAND_ORDER.index("40m"), ["RTTY"]])
+        self.assertEqual(st["tiers"], "")                  # not rated
+
+    def test_without_dictionary_the_entity_goes_as_text(self):
+        d = self.build(mw_sample(VP8=50), dxcc=None)
+        self.assertEqual(self.data(d.page)["st"][0][2], "Falkland Islands")
+        self.codec.to_wire({**d.page, "id": 412, "t": int(self.until)})   # still valid
+
+    def test_clublog_prefix_for_the_rank(self):
+        """Club Log writes 1A0 where AD1C writes 1A: the DXCC list maps it."""
+        line = DxLine(call="1A0C", name="Sov Mil Order of Malta", prefix="1A",
+                      spotters={"A", "B", "C", "D", "E", "F"})   # 9.85 x log2(7) = 27.6
+        rate([line], self.cfg.digest, mw_sample(**{"1A0": 3}), self.dxcc)
+        self.assertEqual((line.dxcc, line.rank, line.tier), (246, 3, "A"))
+        rate([line], self.cfg.digest, mw_sample(**{"1A0": 3}), None)
+        self.assertEqual((line.dxcc, line.rank), (None, None))   # without the list: no match
 
     def test_codec_and_frames(self):
         c = cty()                                            # 12 stations, 6 bands each
@@ -414,24 +429,28 @@ class BrocastPageTests(unittest.TestCase):
                     s = parse(f"DX de {sp}: {f}.0  VP8D{i:02d}  {'SSB' if f == 28400 else ''}  1200Z")
                     self.st.add(s, self.base + 9000 + i, c.lookup(s.dx), c.lookup(s.spotter))
         d = self.build(mw_sample(VP8=5))
-        stations = [r for t in self.tables(d.page) for r in t["rows"] if isinstance(r[0], int)]
-        self.assertEqual(len(stations), 12)
-        page = {**d.page, "id": 412, "rev": 0, "t": int(self.until)}
-        built = self.fragment.build(self.codec, page, self.zd)
-        self.assertLessEqual(built.fragments, 4)
-        back = self.codec.from_wire(self.codec.to_wire(page))
-        self.assertEqual(back["blk"][1]["rows"][0], d.page["blk"][1]["rows"][0])
-        self.assertEqual(back["cat"], ["dx"])
+        self.assertEqual(len(self.data(d.page)["st"]), 12)
+        for page in (d.page, d.act.page):
+            page = {**page, "id": 412, "rev": 0, "t": int(self.until)}
+            built = self.fragment.build(self.codec, page, self.zd)
+            self.assertLessEqual(built.fragments, 2)
+            back = self.codec.from_wire(self.codec.to_wire(page))
+            self.assertEqual(back["typ"], "dxsum")
+            self.assertEqual(back["cat"], ["dx"])
+        back = self.codec.from_wire(self.codec.to_wire({**d.page, "id": 412, "t": 1}))
+        self.assertEqual(back["blk"][0]["v"]["st"][0][2], "VP8")      # number -> name
 
     def test_inbox_file_carries_the_page(self):
         d = self.build(mw_sample(VP8=50))
-        f = write_inbox(self.cfg.digest.inbox, d, self.cfg.digest)
-        b = inbox.parse(f.read_bytes())
-        self.assertEqual(json.loads(b.brocast)["ti"], d.page["ti"])
+        files = write_inbox(self.cfg.digest.inbox, d, self.cfg.digest)
+        pages = [json.loads(inbox.parse(f.read_bytes()).brocast) for f in files]
+        self.assertEqual([p["ti"] for p in pages], [d.page["ti"], d.act.page["ti"]])
+        self.assertTrue(all(p["typ"] == "dxsum" for p in pages))
         off = build(self.st.spots(self.since, self.until),
                     __import__("dataclasses").replace(self.cfg.digest, brocast=False),
                     self.since, self.until, 86400, "", None)
         self.assertIsNone(off.page)
+        self.assertIsNone(off.act.page)
 
 
 class TelnetFilterTests(unittest.TestCase):

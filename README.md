@@ -250,8 +250,11 @@ und Weboberfläche zeigen, wer in welchem Board ist; mitchatten nur über die Ma
 ## DX-Zusammenfassung (dxfeed)
 
 Sammelt die Spots eines DX-Clusters und legt jeden Tag um 05:00 eine
-Zusammenfassung der letzten 24 Stunden als Bulletin an **DX** in den
-Eingangsordner – nur lokal, keine Live-Spots über Funk (`PLANUNG.md`, Abschnitt 16).
+Zusammenfassung der letzten 24 Stunden als zwei Bulletins an **DX** in den
+Eingangsordner: „DX-Zusammenfassung“ (Stationen, nach Relevanz A/B/C aus Club
+Log Most Wanted und Spotterzahl) und „DX-Bandaktivitaet“. Nur lokal, keine
+Live-Spots über Funk. Beide tragen eine brocast-Seite `dxsum` (Dictionary v4),
+die der Listener als Band/Mode-Raster bzw. Heatmap zeigt (`PLANUNG.md`, Abschnitt 16).
 
 1. `dxfeed.conf.example` nach `dxfeed.conf` kopieren, unter `[cluster]` das
    Rufzeichen bei `login` eintragen. Hat `tinybox.conf` einen Abschnitt
@@ -261,8 +264,9 @@ Eingangsordner – nur lokal, keine Live-Spots über Funk (`PLANUNG.md`, Abschni
 3. Einmal `dxfeed_aufgabe_einrichten.bat` ausführen: Aufgabe 05:00 in der
    Aufgabenplanung (Ordner *TinyBox*).
 
-Prüfen: `dxfeed status`, `dxfeed show`, `dxfeed digest` (zeigt die
-Zusammenfassung nur an). Meldungen in `logs\dxfeed.log`.
+Prüfen: `dxfeed status` (auch Most-Wanted-Liste und DXCC-Liste), `dxfeed show`,
+`dxfeed digest` (zeigt beide Bulletins nur an). Most-Wanted-Liste sofort holen:
+`dxfeed mw-update`. Meldungen in `logs\dxfeed.log`.
 
 ## Tests
 

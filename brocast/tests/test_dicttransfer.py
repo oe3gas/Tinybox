@@ -30,7 +30,11 @@ class BuildTests(unittest.TestCase):
     def test_frames_fit_and_reassemble(self):
         d = v2()
         frames = dicttransfer.build_frames(d, 25, 0, T0)
-        self.assertLess(len(frames), 20)          # ~15 instead of ~50 as text
+        # v4 brings the DXCC list (402 entities, mostly the names): 56 frames,
+        # packed about a quarter of the YAML text
+        self.assertLess(len(frames), 70)
+        self.assertLess(len(dicttransfer.payload(d)) * 3, (Path(__file__).resolve().parent.parent
+                                                           / "brocast-core.yaml").stat().st_size)
         self.assertTrue(all(len(f) <= 240 for f in frames))
         parts = [dicttransfer.part_of(cbor2_page(f)) for f in frames]
         self.assertEqual([p["n"] for p in parts], list(range(1, len(frames) + 1)))

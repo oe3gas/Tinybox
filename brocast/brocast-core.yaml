@@ -17,11 +17,13 @@
 # Inhaltliche Änderungen nur noch als Version 2 (version: 2, nur Ergänzungen),
 # verteilt über TinyBox DICT. Version 3 (19.10.2026): Quellen-Liste src, damit
 # feste Quellenangaben (z. B. GeoSphere-Lizenzhinweis) nur 1 Byte kosten.
+# Version 4 (23.10.2026): DX-Zusammenfassung typ 13 dxsum mit Thema dxsum,
+# Listen band, mode, dxtier und dxcc (ADIF-Nummern, für alle Seitentypen).
 # Kommentare dürfen geändert werden – sie gehen
 # nicht in die Prüfsumme ein. Der Test test_v1_is_frozen wacht darüber.
 
 dictionary: brocast-core
-version: 3
+version: 4
 languages: [de, en]
 
 # ---------------------------------------------------------------------------
@@ -91,7 +93,9 @@ enums:
     9:  { name: index, de: "Inhaltsverzeichnis",   en: "Index",           exp: 1440 }
     10: { name: dict,  de: "Dictionary-Seite",     en: "Dictionary page", exp: 10080 }
     11: { name: formreply, de: "Formularantwort",  en: "Form reply", reserved: v2 }
-    # 12..23: Reserve
+    # 12: frei lassen (war im Entwurf Seitenabruf/Pull, entfallen)
+    13: { name: dxsum, de: "DX-Zusammenfassung",   en: "DX summary",      exp: 1440 }   # ab v4
+    # 14..23: Reserve
 
   flg:            # Bitnummern
     0: { name: withdrawn,    de: "zurückgezogen",      en: "withdrawn" }
@@ -128,6 +132,453 @@ enums:
     0:  { name: geosphere, de: "GeoSphere Austria, TAWES (CC BY 4.0)", en: "GeoSphere Austria, TAWES (CC BY 4.0)" }
     1:  { name: tinybox,   de: "TinyBox", en: "TinyBox" }
 
+  # ---- ab Version 4 ----
+  # Amateurfunkbänder, auch als Bitnummer (Bit i = Band i)
+  band:
+    0:  { name: 160m, de: "160 m", en: "160 m" }
+    1:  { name: 80m,  de: "80 m",  en: "80 m" }
+    2:  { name: 60m,  de: "60 m",  en: "60 m" }
+    3:  { name: 40m,  de: "40 m",  en: "40 m" }
+    4:  { name: 30m,  de: "30 m",  en: "30 m" }
+    5:  { name: 20m,  de: "20 m",  en: "20 m" }
+    6:  { name: 17m,  de: "17 m",  en: "17 m" }
+    7:  { name: 15m,  de: "15 m",  en: "15 m" }
+    8:  { name: 12m,  de: "12 m",  en: "12 m" }
+    9:  { name: 10m,  de: "10 m",  en: "10 m" }
+    10: { name: 6m,   de: "6 m",   en: "6 m" }
+    11: { name: 4m,   de: "4 m",   en: "4 m" }
+    12: { name: 2m,   de: "2 m",   en: "2 m" }
+    13: { name: 70cm, de: "70 cm", en: "70 cm" }
+
+  # Betriebsarten (Schreibweise wie im DX-Cluster), häufige zuerst
+  mode:
+    0:  { name: CW,     de: "CW",     en: "CW" }
+    1:  { name: SSB,    de: "SSB",    en: "SSB" }
+    2:  { name: FT8,    de: "FT8",    en: "FT8" }
+    3:  { name: FT4,    de: "FT4",    en: "FT4" }
+    4:  { name: RTTY,   de: "RTTY",   en: "RTTY" }
+    5:  { name: FM,     de: "FM",     en: "FM" }
+    6:  { name: PSK,    de: "PSK",    en: "PSK" }
+    7:  { name: JS8,    de: "JS8",    en: "JS8" }
+    8:  { name: Q65,    de: "Q65",    en: "Q65" }
+    9:  { name: MSK,    de: "MSK144", en: "MSK144" }
+    10: { name: SSTV,   de: "SSTV",   en: "SSTV" }
+    11: { name: AM,     de: "AM",     en: "AM" }
+    12: { name: OLIVIA, de: "Olivia", en: "Olivia" }
+    13: { name: VARA,   de: "VARA",   en: "VARA" }
+    14: { name: JT65,   de: "JT65",   en: "JT65" }
+    15: { name: WSPR,   de: "WSPR",   en: "WSPR" }
+
+  # Relevanz einer DX-Station (dxfeed: Club Log Most Wanted × Spotter)
+  dxtier:
+    0: { name: A, de: "selten – sofort hinschauen", en: "rare – look now" }
+    1: { name: B, de: "interessant",                en: "interesting" }
+    2: { name: C, de: "Alltag",                     en: "everyday" }
+
+  dxcc:             # ab Version 4: DXCC-Gebiete, Nummer = ADIF-Code (ARRL); erzeugt mit tools/build_dxcc.py
+    1: { name: "VE", en: "Canada", cont: NA, cq: 5, itu: 9 }
+    2: { name: del2, en: "Abu Ail Islands", del: true }
+    3: { name: "YA", en: "Afghanistan", cont: AS, cq: 21, itu: 40 }
+    4: { name: "3B6", en: "Agalega & St. Brandon", cont: AF, cq: 39, itu: 53, cl: "3B7" }
+    5: { name: "OH0", en: "Aland Islands", cont: EU, cq: 15, itu: 18 }
+    6: { name: "KL", en: "Alaska", cont: NA, cq: 1, itu: 1, cl: "KL7" }
+    7: { name: "ZA", en: "Albania", cont: EU, cq: 15, itu: 28 }
+    8: { name: del8, en: "Aldabra", del: true }
+    9: { name: "KH8", en: "American Samoa", cont: OC, cq: 32, itu: 62 }
+    10: { name: "FT/Z", en: "Amsterdam & St. Paul Is.", cont: AF, cq: 39, itu: 68, cl: "FT5Z" }
+    11: { name: "VU4", en: "Andaman & Nicobar Is.", cont: AS, cq: 26, itu: 49 }
+    12: { name: "VP2E", en: "Anguilla", cont: NA, cq: 8, itu: 11 }
+    13: { name: "CE9", en: "Antarctica", cont: SA, cq: 13, itu: 73 }
+    14: { name: "EK", en: "Armenia", cont: AS, cq: 21, itu: 29 }
+    15: { name: "UA9", en: "Asiatic Russia", cont: AS, cq: 19, itu: 33, cl: "UA0" }
+    16: { name: "ZL9", en: "N.Z. Subantarctic Is.", cont: OC, cq: 32, itu: 60 }
+    17: { name: "YV0", en: "Aves Island", cont: NA, cq: 8, itu: 11 }
+    18: { name: "4J", en: "Azerbaijan", cont: AS, cq: 21, itu: 29 }
+    19: { name: del19, en: "Bajo Nuevo", del: true }
+    20: { name: "KH1", en: "Baker & Howland Islands", cont: OC, cq: 31, itu: 61 }
+    21: { name: "EA6", en: "Balearic Islands", cont: EU, cq: 14, itu: 37 }
+    22: { name: "T8", en: "Palau", cont: OC, cq: 27, itu: 64 }
+    23: { name: del23, en: "Blenheim Reef", del: true }
+    24: { name: "3Y/B", en: "Bouvet", cont: AF, cq: 38, itu: 67 }
+    25: { name: del25, en: "British North Borneo", del: true }
+    26: { name: del26, en: "British Somaliland", del: true }
+    27: { name: "EU", en: "Belarus", cont: EU, cq: 16, itu: 29 }
+    28: { name: del28, en: "Panama Canal Zone", del: true }
+    29: { name: "EA8", en: "Canary Islands", cont: AF, cq: 33, itu: 36 }
+    30: { name: del30, en: "Celebes and the Molucca Islands", del: true }
+    31: { name: "T31", en: "Central Kiribati", cont: OC, cq: 31, itu: 62 }
+    32: { name: "EA9", en: "Ceuta & Melilla", cont: AF, cq: 33, itu: 37 }
+    33: { name: "VQ9", en: "Chagos Islands", cont: AF, cq: 39, itu: 41 }
+    34: { name: "ZL7", en: "Chatham Islands", cont: OC, cq: 32, itu: 60 }
+    35: { name: "VK9X", en: "Christmas Island", cont: OC, cq: 29, itu: 54 }
+    36: { name: "FO/C", en: "Clipperton Island", cont: NA, cq: 7, itu: 10 }
+    37: { name: "TI9", en: "Cocos Island", cont: NA, cq: 7, itu: 11 }
+    38: { name: "VK9C", en: "Cocos (Keeling) Islands", cont: OC, cq: 29, itu: 54 }
+    39: { name: del39, en: "Comoros", del: true }
+    40: { name: "SV9", en: "Crete", cont: EU, cq: 20, itu: 28 }
+    41: { name: "FT/W", en: "Crozet Island", cont: AF, cq: 39, itu: 68, cl: "FT5/W" }
+    42: { name: del42, en: "Daman and Diu", del: true }
+    43: { name: "KP5", en: "Desecheo Island", cont: NA, cq: 8, itu: 11 }
+    44: { name: del44, en: "Desroches Island", del: true }
+    45: { name: "SV5", en: "Dodecanese", cont: EU, cq: 20, itu: 28 }
+    46: { name: "9M6", en: "East Malaysia", cont: OC, cq: 28, itu: 54 }
+    47: { name: "CE0Y", en: "Easter Island", cont: SA, cq: 12, itu: 63 }
+    48: { name: "T32", en: "Eastern Kiribati", cont: OC, cq: 31, itu: 61 }
+    49: { name: "3C", en: "Equatorial Guinea", cont: AF, cq: 36, itu: 47 }
+    50: { name: "XE", en: "Mexico", cont: NA, cq: 6, itu: 10 }
+    51: { name: "E3", en: "Eritrea", cont: AF, cq: 37, itu: 48 }
+    52: { name: "ES", en: "Estonia", cont: EU, cq: 15, itu: 29 }
+    53: { name: "ET", en: "Ethiopia", cont: AF, cq: 37, itu: 48 }
+    54: { name: "UA", en: "European Russia", cont: EU, cq: 16, itu: 29 }
+    55: { name: del55, en: "Farquhar Group", del: true }
+    56: { name: "PY0F", en: "Fernando de Noronha", cont: SA, cq: 11, itu: 13 }
+    57: { name: del57, en: "French Equatorial Africa", del: true }
+    58: { name: del58, en: "French Indo-China", del: true }
+    59: { name: del59, en: "French West Africa", del: true }
+    60: { name: "C6", en: "Bahamas", cont: NA, cq: 8, itu: 11, cl: "C6A" }
+    61: { name: "R1FJ", en: "Franz Josef Land", cont: EU, cq: 40, itu: 75, cl: "R1F" }
+    62: { name: "8P", en: "Barbados", cont: NA, cq: 8, itu: 11 }
+    63: { name: "FY", en: "French Guiana", cont: SA, cq: 9, itu: 12 }
+    64: { name: "VP9", en: "Bermuda", cont: NA, cq: 5, itu: 11 }
+    65: { name: "VP2V", en: "British Virgin Islands", cont: NA, cq: 8, itu: 11 }
+    66: { name: "V3", en: "Belize", cont: NA, cq: 7, itu: 11 }
+    67: { name: del67, en: "French India", del: true }
+    68: { name: del68, en: "Kuwait/Saudi Arabia Neutral Zone", del: true }
+    69: { name: "ZF", en: "Cayman Islands", cont: NA, cq: 8, itu: 11 }
+    70: { name: "CM", en: "Cuba", cont: NA, cq: 8, itu: 11, cl: "CO" }
+    71: { name: "HC8", en: "Galapagos Islands", cont: SA, cq: 10, itu: 12 }
+    72: { name: "HI", en: "Dominican Republic", cont: NA, cq: 8, itu: 11 }
+    74: { name: "YS", en: "El Salvador", cont: NA, cq: 7, itu: 11 }
+    75: { name: "4L", en: "Georgia", cont: AS, cq: 21, itu: 29 }
+    76: { name: "TG", en: "Guatemala", cont: NA, cq: 7, itu: 11 }
+    77: { name: "J3", en: "Grenada", cont: NA, cq: 8, itu: 11 }
+    78: { name: "HH", en: "Haiti", cont: NA, cq: 8, itu: 11 }
+    79: { name: "FG", en: "Guadeloupe", cont: NA, cq: 8, itu: 11 }
+    80: { name: "HR", en: "Honduras", cont: NA, cq: 7, itu: 11 }
+    81: { name: del81, en: "West Germany", del: true }
+    82: { name: "6Y", en: "Jamaica", cont: NA, cq: 8, itu: 11 }
+    84: { name: "FM", en: "Martinique", cont: NA, cq: 8, itu: 11 }
+    85: { name: del85, en: "Bonaire and Curaçao", del: true }
+    86: { name: "YN", en: "Nicaragua", cont: NA, cq: 7, itu: 11 }
+    88: { name: "HP", en: "Panama", cont: NA, cq: 7, itu: 11 }
+    89: { name: "VP5", en: "Turks & Caicos Islands", cont: NA, cq: 8, itu: 11 }
+    90: { name: "9Y", en: "Trinidad & Tobago", cont: SA, cq: 9, itu: 11 }
+    91: { name: "P4", en: "Aruba", cont: SA, cq: 9, itu: 11 }
+    93: { name: del93, en: "Geyser Reef", del: true }
+    94: { name: "V2", en: "Antigua & Barbuda", cont: NA, cq: 8, itu: 11 }
+    95: { name: "J7", en: "Dominica", cont: NA, cq: 8, itu: 11 }
+    96: { name: "VP2M", en: "Montserrat", cont: NA, cq: 8, itu: 11 }
+    97: { name: "J6", en: "St. Lucia", cont: NA, cq: 8, itu: 11 }
+    98: { name: "J8", en: "St. Vincent", cont: NA, cq: 8, itu: 11 }
+    99: { name: "FT/G", en: "Glorioso Islands", cont: AF, cq: 39, itu: 53 }
+    100: { name: "LU", en: "Argentina", cont: SA, cq: 13, itu: 14 }
+    101: { name: del101, en: "Goa", del: true }
+    102: { name: del102, en: "British Togoland", del: true }
+    103: { name: "KH2", en: "Guam", cont: OC, cq: 27, itu: 64 }
+    104: { name: "CP", en: "Bolivia", cont: SA, cq: 10, itu: 12 }
+    105: { name: "KG4", en: "Guantanamo Bay", cont: NA, cq: 8, itu: 11 }
+    106: { name: "GU", en: "Guernsey", cont: EU, cq: 14, itu: 27 }
+    107: { name: "3X", en: "Guinea", cont: AF, cq: 35, itu: 46, cl: "3XA" }
+    108: { name: "PY", en: "Brazil", cont: SA, cq: 11, itu: 15 }
+    109: { name: "J5", en: "Guinea-Bissau", cont: AF, cq: 35, itu: 46 }
+    110: { name: "KH6", en: "Hawaii", cont: OC, cq: 31, itu: 61 }
+    111: { name: "VK0H", en: "Heard Island", cont: AF, cq: 39, itu: 68 }
+    112: { name: "CE", en: "Chile", cont: SA, cq: 12, itu: 14 }
+    113: { name: del113, en: "Ifni", del: true }
+    114: { name: "GD", en: "Isle of Man", cont: EU, cq: 14, itu: 27 }
+    115: { name: del115, en: "Italian Somaliland", del: true }
+    116: { name: "HK", en: "Colombia", cont: SA, cq: 9, itu: 12 }
+    117: { name: "4U1I", en: "ITU HQ", cont: EU, cq: 14, itu: 28, cl: "4U1ITU" }
+    118: { name: "JX", en: "Jan Mayen", cont: EU, cq: 40, itu: 18 }
+    119: { name: del119, en: "Java", del: true }
+    120: { name: "HC", en: "Ecuador", cont: SA, cq: 10, itu: 12 }
+    122: { name: "GJ", en: "Jersey", cont: EU, cq: 14, itu: 27 }
+    123: { name: "KH3", en: "Johnston Island", cont: OC, cq: 31, itu: 61 }
+    124: { name: "FT/J", en: "Juan de Nova, Europa", cont: AF, cq: 39, itu: 53 }
+    125: { name: "CE0Z", en: "Juan Fernandez Islands", cont: SA, cq: 12, itu: 14 }
+    126: { name: "UA2", en: "Kaliningrad", cont: EU, cq: 15, itu: 29 }
+    127: { name: del127, en: "Kamaran Island", del: true }
+    128: { name: del128, en: "Karelo-Finnish Soviet Socialist Republic", del: true }
+    129: { name: "8R", en: "Guyana", cont: SA, cq: 9, itu: 12 }
+    130: { name: "UN", en: "Kazakhstan", cont: AS, cq: 17, itu: 30 }
+    131: { name: "FT/X", en: "Kerguelen Islands", cont: AF, cq: 39, itu: 68, cl: "FT5/X" }
+    132: { name: "ZP", en: "Paraguay", cont: SA, cq: 11, itu: 14 }
+    133: { name: "ZL8", en: "Kermadec Islands", cont: OC, cq: 32, itu: 60 }
+    134: { name: del134, en: "Kingman Reef", del: true }
+    135: { name: "EX", en: "Kyrgyzstan", cont: AS, cq: 17, itu: 30 }
+    136: { name: "OA", en: "Peru", cont: SA, cq: 10, itu: 12 }
+    137: { name: "HL", en: "Republic of Korea", cont: AS, cq: 25, itu: 44 }
+    138: { name: "KH7K", en: "Kure Island", cont: OC, cq: 31, itu: 61 }
+    139: { name: del139, en: "Khuriya Muriya Islands", del: true }
+    140: { name: "PZ", en: "Suriname", cont: SA, cq: 9, itu: 12 }
+    141: { name: "VP8", en: "Falkland Islands", cont: SA, cq: 13, itu: 16 }
+    142: { name: "VU7", en: "Lakshadweep Islands", cont: AS, cq: 22, itu: 41 }
+    143: { name: "XW", en: "Laos", cont: AS, cq: 26, itu: 49 }
+    144: { name: "CX", en: "Uruguay", cont: SA, cq: 13, itu: 14 }
+    145: { name: "YL", en: "Latvia", cont: EU, cq: 15, itu: 29 }
+    146: { name: "LY", en: "Lithuania", cont: EU, cq: 15, itu: 29 }
+    147: { name: "VK9L", en: "Lord Howe Island", cont: OC, cq: 30, itu: 60 }
+    148: { name: "YV", en: "Venezuela", cont: SA, cq: 9, itu: 12 }
+    149: { name: "CU", en: "Azores", cont: EU, cq: 14, itu: 36 }
+    150: { name: "VK", en: "Australia", cont: OC, cq: 30, itu: 59 }
+    151: { name: del151, en: "Maly Vysotsky Island", del: true }
+    152: { name: "XX9", en: "Macao", cont: AS, cq: 24, itu: 44 }
+    153: { name: "VK0M", en: "Macquarie Island", cont: OC, cq: 30, itu: 60 }
+    154: { name: del154, en: "Yemen Arab Republic", del: true }
+    155: { name: del155, en: "West Malaysia", del: true }
+    157: { name: "C2", en: "Nauru", cont: OC, cq: 31, itu: 65, cl: "C21" }
+    158: { name: "YJ", en: "Vanuatu", cont: OC, cq: 32, itu: 56 }
+    159: { name: "8Q", en: "Maldives", cont: AS, cq: 22, itu: 41 }
+    160: { name: "A3", en: "Tonga", cont: OC, cq: 32, itu: 62 }
+    161: { name: "HK0/M", en: "Malpelo Island", cont: SA, cq: 9, itu: 12 }
+    162: { name: "FK", en: "New Caledonia", cont: OC, cq: 32, itu: 56 }
+    163: { name: "P2", en: "Papua New Guinea", cont: OC, cq: 28, itu: 51 }
+    164: { name: del164, en: "Manchuria", del: true }
+    165: { name: "3B8", en: "Mauritius", cont: AF, cq: 39, itu: 53 }
+    166: { name: "KH0", en: "Mariana Islands", cont: OC, cq: 27, itu: 64 }
+    167: { name: "OJ0", en: "Market Reef", cont: EU, cq: 15, itu: 18 }
+    168: { name: "V7", en: "Marshall Islands", cont: OC, cq: 31, itu: 65 }
+    169: { name: "FH", en: "Mayotte", cont: AF, cq: 39, itu: 53 }
+    170: { name: "ZL", en: "New Zealand", cont: OC, cq: 32, itu: 60 }
+    171: { name: "VK9M", en: "Mellish Reef", cont: OC, cq: 30, itu: 56 }
+    172: { name: "VP6", en: "Pitcairn Island", cont: OC, cq: 32, itu: 63 }
+    173: { name: "V6", en: "Micronesia", cont: OC, cq: 27, itu: 65 }
+    174: { name: "KH4", en: "Midway Island", cont: OC, cq: 31, itu: 61 }
+    175: { name: "FO", en: "French Polynesia", cont: OC, cq: 32, itu: 63 }
+    176: { name: "3D2", en: "Fiji", cont: OC, cq: 32, itu: 56 }
+    177: { name: "JD/M", en: "Minami Torishima", cont: OC, cq: 27, itu: 90 }
+    178: { name: del178, en: "Minerva Reefs", del: true }
+    179: { name: "ER", en: "Moldova", cont: EU, cq: 16, itu: 29 }
+    180: { name: "SV/A", en: "Mount Athos", cont: EU, cq: 20, itu: 28 }
+    181: { name: "C9", en: "Mozambique", cont: AF, cq: 37, itu: 53 }
+    182: { name: "KP1", en: "Navassa Island", cont: NA, cq: 8, itu: 11 }
+    183: { name: del183, en: "Netherlands Borneo", del: true }
+    184: { name: del184, en: "Netherlands New Guinea", del: true }
+    185: { name: "H4", en: "Solomon Islands", cont: OC, cq: 28, itu: 51 }
+    186: { name: del186, en: "Newfoundland, Labrador", del: true }
+    187: { name: "5U", en: "Niger", cont: AF, cq: 35, itu: 46 }
+    188: { name: "E6", en: "Niue", cont: OC, cq: 32, itu: 62 }
+    189: { name: "VK9N", en: "Norfolk Island", cont: OC, cq: 32, itu: 60 }
+    190: { name: "5W", en: "Samoa", cont: OC, cq: 32, itu: 62 }
+    191: { name: "E5/N", en: "N. Cook Islands", cont: OC, cq: 32, itu: 62 }
+    192: { name: "JD/O", en: "Ogasawara", cont: AS, cq: 27, itu: 45 }
+    193: { name: del193, en: "Ryukyu Islands", del: true }
+    194: { name: del194, en: "Okinotorishima", del: true }
+    195: { name: "3C0", en: "Annobon Island", cont: AF, cq: 36, itu: 52 }
+    196: { name: del196, en: "Palestine", del: true }
+    197: { name: "KH5", en: "Palmyra & Jarvis Islands", cont: OC, cq: 31, itu: 61 }
+    198: { name: del198, en: "Papua Territory", del: true }
+    199: { name: "3Y/P", en: "Peter 1 Island", cont: AN, cq: 12, itu: 72 }
+    200: { name: del200, en: "Portuguese Timor", del: true }
+    201: { name: "ZS8", en: "Pr. Edward & Marion Is.", cont: AF, cq: 38, itu: 57 }
+    202: { name: "KP4", en: "Puerto Rico", cont: NA, cq: 8, itu: 11 }
+    203: { name: "C3", en: "Andorra", cont: EU, cq: 14, itu: 27, cl: "C31" }
+    204: { name: "XF4", en: "Revillagigedo", cont: NA, cq: 6, itu: 10 }
+    205: { name: "ZD8", en: "Ascension Island", cont: AF, cq: 36, itu: 66 }
+    206: { name: "OE", en: "Austria", cont: EU, cq: 15, itu: 28 }
+    207: { name: "3B9", en: "Rodriguez Island", cont: AF, cq: 39, itu: 53 }
+    208: { name: del208, en: "Ruanda-Urundi", del: true }
+    209: { name: "ON", en: "Belgium", cont: EU, cq: 14, itu: 27 }
+    210: { name: del210, en: "Saar", del: true }
+    211: { name: "CY0", en: "Sable Island", cont: NA, cq: 5, itu: 9 }
+    212: { name: "LZ", en: "Bulgaria", cont: EU, cq: 20, itu: 28 }
+    213: { name: "FS", en: "St. Martin", cont: NA, cq: 8, itu: 11 }
+    214: { name: "TK", en: "Corsica", cont: EU, cq: 15, itu: 28 }
+    215: { name: "5B", en: "Cyprus", cont: AS, cq: 20, itu: 39 }
+    216: { name: "HK0/A", en: "San Andres & Providencia", cont: NA, cq: 7, itu: 11, cl: "HK0S" }
+    217: { name: "CE0X", en: "San Felix & San Ambrosio", cont: SA, cq: 12, itu: 14 }
+    218: { name: del218, en: "Czechoslovakia", del: true }
+    219: { name: "S9", en: "Sao Tome & Principe", cont: AF, cq: 36, itu: 47 }
+    220: { name: del220, en: "Sarawak", del: true }
+    221: { name: "OZ", en: "Denmark", cont: EU, cq: 14, itu: 18 }
+    222: { name: "OY", en: "Faroe Islands", cont: EU, cq: 14, itu: 18 }
+    223: { name: "G", en: "England", cont: EU, cq: 14, itu: 27 }
+    224: { name: "OH", en: "Finland", cont: EU, cq: 15, itu: 18 }
+    225: { name: "IS", en: "Sardinia", cont: EU, cq: 15, itu: 28, cl: "IS0" }
+    226: { name: del226, en: "Saudi Arabia/Iraq Neutral Zone", del: true }
+    227: { name: "F", en: "France", cont: EU, cq: 14, itu: 27 }
+    228: { name: del228, en: "Serrana Bank & Roncador Cay", del: true }
+    229: { name: del229, en: "East Germany", del: true }
+    230: { name: "DL", en: "Fed. Rep. of Germany", cont: EU, cq: 14, itu: 28 }
+    231: { name: del231, en: "Sikkim", del: true }
+    232: { name: "T5", en: "Somalia", cont: AF, cq: 37, itu: 48 }
+    233: { name: "ZB", en: "Gibraltar", cont: EU, cq: 14, itu: 37, cl: "ZB2" }
+    234: { name: "E5/S", en: "South Cook Islands", cont: OC, cq: 32, itu: 63 }
+    235: { name: "VP8/G", en: "South Georgia Island", cont: SA, cq: 13, itu: 73, cl: "VP8G" }
+    236: { name: "SV", en: "Greece", cont: EU, cq: 20, itu: 28 }
+    237: { name: "OX", en: "Greenland", cont: NA, cq: 40, itu: 5 }
+    238: { name: "VP8/O", en: "South Orkney Islands", cont: SA, cq: 13, itu: 73, cl: "VP8O" }
+    239: { name: "HA", en: "Hungary", cont: EU, cq: 15, itu: 28 }
+    240: { name: "VP8/S", en: "South Sandwich Islands", cont: SA, cq: 13, itu: 73, cl: "VP8S" }
+    241: { name: "VP8/H", en: "South Shetland Islands", cont: SA, cq: 13, itu: 73, cl: "VP8H" }
+    242: { name: "TF", en: "Iceland", cont: EU, cq: 40, itu: 17 }
+    243: { name: del243, en: "People's Democratic Rep. of Yemen", del: true }
+    244: { name: del244, en: "Southern Sudan", del: true }
+    245: { name: "EI", en: "Ireland", cont: EU, cq: 14, itu: 27 }
+    246: { name: "1A", en: "Sov Mil Order of Malta", cont: EU, cq: 15, itu: 28, cl: "1A0" }
+    247: { name: "1S", en: "Spratly Islands", cont: AS, cq: 26, itu: 50 }
+    248: { name: "I", en: "Italy", cont: EU, cq: 15, itu: 28 }
+    249: { name: "V4", en: "St. Kitts & Nevis", cont: NA, cq: 8, itu: 11 }
+    250: { name: "ZD7", en: "St. Helena", cont: AF, cq: 36, itu: 66 }
+    251: { name: "HB0", en: "Liechtenstein", cont: EU, cq: 14, itu: 28 }
+    252: { name: "CY9", en: "St. Paul Island", cont: NA, cq: 5, itu: 9 }
+    253: { name: "PY0S", en: "St. Peter & St. Paul", cont: SA, cq: 11, itu: 13 }
+    254: { name: "LX", en: "Luxembourg", cont: EU, cq: 14, itu: 27 }
+    255: { name: del255, en: "St. Maarten, Saba, St. Eustatius", del: true }
+    256: { name: "CT3", en: "Madeira Islands", cont: AF, cq: 33, itu: 36 }
+    257: { name: "9H", en: "Malta", cont: EU, cq: 15, itu: 28 }
+    258: { name: del258, en: "Sumatra", del: true }
+    259: { name: "JW", en: "Svalbard", cont: EU, cq: 40, itu: 18 }
+    260: { name: "3A", en: "Monaco", cont: EU, cq: 14, itu: 27 }
+    261: { name: del261, en: "Swan Is.", del: true }
+    262: { name: "EY", en: "Tajikistan", cont: AS, cq: 17, itu: 30 }
+    263: { name: "PA", en: "Netherlands", cont: EU, cq: 14, itu: 27 }
+    264: { name: del264, en: "Tangier", del: true }
+    265: { name: "GI", en: "Northern Ireland", cont: EU, cq: 14, itu: 27 }
+    266: { name: "LA", en: "Norway", cont: EU, cq: 14, itu: 18 }
+    267: { name: del267, en: "Territory of New Guinea", del: true }
+    268: { name: del268, en: "Tibet", del: true }
+    269: { name: "SP", en: "Poland", cont: EU, cq: 15, itu: 28 }
+    270: { name: "ZK3", en: "Tokelau Islands", cont: OC, cq: 31, itu: 62 }
+    271: { name: del271, en: "Trieste", del: true }
+    272: { name: "CT", en: "Portugal", cont: EU, cq: 14, itu: 37 }
+    273: { name: "PY0T", en: "Trindade & Martim Vaz", cont: SA, cq: 11, itu: 15 }
+    274: { name: "ZD9", en: "Tristan da Cunha & Gough Islands", cont: AF, cq: 38, itu: 66 }
+    275: { name: "YO", en: "Romania", cont: EU, cq: 20, itu: 28 }
+    276: { name: "FT/T", en: "Tromelin Island", cont: AF, cq: 39, itu: 53 }
+    277: { name: "FP", en: "St. Pierre & Miquelon", cont: NA, cq: 5, itu: 9 }
+    278: { name: "T7", en: "San Marino", cont: EU, cq: 15, itu: 28 }
+    279: { name: "GM", en: "Scotland", cont: EU, cq: 14, itu: 27 }
+    280: { name: "EZ", en: "Turkmenistan", cont: AS, cq: 17, itu: 30 }
+    281: { name: "EA", en: "Spain", cont: EU, cq: 14, itu: 37 }
+    282: { name: "T2", en: "Tuvalu", cont: OC, cq: 31, itu: 65 }
+    283: { name: "ZC4", en: "UK Base Areas on Cyprus", cont: AS, cq: 20, itu: 39 }
+    284: { name: "SM", en: "Sweden", cont: EU, cq: 14, itu: 18 }
+    285: { name: "KP2", en: "US Virgin Islands", cont: NA, cq: 8, itu: 11 }
+    286: { name: "5X", en: "Uganda", cont: AF, cq: 37, itu: 48 }
+    287: { name: "HB", en: "Switzerland", cont: EU, cq: 14, itu: 28 }
+    288: { name: "UR", en: "Ukraine", cont: EU, cq: 16, itu: 29 }
+    289: { name: "4U1U", en: "United Nations HQ", cont: NA, cq: 5, itu: 8, cl: "4U1UN" }
+    291: { name: "K", en: "United States", cont: NA, cq: 5, itu: 8 }
+    292: { name: "UK", en: "Uzbekistan", cont: AS, cq: 17, itu: 30, cl: "UJ" }
+    293: { name: "3W", en: "Vietnam", cont: AS, cq: 26, itu: 49 }
+    294: { name: "GW", en: "Wales", cont: EU, cq: 14, itu: 27 }
+    295: { name: "HV", en: "Vatican City", cont: EU, cq: 15, itu: 28 }
+    296: { name: "YU", en: "Serbia", cont: EU, cq: 15, itu: 28, cl: "YT" }
+    297: { name: "KH9", en: "Wake Island", cont: OC, cq: 31, itu: 65 }
+    298: { name: "FW", en: "Wallis & Futuna Islands", cont: OC, cq: 32, itu: 62 }
+    299: { name: "9M2", en: "West Malaysia", cont: AS, cq: 28, itu: 54 }
+    301: { name: "T30", en: "Western Kiribati", cont: OC, cq: 31, itu: 65 }
+    302: { name: "S0", en: "Western Sahara", cont: AF, cq: 33, itu: 46 }
+    303: { name: "VK9W", en: "Willis Island", cont: OC, cq: 30, itu: 55 }
+    304: { name: "A9", en: "Bahrain", cont: AS, cq: 21, itu: 39 }
+    305: { name: "S2", en: "Bangladesh", cont: AS, cq: 22, itu: 41 }
+    306: { name: "A5", en: "Bhutan", cont: AS, cq: 22, itu: 41 }
+    307: { name: del307, en: "Zanzibar", del: true }
+    308: { name: "TI", en: "Costa Rica", cont: NA, cq: 7, itu: 11 }
+    309: { name: "XZ", en: "Myanmar", cont: AS, cq: 26, itu: 49 }
+    312: { name: "XU", en: "Cambodia", cont: AS, cq: 26, itu: 49 }
+    315: { name: "4S", en: "Sri Lanka", cont: AS, cq: 22, itu: 41 }
+    318: { name: "BY", en: "China", cont: AS, cq: 24, itu: 44 }
+    321: { name: "VR", en: "Hong Kong", cont: AS, cq: 24, itu: 44 }
+    324: { name: "VU", en: "India", cont: AS, cq: 22, itu: 41 }
+    327: { name: "YB", en: "Indonesia", cont: OC, cq: 28, itu: 54 }
+    330: { name: "EP", en: "Iran", cont: AS, cq: 21, itu: 40 }
+    333: { name: "YI", en: "Iraq", cont: AS, cq: 21, itu: 39 }
+    336: { name: "4X", en: "Israel", cont: AS, cq: 20, itu: 39 }
+    339: { name: "JA", en: "Japan", cont: AS, cq: 25, itu: 45 }
+    342: { name: "JY", en: "Jordan", cont: AS, cq: 20, itu: 39 }
+    344: { name: "P5", en: "DPR of Korea", cont: AS, cq: 25, itu: 44 }
+    345: { name: "V8", en: "Brunei Darussalam", cont: OC, cq: 28, itu: 54 }
+    348: { name: "9K", en: "Kuwait", cont: AS, cq: 21, itu: 39 }
+    354: { name: "OD", en: "Lebanon", cont: AS, cq: 20, itu: 39 }
+    363: { name: "JT", en: "Mongolia", cont: AS, cq: 23, itu: 32 }
+    369: { name: "9N", en: "Nepal", cont: AS, cq: 22, itu: 42 }
+    370: { name: "A4", en: "Oman", cont: AS, cq: 21, itu: 39 }
+    372: { name: "AP", en: "Pakistan", cont: AS, cq: 21, itu: 41 }
+    375: { name: "DU", en: "Philippines", cont: OC, cq: 27, itu: 50 }
+    376: { name: "A7", en: "Qatar", cont: AS, cq: 21, itu: 39 }
+    378: { name: "HZ", en: "Saudi Arabia", cont: AS, cq: 21, itu: 39 }
+    379: { name: "S7", en: "Seychelles", cont: AF, cq: 39, itu: 53 }
+    381: { name: "9V", en: "Singapore", cont: AS, cq: 28, itu: 54 }
+    382: { name: "J2", en: "Djibouti", cont: AF, cq: 37, itu: 48 }
+    384: { name: "YK", en: "Syria", cont: AS, cq: 20, itu: 39 }
+    386: { name: "BV", en: "Taiwan", cont: AS, cq: 24, itu: 44, cl: "BU" }
+    387: { name: "HS", en: "Thailand", cont: AS, cq: 26, itu: 49 }
+    390: { name: "TA", en: "Asiatic Turkey", cont: AS, cq: 20, itu: 39 }
+    391: { name: "A6", en: "United Arab Emirates", cont: AS, cq: 21, itu: 39 }
+    400: { name: "7X", en: "Algeria", cont: AF, cq: 33, itu: 37 }
+    401: { name: "D2", en: "Angola", cont: AF, cq: 36, itu: 52 }
+    402: { name: "A2", en: "Botswana", cont: AF, cq: 38, itu: 57 }
+    404: { name: "9U", en: "Burundi", cont: AF, cq: 36, itu: 52 }
+    406: { name: "TJ", en: "Cameroon", cont: AF, cq: 36, itu: 47 }
+    408: { name: "TL", en: "Central African Republic", cont: AF, cq: 36, itu: 47 }
+    409: { name: "D4", en: "Cabo Verde", cont: AF, cq: 35, itu: 46 }
+    410: { name: "TT", en: "Chad", cont: AF, cq: 36, itu: 47 }
+    411: { name: "D6", en: "Comoros", cont: AF, cq: 39, itu: 53 }
+    412: { name: "TN", en: "Republic of the Congo", cont: AF, cq: 36, itu: 52 }
+    414: { name: "9Q", en: "Dem. Rep. of the Congo", cont: AF, cq: 36, itu: 52 }
+    416: { name: "TY", en: "Benin", cont: AF, cq: 35, itu: 46 }
+    420: { name: "TR", en: "Gabon", cont: AF, cq: 36, itu: 52 }
+    422: { name: "C5", en: "The Gambia", cont: AF, cq: 35, itu: 46 }
+    424: { name: "9G", en: "Ghana", cont: AF, cq: 35, itu: 46 }
+    428: { name: "TU", en: "Cote d'Ivoire", cont: AF, cq: 35, itu: 46 }
+    430: { name: "5Z", en: "Kenya", cont: AF, cq: 37, itu: 48 }
+    432: { name: "7P", en: "Lesotho", cont: AF, cq: 38, itu: 57 }
+    434: { name: "EL", en: "Liberia", cont: AF, cq: 35, itu: 46 }
+    436: { name: "5A", en: "Libya", cont: AF, cq: 34, itu: 38 }
+    438: { name: "5R", en: "Madagascar", cont: AF, cq: 39, itu: 53 }
+    440: { name: "7Q", en: "Malawi", cont: AF, cq: 37, itu: 53 }
+    442: { name: "TZ", en: "Mali", cont: AF, cq: 35, itu: 46 }
+    444: { name: "5T", en: "Mauritania", cont: AF, cq: 35, itu: 46 }
+    446: { name: "CN", en: "Morocco", cont: AF, cq: 33, itu: 37 }
+    450: { name: "5N", en: "Nigeria", cont: AF, cq: 35, itu: 46 }
+    452: { name: "Z2", en: "Zimbabwe", cont: AF, cq: 38, itu: 53 }
+    453: { name: "FR", en: "Reunion Island", cont: AF, cq: 39, itu: 53 }
+    454: { name: "9X", en: "Rwanda", cont: AF, cq: 36, itu: 52 }
+    456: { name: "6W", en: "Senegal", cont: AF, cq: 35, itu: 46 }
+    458: { name: "9L", en: "Sierra Leone", cont: AF, cq: 35, itu: 46 }
+    460: { name: "3D2/R", en: "Rotuma Island", cont: OC, cq: 32, itu: 56 }
+    462: { name: "ZS", en: "South Africa", cont: AF, cq: 38, itu: 57 }
+    464: { name: "V5", en: "Namibia", cont: AF, cq: 38, itu: 57 }
+    466: { name: "ST", en: "Sudan", cont: AF, cq: 34, itu: 48 }
+    468: { name: "3DA", en: "Kingdom of Eswatini", cont: AF, cq: 38, itu: 57 }
+    470: { name: "5H", en: "Tanzania", cont: AF, cq: 37, itu: 53 }
+    474: { name: "3V", en: "Tunisia", cont: AF, cq: 33, itu: 37 }
+    478: { name: "SU", en: "Egypt", cont: AF, cq: 34, itu: 38 }
+    480: { name: "XT", en: "Burkina Faso", cont: AF, cq: 35, itu: 46 }
+    482: { name: "9J", en: "Zambia", cont: AF, cq: 36, itu: 53 }
+    483: { name: "5V", en: "Togo", cont: AF, cq: 35, itu: 46, cl: "5V7" }
+    488: { name: del488, en: "Walvis Bay", del: true }
+    489: { name: "3D2/C", en: "Conway Reef", cont: OC, cq: 32, itu: 56 }
+    490: { name: "T33", en: "Banaba Island", cont: OC, cq: 31, itu: 65 }
+    492: { name: "7O", en: "Yemen", cont: AS, cq: 21, itu: 39 }
+    493: { name: del493, en: "Penguin Is.", del: true }
+    497: { name: "9A", en: "Croatia", cont: EU, cq: 15, itu: 28 }
+    499: { name: "S5", en: "Slovenia", cont: EU, cq: 15, itu: 28 }
+    501: { name: "E7", en: "Bosnia-Herzegovina", cont: EU, cq: 15, itu: 28 }
+    502: { name: "Z3", en: "North Macedonia", cont: EU, cq: 15, itu: 28 }
+    503: { name: "OK", en: "Czech Republic", cont: EU, cq: 15, itu: 28 }
+    504: { name: "OM", en: "Slovak Republic", cont: EU, cq: 15, itu: 28 }
+    505: { name: "BV9P", en: "Pratas Island", cont: AS, cq: 24, itu: 44 }
+    506: { name: "BS7", en: "Scarborough Reef", cont: AS, cq: 27, itu: 50, cl: "BS7H" }
+    507: { name: "H40", en: "Temotu Province", cont: OC, cq: 32, itu: 51 }
+    508: { name: "FO/A", en: "Austral Islands", cont: OC, cq: 32, itu: 63 }
+    509: { name: "FO/M", en: "Marquesas Islands", cont: OC, cq: 31, itu: 63 }
+    510: { name: "E4", en: "Palestine", cont: AS, cq: 20, itu: 39 }
+    511: { name: "4W", en: "Timor - Leste", cont: OC, cq: 28, itu: 54 }
+    512: { name: "FK/C", en: "Chesterfield Islands", cont: OC, cq: 30, itu: 56 }
+    513: { name: "VP6/D", en: "Ducie Island", cont: OC, cq: 32, itu: 63 }
+    514: { name: "4O", en: "Montenegro", cont: EU, cq: 15, itu: 28 }
+    515: { name: "KH8/S", en: "Swains Island", cont: OC, cq: 32, itu: 62 }
+    516: { name: "FJ", en: "St. Barthelemy", cont: NA, cq: 8, itu: 11 }
+    517: { name: "PJ2", en: "Curacao", cont: SA, cq: 9, itu: 11 }
+    518: { name: "PJ7", en: "Sint Maarten", cont: NA, cq: 8, itu: 11 }
+    519: { name: "PJ5", en: "Saba & St. Eustatius", cont: NA, cq: 8, itu: 11 }
+    520: { name: "PJ4", en: "Bonaire", cont: SA, cq: 9, itu: 11 }
+    521: { name: "Z8", en: "Republic of South Sudan", cont: AF, cq: 34, itu: 48 }
+    522: { name: "Z6", en: "Republic of Kosovo", cont: EU, cq: 15, itu: 28 }
+
   block:
     0:  { name: para,    de: "Absatz",        en: "Paragraph" }
     1:  { name: heading, de: "Überschrift",   en: "Heading" }
@@ -140,6 +591,9 @@ enums:
     8:  { name: pre,     de: "Vorformatiert", en: "Preformatted" }
     9:  { name: mappoint, de: "Kartenpunkt",  en: "Map point" }
     10: { name: sep,     de: "Trenner",       en: "Separator" }
+    # ab v4: v = wie dat (Namensraum des typ), für große Daten, die mit der
+    # Blockliste gepackt und fragmentiert werden (dat steht im ersten Frame)
+    11: { name: data,    de: "Themen-Daten",  en: "Topic data" }
     # 16..23: Formularfelder, reserviert für Version 2
 
   state:
@@ -210,3 +664,39 @@ types:
     3:  { name: zdata,   type: bstr, de: "Gepackte Daten (Teil)", en: "Packed data (part)" }
     4:  { name: zlen,    type: uint, de: "Länge der gepackten Daten", en: "Packed data length" }
     5:  { name: zint,    type: uint, de: "Aussendung über Funk alle … Stunden", en: "Sent over the air every … hours" }
+
+  # typ 13 (ab v4): DX-Zusammenfassung von dxfeed. Seite 1 Stationen (st),
+  # Seite 2 Bandaktivität (act). Die Daten stehen in einem Block k data (nicht in
+  # dat): so werden sie gepackt und dürfen über mehrere Frames gehen.
+  # type rows = Liste von Zeilen, Spalten laut cols:
+  # enum/enums = Nummer(n) der Liste (unbekannt: Text, höchstens free_text Zeichen),
+  # bits = Bitmaske über die Liste, counts = [Nummer, Anzahl, Nummer, Anzahl ...]
+  dxsum:
+    0:  { name: end,   type: time, de: "Ende des Zeitraums", en: "End of period" }
+    1:  { name: win,   type: uint, unit: min, de: "Zeitraum", en: "Period" }
+    2:  { name: calls, type: uint, de: "DX-Rufzeichen", en: "DX calls" }
+    3:  { name: spots, type: uint, de: "Spots", en: "Spots" }
+    4:  { name: conts, type: tstr, de: "Spotter-Kontinente", en: "Spotter continents" }
+    5:  { name: tiers, type: tstr, de: "Relevanzstufen", en: "Relevance tiers" }
+    6:  { name: cov,   type: uint, unit: min, de: "Cluster verbunden", en: "Cluster connected" }
+    7:  { name: st,    type: rows, de: "DX-Stationen", en: "DX stations",
+          cols: [ { name: tier, enum: dxtier, de: "Relevanz" },
+                  { name: call, de: "Rufzeichen" },
+                  { name: dxcc, enum: dxcc, free_text: 30, de: "Gebiet" },
+                  { name: sp,   de: "Spotter" },
+                  { name: mw,   de: "Most Wanted" },
+                  { name: t0,   unit: min, de: "Erster Spot (min vor Ende)" },
+                  { name: t1,   unit: min, de: "Letzter Spot (min vor Ende)" },
+                  { name: cw,   bits: band, de: "Bänder CW" },
+                  { name: ssb,  bits: band, de: "Bänder SSB" },
+                  { name: ft8,  bits: band, de: "Bänder FT8" },
+                  { name: oth,  bits: band, de: "Bänder andere" },
+                  { name: om,   enums: mode, free_text: 10, de: "Andere Modes" } ] }
+    8:  { name: act,   type: rows, de: "Bandaktivität", en: "Band activity",
+          cols: [ { name: band, enum: band, de: "Band" },
+                  { name: cw,   de: "CW" },
+                  { name: ssb,  de: "SSB" },
+                  { name: ft8,  de: "FT8" },
+                  { name: oth,  de: "Andere" },
+                  { name: peak, de: "Spitze (UTC-Stunde)" },
+                  { name: om,   counts: mode, free_text: 10, de: "Andere Modes" } ] }

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .cty import DEFAULT_URL
+from .dxcc import DEFAULT_PATH as DICT_PATH
 from .mostwanted import DEFAULT_URL as MW_URL
 from .spots import BAND_ORDER, clean_call
 
@@ -52,6 +53,7 @@ class DataCfg:
     mostwanted: Path = Path("data/mostwanted.json")
     mostwanted_url: str = MW_URL
     mostwanted_update_days: int = 7
+    dictionary: Path = DICT_PATH          # brocast dictionary (DXCC list, from v4)
 
 
 @dataclass(frozen=True)
@@ -136,7 +138,8 @@ def load(path: str | Path) -> Config:
         keep_days=max(2, get("data", "keep_days", 7, int)),
         mostwanted=Path(get("data", "mostwanted", "data/mostwanted.json")),
         mostwanted_url=get("data", "mostwanted_url", MW_URL),
-        mostwanted_update_days=max(1, get("data", "mostwanted_update_days", 7, int)))
+        mostwanted_update_days=max(1, get("data", "mostwanted_update_days", 7, int)),
+        dictionary=Path(get("data", "dictionary", str(DICT_PATH))))
 
     to = get("digest", "to", "DX").upper()
     if not RUBRIC_RE.match(to):
