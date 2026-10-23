@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .cty import DEFAULT_URL
+from .mostwanted import DEFAULT_URL as MW_URL
 from .spots import BAND_ORDER, clean_call
 
 VALID_RE = re.compile(r"^\d+[mhd]$", re.IGNORECASE)
@@ -48,6 +49,9 @@ class DataCfg:
     cty_update_days: int = 14
     ssl_verify: bool = True
     keep_days: int = 7
+    mostwanted: Path = Path("data/mostwanted.json")
+    mostwanted_url: str = MW_URL
+    mostwanted_update_days: int = 7
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,11 @@ class DigestCfg:
     max_bytes: int = 3000
     valid: str = "7d"
     inbox: Path = Path("eingang")
+    relevance_a: float = 25.0       # score from here: tier A (look now)
+    relevance_b: float = 12.0       # score from here: tier B (interesting), below C
+    brocast: bool = True            # Brocast: page with the bulletin (PLANUNG 16a)
+    brocast_tiers: str = "AB"       # tiers that go over the air
+    brocast_max_rows: int = 12
 
 
 @dataclass(frozen=True)
@@ -124,7 +133,10 @@ def load(path: str | Path) -> Config:
         cty_url=get("data", "cty_url", DEFAULT_URL),
         cty_update_days=max(1, get("data", "cty_update_days", 14, int)),
         ssl_verify=get("data", "ssl_verify", True, bool),
-        keep_days=max(2, get("data", "keep_days", 7, int)))
+        keep_days=max(2, get("data", "keep_days", 7, int)),
+        mostwanted=Path(get("data", "mostwanted", "data/mostwanted.json")),
+        mostwanted_url=get("data", "mostwanted_url", MW_URL),
+        mostwanted_update_days=max(1, get("data", "mostwanted_update_days", 7, int)))
 
     to = get("digest", "to", "DX").upper()
     if not RUBRIC_RE.match(to):
@@ -138,6 +150,16 @@ def load(path: str | Path) -> Config:
             raise ConfigError(f"[digest] {key}: unknown {' '.join(unknown)} "
                               f"(known: {' '.join(BAND_ORDER)})")
     valid = get("digest", "valid", "7d")
+    try:
+        rel_a = float(get("digest", "relevance_a", "25") or 25)
+        rel_b = float(get("digest", "relevance_b", "12") or 12)
+    except ValueError as exc:
+        raise ConfigError(f"[digest] relevance_a/relevance_b: {exc}") from None
+    if not 0 < rel_b <= rel_a:
+        raise ConfigError("[digest] relevance_b must be > 0 and <= relevance_a")
+    tiers = "".join(t for t in "ABC" if t in get("digest", "brocast_tiers", "AB").upper())
+    if not tiers:
+        raise ConfigError("[digest] brocast_tiers: one or more of A B C")
     if valid and not VALID_RE.match(valid):
         raise ConfigError(f"[digest] valid: '{valid}' - e.g. 36h, 7d, empty = keep")
     digest = DigestCfg(
@@ -151,7 +173,12 @@ def load(path: str | Path) -> Config:
         max_lines=max(5, get("digest", "max_lines", 30, int)),
         max_bytes=max(800, get("digest", "max_bytes", 3000, int)),
         valid=valid,
-        inbox=Path("eingang"))
+        inbox=Path("eingang"),
+        relevance_a=rel_a,
+        relevance_b=rel_b,
+        brocast=get("digest", "brocast", True, bool),
+        brocast_tiers=tiers,
+        brocast_max_rows=min(40, max(1, get("digest", "brocast_max_rows", 12, int))))
 
     # CR70: the inbox folder belongs to tinybox.conf ([inbox] dir); [digest] inbox
     # is only an override

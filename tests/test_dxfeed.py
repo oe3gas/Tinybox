@@ -8,10 +8,15 @@ import time
 import unittest
 from pathlib import Path
 
+import json
+import sys
+
 from dxfeed import cty as ctymod
+from dxfeed import mostwanted as mwmod
 from dxfeed.collector import Collector, TelnetFilter
 from dxfeed.config import ConfigError, load
 from dxfeed.digest import build, write_inbox
+from dxfeed import spots as spots_mod
 from dxfeed.spots import band_of, clean_text, mode_of, parse
 from dxfeed.store import Store
 from tinybox.adapters import inbox
@@ -224,11 +229,13 @@ class DigestTests(unittest.TestCase):
     def test_table_and_filters(self):
         d = self.digest()
         lines = d.text.splitlines()
-        rows = [l for l in lines if l.startswith(("VP8", "3B8", "DL1"))]
-        self.assertEqual([r.split()[0] for r in rows], ["VP8ABC", "3B8XY"])
-        self.assertIn("20 17", rows[0])
-        self.assertIn("CW FT8", rows[0])
-        self.assertTrue(rows[0].rstrip().endswith(" 3"))
+        rows = [l for l in lines if l[2:].startswith(("VP8", "3B8", "DL1"))]
+        # alphabetical; without the Most Wanted list every row is tier C, rank "-"
+        self.assertEqual([r.split()[1] for r in rows], ["3B8XY", "VP8ABC"])
+        self.assertIn("20 17", rows[1])
+        self.assertIn("CW FT8", rows[1])
+        self.assertTrue(rows[1].startswith("C "))
+        self.assertTrue(rows[1].rstrip().endswith(" 3   -"))
         self.assertIn("2 Rufzeichen mit weniger als 2 Spottern", d.text)
         self.assertIn("10 Spots gesamt, davon 7 relevant", d.text)
         self.assertIn("(auf 2m 70cm alle)", d.text)
@@ -239,8 +246,8 @@ class DigestTests(unittest.TestCase):
     def test_band_activity(self):
         d = self.digest()
         act = d.text.split("Bandaktivitaet")[1]
-        self.assertRegex(act, r"20m\s+4 #+\s+\d\dz")       # W1AW is NA -> not counted
-        self.assertRegex(act, r"70cm\s+1 #")
+        self.assertRegex(act, r"20m\s+4\s+4\s+0\s+0\s+0 09z")   # W1AW is NA -> not counted
+        self.assertRegex(act, r"70cm\s+1\s+0\s+1\s+0\s+0 09z")  # SSB
         self.assertRegex(act, r"160m\s+0\n")                # AF spotter not counted
 
     def test_vhf_counts_every_entity(self):
@@ -251,7 +258,7 @@ class DigestTests(unittest.TestCase):
                          f"DX de {sp}:   14200.0  DL0HF   SSB  1202Z"):
                 s = parse(line)
                 self.st.add(s, self.base + 2000, c.lookup(s.dx), c.lookup(s.spotter))
-        rows = {l.split()[0]: l for l in self.digest().text.splitlines() if l[:2] in ("DL", "OE")}
+        rows = {l.split()[1]: l for l in self.digest().text.splitlines() if l[2:4] in ("DL", "OE")}
         self.assertIn("DL0ABC", rows)
         self.assertIn(" 2m ", rows["DL0ABC"])
         self.assertIn("70cm", rows["OE5XYZ"])
@@ -285,6 +292,146 @@ class DigestTests(unittest.TestCase):
         self.assertTrue(b.replace.startswith("dxfeed-"))
         self.assertIsNone(b.sender)
         self.assertEqual(list(Path(self.cfg.digest.inbox).glob("*.tmp")), [])
+
+
+def mw_sample(**ranks) -> mwmod.MostWanted:
+    """A Most Wanted list: the given prefixes at the given ranks, the rest filler."""
+    data = {str(r): p for p, r in ranks.items()}
+    filler = (f"X{i}" for i in range(400))
+    for r in range(1, 341):
+        data.setdefault(str(r), next(filler))
+    return mwmod.MostWanted(mwmod.parse(json.dumps(data)))
+
+
+class RelevanceTests(unittest.TestCase):
+    def test_parse_accepts_three_shapes(self):
+        prefixes = [f"P{i}" for i in range(150)]
+        by_rank = {str(i + 1): p for i, p in enumerate(prefixes)}
+        by_prefix = {p: i + 1 for i, p in enumerate(prefixes)}
+        for data in (by_rank, by_prefix, prefixes):
+            ranks = mwmod.parse(json.dumps(data))
+            self.assertEqual((ranks["P0"], ranks["P149"]), (1, 150))
+        with self.assertRaises(mwmod.MostWantedError):
+            mwmod.parse('{"1": "P5"}')                       # far too short
+        with self.assertRaises(mwmod.MostWantedError):
+            mwmod.parse("<html>maintenance</html>")
+
+    def test_rarity_beats_spotters(self):
+        bouvet = mwmod.score(2, 5)          # 5 spotters, rank 2
+        lu = mwmod.score(330, 10)           # 10 spotters, rank 330
+        self.assertAlmostEqual(bouvet, 25.8, delta=0.2)
+        self.assertAlmostEqual(lu, 3.5, delta=0.1)
+        self.assertEqual((mwmod.tier(bouvet, 25, 12), mwmod.tier(lu, 25, 12)), ("A", "C"))
+        self.assertEqual(mwmod.rarity(None), mwmod.rarity(mwmod.UNKNOWN_RANK))
+        self.assertEqual(mwmod.rarity(1), 10.0)
+        self.assertAlmostEqual(mwmod.rarity(340), 1.0, places=3)
+
+    def test_case_and_missing_file(self):
+        mw = mw_sample(**{"3Y/B": 2})
+        self.assertEqual(mw.rank("3y/b"), 2)
+        self.assertIsNone(mw.rank("ZZZ"))
+        self.assertIsNone(mwmod.load_or_none("/nonexistent/mostwanted.json"))
+
+
+class BrocastPageTests(unittest.TestCase):
+    """The page in the header Brocast: - checked with the real brocast codec."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "brocast"))
+        from brocast import Codec
+        from brocast import fragment, zdict
+        cls.codec, cls.fragment = Codec(), fragment
+        cls.zd = zdict.load()
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cfg = make_cfg(self.tmp.name)
+        self.st = Store(self.cfg.data.db)
+        self.base = 1792054800.0
+        fill(self.st, cty(), self.base)
+        c = cty()
+        for sp in ("OE3GAS", "DK9IP"):                       # 3B8XY also on 40m RTTY
+            s = parse(f"DX de {sp}:   7040.0  3B8XY  RTTY  1300Z")
+            self.st.add(s, self.base + 5000, c.lookup(s.dx), c.lookup(s.spotter))
+        self.since, self.until = self.base - 60, self.base + 86340
+
+    def tearDown(self):
+        self.st.close()
+        self.tmp.cleanup()
+
+    def build(self, mw):
+        return build(self.st.spots(self.since, self.until), self.cfg.digest, self.since,
+                     self.until, self.st.coverage(self.since, self.until), "", mw)
+
+    def tables(self, page):
+        return [b for b in page["blk"] if b["k"] == "table"]
+
+    def merged(self, page):
+        """Tables with their continuation blocks (no hdr) joined: [{n, rows}, ...]."""
+        out = []
+        for b in self.tables(page):
+            if "hdr" in b:
+                out.append({"n": b["n"], "rows": list(b["rows"])})
+            else:
+                out[-1]["rows"] += b["rows"]
+        return out
+
+    def test_only_relevant_tiers_go_over_the_air(self):
+        d = self.build(mw_sample(VP8=50, **{"3B8": 300}))     # VP8 rare, 3B8 common
+        st = self.tables(d.page)[0]
+        self.assertEqual(st["n"][:2], ["rel", "call"])
+        self.assertEqual([r[1] for r in st["rows"]], ["VP8ABC"])    # 3B8XY is tier C
+        rel, call, ent, sp, mw, t0, t1, cw, ssb, ft8, oth, om = st["rows"][0]
+        self.assertEqual((rel, ent, sp, mw), (1, "Falkland Islands", 3, 50))   # tier B
+        bit = {b: 1 << i for i, b in enumerate(spots_mod.BAND_ORDER)}
+        self.assertEqual((cw, ssb, ft8, oth, om), (bit["20m"], 0, bit["17m"], 0, None))
+        self.assertEqual(st["v"], int(self.until))
+        self.assertEqual(t0 - t1, 120)                      # 0900 .. 1100
+        self.assertIn("Relevanz A/B: 1", d.page["blk"][0]["x"])
+        # the mailbox text still shows both, tier C included, alphabetically
+        rows = [l for l in d.text.splitlines() if l[2:].startswith(("VP8", "3B8"))]
+        self.assertEqual([(r[0], r.split()[1]) for r in rows], [("C", "3B8XY"), ("B", "VP8ABC")])
+
+    def test_activity_names_the_other_modes(self):
+        d = self.build(None)
+        st, act = self.merged(d.page)
+        self.assertEqual(act["n"][0], "band")
+        rows = {r[0]: r for r in act["rows"]}
+        self.assertEqual(rows["40m"][1:], [0, 0, 0, 2, 10, "RTTY 2"])
+        self.assertNotIn("160m", rows)                     # bands without spots stay off air
+        self.assertRegex(d.text, r"40m\s+2\s+0\s+0\s+0\s+2 10z\s+RTTY 2")
+        # without the list: the most relevant by spotters, all tiers
+        self.assertEqual([r[1] for r in st["rows"]], ["3B8XY", "VP8ABC"])
+        self.assertEqual(st["rows"][0][10:], [1 << spots_mod.BAND_ORDER.index("40m"), "RTTY"])
+        self.assertIn("ohne Most-Wanted-Liste", d.page["blk"][0]["x"])
+
+    def test_codec_and_frames(self):
+        c = cty()                                            # 12 stations, 6 bands each
+        for i in range(12):
+            for sp in ("OE3GAS", "DK9IP", "I2XYZ"):
+                for f in (1830, 3510, 7074, 14025, 21074, 28400):
+                    s = parse(f"DX de {sp}: {f}.0  VP8D{i:02d}  {'SSB' if f == 28400 else ''}  1200Z")
+                    self.st.add(s, self.base + 9000 + i, c.lookup(s.dx), c.lookup(s.spotter))
+        d = self.build(mw_sample(VP8=5))
+        stations = [r for t in self.tables(d.page) for r in t["rows"] if isinstance(r[0], int)]
+        self.assertEqual(len(stations), 12)
+        page = {**d.page, "id": 412, "rev": 0, "t": int(self.until)}
+        built = self.fragment.build(self.codec, page, self.zd)
+        self.assertLessEqual(built.fragments, 4)
+        back = self.codec.from_wire(self.codec.to_wire(page))
+        self.assertEqual(back["blk"][1]["rows"][0], d.page["blk"][1]["rows"][0])
+        self.assertEqual(back["cat"], ["dx"])
+
+    def test_inbox_file_carries_the_page(self):
+        d = self.build(mw_sample(VP8=50))
+        f = write_inbox(self.cfg.digest.inbox, d, self.cfg.digest)
+        b = inbox.parse(f.read_bytes())
+        self.assertEqual(json.loads(b.brocast)["ti"], d.page["ti"])
+        off = build(self.st.spots(self.since, self.until),
+                    __import__("dataclasses").replace(self.cfg.digest, brocast=False),
+                    self.since, self.until, 86400, "", None)
+        self.assertIsNone(off.page)
 
 
 class TelnetFilterTests(unittest.TestCase):

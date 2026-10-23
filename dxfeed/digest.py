@@ -6,10 +6,20 @@ Relevance filter (dxfeed.conf [digest]):
   * DXCC entity known and not in exclude (the entities on the air every day);
     on all_dxcc_bands (default 2m 70cm) every entity counts, since DX on
     VHF/UHF from here is mostly Europe
-One line per DX call: entity, bands, modes, first/last time, number of
-different spotters. Calls seen by fewer than min_spotters stations are only
-counted (often busted calls). Then the band activity of all spots from the
-spotter continents, as a rough picture of yesterday's propagation.
+One line per DX call: relevance, entity, bands, modes, first/last time, number
+of different spotters, Club Log Most Wanted rank. Calls seen by fewer than
+min_spotters stations are only counted (often busted calls). Then the band
+activity of all spots from the spotter continents, split by mode (CW, SSB,
+FT8, other - the other modes named), as a rough picture of yesterday's
+propagation.
+
+Relevance (PLANUNG.md 16a, mostwanted.py): score = rarity x log2(1 + spotters),
+tier A/B/C by relevance_a / relevance_b. The table keeps the most relevant
+calls and shows them in alphabetical order.
+
+With [digest] brocast = yes the bulletin carries a brocast page as well
+(header "Brocast:", PLANUNG 6d): only the tiers in brocast_tiers, bands and
+modes as bit masks, the listener draws the band/mode grid from them.
 
 The text stays below max_bytes (it goes over the air via brocast): table lines
 are dropped from the end until it fits. Plain ASCII, lines below 80 columns.
@@ -17,29 +27,71 @@ are dropped from the end until it fits. Plain ASCII, lines below 80 columns.
 
 from __future__ import annotations
 
+import json
 import os
 import time
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from . import mostwanted as mwmod
 from .config import DigestCfg
 from .spots import BAND_ORDER
 
-BAR_WIDTH = 24
+MODE_GROUPS = ("CW", "SSB", "FT8")          # everything else is "other"
+# brocast: every block must fit into one frame (frame format 1, splitter), so the
+# first block of a table carries hdr and n with one row only (as geosphere_station)
+STATION_ROWS_PER_BLOCK = 3
+ACTIVITY_ROWS_PER_BLOCK = 5
+STATION_N = ["rel", "call", "ent", "sp", "mw", "t0", "t1", "cw", "ssb", "ft8", "oth", "om"]
+STATION_HDR = ["R", "Call", "Gebiet", "Sp", "MW", "ab", "bis", "CW", "SSB", "FT8", "And", "Andere"]
+ACTIVITY_N = ["band", "cw", "ssb", "ft8", "oth", "peak", "om"]
+ACTIVITY_HDR = ["Band", "CW", "SSB", "FT8", "And", "Spitze", "Andere"]
+
+
+def mode_group(mode: str) -> int:
+    """0 CW, 1 SSB, 2 FT8, 3 other (FT4, RTTY, FM, unknown ...)."""
+    return MODE_GROUPS.index(mode) if mode in MODE_GROUPS else 3
+
+
+def other_name(mode: str) -> str:
+    return mode or "?"
 
 
 @dataclass
 class DxLine:
     call: str
     name: str
+    prefix: str = ""
     bands: set[str] = field(default_factory=set)
     modes: set[str] = field(default_factory=set)
+    band_modes: dict[str, set[str]] = field(default_factory=dict)
     spotters: set[str] = field(default_factory=set)
     first: int = 0
     last: int = 0
     count: int = 0
+    rank: int | None = None         # Club Log Most Wanted, None = unknown
+    score: float = 0.0
+    tier: str = "C"
+
+
+@dataclass
+class BandActivity:
+    band: str
+    spots: int = 0
+    by_group: list[int] = field(default_factory=lambda: [0, 0, 0, 0])
+    others: Counter = field(default_factory=Counter)
+    hours: Counter = field(default_factory=Counter)
+
+    @property
+    def peak(self) -> int:
+        return self.hours.most_common(1)[0][0] if self.hours else 0
+
+    def other_text(self) -> str:
+        """FT4 28 RTTY 9 JS8 5 - most frequent first."""
+        return " ".join(f"{m} {n}" for m, n in
+                        sorted(self.others.items(), key=lambda x: (-x[1], x[0])))
 
 
 @dataclass
@@ -49,6 +101,7 @@ class Digest:
     replace: str
     lines: int          # table lines shown
     spots: int          # spots in the window (all)
+    page: dict | None = None    # brocast page (header "Brocast:"), None = text only
 
 
 HF_BANDS = {"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"}
@@ -90,8 +143,10 @@ def aggregate(rows, cfg: DigestCfg) -> tuple[list[DxLine], int]:
         n += 1
         d = by_call.get(r["dx"])
         if d is None:
-            d = by_call[r["dx"]] = DxLine(call=r["dx"], name=r["dx_name"], first=r["ts"])
+            d = by_call[r["dx"]] = DxLine(call=r["dx"], name=r["dx_name"],
+                                          prefix=r["dx_prefix"], first=r["ts"])
         d.bands.add(r["band"])
+        d.band_modes.setdefault(r["band"], set()).add(r["mode"])
         if r["mode"]:
             d.modes.add(r["mode"])
         d.spotters.add(r["spotter"])
@@ -102,48 +157,129 @@ def aggregate(rows, cfg: DigestCfg) -> tuple[list[DxLine], int]:
     return lines, n
 
 
-def band_activity(rows, cfg: DigestCfg) -> list[str]:
-    """One line per band with spots: count, bar, hour (UTC) with most spots."""
-    counts: Counter[str] = Counter()
-    hours: dict[str, Counter[int]] = defaultdict(Counter)
+def rate(lines: list[DxLine], cfg: DigestCfg, mw: mwmod.MostWanted | None) -> None:
+    """Most Wanted rank, score and tier for every line (in place)."""
+    for d in lines:
+        d.rank = mw.rank(d.prefix) if mw is not None else None
+        d.score = mwmod.score(d.rank, len(d.spotters))
+        d.tier = mwmod.tier(d.score, cfg.relevance_a, cfg.relevance_b)
+
+
+def by_relevance(lines: list[DxLine]) -> list[DxLine]:
+    return sorted(lines, key=lambda d: (-d.score, -len(d.spotters), d.call))
+
+
+def activity(rows, cfg: DigestCfg) -> list[BandActivity]:
+    """Spots per band and mode group from the spotter continents (all DX, not
+    only the relevant ones), in band order; bands without spots included."""
+    acts = {b: BandActivity(b) for b in BAND_ORDER if b in cfg.bands}
     for r in rows:
         if cfg.spotter_continents and r["sp_cont"] not in cfg.spotter_continents:
             continue
-        if r["band"] not in cfg.bands:
+        a = acts.get(r["band"])
+        if a is None:
             continue
-        counts[r["band"]] += 1
-        hours[r["band"]][time.gmtime(r["ts"]).tm_hour] += 1
-    if not counts:
+        a.spots += 1
+        g = mode_group(r["mode"])
+        a.by_group[g] += 1
+        if g == 3:
+            a.others[other_name(r["mode"])] += 1
+        a.hours[time.gmtime(r["ts"]).tm_hour] += 1
+    return list(acts.values())
+
+
+def band_activity(rows, cfg: DigestCfg) -> list[str]:
+    """Text: one line per band - spots, per mode group, peak hour (UTC), other modes."""
+    acts = activity(rows, cfg)
+    if not any(a.spots for a in acts):
         return ["  (keine Spots)"]
-    top = max(counts.values())
-    out = []
-    for band in BAND_ORDER:
-        if band not in cfg.bands:
+    out = [f"  {'Band':>4} {'Spots':>6} {'CW':>4} {'SSB':>4} {'FT8':>4} {'And':>4} "
+           "Spitze Andere"]
+    for a in acts:
+        if not a.spots:
+            out.append(f"  {a.band:>4} {0:>6}")
             continue
-        n = counts.get(band, 0)
-        if n == 0:
-            out.append(f"  {band:>4} {0:>5}")
-            continue
-        bar = "#" * max(1, round(n / top * BAR_WIDTH))
-        peak = hours[band].most_common(1)[0][0]
-        out.append(f"  {band:>4} {n:>5} {bar:<{BAR_WIDTH}} {peak:02d}z")
+        cw, ssb, ft8, oth = a.by_group
+        out.append((f"  {a.band:>4} {a.spots:>6} {cw:>4} {ssb:>4} {ft8:>4} {oth:>4} "
+                    f"{a.peak:02d}z    {_fit(a.other_text(), 30)}").rstrip())
     return out
 
 
 def table_line(d: DxLine) -> str:
     bands = " ".join(_short_band(b) for b in BAND_ORDER if b in d.bands)
     modes = " ".join(sorted(d.modes)) or "?"
-    return (f"{_fit(d.call, 10):<10} {_fit(d.name, 17):<17} {_fit(bands, 11):<11} "
-            f"{_fit(modes, 8):<8} {time_span(d.first, d.last):<15} {len(d.spotters):>2}").rstrip()
+    rank = "-" if d.rank is None else str(d.rank)
+    return (f"{d.tier} {_fit(d.call, 10):<10} {_fit(d.name, 16):<16} {_fit(bands, 11):<11} "
+            f"{_fit(modes, 8):<8} {time_span(d.first, d.last):<15} {len(d.spotters):>2} "
+            f"{rank:>3}").rstrip()
+
+
+def valid_minutes(valid: str) -> int | None:
+    """7d -> 10080, 36h -> 2160, 90m -> 90, empty -> None (rubric default)."""
+    if not valid:
+        return None
+    n, unit = int(valid[:-1]), valid[-1].lower()
+    return n * {"m": 1, "h": 60, "d": 1440}[unit]
+
+
+def _mask(d: DxLine, group: int) -> int:
+    """Bands (bit = index in BAND_ORDER) on which the call was spotted in this mode group."""
+    m = 0
+    for i, band in enumerate(BAND_ORDER):
+        if any(mode_group(x) == group for x in d.band_modes.get(band, ())):
+            m |= 1 << i
+    return m
+
+
+def brocast_page(sel: list[DxLine], acts: list[BandActivity], cfg: DigestCfg, until: float,
+                 n_calls: int, n_rel: int, coverage_note: str, rated: bool = True) -> dict:
+    """Table page (typ text, cat dx) for brocastd - names as in the ingest API.
+
+    Station table: one row per call, bands per mode group as bit masks
+    (bit i = BAND_ORDER[i]), times as minutes before the end of the window,
+    which the first block carries as v (Unix time). n names the columns, the
+    listener draws the band/mode grid from them (app.js dxGrid). Activity
+    table: spots per band and mode group, peak hour, other modes named."""
+    conts = "/".join(sorted(cfg.spotter_continents)) or "allen Kontinenten"
+    tiers = "/".join(cfg.brocast_tiers)
+    which = f"Relevanz {tiers}" if rated else "ohne Most-Wanted-Liste"
+    blk: list[dict] = [{"k": "para", "x": f"{n_calls} DX-Calls, {n_rel} Spots aus {conts}; "
+                                          f"{which}: {len(sel)}"}]
+    if coverage_note:
+        blk.append({"k": "note", "st": "warn", "x": coverage_note})
+    rows = []
+    for d in sel:
+        om = sorted({other_name(m) for b in d.band_modes.values() for m in b if mode_group(m) == 3})
+        rows.append([mwmod.TIERS.index(d.tier), d.call, d.name[:20], len(d.spotters), d.rank,
+                     max(0, round((until - d.first) / 60)), max(0, round((until - d.last) / 60)),
+                     _mask(d, 0), _mask(d, 1), _mask(d, 2), _mask(d, 3),
+                     " ".join(om) or None])
+    if rows:
+        blk.append({"k": "table", "v": int(until), "hdr": STATION_HDR, "n": STATION_N,
+                    "rows": rows[:1]})
+        blk += [{"k": "table", "rows": rows[i:i + STATION_ROWS_PER_BLOCK]}
+                for i in range(1, len(rows), STATION_ROWS_PER_BLOCK)]
+    arows = [[a.band, *a.by_group, a.peak, a.other_text() or None] for a in acts if a.spots]
+    if arows:
+        blk.append({"k": "table", "hdr": ACTIVITY_HDR, "n": ACTIVITY_N, "rows": arows[:1]})
+        blk += [{"k": "table", "rows": arows[i:i + ACTIVITY_ROWS_PER_BLOCK]}
+                for i in range(1, len(arows), ACTIVITY_ROWS_PER_BLOCK)]
+    page = {"typ": "text", "cat": ["dx"], "src": ["tinybox", "dxfeed"],
+            "ti": f"DX-Cluster {datetime.fromtimestamp(until):%d.%m.%Y}", "blk": blk}
+    exp = valid_minutes(cfg.valid)
+    if exp:
+        page["exp"] = exp
+    return page
 
 
 def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
-          node: str = "") -> Digest | None:
+          node: str = "", mw: mwmod.MostWanted | None = None) -> Digest | None:
     """None if there is nothing to report (no spots at all in the window)."""
     if not rows:
         return None
     lines, n_rel = aggregate(rows, cfg)
-    shown = [d for d in lines if len(d.spotters) >= cfg.min_spotters]
+    rate(lines, cfg, mw)
+    shown = by_relevance([d for d in lines if len(d.spotters) >= cfg.min_spotters])
     single = len(lines) - len(shown)
     entities = len({d.name for d in lines})
 
@@ -156,24 +292,33 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
                " alle)." if cfg.all_dxcc_bands & set(cfg.bands) else "."),
             f"{len(rows)} Spots gesamt, davon {n_rel} relevant: {len(lines)} DX-Rufzeichen "
             f"aus {entities} Gebieten."]
+    coverage_note = ""
     if coverage_sec < 0.9 * (until - since):
-        head.append(f"Achtung: Cluster nur {coverage_sec / 3600:.1f} von {window_h:.0f} h "
-                    "verbunden - unvollstaendig.")
+        coverage_note = (f"Achtung: Cluster nur {coverage_sec / 3600:.1f} von {window_h:.0f} h "
+                         "verbunden - unvollstaendig.")
+        head.append(coverage_note)
 
-    table_head = ["Zeit: Tag/UTC erster-letzter Spot, Sp: verschiedene Spotter.", "",
-                  f"{'Call':<10} {'Gebiet':<17} {'Baender':<11} {'Modes':<8} {'Zeit UTC':<15} Sp",
-                  "-" * 69]
+    table_head = ["R: Relevanz A (selten) bis C, nach Club Log Most Wanted (MW) und",
+                  "Spotterzahl. Zeit: Tag/UTC erster-letzter Spot, Sp: verschiedene Spotter.",
+                  "" if mw is not None else "(Most-Wanted-Liste fehlt: Relevanz nur nach Spottern.)",
+                  f"R {'Call':<10} {'Gebiet':<16} {'Baender':<11} {'Modes':<8} {'Zeit UTC':<15} "
+                  "Sp  MW",
+                  "-" * 73]
+    if table_head[2] == "":
+        del table_head[2]
+    table_head.insert(len(table_head) - 2, "")
     tail_parts = ["", "Bandaktivitaet (alle Spots, Spitze in UTC):", *band_activity(rows, cfg),
                   "", "Quelle: DX-Cluster" + (f" {node}" if node else "")
-                  + ", Laenderdaten AD1C cty.dat. TinyBox dxfeed."]
+                  + ", Laenderdaten AD1C cty.dat"
+                  + (", Club Log Most Wanted" if mw is not None else "") + ". TinyBox dxfeed."]
 
-    rows_out = [table_line(d) for d in shown[:cfg.max_lines]]
-    hidden = len(shown) - len(rows_out)
+    kept = shown[:cfg.max_lines]                 # most relevant first
+    hidden = len(shown) - len(kept)
 
     def compose() -> str:
         body = list(head) + [""]
-        if rows_out:
-            body += table_head + rows_out
+        if kept:
+            body += table_head + [table_line(d) for d in sorted(kept, key=lambda d: d.call)]
         else:
             body.append("Keine seltenen DX-Spots im Zeitraum.")
         more = []
@@ -187,14 +332,23 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
         return "\n".join(body + tail_parts) + "\n"
 
     text = compose()
-    while len(text.encode("ascii", "replace")) > cfg.max_bytes and rows_out:
-        rows_out.pop()
+    while len(text.encode("ascii", "replace")) > cfg.max_bytes and kept:
+        kept.pop()                                  # the least relevant goes first
         hidden += 1
         text = compose()
 
+    page = None
+    if cfg.brocast:
+        # without the Most Wanted list every entity has the same rarity and the
+        # tiers say little: then the most relevant by spotters, up to the limit
+        sel = shown if mw is None else [d for d in shown if d.tier in cfg.brocast_tiers]
+        sel = sel[:cfg.brocast_max_rows]
+        page = brocast_page(sorted(sel, key=lambda d: d.call), activity(rows, cfg), cfg,
+                            until, len(lines), n_rel, coverage_note, mw is not None)
+
     return Digest(subject=f"DX-Zusammenfassung {t1:%d.%m.%Y}",
                   text=text, replace=f"dxfeed-{t1:%Y%m%d}",
-                  lines=len(rows_out), spots=len(rows))
+                  lines=len(kept), spots=len(rows), page=page)
 
 
 def write_inbox(directory: str | Path, d: Digest, cfg: DigestCfg) -> Path:
@@ -205,6 +359,8 @@ def write_inbox(directory: str | Path, d: Digest, cfg: DigestCfg) -> Path:
     head = {"To": cfg.to, "Subject": d.subject, "Replace": d.replace}
     if cfg.valid:
         head["Valid"] = cfg.valid
+    if d.page is not None:
+        head["Brocast"] = json.dumps(d.page, ensure_ascii=True, separators=(",", ":"))
     content = "".join(f"{k}: {v}\n" for k, v in head.items()) + "\n" + d.text
     name = d.replace.replace("-", "_")
     tmp = directory / f"{name}.tmp"

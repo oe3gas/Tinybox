@@ -1110,6 +1110,15 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - **Betrieb PC2:** `start_alles.bat` startet den Sammler (`START_DXFEED=1`, nur wenn `dxfeed.conf` existiert); `dxfeed_aufgabe_einrichten.bat` legt die 05:00-Aufgabe an. NanoPi: `dxfeed.service`, `dxfeed-digest.timer` (aktiv, sobald `dxfeed.conf` existiert).
 - **Später (offen):** BBS-Befehl `DX` (letzte gefilterte Spots auf Abruf), persönliche Watchlist (Mail nur bei Treffer, opt-in).
 
+### 16a. Relevanz und brocast-Seite (entschieden 23.10.2026)
+
+- **Relevanz statt Spotterzahl:** EA6, CU, CE, KP4 usw. sind kein echtes DX; ein seltenes Gebiet mit wenigen Spottern zählt mehr als ein häufiges mit vielen (5 Spotter für Bouvet > 10 für LU).
+- **Score = Seltenheit × log₂(1 + Spotter)**. Seltenheit 1 … 10 aus dem **Club Log Most Wanted**-Rang: `1 + 9·((341 − Rang)/340)²`. Stufen **A** (ab `relevance_a` = 25, sofort hinschauen), **B** (ab `relevance_b` = 12, interessant), **C** (Alltag). Schwellen sind Startwerte, nach ein paar Tagen echter Daten nachjustieren.
+- Most-Wanted-Liste als JSON (`mostwanted.php?api=1`), Datei `data/mostwanted.json`, alle 7 Tage erneuert (`dxfeed.bat mw-update` von Hand). Fehlt sie, gilt für alle Gebiete Rang 170 (nur Spotterzahl zählt), der Digest läuft weiter.
+- **Mailbox-Text:** alle Calls ab `min_spotters`, alphabetisch, mit Spalten R (Stufe) und MW (Rang); bei Platzmangel fallen die am wenigsten relevanten zuerst weg. Bandaktivität jetzt je Mode-Gruppe (CW, SSB, FT8, Andere), die anderen Modes mit Namen und Anzahl.
+- **brocast-Seite** im Kopf `Brocast:` (6d), Rubrik dx: nur die Stufen aus `brocast_tiers` (Standard A+B), höchstens `brocast_max_rows`. Bänder je Mode-Gruppe als Bitmaske (Bit i = Band i, 160 m … 70 cm), Zeiten als Minuten vor Fensterende. Score und Stufe rechnet dxfeed, der Listener zeichnet daraus Band/Mode-Raster (4 Punkte je Band), Heatmap der Bandaktivität und die anderen Modes im Detail; sortierbar alphabetisch (Standard) oder nach Relevanz. Teletext-Ansicht: einfache Tabelle.
+- **Größe (Beispiel 23.10.2026, 8 Stationen A+B):** 735 B Nutzdaten in 3 Frames (Stationen und Bandaktivität je etwa die Hälfte); alle 25 Stationen wären 5 Frames.
+
 ## 17. Refactoring (entschieden 17.10.2026)
 
 Gezielt in Schritten, kein Großumbau. Sicherheitsnetz sind die bestehenden Tests (TinyBox und brocast).

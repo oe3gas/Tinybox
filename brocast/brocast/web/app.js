@@ -20,6 +20,7 @@ const state = {
   raw: false,
   view: "flow",           // page view: flow | teletext
   graphic: true,          // weather pages and tables: graphic view (false = plain text/table)
+  dxSort: "abc",          // DX table: abc (alphabetical) | rel (relevance)
   rxFilter: null,         // receive log: {org, id} of one page, or null = all
   rxForeign: false,       // receive log: also show non-brocast frames
   settings: {},
@@ -533,7 +534,7 @@ function saveGraphic(on) {
 function hasGraphic(p) {
   if (state.view === "teletext") return false;            // the teletext screen is always text
   return (p.typ === "wx" && Array.isArray(p.data) && p.data.length > 0)
-    || p.blocks.some(b => b.k === "table" && wxgCols(b) !== null);
+    || p.blocks.some(b => b.k === "table" && (wxgCols(b) !== null || dxKind(b) !== null));
 }
 
 /* The bar above the page: the view switch. Both views show the whole page
@@ -587,8 +588,8 @@ function renderContent(p) {
     for (const d of p.data) cards.append(card(d.label, d.value, d.unit));
     c.append(cards);
   }
-  // teletext: no weather grid either (no column semantics -> the plain table)
-  const semantics = teletext ? null : tableSemantics(p.blocks);
+  // teletext: no weather or DX grid (renderBlocks draws plain tables there)
+  const semantics = tableSemantics(p.blocks);
   let blocks = p.blocks;
   if (used.size) blocks = blocks.filter(b => !used.has(b));
   renderBlocks(c, blocks, p.sub_total, semantics);
@@ -645,7 +646,7 @@ function tableSemantics(blocks) {
   let current = null;
   for (const b of blocks) {
     if (b.k !== "table") { current = null; continue; }
-    if (b.hdr) current = { cols: wxgCols(b), hdr: b.hdr };
+    if (b.hdr) current = { cols: wxgCols(b), dx: dxKind(b), n: b.n, v: b.v, hdr: b.hdr };
     if (current) sem.set(b, current);
   }
   return sem;
@@ -674,7 +675,8 @@ function isMosaic(text) {
 }
 
 function renderBlocks(c, blocks, total, semantics) {
-  let cards = null, lastTable = null, lastGrid = null, lastMosaic = null;
+  let cards = null, lastTable = null, lastGrid = null, lastMosaic = null, lastDx = null;
+  const graphic = state.graphic && state.view !== "teletext";
   for (const b of blocks) {
     if (b.k === "value") {
       if (!cards) { cards = el("div", "cards"); c.append(cards); }
@@ -696,9 +698,23 @@ function renderBlocks(c, blocks, total, semantics) {
       continue;
     }
     lastMosaic = null;
-    // a table with column semantics (n) is drawn as a weather grid in graphic mode
     const sem = b.k === "table" && semantics ? semantics.get(b) : null;
-    if (sem && sem.cols && state.graphic) {
+    // DX digest (dxfeed): station table and band activity - grid in graphic mode,
+    // otherwise a plain table with the bit masks turned into band and mode lists
+    if (sem && sem.dx) {
+      lastTable = null;
+      lastGrid = null;
+      if (!b.hdr && lastDx) lastDx.rows.push(...(b.rows || []));
+      else {
+        lastDx = { sem, rows: [...(b.rows || [])], node: el("div") };
+        c.append(lastDx.node);
+      }
+      drawDx(lastDx, graphic);
+      continue;
+    }
+    lastDx = null;
+    // a table with column semantics (n) is drawn as a weather grid in graphic mode
+    if (sem && sem.cols && graphic) {
       lastTable = null;
       if (!b.hdr && lastGrid) {                                  // continuation: redraw with all rows
         lastGrid.rows.push(...scaledRows(b));
@@ -1234,6 +1250,267 @@ function wxGrid(rows, cols, hdr, withSummary) {
   return wrap;
 }
 
+/* ---------- DX digest (dxfeed, PLANUNG 16a) ----------
+ * Two table blocks whose "n" names the columns:
+ *   stations  n = rel call ent sp mw t0 t1 cw ssb ft8 oth om
+ *             rel 0/1/2 = relevance A/B/C (dxfeed decides), mw = Club Log Most
+ *             Wanted rank, t0/t1 = minutes before the end of the window (v of the
+ *             first block, Unix time), cw..oth = bands as bit masks (bit i =
+ *             DX_BANDS[i]), om = names of the other modes ("FT4 RTTY")
+ *   activity  n = band cw ssb ft8 oth peak om
+ *             spots per mode group, peak hour (UTC), other modes with counts
+ * Continuation blocks (no hdr) add rows. Nothing extra goes over the air: the
+ * grid, the heat map and the plain lists are all computed here. */
+
+const DX_BANDS = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m",
+                  "6m", "4m", "2m", "70cm"];
+const DX_MODES = [["cw", "CW"], ["ssb", "SSB"], ["ft8", "FT8"], ["oth", "Andere"]];
+const DX_TIERS = ["A", "B", "C"];
+
+function dxKind(b) {
+  if (!Array.isArray(b.n)) return null;
+  if (b.n.includes("call") && b.n.includes("rel") && b.n.includes("cw")) return "stations";
+  if (b.n[0] === "band" && b.n.includes("oth")) return "activity";
+  return null;
+}
+
+function dxBandLabel(band) { return band === "70cm" ? "70c" : band.replace(/m$/, ""); }
+
+/* row -> object by the column names of n */
+function dxRecord(n, r) {
+  const o = {};
+  n.forEach((k, i) => { o[k] = Array.isArray(r) ? r[i] : undefined; });
+  return o;
+}
+
+function dxBandsOf(o) {             // bands of all mode groups, in band order
+  const all = DX_MODES.reduce((m, [k]) => m | (Number(o[k]) || 0), 0);
+  return DX_BANDS.filter((_, i) => all & (1 << i));
+}
+
+function dxModesOn(o, i) {          // mode names on band i
+  const out = [];
+  for (const [k, name] of DX_MODES) {
+    if (!((Number(o[k]) || 0) & (1 << i))) continue;
+    out.push(k === "oth" ? (o.om || "Andere") : name);
+  }
+  return out;
+}
+
+function dxModeList(o) {
+  const out = DX_MODES.slice(0, 3).filter(([k]) => Number(o[k])).map(([, name]) => name);
+  if (Number(o.oth)) out.push(o.om || "Andere");
+  return out.join(" ");
+}
+
+function dxTime(end, minutesBefore) {
+  if (typeof end !== "number" || typeof minutesBefore !== "number") return "";
+  const d = new Date((end - minutesBefore * 60) * 1000);
+  const p2 = x => String(x).padStart(2, "0");
+  return { day: p2(d.getUTCDate()), hm: p2(d.getUTCHours()) + p2(d.getUTCMinutes()) };
+}
+
+function dxSpan(end, o) {
+  const a = dxTime(end, o.t0), b = dxTime(end, o.t1);
+  if (!a) return "";
+  if (!b || (a.day === b.day && a.hm === b.hm)) return `${a.day}/${a.hm}`;
+  return a.day === b.day ? `${a.day}/${a.hm}-${b.hm}` : `${a.day}/${a.hm}-${b.day}/${b.hm}`;
+}
+
+function dxTierBadge(rel) {
+  const t = DX_TIERS[rel] || "?";
+  const s = el("span", "dx-tier t" + t, t);
+  s.title = { A: "Relevanz A: selten – sofort hinschauen", B: "Relevanz B: interessant",
+              C: "Relevanz C: Alltag" }[t] || "Relevanz unbekannt";
+  return s;
+}
+
+/* the score of dxfeed (mostwanted.py): rarity from the Most Wanted rank times
+ * log2(1 + spotters) - only for the order; the tier itself comes from dxfeed */
+function dxScore(o) {
+  const r = typeof o.mw === "number" ? Math.min(340, Math.max(1, o.mw)) : 170;
+  return (1 + 9 * ((341 - r) / 340) ** 2) * Math.log2(1 + (Number(o.sp) || 0));
+}
+
+function dxSorted(recs) {
+  const byCall = (a, b) => String(a.call).localeCompare(String(b.call));
+  if (state.dxSort !== "rel") return [...recs].sort(byCall);
+  return [...recs].sort((a, b) => (a.rel ?? 9) - (b.rel ?? 9) || dxScore(b) - dxScore(a) || byCall(a, b));
+}
+
+function drawDx(dx, graphic) {
+  const { sem } = dx;
+  const recs = dx.rows.filter(r => Array.isArray(r)).map(r => dxRecord(sem.n, r));
+  if (sem.dx === "stations") dx.node.replaceChildren(graphic ? dxStationGrid(dx, recs) : dxStationPlain(sem, recs));
+  else dx.node.replaceChildren(graphic ? dxActivityGrid(recs) : dxActivityPlain(recs));
+}
+
+function dxPlainTable(head, rows) {
+  const t = el("table", "tbl");
+  const tr = el("tr");
+  for (const h of head) tr.append(el("th", null, h));
+  t.append(tr);
+  for (const r of rows) {
+    const row = el("tr");
+    for (const x of r) row.append(el("td", null, String(x ?? "")));
+    t.append(row);
+  }
+  return t;
+}
+
+/* plain table; the teletext screen has 40 columns, so there only R, call,
+ * entity (12 characters) and bands - modes and times stay in the flow view */
+function dxStationPlain(sem, recs) {
+  const bands = o => dxBandsOf(o).map(dxBandLabel).join(" ");
+  if (state.view === "teletext") {
+    return dxPlainTable(["R", "Call", "Gebiet", "Bänder"],
+      dxSorted(recs).map(o => [DX_TIERS[o.rel] || "?", o.call, String(o.ent || "").slice(0, 12), bands(o)]));
+  }
+  return dxPlainTable(["R", "Call", "Gebiet", "Bänder", "Modes", "Zeit UTC", "Sp", "MW"],
+    dxSorted(recs).map(o => [DX_TIERS[o.rel] || "?", o.call, o.ent || "", bands(o), dxModeList(o),
+                             dxSpan(sem.v, o), o.sp, o.mw ?? "–"]));
+}
+
+function dxActivityPlain(recs) {
+  const peak = o => typeof o.peak === "number" ? String(o.peak).padStart(2, "0") + "z" : "";
+  if (state.view === "teletext") {
+    const box = el("div");
+    box.append(dxPlainTable(["Band", "CW", "SSB", "FT8", "And", "Spz"],
+                            recs.map(o => [o.band, o.cw, o.ssb, o.ft8, o.oth, peak(o)])));
+    const others = recs.filter(o => o.om);
+    if (others.length) {
+      box.append(el("h4", null, "Andere Modes"));
+      const ul = el("ul");
+      for (const o of others) ul.append(el("li", null, `${o.band} ${o.om}`));
+      box.append(ul);
+    }
+    return box;
+  }
+  return dxPlainTable(["Band", "CW", "SSB", "FT8", "Andere", "Spitze UTC", "Andere Modes"],
+    recs.map(o => [o.band, o.cw, o.ssb, o.ft8, o.oth, peak(o), o.om || ""]));
+}
+
+function dxLegend() {
+  const l = el("div", "dx-legend");
+  for (const [k, name] of DX_MODES) {
+    const i = el("span", "dx-key");
+    i.append(el("i", "dx-m " + k), name);
+    l.append(i);
+  }
+  return l;
+}
+
+function dxStationGrid(dx, recs) {
+  const { sem } = dx;
+  const wrap = el("div", "dxg");
+  const bar = el("div", "dxg-bar");
+  const sortBtn = (key, label) => {
+    const b = el("button", "btn sm" + (state.dxSort === key ? " on" : ""), label);
+    b.type = "button";
+    b.onclick = () => { state.dxSort = key; saveDxSort(key); drawDx(dx, true); };
+    return b;
+  };
+  bar.append(el("span", "dxg-cap", "Sortierung"), sortBtn("abc", "Alphabetisch"), sortBtn("rel", "Relevanz"),
+             el("span", "grow"), dxLegend());
+  wrap.append(bar);
+
+  const t = el("table", "dxg-tbl");
+  const head = el("tr");
+  head.append(el("th", "dx-r", "R"), el("th", "dx-call", "Call"), el("th", "dx-ent", "Gebiet"));
+  DX_BANDS.forEach(b => head.append(el("th", "dx-b" + (b === "6m" ? " vhf" : ""), dxBandLabel(b))));
+  head.append(el("th", "dx-num", "MW"), el("th", "dx-time", "Zeit UTC"), el("th", "dx-num", "Sp"));
+  t.append(head);
+  for (const o of dxSorted(recs)) {
+    const tr = el("tr", "dx-row t" + (DX_TIERS[o.rel] || "x"));
+    const r = el("td", "dx-r");
+    r.append(dxTierBadge(o.rel));
+    const ent = el("td", "dx-ent", o.ent || "");
+    ent.title = o.ent || "";
+    const call = el("td", "dx-call", String(o.call ?? ""));
+    call.title = `${o.call}: ${dxSpan(sem.v, o)} UTC, ${o.sp ?? "?"} Spotter, Most Wanted ${o.mw ?? "unbekannt"}`;
+    tr.append(r, call, ent);
+    DX_BANDS.forEach((band, i) => {
+      const td = el("td", "dx-b" + (band === "6m" ? " vhf" : ""));
+      const q = el("span", "dx-q");
+      const modes = dxModesOn(o, i);
+      for (const [k] of DX_MODES) q.append(el("i", ((Number(o[k]) || 0) & (1 << i)) ? "dx-m " + k : null));
+      if (modes.length) td.title = `${band}: ${modes.join(", ")}`;
+      td.append(q);
+      tr.append(td);
+    });
+    tr.append(el("td", "dx-num", o.mw ?? "–"), el("td", "dx-time", dxSpan(sem.v, o)), el("td", "dx-num sp", String(o.sp ?? "")));
+    t.append(tr);
+  }
+  const scroll = el("div", "dxg-scroll");
+  scroll.append(t);
+  wrap.append(scroll);
+  if (!recs.length) wrap.append(el("p", "dimtext", "Keine DX-Station dieser Relevanz im Zeitraum."));
+  return wrap;
+}
+
+function dxActivityGrid(recs) {
+  const wrap = el("div", "dxa");
+  wrap.append(el("h4", null, "Bandaktivität nach Mode"));
+  const byBand = new Map(recs.map(o => [o.band, o]));
+  const counts = DX_BANDS.map(b => byBand.get(b) || {});
+  const top = Math.max(1, ...counts.flatMap(o => DX_MODES.map(([k]) => Number(o[k]) || 0)));
+  const t = el("table", "dxa-tbl");
+  const head = el("tr");
+  head.append(el("th"));
+  DX_BANDS.forEach(b => head.append(el("th", b === "6m" ? "vhf" : null, dxBandLabel(b))));
+  t.append(head);
+  for (const [k, name] of DX_MODES) {
+    const tr = el("tr");
+    const lab = el("th", "dxa-mode");
+    lab.append(el("i", "dx-m " + k), name);
+    tr.append(lab);
+    counts.forEach((o, i) => {
+      const n = Number(o[k]) || 0;
+      const td = el("td", DX_BANDS[i] === "6m" ? "vhf" : null);
+      const cell = el("span", "dxa-cell " + k);
+      // log scale, so 3 spots on 4 m do not vanish next to 600 on 20 m
+      if (n) cell.style.setProperty("--a", Math.round(Math.max(0.14, Math.log(n + 1) / Math.log(top + 1)) * 100) + "%");
+      else cell.classList.add("zero");
+      td.title = `${DX_BANDS[i]} ${name}: ${n} Spots` + (k === "oth" && o.om ? ` (${o.om})` : "");
+      td.append(cell);
+      tr.append(td);
+    });
+    t.append(tr);
+  }
+  const sum = el("tr", "dxa-sum");
+  sum.append(el("th", null, "Summe"));
+  counts.forEach((o, i) => sum.append(el("td", DX_BANDS[i] === "6m" ? "vhf" : null,
+    String(DX_MODES.reduce((s, [k]) => s + (Number(o[k]) || 0), 0) || ""))));
+  const peak = el("tr", "dxa-peak");
+  peak.append(el("th", null, "Spitze UTC"));
+  counts.forEach((o, i) => peak.append(el("td", DX_BANDS[i] === "6m" ? "vhf" : null,
+    typeof o.peak === "number" ? String(o.peak).padStart(2, "0") : "")));
+  t.append(sum, peak);
+  const scroll = el("div", "dxg-scroll");
+  scroll.append(t);
+  wrap.append(scroll);
+  const others = recs.filter(o => o.om);
+  if (others.length) {
+    wrap.append(el("div", "dxa-cap", "Andere Modes im Detail"));
+    const list = el("div", "dxa-others");
+    for (const o of others) {
+      const i = el("div");
+      i.append(el("b", null, o.band), " " + o.om);
+      list.append(i);
+    }
+    wrap.append(list);
+  }
+  return wrap;
+}
+
+function loadDxSort() {
+  try { return localStorage.getItem("brocast.dxsort") === "rel" ? "rel" : "abc"; } catch (e) { return "abc"; }
+}
+
+function saveDxSort(v) {
+  try { localStorage.setItem("brocast.dxsort", v); } catch (e) { /* private mode */ }
+}
+
 function rawView(raws) {
   const r = el("div", "raw");
   for (const x of raws) {
@@ -1611,6 +1888,7 @@ async function poll() {
 async function init() {
   state.view = loadView();
   state.graphic = loadGraphic();
+  state.dxSort = loadDxSort();
   $("tab-cat").onclick = () => setMode("cat");
   $("tab-st").onclick = () => setMode("st");
   $("sub-filter").onchange = () => { state.sub = $("sub-filter").value; renderList().catch(e => toast(e.message, true)); };

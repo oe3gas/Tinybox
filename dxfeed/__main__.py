@@ -4,8 +4,9 @@
     digest               print the DX digest of the last 24 hours
     digest --tinybox     ... and put it into the TinyBox inbox folder (bulletin to DX)
     show [-n 20]         the last spots in the database
-    status               spots, coverage and cty.dat state
+    status               spots, coverage, cty.dat and Most Wanted state
     cty-update           download the AD1C country file now
+    mw-update            download the Club Log Most Wanted list now
 
 Exit codes: 0 ok, 1 nothing to report, 2 error.
 """
@@ -14,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 import time
@@ -22,6 +24,7 @@ from pathlib import Path
 
 from . import VERSION
 from . import cty as ctymod
+from . import mostwanted as mwmod
 from .collector import Collector
 from .config import Config, ConfigError, load
 from .digest import build, write_inbox
@@ -58,6 +61,18 @@ def load_cty(cfg: Config, *, fetch_if_missing: bool) -> ctymod.Cty | None:
         return None
 
 
+def load_mostwanted(cfg: Config) -> mwmod.MostWanted | None:
+    """The Most Wanted list for the relevance score; refreshed when older than
+    mostwanted_update_days. A failed download keeps the old file."""
+    d = cfg.data
+    if ctymod.is_stale(d.mostwanted, d.mostwanted_update_days):
+        try:
+            mwmod.download(d.mostwanted, d.mostwanted_url, verify_ssl=d.ssl_verify)
+        except Exception as exc:
+            log.warning("most wanted list download failed: %s", exc)
+    return mwmod.load_or_none(d.mostwanted)
+
+
 def cmd_collect(cfg: Config, args) -> int:
     log.info("dxfeed %s: nodes %s, login %s, skimmer %s", VERSION,
              " ".join(f"{h}:{p}" for h, p in cfg.cluster.nodes), cfg.cluster.login,
@@ -84,7 +99,7 @@ def cmd_digest(cfg: Config, args) -> int:
         rows = store.spots(since, until)
         cov = store.coverage(since, until)
         node = " ".join(f"{h}:{p}" for h, p in cfg.cluster.nodes[:1])
-        d = build(rows, cfg.digest, since, until, cov, node)
+        d = build(rows, cfg.digest, since, until, cov, node, load_mostwanted(cfg))
     finally:
         store.close()
     if d is None:
@@ -95,6 +110,11 @@ def cmd_digest(cfg: Config, args) -> int:
         print(f"Subject: {d.subject}\n")
         print(d.text, end="")
         print(f"\n[{len(d.text.encode('ascii', 'replace'))} Bytes, {d.lines} Zeilen]")
+        if d.page is not None:
+            n = sum(len(b.get("rows", [])) for b in d.page["blk"] if "n" in b and
+                    b["n"] and b["n"][0] == "rel")
+            size = len(json.dumps(d.page, separators=(",", ":")))
+            print(f"[brocast-Seite: {n} Stationen, JSON {size} Bytes]")
         return 0
     if not args.tinybox:
         log.info("inbox %s (%s)", cfg.digest.inbox, cfg.inbox_source)
@@ -138,6 +158,30 @@ def cmd_status(cfg: Config, args) -> int:
         print(f"cty.dat:     {len(cty)} Gebiete, {cty.version or '?'}, {age:.0f} Tage alt")
     except (ctymod.CtyError, OSError):
         print(f"cty.dat:     fehlt ({cfg.data.cty}) - python -m dxfeed cty-update")
+        cty = None
+    try:
+        mw = mwmod.MostWanted.load(cfg.data.mostwanted)
+        age = (now - cfg.data.mostwanted.stat().st_mtime) / 86400
+        line = f"Most Wanted: {len(mw)} Gebiete, {age:.0f} Tage alt"
+        if cty is not None:
+            missing = sorted({e.prefix for e, _ in cty.prefixes.values()} - set(mw.ranks))
+            if missing:
+                line += f"; ohne Rang: {' '.join(missing[:12])}" + (" ..." if len(missing) > 12 else "")
+        print(line)
+    except (mwmod.MostWantedError, OSError):
+        print(f"Most Wanted: fehlt ({cfg.data.mostwanted}) - python -m dxfeed mw-update")
+    return 0
+
+
+def cmd_mw_update(cfg: Config, args) -> int:
+    try:
+        mwmod.download(cfg.data.mostwanted, cfg.data.mostwanted_url,
+                       verify_ssl=cfg.data.ssl_verify)
+    except Exception as exc:
+        log.error("most wanted list download failed: %s", exc)
+        return 2
+    mw = mwmod.MostWanted.load(cfg.data.mostwanted)
+    print(f"Most Wanted: {len(mw)} Gebiete -> {cfg.data.mostwanted}")
     return 0
 
 
@@ -167,6 +211,7 @@ def run(argv: list[str] | None = None) -> int:
     p.add_argument("-n", type=int, default=20)
     sub.add_parser("status", help="database and cty.dat state")
     sub.add_parser("cty-update", help="download cty.dat")
+    sub.add_parser("mw-update", help="download the Club Log Most Wanted list")
     args = ap.parse_args(argv)
 
     try:
@@ -176,7 +221,8 @@ def run(argv: list[str] | None = None) -> int:
         return 2
     setup_logging(cfg.log_level, args.log or cfg.log_file)
     handler = {"collect": cmd_collect, "digest": cmd_digest, "show": cmd_show,
-               "status": cmd_status, "cty-update": cmd_cty_update}[args.cmd]
+               "status": cmd_status, "cty-update": cmd_cty_update,
+               "mw-update": cmd_mw_update}[args.cmd]
     try:
         return handler(cfg, args)
     except Exception:

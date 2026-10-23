@@ -405,6 +405,64 @@ a.extlink:hover { color: var(--accent-dark); }
   .wxg-dir { min-width: 0; }
 }
 
+/* DX digest (dxfeed): station grid with band/mode dots, activity heat map.
+   Mode colours: CW amber, SSB blue, FT8 green, other violet - strong enough on white */
+:root { --m-cw: #B86A00; --m-ssb: #0B4A8F; --m-ft8: #0B7A2F; --m-oth: #6A3FA6; }
+.dxg, .dxa { margin: 4px 0 18px; min-width: 0; }
+.dxg { container-type: inline-size; }
+.dxg-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.dxg-cap, .dxa-cap { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.dxa-cap { margin: 12px 0 4px; }
+.dx-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; font-weight: 600; }
+.dx-key { display: inline-flex; align-items: center; gap: 5px; }
+.dx-m { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--rule); }
+.dx-m.cw { background: var(--m-cw); } .dx-m.ssb { background: var(--m-ssb); }
+.dx-m.ft8 { background: var(--m-ft8); } .dx-m.oth { background: var(--m-oth); }
+.dxg-scroll { overflow-x: auto; }
+.dxg-tbl, .dxa-tbl { border-collapse: collapse; background: #fff; border: 2px solid var(--ink); font-size: 14px; }
+.dxg-tbl { min-width: 600px; width: 100%; }
+.dxg-tbl th { background: var(--paper-2); font-size: 12px; font-weight: 700; padding: 6px 4px; text-align: left;
+              border-bottom: 2px solid var(--ink); white-space: nowrap; }
+.dxg-tbl td { padding: 5px 4px; border-top: 1px solid var(--rule); vertical-align: middle; }
+.dxg-tbl tr.dx-row:hover td { background: var(--paper-2); }
+.dxg-tbl tr.tC td { color: var(--ink-3); }
+.dxg-tbl .dx-r { width: 30px; padding-left: 8px; }
+.dxg-tbl .dx-call { font: 700 14px var(--mono); white-space: nowrap; color: var(--ink); }
+.dxg-tbl .dx-ent { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dxg-tbl th.dx-b, .dxg-tbl td.dx-b { width: 24px; padding-left: 1px; padding-right: 1px; text-align: center; }
+.dxg-tbl .vhf, .dxa-tbl .vhf { border-left: 2px solid var(--ink-3); }
+.dxg-tbl .dx-num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.dxg-tbl .dx-num.sp { font-weight: 700; padding-right: 8px; }
+.dxg-tbl .dx-time { font: 12px var(--mono); color: var(--ink-3); white-space: nowrap; padding-left: 10px; }
+.dx-q { display: inline-grid; grid-template-columns: 7px 7px; gap: 1px; vertical-align: middle; }
+.dx-q i { width: 7px; height: 7px; border-radius: 1.5px; background: #E6E6E1; }
+.dx-q i.dx-m { width: 7px; height: 7px; }
+.dx-tier { display: inline-block; min-width: 20px; text-align: center; font: 700 12px var(--mono); padding: 1px 5px;
+           border-radius: 4px; border: 1.5px solid currentColor; }
+.dx-tier.tA { color: #fff; background: var(--danger); border-color: var(--danger); }
+.dx-tier.tB { color: var(--warn); }
+.dx-tier.tC { color: var(--ink-3); }
+.dxa-tbl { font-size: 13px; }
+.dxa-tbl th { font-weight: 700; padding: 4px 6px; text-align: center; background: var(--paper-2); white-space: nowrap; }
+.dxa-tbl th.dxa-mode { text-align: left; display: flex; align-items: center; gap: 6px; background: #fff; }
+.dxa-tbl td { padding: 2px; text-align: center; min-width: 30px; }
+.dxa-cell { display: block; height: 18px; border-radius: 3px; background: #F1F1EE; }
+.dxa-cell.cw { background: color-mix(in srgb, var(--m-cw) var(--a), #F1F1EE); }
+.dxa-cell.ssb { background: color-mix(in srgb, var(--m-ssb) var(--a), #F1F1EE); }
+.dxa-cell.ft8 { background: color-mix(in srgb, var(--m-ft8) var(--a), #F1F1EE); }
+.dxa-cell.oth { background: color-mix(in srgb, var(--m-oth) var(--a), #F1F1EE); }
+.dxa-cell.zero { background: #F1F1EE; }
+.dxa-sum td { font: 700 12px var(--mono); padding-top: 4px; border-top: 1.5px solid var(--rule); }
+.dxa-sum th, .dxa-peak th { text-align: left; background: #fff; font-size: 12px; color: var(--ink-3); }
+.dxa-peak td { font: 12px var(--mono); color: var(--ink-3); }
+.dxa-others { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 3px 16px; font-size: 14px; }
+.dxa-others div { border-left: 3px solid var(--m-oth); padding-left: 8px; }
+/* narrow page pane: the time span moves into the tooltip of the call */
+@container (max-width: 780px) {
+  .dxg-tbl .dx-time { display: none; }
+  .dxg-tbl .dx-ent { max-width: 130px; }
+}
+
 .wx-wrap { container-type: inline-size; }
 @container (max-width: 640px) {
   .wx { grid-template-columns: repeat(2, minmax(0, 1fr)); }

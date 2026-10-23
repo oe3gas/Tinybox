@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- dxfeed: Relevanz der DX-Meldungen nach Club Log Most Wanted und Spotterzahl
+  (Stufen A/B/C, PLANUNG 16a), neuer Befehl `mw-update`; Tabelle alphabetisch,
+  Bandaktivität je Mode mit den anderen Modes namentlich. Das DX-Bulletin trägt
+  eine brocast-Seite (nur Stufe A+B); der Listener zeigt sie als Band/Mode-Raster
+  mit Heatmap der Bandaktivität.
 - Konsole aller vier Programme (TinyBox, tbclient, kisshub, brocastd) einheitlich:
   `[ERROR]` (rot) und `[WARN]` (gelb) vor Fehlern und Warnungen, stehende
   Verbindungen grün, Startzeile hervorgehoben. Farben nur in einem echten
