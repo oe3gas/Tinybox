@@ -25,6 +25,8 @@ import time
 from datetime import datetime
 from typing import Any
 
+from prcore import termcolor
+
 from ..app import App
 from ..config import LOOPBACK_HOSTS, PartnerCfg, normalize_call
 from ..fwd.link import AgwLink, TcpLink
@@ -243,7 +245,7 @@ class ForwardModule:
             self.server = await asyncio.start_server(self._tcp_in, self.cfg.listen_host,
                                                      self.cfg.listen_port)
             self.listen_port = self.server.sockets[0].getsockname()[1]
-            log.info("forward port listening on %s:%d", self.cfg.listen_host, self.listen_port)
+            termcolor.kv(log, "Forward port", f"{self.cfg.listen_host}:{self.listen_port}")
 
     # --- scheduler ---------------------------------------------------------------------
 

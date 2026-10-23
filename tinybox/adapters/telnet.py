@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from prcore import termcolor
+
 from .. import logsetup, texts
 from ..app import App
 from ..config import is_valid_call, normalize_call
@@ -179,5 +181,5 @@ async def start(app: App) -> asyncio.AbstractServer:
 
     cfg = app.cfg.telnet
     server = await asyncio.start_server(handle, cfg.host, cfg.port)
-    log.info("telnet test port listening on %s:%d", cfg.host, cfg.port)
+    termcolor.kv(log, "Telnet test port", f"{cfg.host}:{cfg.port}")
     return server

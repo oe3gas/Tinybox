@@ -296,29 +296,33 @@ class Daemon:
     # -- run ----------------------------------------------------------------
 
     async def run(self) -> None:
-        log.info("brocastd %s, Modus %s, Rufzeichen %s, Direwolf über %s", VERSION,
-                 self.cfg.mode, self.cfg.callsign or "-", self.cfg.direwolf.describe(),
-                 extra=colorlog.HEAD)
-        st = self.cfg.station
-        log.info("Funk: %s Bd (%s), TXDELAY %s ms (%s)", st.baud,
-                 self.cfg.sources.get("baud", "-"), st.txdelay_ms,
-                 self.cfg.sources.get("txdelay_ms", "-"))
-        for hint in self.cfg.hints:
-            log.info("Konfig-Hinweis: %s", hint)
-        log.info("Preset-Wörterbuch: %s", self.zd.describe())
-        if self.cfg.is_station:
-            st = self.cfg.station
-            log.info("Frame-Format %s%s, Alterung %s", st.wire_format,
-                     ", Blockliste gepackt" if st.wire_format == FORMAT_FRAGMENT
-                     and st.compress and self.zd.ok else "",
-                     ", ".join(f"ab {h} h alle {m} min" if m else f"ab {h} h Pause"
-                               for h, m in st.aging) or "aus")
+        cfg = self.cfg
+        st = cfg.station
+        log.info("brocastd start - Version %s", VERSION, extra=colorlog.HEAD)
+        items: list = [("Modus", cfg.mode), ("Rufzeichen", cfg.callsign or "-"), None,
+                       ("Verbindung über", cfg.direwolf.describe()),
+                       ("Funk", f"{st.baud} Bd ({cfg.sources.get('baud', '-')}), "
+                                f"TXDELAY {st.txdelay_ms} ms ({cfg.sources.get('txdelay_ms', '-')})"),
+                       None, ("Preset-Wörterbuch", self.zd.describe())]
+        if cfg.is_station:
+            items.append(("Frame-Format", str(st.wire_format) + (
+                ", Blockliste gepackt" if st.wire_format == FORMAT_FRAGMENT
+                and st.compress and self.zd.ok else "")))
+            items.append(("Alterung", ", ".join(f"ab {h} h alle {m} min" if m else f"ab {h} h Pause"
+                                                for h, m in st.aging) or "aus"))
+        items += [None, ("Log-Datei", cfg.log_file or "- (nur Konsole)")]
+        if cfg.is_station and cfg.txlog_dir is not None:
+            items.append(("Sendeprotokoll", cfg.txlog_dir))
+        items.append(None)
+        colorlog.kv_block(log, items)
+        for hint in cfg.hints:
+            log.warning("Konfig-Hinweis: %s", hint)
         if self.cfg.is_station and self.cfg.direwolf.interface == "kiss" \
                 and self.cfg.station.burst_frames > 0:
             log.info("KISS: Sendepausen werden berechnet; bei belegtem Kanal können Blöcke "
                      "in Direwolf zusammenwachsen (README, „Verbindung zu Direwolf“)")
         await self.web.start()
-        log.info("Listener-Oberfläche: http://%s:%s/", self.web.host, self.web.port)
+        colorlog.kv(log, "Listener-Oberfläche", f"http://{self.web.host}:{self.web.port}/", url=True)
         tasks = [asyncio.create_task(self.link.run(), name="direwolf"),
                  asyncio.create_task(self._housekeeping(), name="housekeeping")]
         if self.ingest and self.carousel:
@@ -351,9 +355,7 @@ def setup_logging(cfg: config.Config) -> None:
         fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s",
                                           "%Y-%m-%d %H:%M:%S"))
         root.addHandler(fh)
-        log.info("Log-Datei: %s", cfg.log_dir / name)
-    if cfg.is_station and cfg.txlog_dir is not None:
-        log.info("Sendeprotokoll: %s", cfg.txlog_dir)
+        cfg.log_file = cfg.log_dir / name               # shown in the start block
 
 
 def main(argv: list[str] | None = None) -> int:

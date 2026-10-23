@@ -18,6 +18,7 @@ from kisshub import config as hubconfig
 from kisshub import profiles
 from kisshub.hub import PRIO_CONTROL, PRIO_I, PRIO_UI, Hub, HubCfg, priority
 from kisshub.tnc import BUNDLE_MAGIC, TUNNEL_MAGIC, Tnc, is_ui, pack_bundle, unpack_bundle
+from prcore import termcolor
 from kisshub.transport import TcpTransport
 from prcore.ax25 import frame as ax
 from prcore import kiss
@@ -610,7 +611,7 @@ class RadioValuesTests(unittest.TestCase):
         self.assertEqual((h.ax25["paclen"], h.ax25["maxframe"], h.ax25["t1_min_sec"]),
                          (256, 4, 18.0))
         self.assertEqual((h.status_port, cfg.hints), (8102, ()))
-        text = "\n".join(hubconfig.radio_lines(cfg))
+        text = "\n".join(termcolor.kv_plain(*x) for x in hubconfig.radio_lines(cfg))
         self.assertIn("air_baud 350 (profile vara-fm)", text)
 
     def test_overrides_and_old_keys(self):
@@ -635,7 +636,7 @@ class RadioValuesTests(unittest.TestCase):
         self.assertEqual((h.air_baud, round(h.txdelay_sec * 1000)), (9600, 150))
         self.assertEqual(h.sources["txdelay_ms"], "direwolf.conf")
         self.assertEqual((h.ax25["paclen"], h.ax25["maxframe_ext"]), (200, 6))
-        self.assertIn("MODEM 9600", "\n".join(hubconfig.radio_lines(cfg)))
+        self.assertIn("MODEM 9600", "\n".join(termcolor.kv_plain(*x) for x in hubconfig.radio_lines(cfg)))
         with self.assertRaises(hubconfig.ConfigError):
             self.load("[tnc]\nprofile=direwolf\n")
         with self.assertRaises(hubconfig.ConfigError):

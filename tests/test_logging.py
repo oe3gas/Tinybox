@@ -10,6 +10,7 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
+from prcore import termcolor
 from tinybox import config, logsetup
 from tinybox.adapters.sysop import MonitorFilter, SysopConsole
 from tests.test_tinybox import ROOT, login, make_app
@@ -320,11 +321,12 @@ class SetupTests(unittest.TestCase):
         cfg = self.make_cfg()
         cfg.brocast.token = "s3cret"
         block = logsetup.start_block(cfg, "1.2.3", "tinybox.conf", None, {"agw"})
-        text = "\n".join(block)
+        text = "\n".join(x if isinstance(x, str) else termcolor.kv_plain(*x)
+                         for x in block if x is not None)
         self.assertIn("----- TinyBox 1.2.3", text)
-        self.assertIn("adapters:", text)
+        self.assertIn("Adapters:", text)
         self.assertIn("telnet=on", text)
-        self.assertIn("brocast token set", text)
+        self.assertRegex(text, r"brocast token: +set")
         self.assertNotIn("s3cret", text)
         self.assertIn("debug agw", text)
 

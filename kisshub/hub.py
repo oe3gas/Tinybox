@@ -166,12 +166,12 @@ class Hub:
 
     async def start(self) -> None:
         self._server = await asyncio.start_server(self._client, self.cfg.listen, self.cfg.port)
-        log.info("KISS-TCP server on %s:%d", self.cfg.listen, self.port)
+        log.debug("KISS-TCP server on %s:%d", self.cfg.listen, self.port)
         if self.cfg.status_port:
             self._status_server = await asyncio.start_server(
                 self._status_client, "127.0.0.1",
                 self.cfg.status_port if self.cfg.status_port > 0 else 0)
-            log.info("status query on http://127.0.0.1:%d/status", self.status_port)
+            log.debug("status query on http://127.0.0.1:%d/status", self.status_port)
         self._tasks = [asyncio.create_task(self.tnc.run()),
                        asyncio.create_task(self._sender()),
                        asyncio.create_task(self._status()),

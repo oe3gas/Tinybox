@@ -16,7 +16,7 @@ import unittest
 from tinybox import config, logsetup
 from tinybox.adapters import kiss as kissadapter
 from prcore.ax25 import frame as ax
-from prcore import kiss
+from prcore import kiss, termcolor
 from prcore.ax25.frame import Frame
 from prcore.ax25.link import Ax25Link, LinkCfg
 
@@ -363,7 +363,7 @@ class KissConfigTests(unittest.TestCase):
             self.assertIn("old name - use [agw] port", text)
             self.assertIn("paclen = 200: same as PACLEN", text)
             self.assertIn("max_outstanding = 2: overrides", text)
-            lines = "\n".join(logsetup.radio_lines(cfg))
+            lines = "\n".join(termcolor.kv_plain(*x) for x in logsetup.radio_lines(cfg))
             self.assertIn("paclen 200 ([direwolf] paclen)", lines)
             with self.assertRaises(config.ConfigError):
                 self.load("[agw]\ndirewolf_conf = /nowhere/at/all\n")

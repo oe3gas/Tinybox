@@ -243,21 +243,17 @@ def _float(cp: configparser.ConfigParser, key: str) -> float:
         raise ConfigError(f"[ax25] {key}: {exc}") from None
 
 
-def radio_lines(cfg: Config) -> list[str]:
-    """CR70: where each radio value came from - shown at every start."""
+def radio_lines(cfg: Config) -> list[tuple]:
+    """CR70: where each radio value came from - start block items."""
     h = cfg.hub
     src = h.sources
-    lines = [f"radio: air_baud {h.air_baud} ({src.get('air_baud')}), "
-             f"txdelay {round(h.txdelay_sec * 1000)} ms ({src.get('txdelay_ms')}), "
-             f"max_lead {round(h.max_lead_sec * 1000)} ms ({src.get('max_lead_ms')})",
-             "AX.25 recommendation for TinyBox/client: "
-             + ", ".join(f"{k} {v}" for k, v in h.ax25.items()) + f" ({src.get('ax25')})"]
-    if not h.status_port:
-        lines.append("status query off ([server] status_port = 0) - TinyBox and client "
-                     "keep their own values")
+    lines = [("Radio values", f"air_baud {h.air_baud} ({src.get('air_baud')}), "
+                              f"txdelay {round(h.txdelay_sec * 1000)} ms ({src.get('txdelay_ms')}), "
+                              f"max_lead {round(h.max_lead_sec * 1000)} ms ({src.get('max_lead_ms')})"),
+             ("AX.25 recommendation", ", ".join(f"{k} {v}" for k, v in h.ax25.items()),
+              f"({src.get('ax25')}; for TinyBox and client)")]
     if cfg.direwolf:
-        lines.insert(0, f"direwolf.conf {cfg.direwolf}")
-    lines += [f"hint: {x}" for x in cfg.hints]
+        lines.insert(0, ("direwolf.conf", cfg.direwolf))
     return lines
 
 

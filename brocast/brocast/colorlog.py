@@ -15,7 +15,8 @@ if (_root / "prcore" / "termcolor.py").is_file() and str(_root) not in sys.path:
     sys.path.append(str(_root))
 
 try:
-    from prcore.termcolor import HEAD, OK, ConsoleFormatter, check_mode, console_handler
+    from prcore.termcolor import (HEAD, OK, ConsoleFormatter, check_mode, console_handler, kv,
+                                  kv_block)
 except ImportError:                                   # brocast without the TinyBox repo
     OK: dict = {}
     HEAD: dict = {}
@@ -43,4 +44,18 @@ except ImportError:                                   # brocast without the Tiny
         handler.setFormatter(ConsoleFormatter(tag))
         return handler
 
-__all__ = ["HEAD", "OK", "ConsoleFormatter", "check_mode", "console_handler"]
+    def kv(log: logging.Logger, label: str, value, note: str = "", url: bool = False,
+           level: int = logging.INFO) -> None:              # type: ignore[no-redef]
+        text = f"{label + ':':<23} {value}"
+        log.log(level, "%s", text + (f"  {note}" if note else ""))
+
+    def kv_block(log: logging.Logger, items) -> None:       # type: ignore[no-redef]
+        for item in items:
+            if item is None:
+                log.info("")
+            elif isinstance(item, str):
+                log.info("%s", item)
+            else:
+                kv(log, *item)
+
+__all__ = ["HEAD", "OK", "ConsoleFormatter", "check_mode", "console_handler", "kv", "kv_block"]

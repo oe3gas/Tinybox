@@ -9,6 +9,8 @@
   oder der Umgebungsvariable `NO_COLOR`.
 - tbclient 2026.10.23: übersichtlicher Startblock (Call, Locator, TinyBox,
   Autoconnect, Verbindungsweg, Web-GUI); technische Details nur mit `-v`.
+- TinyBox, kisshub und brocastd: Startblock im selben Muster (Beschriftung: Wert),
+  Adressen von Web-GUI und Ports als eigene Zeilen; Inhalt unverändert.
 - „Nicht erreichbar“ (Direwolf, KISS, TNC) wird nur noch einmal gemeldet, als `[ERROR]`.
 - Linux-Startskripte `tinybox.sh`, `tbclient.sh`, `kisshub.sh`, `brocast/brocastd.sh`.
 

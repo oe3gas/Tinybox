@@ -488,53 +488,67 @@ def _secret(value: str) -> str:
 
 
 def start_block(cfg, version: str, config_path: str | None,
-                log_path: Path | None, debug: set[str]) -> list[str]:
+                log_path: Path | None, debug: set[str]) -> list:
     """The first lines of every run: which version, what is switched on.
-    Never tokens or the login URL - only set/unset."""
+    Never tokens or the login URL - only set/unset.
+
+    Items for termcolor.kv_block: (label, value[, note]), None = empty line,
+    a string = a line as it is (the head line)."""
     root = Path(__file__).resolve().parent.parent
     adapters = " ".join(f"{name}={'on' if on else 'off'}" for name, on in (
         ("telnet", cfg.telnet.enabled), ("web", cfg.web.enabled),
         ("brocast", cfg.brocast.publish), ("inbox", cfg.inbox.enabled),
         ("forward", cfg.forward.enabled), ("mqtt", cfg.mqtt.enabled),
         ("console", cfg.console.enabled)))
+    if cfg.radio.interface == "kiss":
+        via = ("kiss", f"(kisshub {cfg.kiss.host}:{cfg.kiss.port}, channel {cfg.kiss.channel}, "
+                       f"own AX.25 {cfg.ax25.version})")
+    else:
+        via = ("agw", f"(Direwolf {cfg.direwolf.agw_host}:{cfg.direwolf.agw_port}, "
+                      f"port {cfg.direwolf.agw_radio_port})")
     return [
         f"----- TinyBox {version} ({git_commit(root)}) start -----",
-        f"python {platform.python_version()} {sys.platform}, {platform.platform()}, "
-        f"pid {os.getpid()}",
-        f"config {config_path or '-'}, data {cfg.storage.data_dir}, log {log_path or '-'}",
-        f"station mailbox {cfg.station.mailbox_call}, bbs {cfg.station.bbs_call}, "
-        f"sysop {cfg.station.sysop_call}",
-        (f"radio kiss {cfg.kiss.host}:{cfg.kiss.port} channel {cfg.kiss.channel} "
-         f"(own AX.25 {cfg.ax25.version}), max_users {cfg.mailbox.max_users}"
-         if cfg.radio.interface == "kiss" else
-         f"radio agw {cfg.direwolf.agw_host}:{cfg.direwolf.agw_port} "
-         f"port {cfg.direwolf.agw_radio_port}, max_users {cfg.mailbox.max_users}"),
+        ("Mailbox call", cfg.station.mailbox_call),
+        ("BBS call", cfg.station.bbs_call),
+        ("Sysop", cfg.station.sysop_call),
+        ("Max users", cfg.mailbox.max_users),
+        None,
+        ("Connection via", *via),
         *radio_lines(cfg),
-        f"adapters: {adapters}",
-        f"brocast token {_secret(cfg.brocast.token)}, "
-        f"level {cfg.logging.level}, debug {','.join(sorted(debug)) or '-'}, "
-        f"keep_days {cfg.logging.keep_days}",
+        None,
+        ("Adapters", adapters),
+        ("brocast token", _secret(cfg.brocast.token)),
+        ("Logging", f"level {cfg.logging.level}, debug {','.join(sorted(debug)) or '-'}, "
+                    f"keep_days {cfg.logging.keep_days}"),
+        ("Log file", log_path or "- (console only)"),
+        ("Config", config_path or "-"),
+        ("Data", cfg.storage.data_dir),
+        ("Python", f"{platform.python_version()} {sys.platform}, {platform.platform()}, "
+                   f"pid {os.getpid()}"),
+        None,
     ]
 
 
-def radio_lines(cfg) -> list[str]:
-    """CR70: where the radio values come from, and old keys still in the file."""
+def radio_lines(cfg) -> list[tuple]:
+    """CR70: where the radio values come from (start block items)."""
     src = cfg.sources or {}
     if cfg.radio.interface == "kiss":
         a = cfg.ax25
-        lines = [f"radio values: {src.get('kiss', '-')}; until the first status "
-                 f"air_baud {cfg.kiss.air_baud}, txdelay {cfg.kiss.txdelay_ms} ms, "
-                 f"paclen {a.paclen}, window {a.maxframe}/{a.maxframe_ext}, "
-                 f"T1 {a.t1_min_sec}-{a.t1_max_sec} s, T2 {a.t2_sec} s "
-                 f"(kisshub status 127.0.0.1:{cfg.kiss.status_port})"]
+        lines = [("Radio values",
+                  f"air_baud {cfg.kiss.air_baud}, txdelay {cfg.kiss.txdelay_ms} ms, "
+                  f"paclen {a.paclen}, window {a.maxframe}/{a.maxframe_ext}, "
+                  f"T1 {a.t1_min_sec}-{a.t1_max_sec} s, T2 {a.t2_sec} s",
+                  f"({src.get('kiss', '-')}; until the first status of kisshub "
+                  f"127.0.0.1:{cfg.kiss.status_port})")]
     else:
         d = cfg.direwolf
-        lines = [f"AGW values: port {d.agw_port} ({src.get('agw_port', '-')}), "
-                 f"paclen {d.paclen} ({src.get('agw_paclen', '-')}), "
-                 f"window {d.max_outstanding} ({src.get('agw_window', '-')})"]
+        lines = [("AGW values",
+                  f"port {d.agw_port} ({src.get('agw_port', '-')}), "
+                  f"paclen {d.paclen} ({src.get('agw_paclen', '-')}), "
+                  f"window {d.max_outstanding} ({src.get('agw_window', '-')})")]
     if src.get("direwolf.conf"):
-        lines.append(f"direwolf.conf {src['direwolf.conf']}")
-    return lines + [f"config hint: {h}" for h in cfg.hints or ()]
+        lines.append(("direwolf.conf", src["direwolf.conf"]))
+    return lines
 
 
 def stop_line(reason: str) -> str:
@@ -562,7 +576,8 @@ def write_bundle(app, control: LogControl, version: str, lines: int = 400) -> Pa
     path = Path(target_dir) / f"tinybox_debug_{datetime.now():%Y-%m-%d_%H-%M-%S}.txt"
     out: list[str] = [f"TinyBox debug bundle {datetime.now():%Y-%m-%d %H:%M:%S}", ""]
     out.append("--- start block -------------------------------------------------")
-    out += start_block(cfg, version, app.config_path, control.path, control.debug)
+    out += [x if isinstance(x, str) else termcolor.kv_plain(*x) if x else ""
+            for x in start_block(cfg, version, app.config_path, control.path, control.debug)]
     out.append("")
     out.append("--- state -------------------------------------------------------")
     out.append(f"up {counters.summary()}")

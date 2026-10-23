@@ -191,18 +191,19 @@ class StartLinesTests(unittest.TestCase):
     def test_log_and_links_file_are_named(self):
         from kisshub.__main__ import log_lines
         from kisshub import config as hubconfig
+        from prcore import termcolor
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "k.conf"
             p.write_text("[tnc]\nprofile=generic\ntransport=tcp\nport=8001\n"
                          "[log]\nlinks_file =\n", encoding="utf-8")
-            text = "\n".join(log_lines(str(p), hubconfig.load(p)))
+            text = "\n".join(termcolor.kv_plain(*x) for x in log_lines(str(p), hubconfig.load(p)))
             self.assertIn("NO log file", text)
-            self.assertIn("links file: off", text)
+            self.assertRegex(text, r"Links file: +off")
             p.write_text("[tnc]\nprofile=generic\ntransport=tcp\nport=8001\n"
                          "[log]\nfile = kisshub-dw.log\nlinks_file = links-dw.jsonl\n",
                          encoding="utf-8")
-            text = "\n".join(log_lines(str(p), hubconfig.load(p)))
-            self.assertIn("kisshub-dw.log (level INFO)", text)
+            text = "\n".join(termcolor.kv_plain(*x) for x in log_lines(str(p), hubconfig.load(p)))
+            self.assertIn("kisshub-dw.log  (level INFO)", text)
             self.assertIn("links-dw.jsonl", text)
 
 

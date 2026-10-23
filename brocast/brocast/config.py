@@ -89,6 +89,7 @@ class Config:
     dictionary: Path
     log_level: str = "INFO"
     color: str = "auto"                  # [console] color: auto | yes | no
+    log_file: Path | None = None         # this start's log file (set by setup_logging)
     log_dir: Path | None = None          # program log, one file per start; None = console only
     txlog_dir: Path | None = None        # Sendeprotokoll (station); None = data_dir/../logs
     direwolf: DirewolfCfg = field(default_factory=DirewolfCfg)

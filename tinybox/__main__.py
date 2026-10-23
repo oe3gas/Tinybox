@@ -52,9 +52,12 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
     # The start block answers the first question when debugging: which version
     # is running, what is switched on (CR32). It comes before everything else,
     # so a run always begins with it. Never tokens, only set/unset.
-    for i, line in enumerate(logsetup.start_block(cfg, VERSION, config_path, control.path,
-                                                  control.debug)):
-        log.info("%s", line, extra=termcolor.HEAD if i == 0 else None)
+    head, *items = logsetup.start_block(cfg, VERSION, config_path, control.path,
+                                        control.debug)
+    log.info("%s", head, extra=termcolor.HEAD)
+    termcolor.kv_block(log, items)
+    for hint in cfg.hints or ():
+        log.warning("config hint: %s", hint)
     app = App.create(cfg)
     app.stop_event = asyncio.Event()
     app.config_path = config_path
@@ -69,9 +72,8 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
     if cfg.web.enabled:
         web_server = await web.start(app)
         # the login link contains the secret token: console only, never the log file
-        print("\n" + termcolor.tag_text("[tinyb]", "   Web GUI login:  "
-                                         + app.web_login_url, "url", cfg.console.color)
-              + "\n", flush=True)
+        termcolor.kv_print("[tinyb]", "Web GUI login", app.web_login_url,
+                           cfg.console.color, url=True)
     if cfg.radio.interface == "kiss":              # own AX.25 layer 2 (PLANUNG.md 15)
         from .adapters import kiss
         app.agw = kiss.KissAdapter(app)

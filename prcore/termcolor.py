@@ -91,14 +91,29 @@ def check_mode(value: str) -> str:
     raise ValueError(f"[console] color must be auto, yes or no, not {value!r}")
 
 
+def kv_plain(label: str, value, note: str = "") -> str:
+    """'Your call:              OE3XXX' - the text of a label/value line."""
+    text = f"{label + ':':<{LABEL_WIDTH}} {value}"
+    return text + f"  {note}" if note else text
+
+
 def kv(log: logging.Logger, label: str, value, note: str = "", url: bool = False,
        level: int = logging.INFO) -> None:
     """A label/value line of a start block:  'Your call:              OE3XXX'."""
-    text = f"{label + ':':<{LABEL_WIDTH}} {value}"
-    if note:
-        text += f"  {note}"
-    log.log(level, "%s", text,
+    log.log(level, "%s", kv_plain(label, value, note),
             extra={"tb_kv": (label + ":", str(value), note), "tb_url": url})
+
+
+def kv_block(log: logging.Logger, items) -> None:
+    """A start block: (label, value[, note]) tuples, None = empty line,
+    a plain string = a line as it is."""
+    for item in items:
+        if item is None:
+            blank(log)
+        elif isinstance(item, str):
+            log.info("%s", item)
+        else:
+            kv(log, *item)
 
 
 def blank(log: logging.Logger) -> None:
@@ -173,9 +188,12 @@ def console_handler(tag: str, mode: str = "auto", context: str = "",
     return handler
 
 
-def tag_text(tag: str, text: str, tone: str = "", mode: str = "auto") -> str:
-    """For print() lines outside logging (TinyBox web login link)."""
-    if not use_color(mode):
-        return f"{tag}{text}"
-    code = {"ok": GREEN, "head": WHITE + BOLD, "url": BLUE_UL}.get(tone, "")
-    return f"{GREY}{tag}{RESET}{code}{text}{RESET if code else ''}"
+def kv_print(tag: str, label: str, value: str, mode: str = "auto", url: bool = False) -> None:
+    """A label/value line printed past logging - never in a log file (TinyBox login link)."""
+    import time
+    record = logging.LogRecord("print", logging.INFO, "", 0, "%s",
+                               (kv_plain(label, value),), None)
+    record.created = time.time()
+    record.tb_kv = (label + ":", value, "")
+    record.tb_url = url
+    print(ConsoleFormatter(tag, use_color(mode)).format(record), flush=True)

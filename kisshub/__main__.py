@@ -53,23 +53,44 @@ async def main(cfg) -> None:
         await asyncio.shield(hub.stop())
 
 
-def log_lines(config_path: str, cfg) -> list[str]:
+def log_lines(config_path: str, cfg) -> list[tuple]:
     """Where this run is logged - shown at every start, so a test run is never
     lost because the log went nowhere (or somewhere unexpected)."""
     trace = ", trace on" if cfg.trace else ""
-    lines = [f"config {Path(config_path).resolve()}"]
+    lines = [("Config", Path(config_path).resolve())]
     if cfg.log_file:
-        lines.append(f"log file {Path(cfg.log_file).resolve()} (level {cfg.log_level}{trace})")
+        lines.append(("Log file", Path(cfg.log_file).resolve(), f"(level {cfg.log_level}{trace})"))
     else:
-        lines.append(f"log: console only - NO log file (level {cfg.log_level}{trace}); "
-                     "set [log] file = kisshub.log to keep it")
+        lines.append(("Log file", "NO log file - console only",
+                      f"(level {cfg.log_level}{trace}; set [log] file = kisshub.log to keep it)"))
     if cfg.hub.links_file:
-        lines.append(f"links file {Path(cfg.hub.links_file).resolve()} "
-                     "(one JSON line per finished AX.25 link)")
+        lines.append(("Links file", Path(cfg.hub.links_file).resolve(),
+                      "(one JSON line per finished AX.25 link)"))
     else:
-        lines.append("links file: off - finished AX.25 links are not written "
-                     "([log] links_file)")
+        lines.append(("Links file", "off", "(finished AX.25 links are not written, "
+                                           "[log] links_file)"))
     return lines
+
+
+def start_items(config_path: str, cfg) -> list:
+    """The start block (termcolor.kv_block): what runs, where, with which values."""
+    h = cfg.hub
+    p = cfg.tnc.profile
+    if h.status_port:
+        status = (("Status query", f"http://127.0.0.1:{h.status_port}/status", "", True)
+                  if h.status_port > 0 else ("Status query", "on (free port)"))
+    else:
+        status = ("Status query", "off",
+                  "([server] status_port = 0 - TinyBox and client keep their own values)")
+    return [("TNC profile", p.name, f"({p.notes})"),
+            ("TNC port", make_transport(cfg.tnc).describe()),
+            ("KISS-TCP for programs", f"{h.listen}:{h.port}"),
+            status,
+            None,
+            *radio_lines(cfg),
+            None,
+            *log_lines(config_path, cfg),
+            None]
 
 
 HELP = """\
@@ -134,10 +155,10 @@ def run(argv: list[str] | None = None) -> int:
         return 2
     setup_logging(cfg.log_level, cfg.log_file, cfg.color)
     log = logging.getLogger("kisshub")
-    log.info("kisshub %s: %s (%s), KISS-TCP %s:%d", VERSION, cfg.tnc.profile.name,
-             cfg.tnc.profile.notes, cfg.hub.listen, cfg.hub.port, extra=termcolor.HEAD)
-    for line in log_lines(args.config, cfg) + radio_lines(cfg):
-        log.info("%s", line)
+    log.info("kisshub start - version %s", VERSION, extra=termcolor.HEAD)
+    termcolor.kv_block(log, start_items(args.config, cfg))
+    for hint in cfg.hints:
+        log.warning("config hint: %s", hint)
     try:
         asyncio.run(main(cfg))
     except KeyboardInterrupt:

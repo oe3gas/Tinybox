@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from . import colorlog
+
 log = logging.getLogger(__name__)
 
 PREFIX = "/api/v1"
@@ -121,7 +123,7 @@ class JsonServer:
         self.server = await asyncio.start_server(self._handle, self.host, self.port,
                                                  limit=MAX_HEADER)
         self.port = self.server.sockets[0].getsockname()[1]
-        log.info("%s auf http://%s:%s%s", self.name, self.host, self.port, PREFIX)
+        colorlog.kv(log, self.name, f"http://{self.host}:{self.port}{PREFIX}", url=True)
         if self.lan:
             log.warning("%s im LAN erreichbar (allow_lan = yes), ohne Anmeldung – "
                         "Zugriff per Firewall auf das Heimnetz beschränken", self.name)

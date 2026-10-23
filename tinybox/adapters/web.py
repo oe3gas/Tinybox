@@ -27,7 +27,7 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from prcore import aprs
+from prcore import aprs, termcolor
 
 from .. import VERSION, config, connlog, framemon, linkq, logsetup
 from ..app import App
@@ -203,7 +203,7 @@ class WebServer:
         self.app.bus.subscribe("*", lambda name, data: self.hub.push(
             {"type": "event", "name": name}))
         self.app.web_login_url = f"http://127.0.0.1:{self.port}/login?token={self.token}"
-        log.info("web GUI listening on http://127.0.0.1:%d", self.port)
+        termcolor.kv(log, "Web GUI", f"http://127.0.0.1:{self.port}/", url=True)
 
     def close(self) -> None:
         if self._log_handler:
