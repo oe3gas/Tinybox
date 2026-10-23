@@ -174,14 +174,19 @@ Station
   Zum Testen eines Modems, z. B. VARA FM ueber KISS.
 - Schlanke tbclient.conf (CR70): [radio] interface, [agw] direwolf_conf,
   [kiss] port. Funkrate, TXDELAY und AX.25-Werte kommen vom kisshub bzw.
-  aus direwolf.conf; [ax25] nur noch zum Ueberschreiben. Beim Start steht,
-  woher jeder Wert kommt. Alte Schluessel gelten weiter (mit Hinweis).
+  aus direwolf.conf; [ax25] nur noch zum Ueberschreiben. Woher jeder Wert
+  kommt, zeigt der Start mit tbclient.bat -v. Alte Schluessel gelten weiter (mit Hinweis).
 - Connect ueber Digipeater (CR71): im Feld "Connect to:" z. B.
   OE3XYZ-1 V OE3XTC-5,OE3ABC (V oder VIA, Komma oder Leerzeichen, bis 8
   Digis). Unter dem Feld steht beim Tippen, wie es verstanden wird, oder was
   falsch ist. Der Pfad bleibt in der Liste der letzten Ziele. Via ist nur
   Digipeating: einen Node (NET/ROM, BPQ, Xnet) connectet man selbst und gibt
   dort C ein.
+- Uebersichtliche Konsole: beim Start ein Block mit eigenem Call, Locator,
+  bevorzugter TinyBox, Autoconnect, Verbindungsweg und Adresse der Web-GUI.
+  Fehler beginnen mit [ERROR] (rot), Warnungen mit [WARN] (gelb), stehende
+  Verbindungen sind gruen. Farben nur in einem echten Konsolenfenster;
+  abschalten mit [console] color = no. Technische Details mit -v.
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu

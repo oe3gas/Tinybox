@@ -16,7 +16,7 @@ from typing import Any, Callable
 
 import yaml
 
-from . import config, dictimport, dicttransfer, fragment, zdict
+from . import colorlog, config, dictimport, dicttransfer, fragment, zdict
 from .agw import AgwLink
 from .carousel import Carousel
 from .codec import BrocastError, Codec
@@ -297,7 +297,8 @@ class Daemon:
 
     async def run(self) -> None:
         log.info("brocastd %s, Modus %s, Rufzeichen %s, Direwolf über %s", VERSION,
-                 self.cfg.mode, self.cfg.callsign or "-", self.cfg.direwolf.describe())
+                 self.cfg.mode, self.cfg.callsign or "-", self.cfg.direwolf.describe(),
+                 extra=colorlog.HEAD)
         st = self.cfg.station
         log.info("Funk: %s Bd (%s), TXDELAY %s ms (%s)", st.baud,
                  self.cfg.sources.get("baud", "-"), st.txdelay_ms,
@@ -334,12 +335,14 @@ class Daemon:
             self.store.close()
 
 
+TAG = "[brocst]"
+
+
 def setup_logging(cfg: config.Config) -> None:
     """Console, plus a log file per start (brocastd_log_<date>_<time>.log) if log_dir is set."""
     root = logging.getLogger()
     root.setLevel(cfg.log_level)
-    console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(logging.Formatter("[brocst] %(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S"))
+    console = colorlog.console_handler(TAG, cfg.color)
     root.addHandler(console)
     if cfg.log_dir is not None:
         cfg.log_dir.mkdir(parents=True, exist_ok=True)
@@ -360,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = config.load(args.config)
     except config.ConfigError as exc:
-        print(f"[brocst] Konfigurationsfehler: {exc}", file=sys.stderr)
+        print(f"{TAG} [ERROR] Konfigurationsfehler: {exc}", file=sys.stderr)
         return 2
     setup_logging(cfg)
 

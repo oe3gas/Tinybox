@@ -24,6 +24,7 @@ from typing import Callable
 from prcore import kiss
 from prcore.ax25 import frame as ax
 from prcore.ax25.frame import AX25Error
+from prcore.termcolor import OK
 
 from .profiles import KISS_EXIT, Profile, Step
 
@@ -171,7 +172,7 @@ class Tnc:
             try:
                 await self.transport.open()
             except Exception as exc:
-                (log.debug if warned else log.warning)(
+                (log.debug if warned else log.error)(
                     "TNC %s not reachable (%s), retrying every %ss",
                     self.transport.describe(), exc, self.reconnect_sec)
                 warned = True
@@ -191,7 +192,7 @@ class Tnc:
                 self.inits += 1
                 self.last_error = None
                 self._send_params()
-                log.info("TNC in KISS mode - ready")
+                log.info("TNC in KISS mode - ready", extra=OK)
                 if self.profile.tunnel != "no":
                     log.info("VARA tunnel %s: %s through KISS type 2, no KISS parameters sent",
                              self.profile.tunnel, "all frames" if self.profile.tunnel == "all"
@@ -206,7 +207,7 @@ class Tnc:
                 log.error("TNC init failed: %s", exc)
                 self.last_error = f"init failed: {exc}"
             except ConnectionError as exc:
-                log.warning("TNC lost: %s", exc)
+                log.error("TNC lost: %s", exc)
                 if self.state == "kiss":
                     self.port_losses += 1
                 self.last_error = f"lost: {exc}"

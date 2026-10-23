@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import colorlog
+
 # Callsign as used in an AX.25 address field: 3-6 chars, letters and digits,
 # at least one digit and one letter, optional SSID 0-15.
 AX25_CALL_RE = re.compile(
@@ -86,6 +88,7 @@ class Config:
     data_dir: Path
     dictionary: Path
     log_level: str = "INFO"
+    color: str = "auto"                  # [console] color: auto | yes | no
     log_dir: Path | None = None          # program log, one file per start; None = console only
     txlog_dir: Path | None = None        # Sendeprotokoll (station); None = data_dir/../logs
     direwolf: DirewolfCfg = field(default_factory=DirewolfCfg)
@@ -285,6 +288,10 @@ def load(path: str | Path) -> Config:
         dictionary=base / get("brocastd", "dictionary", "brocast-core.yaml"),
         log_level=get("brocastd", "log_level", "INFO").upper(),
     )
+    try:
+        cfg.color = colorlog.check_mode(get("console", "color", "auto"))
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
     log_dir = get("logging", "log_dir", "logs")
     cfg.log_dir = (base / log_dir) if log_dir else None
     cfg.txlog_dir = base / (get("logging", "txlog_dir", "logs") or "logs")

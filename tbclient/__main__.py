@@ -8,9 +8,13 @@ import logging
 import socket
 import sys
 
+from prcore import termcolor
+
 from . import VERSION, config
 from .core import ClientCore
 from .web import WebServer
+
+TAG = "[tbcli]"
 
 
 def main() -> int:
@@ -18,26 +22,25 @@ def main() -> int:
     ap.add_argument("-c", "--config", default="tbclient.conf")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
-                        format="[tbcli] %(asctime)s %(message)s", datefmt="%H:%M:%S",
-                        stream=sys.stdout)
     try:
         cfg = config.load(args.config)
+        color = cfg.color
     except (config.ConfigError, ValueError) as exc:
-        print(f"Config error: {exc}")
-        return 1
+        cfg, color = None, "auto"
+        error = exc
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG if args.verbose else logging.INFO)
+    root.addHandler(termcolor.console_handler(TAG, color))
     log = logging.getLogger("tbclient")
-    log.info("TinyBox client %s - %s -> %s via %s", VERSION, cfg.mycall, cfg.tinybox_call,
-             cfg.link)
-    for line in config.radio_lines(cfg):
-        log.info("%s", line)
+    if cfg is None:
+        log.error("Config error: %s", error)
+        return 1
+    start_block(log, cfg)
 
     async def run() -> None:
         core = ClientCore(cfg)
         await WebServer(core).start()
-        if cfg.web_host in ("0.0.0.0", "::"):
-            log.info("open http://%s:%s/ (or http://127.0.0.1:%s/ on this PC)",
-                     socket.gethostname(), cfg.web_port, cfg.web_port)
+        web_line(log, cfg)
         await core.run()
 
     try:
@@ -45,9 +48,35 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     except OSError as exc:
-        print(f"Error: {exc}")
+        log.error("%s", exc)
         return 1
     return 0
+
+
+def start_block(log: logging.Logger, cfg: config.Config) -> None:
+    """What the user wants to see at start: who am I, where to, over what."""
+    log.info("TinyBox client start - version %s", VERSION, extra=termcolor.HEAD)
+    termcolor.kv(log, "Your call", cfg.mycall)
+    termcolor.kv(log, "Your locator", cfg.locator or "(not set)")
+    termcolor.blank(log)
+    termcolor.kv(log, "Your preferred TinyBox", cfg.tinybox_call)
+    termcolor.kv(log, "Autoconnect to", cfg.tinybox_call if cfg.auto_connect else "off")
+    termcolor.blank(log)
+    termcolor.kv(log, "Connection via", cfg.link, config.link_note(cfg))
+    termcolor.blank(log)
+    for line in config.radio_lines(cfg):     # details only with -v, hints always
+        if line.startswith("config hint: "):
+            log.warning("%s", line)
+        else:
+            log.debug("%s", line)
+
+
+def web_line(log: logging.Logger, cfg: config.Config) -> None:
+    if cfg.web_host in ("0.0.0.0", "::"):
+        termcolor.kv(log, "Web GUI on HTTP", f"http://{socket.gethostname()}:{cfg.web_port}/",
+                     f"(on this PC: http://127.0.0.1:{cfg.web_port}/)", url=True)
+    else:
+        termcolor.kv(log, "Web GUI on HTTP", f"http://{cfg.web_host}:{cfg.web_port}/", url=True)
 
 
 if __name__ == "__main__":

@@ -55,6 +55,9 @@ direwolf_conf = C:\direwolf ; only used by profile direwolf
 port   = 8101              ; not 8001: that is Direwolf's KISS port
                            ; loopback only; status query (JSON) on port + 1
 
+[console]
+color = auto               ; colours in the console window: auto | yes | no
+
 [log]
 level = INFO               ; DEBUG shows every byte of the TNC dialog
 file  = kisshub-{profile}.log   ; empty = console only; {profile} = the profile name,

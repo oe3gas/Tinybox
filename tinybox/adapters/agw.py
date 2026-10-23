@@ -29,6 +29,7 @@ import time
 from collections import deque
 
 from prcore.agw import PID_NO_L3, AgwProtocolError, Frame, read_frame, via_data
+from prcore.termcolor import OK
 
 from .. import chatimg, linkq, logsetup, texts
 from ..app import App
@@ -247,14 +248,14 @@ class AgwAdapter:
                 reader, writer = await asyncio.open_connection(dw.agw_host, dw.agw_port)
             except OSError as exc:
                 # warn once, then retry quietly until Direwolf is back
-                (log.debug if warned else log.warning)(
+                (log.debug if warned else log.error)(
                     "Direwolf AGW %s:%d not reachable (%s), retrying every %ds",
                     dw.agw_host, dw.agw_port, exc, dw.reconnect_sec)
                 warned = True
                 await asyncio.sleep(dw.reconnect_sec)
                 continue
             warned = False
-            log.info("connected to Direwolf AGW %s:%d", dw.agw_host, dw.agw_port)
+            log.info("connected to Direwolf AGW %s:%d", dw.agw_host, dw.agw_port, extra=OK)
             self._writer = writer
             watchdog = asyncio.create_task(self._idle_watchdog())
             self.q_supported = None
@@ -271,7 +272,7 @@ class AgwAdapter:
                         log.exception("error handling AGW frame '%s' from %s",
                                       frame.kind, frame.call_from)
             except (asyncio.IncompleteReadError, ConnectionError, AgwProtocolError) as exc:
-                log.warning("AGW connection lost: %s", exc or type(exc).__name__)
+                log.error("AGW connection lost: %s", exc or type(exc).__name__)
             except Exception:
                 log.exception("AGW adapter error, reconnecting")
             finally:

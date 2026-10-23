@@ -80,6 +80,7 @@ port    = 8080                 # login link is shown in the TinyBox window
 [console]
 enabled = yes                  # sysop console in the TinyBox window
 monitor = yes                  # show live session traffic there (toggle: MON)
+color = auto                   # colours in the console window: auto | yes | no
 
 [storage]
 data_dir = data

@@ -17,6 +17,8 @@ import asyncio
 import logging
 from typing import Awaitable, Callable, Optional
 
+from .termcolor import OK
+
 log = logging.getLogger(__name__)
 
 FEND, FESC, TFEND, TFESC = 0xC0, 0xDB, 0xDC, 0xDD
@@ -149,21 +151,21 @@ class KissTcpClient:
             try:
                 reader, writer = await asyncio.open_connection(self.host, self.port)
             except OSError as exc:
-                (log.debug if warned else log.warning)(
+                (log.debug if warned else log.error)(
                     "KISS %s:%d not reachable (%s), retrying every %ss",
                     self.host, self.port, exc, self.reconnect_sec)
                 warned = True
                 await asyncio.sleep(self.reconnect_sec)
                 continue
             warned = False
-            log.info("connected to KISS %s:%d", self.host, self.port)
+            log.info("connected to KISS %s:%d", self.host, self.port, extra=OK)
             self._writer = writer
             self.connected.set()
             try:
                 await self._read(reader)
-                log.warning("KISS connection closed by %s:%d", self.host, self.port)
+                log.error("KISS connection closed by %s:%d", self.host, self.port)
             except (ConnectionError, OSError) as exc:
-                log.warning("KISS connection lost: %s", exc or type(exc).__name__)
+                log.error("KISS connection lost: %s", exc or type(exc).__name__)
             finally:
                 self.connected.clear()
                 self._writer = None

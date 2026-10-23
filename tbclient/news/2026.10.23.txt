@@ -1,0 +1,2 @@
+- Console: clear start block (call, locator, TinyBox,
+  link, web GUI), colours, [ERROR]/[WARN] tags.

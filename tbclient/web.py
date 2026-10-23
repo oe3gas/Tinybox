@@ -106,8 +106,7 @@ class WebServer:
     async def start(self) -> asyncio.base_events.Server:
         cfg = self.core.cfg
         server = await asyncio.start_server(self._client, cfg.web_host, cfg.web_port)
-        log.info("web GUI on http://%s:%s/", "<this PC>" if cfg.web_host in ("0.0.0.0", "::")
-                 else cfg.web_host, cfg.web_port)
+        log.debug("web server on %s:%s", cfg.web_host, cfg.web_port)
         return server
 
     async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

@@ -8,6 +8,8 @@ import logging
 import os
 import sys
 
+from prcore import termcolor
+
 from . import VERSION, beacon, config, logsetup, notify, texts
 from .adapters import agw, brocast, inbox, sysop, telnet, web
 from .app import App
@@ -50,9 +52,9 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
     # The start block answers the first question when debugging: which version
     # is running, what is switched on (CR32). It comes before everything else,
     # so a run always begins with it. Never tokens, only set/unset.
-    for line in logsetup.start_block(cfg, VERSION, config_path, control.path,
-                                     control.debug):
-        log.info("%s", line)
+    for i, line in enumerate(logsetup.start_block(cfg, VERSION, config_path, control.path,
+                                                  control.debug)):
+        log.info("%s", line, extra=termcolor.HEAD if i == 0 else None)
     app = App.create(cfg)
     app.stop_event = asyncio.Event()
     app.config_path = config_path
@@ -67,7 +69,9 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
     if cfg.web.enabled:
         web_server = await web.start(app)
         # the login link contains the secret token: console only, never the log file
-        print(f"\n[tinyb]   Web GUI login:  {app.web_login_url}\n", flush=True)
+        print("\n" + termcolor.tag_text("[tinyb]", "   Web GUI login:  "
+                                         + app.web_login_url, "url", cfg.console.color)
+              + "\n", flush=True)
     if cfg.radio.interface == "kiss":              # own AX.25 layer 2 (PLANUNG.md 15)
         from .adapters import kiss
         app.agw = kiss.KissAdapter(app)
@@ -106,7 +110,8 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
             web_server.close()
         await asyncio.gather(*tasks, return_exceptions=True)
         app.store.close()
-        log.info("%s", logsetup.stop_line("RESTART" if app.restart else "SHUTDOWN"))
+        log.info("%s", logsetup.stop_line("RESTART" if app.restart else "SHUTDOWN"),
+                 extra=termcolor.HEAD)
     return app.restart
 
 

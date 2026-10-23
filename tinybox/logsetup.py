@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from prcore import termcolor
+
 PREFIX = "tinybox-"             # tinybox-2026-10-13.log
 SUFFIX = ".log"
 MAX_BYTES = 20 * 1024 * 1024    # per day; then tinybox-2026-10-13.2.log
@@ -604,9 +606,7 @@ def setup(cfg, monitor_filter_factory) -> tuple[LogControl, object]:
     console_filter = monitor_filter_factory(cfg.console.monitor)
     console_level = LevelFilter(cfg.logging.level)
     console_level.debug = set(debug)
-    console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(logging.Formatter("[tinyb] %(asctime)s %(cctx)s%(message)s",
-                                           "%H:%M:%S"))
+    console = termcolor.console_handler("[tinyb]", cfg.console.color, context="cctx")
     console.addFilter(ContextFilter())            # also for records without the root path
     console.addFilter(console_level)
     console.addFilter(console_filter)

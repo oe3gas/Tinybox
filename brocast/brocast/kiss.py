@@ -6,6 +6,8 @@ import asyncio
 import logging
 from typing import Awaitable, Callable, Optional
 
+from .colorlog import OK
+
 log = logging.getLogger(__name__)
 
 FEND, FESC, TFEND, TFESC = 0xC0, 0xDB, 0xDC, 0xDD
@@ -85,17 +87,21 @@ class KissLink:
 
     async def run(self) -> None:
         delay = 1
+        warned = False
         while True:
             try:
                 reader, writer = await asyncio.open_connection(self.host, self.port)
             except OSError as exc:
-                log.warning("KISS %s:%s nicht erreichbar (%s), neuer Versuch in %s s",
-                            self.host, self.port, exc, delay)
+                (log.debug if warned else log.error)(
+                    "KISS %s:%s nicht erreichbar (%s), neuer Versuch in %s s",
+                    self.host, self.port, exc, delay)
+                warned = True
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, max(self.reconnect_sec, 1) * 6)
                 continue
             delay = 1
-            log.info("KISS verbunden mit %s:%s", self.host, self.port)
+            warned = False
+            log.info("KISS verbunden mit %s:%s", self.host, self.port, extra=OK)
             self._writer = writer
             self.connected.set()
             try:
@@ -104,7 +110,7 @@ class KissLink:
                 self.connected.clear()
                 self._writer = None
                 writer.close()
-                log.warning("KISS-Verbindung verloren")
+                log.error("KISS-Verbindung verloren")
             await asyncio.sleep(self.reconnect_sec)
 
     async def _read(self, reader: asyncio.StreamReader) -> None:

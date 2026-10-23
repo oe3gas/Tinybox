@@ -19,6 +19,8 @@ import logging
 import struct
 from typing import Callable
 
+from prcore.termcolor import OK
+
 from prcore.agw import PID_NO_L3, Frame, read_frame, via_data
 
 from . import radio
@@ -155,14 +157,15 @@ class AgwPort:
                                                                self.cfg.agw_port)
             except OSError as exc:
                 if not warned:
-                    log.warning("Direwolf AGW %s:%s not reachable (%s)",
+                    log.error("Direwolf AGW %s:%s not reachable (%s)",
                                 self.cfg.agw_host, self.cfg.agw_port, exc)
                 warned = True
                 await asyncio.sleep(5)
                 continue
             warned = False
             self._writer = writer
-            log.info("connected to Direwolf AGW %s:%s", self.cfg.agw_host, self.cfg.agw_port)
+            log.info("connected to Direwolf AGW %s:%s", self.cfg.agw_host, self.cfg.agw_port,
+                     extra=OK)
             self.send("R")
             self.send("X", self.cfg.mycall)
             self.send("k")
@@ -175,7 +178,7 @@ class AgwPort:
                     except Exception:
                         log.exception("error handling AGW frame")
             except (asyncio.IncompleteReadError, ConnectionError, OSError) as exc:
-                log.warning("AGW connection lost: %s", exc or type(exc).__name__)
+                log.error("AGW connection lost: %s", exc or type(exc).__name__)
             finally:
                 self.agw_up.clear()
                 self._writer = None

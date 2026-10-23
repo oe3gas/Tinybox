@@ -18,6 +18,7 @@ import logging
 import struct
 from typing import Optional
 
+from .colorlog import OK
 from .kiss import FrameHandler
 
 log = logging.getLogger(__name__)
@@ -56,17 +57,21 @@ class AgwLink:
 
     async def run(self) -> None:
         delay = 1
+        warned = False
         while True:
             try:
                 reader, writer = await asyncio.open_connection(self.host, self.port)
             except OSError as exc:
-                log.warning("AGW %s:%s nicht erreichbar (%s), neuer Versuch in %s s",
-                            self.host, self.port, exc, delay)
+                (log.debug if warned else log.error)(
+                    "AGW %s:%s nicht erreichbar (%s), neuer Versuch in %s s",
+                    self.host, self.port, exc, delay)
+                warned = True
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, max(self.reconnect_sec, 1) * 6)
                 continue
             delay = 1
-            log.info("AGW verbunden mit %s:%s", self.host, self.port)
+            warned = False
+            log.info("AGW verbunden mit %s:%s", self.host, self.port, extra=OK)
             writer.write(pack("R") + pack("k"))          # version, raw frames on
             self._writer = writer
             self.connected.set()
@@ -80,7 +85,7 @@ class AgwLink:
                 self._writer = None
                 self._fail_query()
                 writer.close()
-                log.warning("AGW-Verbindung verloren")
+                log.error("AGW-Verbindung verloren")
             await asyncio.sleep(self.reconnect_sec)
 
     async def _read(self, reader: asyncio.StreamReader) -> None:

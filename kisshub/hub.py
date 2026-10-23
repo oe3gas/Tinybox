@@ -42,6 +42,7 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from prcore import kiss
+from prcore.termcolor import OK
 
 from .linkstats import LinkStats, describe
 from .tnc import Tnc
@@ -209,7 +210,7 @@ class Hub:
         c = Client(f"client{next(self._names)} {peer[0]}:{peer[1]}" if peer else "client",
                    writer)
         self.clients[writer] = c
-        log.info("%s connected (%d clients)", c.name, len(self.clients))
+        log.info("%s connected (%d clients)", c.name, len(self.clients), extra=OK)
         dec = kiss.Decoder()
         try:
             while data := await reader.read(4096):

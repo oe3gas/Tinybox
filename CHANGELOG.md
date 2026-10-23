@@ -1,5 +1,17 @@
 # Changelog
 
+## Unveröffentlicht
+
+- Konsole aller vier Programme (TinyBox, tbclient, kisshub, brocastd) einheitlich:
+  `[ERROR]` (rot) und `[WARN]` (gelb) vor Fehlern und Warnungen, stehende
+  Verbindungen grün, Startzeile hervorgehoben. Farben nur in einem echten
+  Konsolenfenster, nicht in Log-Dateien; abschalten mit `[console] color = no`
+  oder der Umgebungsvariable `NO_COLOR`.
+- tbclient 2026.10.23: übersichtlicher Startblock (Call, Locator, TinyBox,
+  Autoconnect, Verbindungsweg, Web-GUI); technische Details nur mit `-v`.
+- „Nicht erreichbar“ (Direwolf, KISS, TNC) wird nur noch einmal gemeldet, als `[ERROR]`.
+- Linux-Startskripte `tinybox.sh`, `tbclient.sh`, `kisshub.sh`, `brocast/brocastd.sh`.
+
 ## v1.0.0 – 22.10.2026
 
 Erste öffentliche Version.

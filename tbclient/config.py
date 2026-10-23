@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from prcore import termcolor
 from prcore.ax25.link import parse_calls
 
 CALL_RE = re.compile(r"^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$")
@@ -31,6 +32,7 @@ class Config:
     radio_port: int = 0
     web_host: str = "0.0.0.0"
     web_port: int = 7744
+    color: str = "auto"               # [console] color: auto | yes | no
     data_dir: Path = Path("data/tbclient")
     sync_chunk: int = 1024            # bytes per request of a mailbox sync (radio)
     sync_pause: float = 5.0           # seconds between two requests (radio)
@@ -144,6 +146,10 @@ def load(path: str | Path) -> Config:
 
     cfg.web_host = get("web", "host", cfg.web_host)
     cfg.web_port = int(get("web", "port", str(cfg.web_port)))
+    try:
+        cfg.color = termcolor.check_mode(get("console", "color", cfg.color))
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
     data_dir = Path(get("storage", "data_dir", str(cfg.data_dir)))
     cfg.data_dir = data_dir if data_dir.is_absolute() else path.parent / data_dir
 
@@ -257,3 +263,12 @@ def radio_lines(cfg: Config) -> list[str]:
     if src.get("direwolf.conf"):
         lines.append(f"direwolf.conf {src['direwolf.conf']}")
     return lines + [f"config hint: {h}" for h in cfg.hints]
+
+
+def link_note(cfg: Config) -> str:
+    """The bracket after 'Connection via:' in the start block."""
+    if cfg.link == "agw":
+        return f"(Direwolf {cfg.agw_host}:{cfg.agw_port}, channel {cfg.radio_port})"
+    if cfg.link == "kiss":
+        return f"(kisshub {cfg.kiss_host}:{cfg.kiss_port})"
+    return f"(TinyBox {cfg.telnet_host}:{cfg.telnet_port}, test only)"

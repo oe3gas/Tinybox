@@ -7,7 +7,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
-from prcore import direwolfconf, kiss
+from prcore import direwolfconf, kiss, termcolor
 
 from .hub import HubCfg
 from .profiles import PROFILES, TUNNEL_MODES, Profile, ax25_recommendation, with_init_lines
@@ -40,12 +40,13 @@ class Config:
     hub: HubCfg
     log_level: str = "INFO"
     log_file: str = ""
+    color: str = "auto"               # [console] color: auto | yes | no
     trace: bool = False               # [log] trace: every byte to/from the TNC in hex
     hints: tuple[str, ...] = ()       # CR70: old keys still in the file, shown at start
     direwolf: str = ""                # CR70: what was read from direwolf.conf
 
 
-SECTIONS = ("tnc", "kiss", "ax25", "server", "log", "vara")
+SECTIONS = ("tnc", "kiss", "ax25", "server", "log", "vara", "console")
 
 
 def load(path: str | Path, profile_name: str | None = None) -> Config:
@@ -224,7 +225,15 @@ def load(path: str | Path, profile_name: str | None = None) -> Config:
         raise ConfigError("[kiss] txdelay_ms: 0..10000")
     return Config(tnc=tnc, hub=hub, log_level=get("log", "level", "INFO").upper(),
                   log_file=named(get("log", "file", "")), trace=get("log", "trace", False, bool),
-                  hints=tuple(hints), direwolf=dw.describe() if dw else "")
+                  hints=tuple(hints), direwolf=dw.describe() if dw else "",
+                  color=_color(get("console", "color", "auto")))
+
+
+def _color(value: str) -> str:
+    try:
+        return termcolor.check_mode(value)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
 
 
 def _float(cp: configparser.ConfigParser, key: str) -> float:

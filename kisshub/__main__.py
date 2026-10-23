@@ -15,6 +15,8 @@ import logging
 import sys
 from pathlib import Path
 
+from prcore import termcolor
+
 from . import VERSION
 from .config import ConfigError, load, make_transport, radio_lines
 from .console import Console, LogControl
@@ -22,13 +24,16 @@ from .hub import Hub
 from .tnc import Tnc
 
 
-def setup_logging(level: str, file: str) -> None:
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+TAG = "[kisshb]"
+
+
+def setup_logging(level: str, file: str, color: str = "auto") -> None:
+    handlers: list[logging.Handler] = [termcolor.console_handler(TAG, color)]
     if file:
-        handlers.append(logging.FileHandler(file, encoding="utf-8"))
-    logging.basicConfig(level=getattr(logging, level, logging.INFO), handlers=handlers,
-                        format="%(asctime)s %(levelname).1s [kisshub] %(message)s",
-                        datefmt="%H:%M:%S")
+        fh = logging.FileHandler(file, encoding="utf-8")
+        fh.setFormatter(termcolor.ConsoleFormatter(TAG, datefmt="%Y-%m-%d %H:%M:%S"))
+        handlers.append(fh)
+    logging.basicConfig(level=getattr(logging, level, logging.INFO), handlers=handlers)
 
 
 async def main(cfg) -> None:
@@ -125,12 +130,12 @@ def run(argv: list[str] | None = None) -> int:
     try:
         cfg = load(args.config, args.profile)
     except ConfigError as exc:
-        print(f"kisshub: {exc}", file=sys.stderr)
+        print(f"{TAG} [ERROR] {exc}", file=sys.stderr)
         return 2
-    setup_logging(cfg.log_level, cfg.log_file)
+    setup_logging(cfg.log_level, cfg.log_file, cfg.color)
     log = logging.getLogger("kisshub")
     log.info("kisshub %s: %s (%s), KISS-TCP %s:%d", VERSION, cfg.tnc.profile.name,
-             cfg.tnc.profile.notes, cfg.hub.listen, cfg.hub.port)
+             cfg.tnc.profile.notes, cfg.hub.listen, cfg.hub.port, extra=termcolor.HEAD)
     for line in log_lines(args.config, cfg) + radio_lines(cfg):
         log.info("%s", line)
     try:

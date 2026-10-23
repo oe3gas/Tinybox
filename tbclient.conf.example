@@ -46,6 +46,10 @@ version      = 2.2             # 2.2: SABME/SREJ/XID, falls back to 2.0 by itsel
 host         = 0.0.0.0         # 0.0.0.0 = reachable in the LAN (no login! see PLANUNG.md 11/5)
 port         = 7744
 
+[console]
+color        = auto            # colours in the console window: auto | yes | no
+                               # (auto: only in a real console, not in a log file)
+
 [sync]
 # Mailbox sync over radio, easy on the channel: each request asks for about
 # chunk_bytes, then the client pauses pause_sec (longer while others are heard).

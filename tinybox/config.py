@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from prcore import termcolor
 from prcore.ax25.link import parse_calls
 
 # Amateur radio callsign as used in AX.25: 3-6 chars, letters and digits,
@@ -198,6 +199,7 @@ class WebCfg:
 class ConsoleCfg:
     enabled: bool
     monitor: bool
+    color: str = "auto"              # colours in the console window: auto | yes | no
 
 
 @dataclass
@@ -393,6 +395,13 @@ class Config:
     sources: dict = field(default_factory=dict)
     hints: list = field(default_factory=list)
     kiss_fixed: frozenset = frozenset()
+
+
+def _color(value: str) -> str:
+    try:
+        return termcolor.check_mode(value.split("#", 1)[0])
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
 
 
 def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
@@ -716,6 +725,7 @@ def load(path: str | Path) -> Config:
     console = ConsoleCfg(
         enabled=_get(cp, "console", "enabled", True, bool),
         monitor=_get(cp, "console", "monitor", True, bool),
+        color=_color(_get(cp, "console", "color", "auto")),
     )
 
     data_dir = Path(_get(cp, "storage", "data_dir", "data"))
