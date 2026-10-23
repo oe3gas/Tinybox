@@ -55,9 +55,12 @@ brauchen welche. Unter Debian/Ubuntu/Raspberry Pi OS gibt es sie auch als Pakete
 `sudo apt install python3-serial python3-cbor2 python3-yaml`.
 
 **Linux-Hinweise**
-- Die `.bat`-Dateien sind nur für Windows. Unter Linux startet man jedes Programm
-  wie oben mit `python3 -m <programm> -c <programm>.conf` (`kisshub` und `dxfeed`
-  genauso, fwdsim mit `python3 -m fwdsim`; brocastd aus dem Ordner `brocast/` mit `python3 -m brocast.daemon -c brocastd.conf`).
+- Die `.bat`-Dateien sind nur für Windows. Für Linux gibt es die Gegenstücke
+  `tinybox.sh`, `tbclient.sh`, `kisshub.sh` und `brocast/brocastd.sh` – im Terminal
+  starten, z. B. `./tbclient.sh`. Die Log-Ausgabe (Konsole) erscheint dort genauso
+  wie im Windows-Fenster, beendet wird mit Strg+C. Alles andere startet man wie oben
+  mit `python3 -m <programm> -c <programm>.conf` (`dxfeed` genauso, fwdsim mit
+  `python3 -m fwdsim`).
 - Pfade in den Beispielen wie `C:\Tinybox` oder `data\` sind unter Linux einfach
   `~/Tinybox` bzw. `data/`.
 - Direwolf: `sudo apt install direwolf`, Konfiguration wie unten bei „Mit Direwolf“.
