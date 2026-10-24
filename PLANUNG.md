@@ -233,6 +233,7 @@ Text ...
 | `geosphere_station.py --tinybox` | stündlich xx:05 | an `WX`, `Replace: geosphere-wetter-11334`, `Valid: 2h`, mit `Brocast:` (Wetterseite `typ wx`, Abschnitt 6d) |
 | `geosphere_station.py --region --tinybox` | stündlich xx:05 (**ersetzt die Zeile oben seit 13.10.2026**) | 24 Stationen Wein-/Waldviertel (`REGION` im Skript, 2 API-Abrufe): je Station ein Einzelbericht wie Schöngrabern (`Replace: geosphere-wetter-<ID>`, eigene `wx`-Seite = 1 Frame, grafisch im Listener) **und** der Gesamtüberblick „Wetter Wein- & Waldviertel“ (`Replace: geosphere-wetter-region`, Text ~1,9 kB nur in der Mailbox; `Brocast:` Tabellenseite `typ text`, Blöcke `table` mit `sc -1` und Spaltenbedeutung `n`, Abschnitt 6g; 3 Frames gepackt). Funkmenge je Karussell-Lauf: 24 + 3 Frames. **Nicht** `--einzel-ohne-brocast` (Variante B vom 13.10.2026, zurückgenommen 14.10.2026): die TinyBox sendet *jedes* Bulletin, ohne `Brocast:`-Seite ging der Mailbox-Text (≈ 600 B, 2–3 Frames) statt der `wx`-Seite (1 Frame) über Funk, und der Listener zeigte nur Text (Fehlerbild vom 14.10.). Der Schalter bleibt im Skript, taugt aber nur, wenn die Einzelbulletins gar nicht an brocast gehen sollen. |
 | `geosphere_warnungen.py --tinybox` | alle 15 min | an `WARN` nur bei Änderung, gültig bis Warnungsende; bei vorzeitiger Aufhebung „Entwarnung“ (3 h) |
+| `geosphere_prognose.py --locator JN88BN --tinybox` | alle 3 h um xx:35 (00:35, 03:35 …) | Prognose 48 h in 3-h-Schritten je Locator an `WX`, `Replace: geosphere-prognose-<LOC>`, `Valid: 4h`, mit `Brocast:` (Prognosetabelle, 2 Frames gepackt, im Listener als Meteogramm; Abschnitt 20) |
 
 Bulletins an `WARN` werden in brocast zu Warnseiten (`[brocast] alert_destinations`, Rubrik Notfunk) und im Listener immer angezeigt und hervorgehoben.
 
@@ -1256,6 +1257,56 @@ Anlass: Prüfung der Lieferanten dxfeed, GeoSphere (Wetter, Warnungen) und TBNEW
   `geosphere_aufgaben_einrichten.bat` installiert `truststore` bei Bedarf.
 - Weitere Punkte der Prüfung (gemeinsames Paket für Lieferanten, einheitliche
   Konfiguration, dxfeed als Tabellenseite, DX-News als zweiter Inhalt) folgen gesondert.
+
+## 20. Wetterprognose für einen Locator (Weg 1 entschieden und umgesetzt 24.10.2026, Weg 2 = CR72)
+
+Anlass: Neben den Messwerten (TAWES, Abschnitt 6d/6g) soll es eine **Prognose** geben,
+besonders für den Wind. Die Stations-API von GeoSphere liefert nur Messwerte; die
+Prognose kommt aus dem Wettermodell `nwp-v1-1h-2500m` (C-LAEF, 2,5-km-Gitter,
+Stundenwerte, 61 h, neuer Lauf alle 3 h, CC BY 4.0), abgefragt über
+`/v1/timeseries/forecast/nwp-v1-1h-2500m?lat_lon=<lat>,<lon>`.
+
+**Ort = Maidenhead-Locator.** Funkamateure kennen ihren Locator; die API nimmt nur
+Koordinaten. Das Skript rechnet den Locator in den Mittelpunkt um, die API liefert die
+Gitterzelle an diesem Punkt (ihre Koordinaten stehen in der Antwort und gehen als `pos`
+mit). 6-stellig (ca. 6 × 5 km ≈ 3 × 2 Modellzellen) passt zur Auflösung, 8-stellig geht
+auch, 4-stellig (150 × 110 km) wird abgelehnt, ebenso ein Locator außerhalb des
+Modellgebiets (≈ 43–51,8° N, 5,5–22° O).
+
+**Weg 1 – feste Locators, zeitgesteuert (umgesetzt):** `geosphere_prognose.py --locator
+JN88BN[,…] --tinybox`, Aufgabenplanung alle 3 h um 00:35, 03:35 … (`geosphere_aufgaben_einrichten.bat`,
+Variable `LOCATOR`; NanoPi: `geosphere-prognose.timer`). Ein API-Abruf für alle Locators.
+Je Locator ein Bulletin an `WX`, `Replace: geosphere-prognose-<LOC>`, `Valid: 4h`.
+
+- **Werte je Schritt** (Standard 48 h in 3-h-Schritten, `--stunden` bis 54, `--schritt` 1/2/3/6):
+  Temperatur am Beginn, mittlerer Wind (Vektormittel aus `u10m`/`v10m`), stärkste Böe im
+  Schritt (`ugust`/`vgust` sind das Maximum der jeweils letzten Stunde), Niederschlag im
+  Schritt (Differenz der Summenreihe `rr_acc`, nie negativ), Bewölkung in Achteln (`tcc`).
+  Die Zeilen stehen auf dem lokalen 3-h-Raster (über die Zeitumstellung hinweg lesbar), der
+  erste Schritt beginnt mit der aktuellen Stunde.
+- **Text** (Mailbox, Terminal): Tabelle ≤ 60 Zeichen breit, Wind und Böen in km/h mit Bft,
+  darunter Temperaturspanne, stärkste Böe mit Zeit, Regensumme und Beginn.
+- **brocast-Seite** `typ wx` ohne `dat`, mit `area` = Locator, `pos` = Gitterzelle und einer
+  Tabelle mit Spaltenbedeutung `n = ["hour", "sky", "temp", "wdir", "wspd", "gust", "rr"]`
+  (wie die Regionsübersicht, 6g): Uhrzeit als Text, Achtel ×10, sonst `sc -1`; je Tag eine
+  Gruppenzeile („Sa 24.10.“). Keine Dictionary-Änderung. 48 h / 3 h = 17 Zeilen,
+  **gepackt 2 Frames** (≈ 340 B).
+- **Listener:** Erste Spalte `hour` → **Prognosegrafik (Meteogramm)** statt Stationsraster:
+  oben Kacheln (Temperaturspanne mit Zeiten, stärkste Böe in km/h mit Bft und Zeit,
+  Niederschlagssumme mit Beginn), darunter je Zeitschritt eine Spalte: Tag/Uhrzeit,
+  Wolkensymbol (Sonne/Mond nach Sonnenauf- und -untergang am Ort, Tropfen bei Regen),
+  Temperaturkurve, Regenbalken, Windpfeil mit Richtung und km/h, Böen mit Bft (ab Bft 6
+  hervorgehoben); Nachtschritte hinterlegt, Tageswechsel als Linie. Text und Teletext zeigen
+  die schlichte Tabelle. Alles aus den gesendeten Zahlen, nichts zusätzlich über Funk.
+- **Quelle:** vorerst als Text `GeoSphere Austria, NWP (CC BY 4.0)` (35 B), denn der
+  Listen-Eintrag `geosphere` nennt TAWES. **Offen:** eigener `src`-Eintrag in der nächsten
+  Dictionary-Version (spart ≈ 33 B je Aussendung).
+- Tests: `tests/test_geosphere_prognose.py` mit einer echten API-Antwort (`tests/fixtures/
+  geosphere_nwp_jn88bn.json`, über das Ende der Sommerzeit am 25.10.2026).
+
+**Weg 2 – Prognose auf Anfrage eines Users (geplant, CR72):** Ein User fordert über die
+TinyBox die Prognose für **seinen** Locator an und bekommt sie zurück. Details siehe
+`docs/client-change-requests.md`, CR72.
 
 ## Quellen
 

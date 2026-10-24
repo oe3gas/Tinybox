@@ -1,0 +1,18 @@
+[Unit]
+Description=GeoSphere forecast for a locator into the TinyBox inbox
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tinybox
+Group=tinybox
+WorkingDirectory=/opt/tinybox
+# inbox in RAM (/run/tinybox/eingang, see tmpfiles-tinybox.conf); messages go to the journal
+# more locators: --locator JN88BN,JN78WM (one bulletin each)
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/tinybox/geosphere_prognose.py --locator JN88BN --tinybox /run/tinybox/eingang
+TimeoutStartSec=120
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes

@@ -1,0 +1,8 @@
+[Unit]
+Description=GeoSphere forecast every 3 hours at xx:35 (00:35, 03:35 ...)
+
+[Timer]
+OnCalendar=*-*-* 00/3:35:00
+
+[Install]
+WantedBy=timers.target

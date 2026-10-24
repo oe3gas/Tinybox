@@ -2014,3 +2014,29 @@ Die Klarheit eines eigenen Felds liefert eine Vorschau unter dem Eingabefeld.
   Digipeater → TinyBox über KISS, beide Richtungen durch den Digi). Client 2026.10.18.7.
 - **Funktest und Abnahme** (OE3GAS, 18.10.2026): getestet und abgenommen ✅
 
+## CR72 – Wetterprognose auf Anfrage: User fordert die Prognose für seinen Locator an (offen, erfasst 24.10.2026)
+
+### Erfassung (OE3GAS, 24.10.2026)
+
+Ziel – genau das: **Ein User fordert den Forecast für seinen Locator an.** Er bekommt die
+Prognose für seinen Standort zurück, nicht nur für die fest eingestellten Locators der
+Aufgabenplanung (Weg 1, PLANUNG Abschnitt 20).
+
+### Vorschlag (zur Entscheidung)
+
+- **Befehl in der TinyBox**, z. B. `WX JN88BN` (Name noch offen; `WX` ist auch die Rubrik).
+  Ohne Locator: der zuletzt verwendete des Users (neu: Locator im User-Profil, einmal mit
+  `WX JN88BN` gesetzt). Prüfung wie in `geosphere_prognose.py` (6/8-stellig, im Modellgebiet).
+- **Antwort an den Fragenden**, nicht als Bulletin: im Terminal sofort der Text aus
+  `geosphere_prognose.bericht()` (≤ 60 Zeichen breit); im Client als persönliche Nachricht
+  bzw. eigene Ansicht mit der Prognosegrafik (gleiche Tabelle wie die brocast-Seite).
+- **Abruf in der TinyBox** über dieselben Funktionen (Locator → Punkt, API, Schritte) –
+  dafür die Logik aus dem Skript in ein Modul ziehen, das TinyBox importiert. Abruf
+  asynchron/mit Timeout, damit eine langsame API die Verbindung nicht blockiert.
+- **Cache je Locator und Modelllauf:** das Modell rechnet nur alle 3 h neu – gleiche
+  Anfragen innerhalb dieser Zeit ohne neuen API-Abruf. Grenze je User/Stunde gegen Missbrauch.
+- **Über Funk:** nur die Antwort an den Fragenden; keine brocast-Seite je Anfrage (sonst
+  füllt jede Einzelanfrage das Karussell). Offen: Locators, die oft angefragt werden,
+  automatisch in Weg 1 aufnehmen?
+- Offen: Nur für angemeldete User oder für jeden Connect? Ausgabe-Schritte (3 h / 48 h wie
+  Weg 1, im Terminal evtl. 24 h)?

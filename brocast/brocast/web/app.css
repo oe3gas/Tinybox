@@ -405,6 +405,51 @@ a.extlink:hover { color: var(--accent-dark); }
   .wxg-dir { min-width: 0; }
 }
 
+/* forecast (meteogram): one column per time step, labels on the left (sticky when
+   the grid scrolls sideways). Night steps are shaded, days separated by a rule. */
+.wxf-scroll { overflow-x: auto; background: #fff; border: 2px solid var(--ink); border-radius: 10px; }
+.wxf-grid { display: grid; grid-template-columns: 74px repeat(var(--wxf-n), minmax(48px, 1fr));
+            min-width: calc(74px + var(--wxf-n) * 48px); align-items: stretch; }
+.wxf-lab { position: sticky; left: 0; z-index: 1; background: var(--paper-2); border-right: 1.5px solid var(--rule);
+           padding: 4px 8px; font-size: 12px; font-weight: 700; color: var(--ink-2); display: flex;
+           flex-direction: column; justify-content: center; line-height: 1.15; }
+.wxf-lab small { font: 11px var(--mono); color: var(--ink-3); font-weight: 400; }
+.wxf-day { background: var(--paper-2); border-bottom: 1.5px solid var(--rule); padding: 5px 8px;
+           font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wxf-dayl { border-bottom: 1.5px solid var(--rule); }
+.wxf-day.d0, .wxf-c.d0 { border-left: 2px solid var(--ink); }
+.wxf-c { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+         padding: 3px 2px; min-width: 0; text-align: center; }
+.wxf-c.night { background: #EEF0F4; }
+.wxf-hour { font: 700 13px var(--mono); padding-top: 6px; }
+.wxf-skyc { padding: 2px; }
+.wxf-sky { width: 40px; height: 33px; }
+.wxf-sky .sun { fill: #F2B400; stroke: #B07F00; stroke-width: 1.5; }
+.wxf-sky .ray { stroke: #D99B00; stroke-width: 2.4; stroke-linecap: round; }
+.wxf-sky .moon { fill: #9AA3B5; stroke: #5F687A; stroke-width: 1.3; }
+.wxf-sky .cloud { fill: #fff; stroke: var(--ink-3); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.wxf-sky .cloud.dark { fill: #C3C8D0; stroke: #4F5663; }
+.wxf-sky .drop { stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; }
+.wxf-temp b { font: 700 14px var(--mono); }
+.wxf-curvec { grid-column: 2 / -1; position: relative; height: 70px; border-bottom: 1.5px solid var(--rule); }
+.wxf-curve { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wxf-curve .area { fill: #C0571B; opacity: .10; }
+.wxf-curve .line { fill: none; stroke: #C0571B; stroke-width: 2.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.wxf-curve .zero { stroke: #1F4E9A; stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.wxf-curve .dayline { stroke: var(--ink); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.wxf-dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
+           background: #fff; border: 2px solid #C0571B; }
+.wxf-rain { justify-content: flex-end; }
+.wxf-rbar { width: 16px; height: 34px; display: flex; align-items: flex-end; border-bottom: 1.5px solid var(--rule); }
+.wxf-rbar i { display: block; width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; }
+.wxf-rain span { font: 600 12px var(--mono); }
+.wxf-rain .dim, .wxf-c .dim { color: var(--ink-3); font-weight: 400; }
+.wxf-wind .wxg-arrow { width: 22px; height: 22px; }
+.wxf-dir { font: 600 11px var(--mono); color: var(--ink-3); }
+.wxf-wind b, .wxf-gust b { font: 700 14px var(--mono); }
+.wxf-gust b.strong { color: var(--warn); }
+.wxf-gust .wxg-bft { font-size: 10px; padding: 0 5px; }
+
 /* DX digest (dxfeed): station grid with band/mode dots, activity heat map.
    Mode colours: CW amber, SSB blue, FT8 green, other violet - strong enough on white */
 :root { --m-cw: #B86A00; --m-ssb: #0B4A8F; --m-ft8: #0B7A2F; --m-oth: #6A3FA6; }

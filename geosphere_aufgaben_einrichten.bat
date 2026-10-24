@@ -8,6 +8,9 @@ rem                 an WX (Replace, Valid 2h). Nicht --einzel-ohne-brocast: die
 rem                 TinyBox sendet jedes Bulletin, ohne Wetterseite ginge der
 rem                 (groessere) Text ueber Funk und der Listener zeigt nur Text.
 rem   - Warnungen:  alle 15 Minuten     -> Bulletin an WARN (nur bei Aenderung)
+rem   - Prognose:   alle 3 Stunden um 00:35, 03:35 ... -> je Locator ein Bulletin
+rem                 an WX (Text + brocast-Prognosetabelle, 2 Frames, Valid 4h).
+rem                 Locators: Variable LOCATOR unten (mehrere mit Komma).
 rem  Die Dateien landen in eingang\, TinyBox macht Bulletins daraus,
 rem  brocast sendet sie. Fehler stehen in logs\geosphere.log.
 rem  Laeuft unter dem angemeldeten Benutzer, ohne Konsolenfenster (pyw).
@@ -36,6 +39,12 @@ schtasks /Create /F /TN "brocast\GeoSphere Wetter" /SC HOURLY /MO 1 /ST 00:05 ^
   /TR "\"%PYW%\" -3 \"%~dp0geosphere_station.py\" --region --tinybox --log \"%~dp0logs\geosphere.log\""
 if errorlevel 1 goto fehler
 
+rem Locator(s) fuer die Prognose, mehrere mit Komma (z. B. JN88BN,JN78WM)
+set LOCATOR=JN88BN
+schtasks /Create /F /TN "brocast\GeoSphere Prognose" /SC HOURLY /MO 3 /ST 00:35 ^
+  /TR "\"%PYW%\" -3 \"%~dp0geosphere_prognose.py\" --locator %LOCATOR% --tinybox --log \"%~dp0logs\geosphere.log\""
+if errorlevel 1 goto fehler
+
 schtasks /Create /F /TN "brocast\GeoSphere Warnungen" /SC MINUTE /MO 15 ^
   /TR "\"%PYW%\" -3 \"%~dp0geosphere_warnungen.py\" --tinybox --log \"%~dp0logs\geosphere.log\""
 if errorlevel 1 goto fehler
@@ -45,8 +54,10 @@ echo Fertig. Die Aufgaben stehen in der Aufgabenplanung unter "brocast".
 echo Erster Testlauf jetzt (mit Ausgabe):
 py -3 "%~dp0geosphere_station.py" --region --tinybox --log "%~dp0logs\geosphere.log"
 py -3 "%~dp0geosphere_warnungen.py" --tinybox --log "%~dp0logs\geosphere.log"
+py -3 "%~dp0geosphere_prognose.py" --locator %LOCATOR% --tinybox --log "%~dp0logs\geosphere.log"
 echo.
-echo In eingang\erledigt\ sollten jetzt geosphere_wetter_region.txt und 24 x geosphere_wetter_^<ID^>.txt liegen.
+echo In eingang\erledigt\ sollten jetzt geosphere_wetter_region.txt, 24 x geosphere_wetter_^<ID^>.txt
+echo und geosphere_prognose_^<LOCATOR^>.txt liegen.
 echo Meldungen der Skripte: logs\geosphere.log
 pause
 exit /b 0

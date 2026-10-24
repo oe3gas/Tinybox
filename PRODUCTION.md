@@ -12,6 +12,7 @@ The NanoPi runs the full station ("PC2" setup):
 | brocastd, station mode (`brocast/brocast/`) | `brocastd.service` |
 | GeoSphere weather (`geosphere_station.py`) | `geosphere-wetter.timer`, hourly at xx:05 |
 | GeoSphere warnings (`geosphere_warnungen.py`) | `geosphere-warnungen.timer`, every 15 minutes |
+| GeoSphere forecast (`geosphere_prognose.py`) | `geosphere-prognose.timer`, every 3 hours at xx:35 (locator in the unit, default JN88BN) |
 
 Direwolf is not part of the build. Install and configure it separately (`AGWPORT 8000`, `KISSPORT 8001`).
 
@@ -112,7 +113,7 @@ The install also sets everything up to keep eMMC writes to a minimum. See [eMMC 
 Then start everything:
 
 ```sh
-sudo systemctl start brocastd tinybox geosphere-wetter.timer geosphere-warnungen.timer
+sudo systemctl start brocastd tinybox geosphere-wetter.timer geosphere-warnungen.timer geosphere-prognose.timer
 ```
 
 Remove `/tmp/f16d5a3` afterwards.
@@ -138,7 +139,7 @@ To see what is installed: `cat /opt/tinybox/VERSION`.
 | Task | Command |
 |---|---|
 | Status | `systemctl status tinybox brocastd` and `systemctl list-timers 'geosphere*'` |
-| Logs | `journalctl -u tinybox -f` (also `brocastd`, `geosphere-wetter`, `geosphere-warnungen`) |
+| Logs | `journalctl -u tinybox -f` (also `brocastd`, `geosphere-wetter`, `geosphere-warnungen`, `geosphere-prognose`) |
 | Restart | `sudo systemctl restart tinybox` |
 | Sysop web login link | `journalctl -u tinybox \| grep "Web GUI"`, or use the token in `/opt/tinybox/data/web.token` |
 | Web GUI from the PC | The GUI only listens on 127.0.0.1. Open a tunnel with `ssh -L 8080:127.0.0.1:8080 nanopi`, then browse to `http://127.0.0.1:8080/login?token=...` |

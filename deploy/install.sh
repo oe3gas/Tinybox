@@ -11,10 +11,10 @@ set -eu
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 DEST=/opt/tinybox
 SVC_USER=tinybox
-UNITS="tinybox.service brocastd.service geosphere-wetter.service geosphere-wetter.timer geosphere-warnungen.service geosphere-warnungen.timer dxfeed.service dxfeed-digest.service dxfeed-digest.timer"
+UNITS="tinybox.service brocastd.service geosphere-wetter.service geosphere-wetter.timer geosphere-warnungen.service geosphere-warnungen.timer geosphere-prognose.service geosphere-prognose.timer dxfeed.service dxfeed-digest.service dxfeed-digest.timer"
 # dxfeed is optional: enabled only once dxfeed.conf exists (see the end)
 DXFEED="dxfeed.service dxfeed-digest.timer"
-ENABLE="brocastd.service tinybox.service geosphere-wetter.timer geosphere-warnungen.timer"
+ENABLE="brocastd.service tinybox.service geosphere-wetter.timer geosphere-warnungen.timer geosphere-prognose.timer"
 
 [ "$(id -u)" -eq 0 ] || { echo "Please run as root: sudo sh $0"; exit 1; }
 [ -f "$SRC/VERSION" ] || { echo "No VERSION file in $SRC - run from a production folder."; exit 1; }
@@ -42,7 +42,7 @@ rm -rf "$DEST/tinybox" "$DEST/dxfeed" "$DEST/brocast/brocast"
 cp -R "$SRC/tinybox" "$DEST/tinybox"
 cp -R "$SRC/dxfeed" "$DEST/dxfeed"
 cp -R "$SRC/brocast/brocast" "$DEST/brocast/brocast"
-cp "$SRC/geosphere_station.py" "$SRC/geosphere_warnungen.py" "$SRC/tinybox.conf.example" "$SRC/dxfeed.conf.example" "$SRC/VERSION" "$DEST/"
+cp "$SRC/geosphere_station.py" "$SRC/geosphere_prognose.py" "$SRC/geosphere_warnungen.py" "$SRC/tinybox.conf.example" "$SRC/dxfeed.conf.example" "$SRC/VERSION" "$DEST/"
 cp "$SRC/brocast/brocastd.conf.example" "$SRC/brocast/requirements.txt" "$DEST/brocast/"
 
 # --- machine files (only on first install) -----------------------------------

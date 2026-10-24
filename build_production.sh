@@ -24,6 +24,7 @@ brocast/zdict
 dxfeed
 dxfeed.conf.example
 geosphere_station.py
+geosphere_prognose.py
 geosphere_warnungen.py
 tbclient/__init__.py
 tbclient/news

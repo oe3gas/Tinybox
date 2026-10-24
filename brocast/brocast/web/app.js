@@ -595,7 +595,7 @@ function renderContent(p) {
   const semantics = teletext ? null : tableSemantics(p.blocks);
   let blocks = p.blocks;
   if (used.size) blocks = blocks.filter(b => !used.has(b));
-  renderBlocks(c, blocks, p.sub_total, semantics);
+  renderBlocks(c, blocks, p.sub_total, semantics, p);
   if (Array.isArray(p.lnk) && p.lnk.length && showFirst) {
     c.append(el("h4", null, "Verweise"));
     for (const ref of p.lnk) c.append(linkNode(null, ref));
@@ -677,7 +677,7 @@ function isMosaic(text) {
   return any;
 }
 
-function renderBlocks(c, blocks, total, semantics) {
+function renderBlocks(c, blocks, total, semantics, page) {
   let cards = null, lastTable = null, lastGrid = null, lastMosaic = null;
   for (const b of blocks) {
     if (b.k === "value") {
@@ -704,14 +704,17 @@ function renderBlocks(c, blocks, total, semantics) {
     const sem = b.k === "table" && semantics ? semantics.get(b) : null;
     if (sem && sem.cols && state.graphic) {
       lastTable = null;
+      // first column "hour": a forecast (meteogram), otherwise a station grid
+      const draw = rows => wxfIsForecast(sem.cols) ? wxForecast(rows, sem.cols, sem.hdr, page)
+                                                   : wxGrid(rows, sem.cols, sem.hdr, true);
       if (!b.hdr && lastGrid) {                                  // continuation: redraw with all rows
         lastGrid.rows.push(...scaledRows(b));
-        lastGrid.node.replaceChildren(wxGrid(lastGrid.rows, sem.cols, sem.hdr, true));
+        lastGrid.node.replaceChildren(draw(lastGrid.rows));
         continue;
       }
       const node = el("div");
       lastGrid = { rows: scaledRows(b), node };
-      node.append(wxGrid(lastGrid.rows, sem.cols, sem.hdr, true));
+      node.append(draw(lastGrid.rows));
       c.append(node);
       continue;
     }
@@ -1233,6 +1236,285 @@ function wxGrid(rows, cols, hdr, withSummary) {
     grid.append(row);
   }
   const scroll = el("div", "wxg-scroll");
+  scroll.append(grid);
+  wrap.append(scroll);
+  return wrap;
+}
+
+/* ---------- forecast (table block whose first column meaning is "hour") ----------
+ * geosphere_prognose.py sends the forecast for a locator as a table with the
+ * column meanings ["hour", "sky", "temp", "wdir", "wspd", "gust", "rr"]: local
+ * hour as text, cloud cover in eighths, temperature, wind from (compass text),
+ * mean wind and strongest gust in the step (m/s), precipitation in the step (mm).
+ * Rows with one text cell are day headings ("Sa 24.10."). In graphic mode it is
+ * drawn as a meteogram: day and hour bar, sky symbols, temperature curve, rain
+ * bars, wind arrows and gusts - one column per time step. Nothing extra is sent
+ * over the air; the plain table stays available with the "Text" button. */
+
+function wxfIsForecast(cols) { return Array.isArray(cols) && cols[0] === "hour"; }
+
+/* sunrise/sunset (local clock hours of this browser) for the date of t at pos,
+ * NOAA approximation; null in polar day/night or without a position */
+function wxfSun(t, pos) {
+  if (!Array.isArray(pos) || pos.length < 2 || isNaN(new Date(t))) return null;
+  const d = new Date(t), rad = Math.PI / 180;
+  const start = Date.UTC(d.getUTCFullYear(), 0, 1);
+  const doy = Math.floor((d.getTime() - start) / 86400000) + 1;
+  const g = 2 * Math.PI / 365 * (doy - 1);
+  const eqt = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g)
+              - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g)
+             + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const lat = pos[0] * rad;
+  const cosH = (Math.cos(90.833 * rad) - Math.sin(lat) * Math.sin(decl)) / (Math.cos(lat) * Math.cos(decl));
+  if (cosH > 1 || cosH < -1) return null;
+  const ha = Math.acos(cosH) / rad;
+  const noonUtcMin = 720 - 4 * pos[1] - eqt;
+  const offsetMin = -d.getTimezoneOffset();                    // browser's local time
+  const local = m => (((m + offsetMin) / 60) % 24 + 24) % 24;
+  return { rise: local(noonUtcMin - 4 * ha), set: local(noonUtcMin + 4 * ha) };
+}
+
+/* sky symbol from cloud cover (eighths), night and rain in the step */
+function wxfSky(eighths, night, rain) {
+  const s = svg("svg", { viewBox: "0 0 48 40", class: "wxf-sky", role: "img",
+                         "aria-label": wxfSkyText(eighths, night, rain) });
+  const cloud = (x, y, k, dark) => s.append(svg("path", {
+    d: "M10,30 a8,8 0 0 1 1,-15.9 a11,11 0 0 1 21,-3 a8,8 0 0 1 6,18.9 Z",
+    transform: `translate(${x} ${y}) scale(${k})`, class: dark ? "cloud dark" : "cloud" }));
+  const body = (x, y, r) => {
+    if (night) {
+      s.append(svg("path", { d: `M${x + r * 0.3},${y - r} a${r},${r} 0 1 0 ${r * 0.7},${r * 1.75} a${r * 0.8},${r * 0.8} 0 0 1 ${-r * 0.7},${-r * 1.75} Z`,
+                             class: "moon" }));
+    } else {
+      for (let a = 0; a < 360; a += 45) {
+        s.append(svg("line", { x1: x, y1: y - r - 3, x2: x, y2: y - r - 7, class: "ray",
+                               transform: `rotate(${a} ${x} ${y})` }));
+      }
+      s.append(svg("circle", { cx: x, cy: y, r, class: "sun" }));
+    }
+  };
+  const e = typeof eighths === "number" ? eighths : null;
+  const wet = typeof rain === "number" && rain >= 0.1;
+  if (e === null && !wet) return s;
+  if (!wet && e <= 1) body(24, 20, 9);
+  else if (!wet && e <= 5) { body(17, 14, 7.5); cloud(8, 9, 0.85, false); }
+  else cloud(4, wet ? 1 : 5, 1, e !== null && e >= 8 || wet);
+  if (wet) {
+    const n = rain >= 2 ? 3 : rain >= 0.5 ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      const x = 24 + (i - (n - 1) / 2) * 9;
+      s.append(svg("line", { x1: x, y1: 32, x2: x - 3, y2: 38, class: "drop" }));
+    }
+  }
+  return s;
+}
+
+function wxfSkyText(eighths, night, rain) {
+  const parts = [];
+  if (typeof eighths === "number") {
+    parts.push(eighths <= 1 ? (night ? "klar" : "sonnig") : eighths <= 3 ? "leicht bewölkt"
+               : eighths <= 5 ? "wolkig" : eighths <= 7 ? "stark bewölkt" : "bedeckt");
+  }
+  if (typeof rain === "number" && rain >= 0.1) parts.push(`Regen ${wxNum(rain)} mm`);
+  return parts.join(", ") || "unbekannt";
+}
+
+/* rows: already scaled; cols: the n list; hdr: header texts; p: the page (t, pos) */
+function wxForecast(rows, cols, hdr, p) {
+  const idx = k => cols.indexOf(k);
+  const cH = idx("hour"), cSky = idx("sky"), cT = idx("temp"), cDir = idx("wdir"), cSpd = idx("wspd"),
+        cGust = idx("gust"), cRr = idx("rr");
+  const at = (r, c) => (c >= 0 && typeof r[c] === "number") ? r[c] : null;
+  const steps = [];
+  let day = "";
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    if (r.length === 1) { day = String(r[0]); continue; }
+    const dir = cDir >= 0 ? r[cDir] : null;
+    steps.push({
+      day, hour: cH >= 0 && r[cH] !== null && r[cH] !== undefined ? String(r[cH]) : "",
+      sky: at(r, cSky), temp: at(r, cT), spd: at(r, cSpd), gust: at(r, cGust), rr: at(r, cRr),
+      dir: typeof dir === "number" ? dir : (typeof dir === "string" && WX_DIRS.includes(dir) ? WX_DIRS.indexOf(dir) * 22.5 : null),
+      dirText: typeof dir === "string" ? dir : (typeof dir === "number" ? wxDir(dir) : ""),
+    });
+  }
+  const wrap = el("div", "wxg wxf");
+  if (!steps.length) return wrap;
+
+  // step length from the hour labels (the first step may be shorter: it starts now)
+  const hours = steps.map(s => parseInt(s.hour, 10));
+  const stepLen = i => {
+    const a = hours[i], b = hours[i + 1];
+    if (isNaN(a)) return 1;
+    if (i + 1 < hours.length && !isNaN(b)) return ((b - a) % 24 + 24) % 24 || 24;
+    return i > 0 && !isNaN(hours[i - 1]) ? ((a - hours[i - 1]) % 24 + 24) % 24 || 1 : 1;
+  };
+  const sun = wxfSun(p && p.t, p && p.pos);
+  const night = i => {
+    const mid = (hours[i] + stepLen(i) / 2) % 24;
+    if (isNaN(mid)) return false;
+    return sun ? (mid < sun.rise || mid > sun.set) : (mid < 6.5 || mid > 18);
+  };
+  const when = s => `${s.day.split(" ")[0]} ${s.hour} Uhr`;
+  // typical step (the first one may be shorter), for the units of rain and gusts
+  const lens = steps.map((s, i) => stepLen(i));
+  const step = lens.length > 1 ? Math.max(...lens.slice(1)) : lens[0];
+  const per = step > 1 ? ` / ${step} h` : " / h";
+
+  // summary: temperature range, strongest gust, precipitation
+  const sum = el("div", "wxg-sum");
+  const tile = (title, value, unit, note) => {
+    const t = el("div", "wxg-tile");
+    t.append(el("div", "wxg-cap", title));
+    const v = el("div", "wxg-val", value);
+    v.append(el("small", null, unit));
+    t.append(v);
+    if (note) t.append(el("div", "wxg-note", note));
+    return t;
+  };
+  const best = (key, fn) => steps.filter(s => s[key] !== null).reduce((a, s) => a === null || fn(s[key], a[key]) ? s : a, null);
+  const lo = best("temp", (x, y) => x < y), hi = best("temp", (x, y) => x > y);
+  if (lo && hi) sum.append(tile("Temperatur", `${wxNum(lo.temp)} … ${wxNum(hi.temp)}`, "°C",
+                                `tiefste ${when(lo)} · höchste ${when(hi)}`));
+  const g = best("gust", (x, y) => x > y);
+  if (g) sum.append(tile("Stärkste Böe", String(Math.round(g.gust * 3.6)), "km/h",
+                         `Bft ${wxBft(g.gust)} · ${when(g)}${g.dirText ? ", aus " + g.dirText : ""}`));
+  const rains = steps.filter(s => s.rr !== null);
+  if (rains.length) {
+    const total = rains.reduce((a, s) => a + s.rr, 0), first = rains.find(s => s.rr >= 0.1);
+    sum.append(tile("Niederschlag", wxNum(total), "mm", first ? `ab ${when(first)}` : "trocken"));
+  }
+  wrap.append(sum);
+
+  // the meteogram: one column per step
+  const n = steps.length;
+  const grid = el("div", "wxf-grid");
+  grid.style.setProperty("--wxf-n", n);
+  const newDay = i => i > 0 && steps[i].day !== steps[i - 1].day;
+  const label = (text, unit) => {
+    const l = el("div", "wxf-lab", text);
+    if (unit) l.append(el("small", null, unit));
+    return l;
+  };
+  const cell = (i, cls) => {
+    const c = el("div", "wxf-c" + (cls ? " " + cls : "") + (newDay(i) ? " d0" : "") + (night(i) ? " night" : ""));
+    return c;
+  };
+
+  // days (one cell spanning the steps of the day) and hours
+  grid.append(el("div", "wxf-lab wxf-dayl"));
+  for (let i = 0; i < n;) {
+    let k = 1;
+    while (i + k < n && steps[i + k].day === steps[i].day) k++;
+    const d = el("div", "wxf-day" + (i > 0 ? " d0" : ""), steps[i].day);
+    d.style.gridColumn = `span ${k}`;
+    grid.append(d);
+    i += k;
+  }
+  grid.append(label("Uhr"));
+  steps.forEach((s, i) => grid.append(Object.assign(cell(i, "wxf-hour"), { textContent: s.hour })));
+
+  // sky
+  grid.append(label(""));
+  steps.forEach((s, i) => {
+    const c = cell(i, "wxf-skyc");
+    c.append(wxfSky(s.sky, night(i), s.rr));
+    c.title = wxfSkyText(s.sky, night(i), s.rr) + (s.sky !== null ? ` (${Math.round(s.sky)}/8)` : "");
+    grid.append(c);
+  });
+
+  // temperature: values, then the curve across all columns
+  const temps = steps.map(s => s.temp), ok = temps.filter(x => x !== null);
+  if (ok.length) {
+    grid.append(label("Temp.", "°C"));
+    steps.forEach((s, i) => {
+      const c = cell(i, "wxf-temp");
+      const b = el("b", null, s.temp === null ? "–" : wxNum(s.temp));
+      if (s.temp !== null) b.style.color = s.temp <= 0 ? "#1F4E9A" : "var(--ink)";
+      c.append(b);
+      grid.append(c);
+    });
+    grid.append(el("div", "wxf-lab"));
+    const W = n * 100, H = 64, pad = 8;
+    const tMin = Math.min(...ok), tMax = Math.max(...ok), span = (tMax - tMin) || 1;
+    const x = i => i * 100 + 50, y = v => (pad + (1 - (v - tMin) / span) * (H - 2 * pad)).toFixed(1);
+    const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", class: "wxf-curve",
+                           role: "img", "aria-label": `Temperaturverlauf ${wxNum(tMin)} bis ${wxNum(tMax)} °C` });
+    for (let i = 1; i < n; i++) if (newDay(i)) s.append(svg("line", { x1: i * 100, x2: i * 100, y1: 0, y2: H, class: "dayline" }));
+    if (tMin < 0 && tMax > 0) s.append(svg("line", { x1: 0, x2: W, y1: y(0), y2: y(0), class: "zero" }));
+    let line = "", run = [];
+    const runs = [];
+    temps.forEach((v, i) => {
+      if (v === null) { if (run.length) runs.push(run); run = []; return; }
+      line += `${run.length ? "L" : "M"}${x(i)},${y(v)} `;
+      run.push([x(i), y(v)]);
+    });
+    if (run.length) runs.push(run);
+    for (const r of runs) {
+      if (r.length < 2) continue;
+      s.append(svg("path", { d: `M${r[0][0]},${H} L` + r.map(q => q.join(",")).join(" L") + ` L${r[r.length - 1][0]},${H} Z`,
+                             class: "area" }));
+    }
+    s.append(svg("path", { d: line, class: "line" }));
+    const holder = el("div", "wxf-curvec");
+    holder.append(s);
+    // dots as HTML so they stay round (the svg is stretched)
+    temps.forEach((v, i) => {
+      if (v === null) return;
+      const dot = el("i", "wxf-dot");
+      dot.style.left = ((i + 0.5) / n * 100) + "%";
+      dot.style.top = (y(v) / H * 100) + "%";
+      holder.append(dot);
+    });
+    grid.append(holder);
+  }
+
+  // precipitation bars (scale at least 2 mm, so drizzle stays small)
+  if (cRr >= 0) {
+    const rMax = Math.max(2, ...steps.map(s => s.rr || 0));
+    grid.append(label("Regen", "mm" + per));
+    steps.forEach((s, i) => {
+      const c = cell(i, "wxf-rain");
+      const bar = el("div", "wxf-rbar");
+      const fill = el("i");
+      fill.style.height = (s.rr ? Math.max(4, s.rr / rMax * 100) : 0) + "%";
+      bar.append(fill);
+      c.append(bar, el("span", s.rr >= 0.1 ? null : "dim", s.rr === null ? "–" : s.rr >= 0.1 ? wxNum(s.rr) : "0"));
+      grid.append(c);
+    });
+  }
+
+  // wind: arrow (where it blows to), direction, mean speed
+  if (cSpd >= 0 || cDir >= 0) {
+    grid.append(label("Wind", "km/h"));
+    steps.forEach((s, i) => {
+      const c = cell(i, "wxf-wind");
+      if (s.dir !== null) c.append(wxgArrow(s.dir));
+      c.append(el("span", "wxf-dir", s.dirText || "–"),
+               el("b", null, s.spd === null ? "–" : String(Math.round(s.spd * 3.6))));
+      if (s.spd !== null) c.title = `${wxNum(s.spd)} m/s · Bft ${wxBft(s.spd)}`;
+      grid.append(c);
+    });
+  }
+
+  // gusts with Beaufort, from Bft 6 highlighted
+  if (cGust >= 0) {
+    grid.append(label("Böen", "km/h"));
+    steps.forEach((s, i) => {
+      const c = cell(i, "wxf-gust");
+      if (s.gust === null) c.append(el("b", "dim", "–"));
+      else {
+        const bft = wxBft(s.gust);
+        c.append(el("b", bft >= 6 ? "strong" : null, String(Math.round(s.gust * 3.6))),
+                 el("span", "wxg-bft" + (bft >= 6 ? " strong" : ""), `Bft ${bft}`));
+        c.title = `${wxNum(s.gust)} m/s`;
+      }
+      grid.append(c);
+    });
+  }
+
+  const scroll = el("div", "wxf-scroll");
   scroll.append(grid);
   wrap.append(scroll);
   return wrap;
