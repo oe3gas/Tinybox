@@ -1636,7 +1636,9 @@ function dxSummaryView(p, graphic) {
   const conts = dx.conts ? ` aus ${dx.conts}` : "";
   const parts = [];
   if (typeof dx.calls === "number") parts.push(`${dx.calls} DX-Rufzeichen`);
-  if (typeof dx.spots === "number") parts.push(`${dx.spots} Spots${conts}`);
+  if (typeof dx.spots === "number")
+    parts.push(dx.st ? `${dx.spots} Spots${conts}`
+                     : `${dx.spots} Spots${conts}, dieselben wie in der DX-Zusammenfassung`);
   if (dx.st) {
     const recs = dxRecords(dx.st);
     if (!dx.tiers) parts.push(`${recs.length} Stationen nach Spottern (ohne Most-Wanted-Liste)`);

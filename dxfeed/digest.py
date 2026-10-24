@@ -9,7 +9,7 @@ Relevance filter (dxfeed.conf [digest]):
 One line per DX call: relevance, entity, bands, modes, first/last time, number
 of different spotters, Club Log Most Wanted rank. Calls seen by fewer than
 min_spotters stations are only counted (often busted calls). Then the band
-activity of all spots from the spotter continents, split by mode (CW, SSB,
+activity of the same relevant spots, split by mode (CW, SSB,
 FT8, other - the other modes named), as a rough picture of yesterday's
 propagation.
 
@@ -147,18 +147,23 @@ def _fit(text: str, width: int) -> str:
     return text if len(text) <= width else text[:width - 1] + "+"
 
 
+def relevant(r, cfg: DigestCfg) -> bool:
+    """The filter of the digest: spotter on spotter_continents, band in bands,
+    DXCC entity known and not excluded (on all_dxcc_bands every entity counts).
+    Station list and band activity both count only these spots (24.10.2026)."""
+    if cfg.spotter_continents and r["sp_cont"] not in cfg.spotter_continents:
+        return False
+    if r["band"] not in cfg.bands or not r["dx_prefix"]:
+        return False
+    return r["band"] in cfg.all_dxcc_bands or r["dx_prefix"] not in cfg.exclude
+
+
 def aggregate(rows, cfg: DigestCfg) -> tuple[list[DxLine], int]:
     """Relevant spots -> one DxLine per DX call, plus the number of relevant spots."""
     by_call: dict[str, DxLine] = {}
     n = 0
     for r in rows:
-        if cfg.spotter_continents and r["sp_cont"] not in cfg.spotter_continents:
-            continue
-        if r["band"] not in cfg.bands:
-            continue
-        if not r["dx_prefix"]:
-            continue
-        if r["band"] not in cfg.all_dxcc_bands and r["dx_prefix"] in cfg.exclude:
+        if not relevant(r, cfg):
             continue
         n += 1
         d = by_call.get(r["dx"])
@@ -215,11 +220,12 @@ def select_stations(shown: list[DxLine], cfg: DigestCfg, rated: bool) -> list[Dx
 
 
 def activity(rows, cfg: DigestCfg) -> list[BandActivity]:
-    """Spots per band and mode group from the spotter continents (all DX, not
-    only the relevant ones), in band order; bands without spots included."""
+    """Relevant spots (the same as the station list) per band and mode group, in
+    band order; bands without spots included. The sum is the number of relevant
+    spots in the head of the station list."""
     acts = {b: BandActivity(b) for b in BAND_ORDER if b in cfg.bands}
     for r in rows:
-        if cfg.spotter_continents and r["sp_cont"] not in cfg.spotter_continents:
+        if not relevant(r, cfg):
             continue
         a = acts.get(r["band"])
         if a is None:
@@ -323,11 +329,13 @@ def station_page(sel: list[DxLine], cfg: DigestCfg, since: float, until: float,
 
 
 def activity_page(acts: list[BandActivity], cfg: DigestCfg, since: float, until: float,
-                  coverage_min: int | None = None) -> dict:
+                  coverage_min: int | None = None, n_spots: int | None = None) -> dict:
     """brocast page typ dxsum with the band activity: spots per band and mode
     group, peak hour (UTC), other modes with counts. Bands without spots stay off.
     Same window and coverage as the stations page."""
     dat = _dat_head(cfg, until, since)
+    if n_spots is not None:
+        dat["spots"] = n_spots                  # = sum of the table (relevant spots)
     if coverage_min is not None:
         dat["cov"] = coverage_min
     dat["act"] = [[a.band, *a.by_group, a.peak,
@@ -404,9 +412,10 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
 
     acts = activity(rows, cfg)
     act_text = "\n".join([f"DX-Bandaktivitaet {t0:%d.%m.%Y %H:%M} - {t1:%d.%m.%Y %H:%M} Lokalzeit",
-                          f"Alle Spots von Stationen in {conts}, Spitze = Stunde (UTC) mit den",
-                          "meisten Spots. Andere: FT4, RTTY, FM ... (Anzahl); DIGI = Digital-",
-                          "Segment ohne Modeangabe, ? = Mode unbekannt.", "",
+                          f"Dieselben {n_rel} Spots wie die DX-Zusammenfassung (Spotter in {conts},",
+                          "ohne haeufige DXCC-Gebiete). Spitze = Stunde (UTC) mit den meisten",
+                          "Spots. Andere: FT4, RTTY, FM ... (Anzahl); DIGI = Digital-Segment",
+                          "ohne Modeangabe, ? = Mode unbekannt.", "",
                           *band_activity(rows, cfg), "", source]) + "\n"
     page = act_page = None
     if cfg.brocast:
@@ -416,7 +425,7 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
         cov = round(coverage_sec / 60) if coverage_note else None
         page = station_page(sorted(sel, key=lambda d: d.call), cfg, since, until,
                             len(lines), n_rel, cov, mw is not None)
-        act_page = activity_page(acts, cfg, since, until, cov)
+        act_page = activity_page(acts, cfg, since, until, cov, n_rel)
 
     act = Bulletin(subject=f"DX-Bandaktivitaet {t1:%d.%m.%Y}", text=act_text,
                    replace=f"dxfeed-act-{t1:%Y%m%d}", page=act_page)

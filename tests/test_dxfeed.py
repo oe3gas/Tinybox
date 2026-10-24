@@ -259,9 +259,18 @@ class DigestTests(unittest.TestCase):
         self.assertIn('eigenes Bulletin "DX-Bandaktivitaet"', d.text)
         self.assertTrue(d.act.subject.startswith("DX-Bandaktivitaet "))
         act = d.act.text
-        self.assertRegex(act, r"20m\s+4\s+4\s+0\s+0\s+0 09z")   # W1AW is NA -> not counted
+        # same spots as the station list: W1AW (NA spotter) and the excluded DL0HF stay out
+        self.assertRegex(act, r"20m\s+3\s+3\s+0\s+0\s+0 09z")
+        self.assertIn("davon 7 relevant", d.text)
+        self.assertIn("Dieselben 7 Spots", act)
+        acts = self.data_sum(d)
+        self.assertEqual(acts, 7)
         self.assertRegex(act, r"70cm\s+1\s+0\s+1\s+0\s+0 09z")  # SSB
         self.assertRegex(act, r"160m\s+0\n")                # AF spotter not counted
+
+    def data_sum(self, d):
+        page = d.act.page["blk"][0]["v"]["act"]
+        return sum(sum(r[1:5]) for r in page)
 
     def test_vhf_counts_every_entity(self):
         c = cty()

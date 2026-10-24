@@ -1136,6 +1136,7 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
   - **Mindestens 10 Stationen** auf der brocast-Seite (`brocast_min_rows`): Stufen aus `brocast_tiers`, nach Relevanz mit Stufe C aufgefüllt, höchstens `brocast_max_rows`. 10 Stationen ≈ 300 B in 2 Frames.
   - Mode „?“ = weder im Kommentar noch aus dem Bandplan erkennbar. Bandplan ergänzt: Digital-Segmente als `DIGI`, Phonie bis 4000/7300 kHz (Region 2), FM-Bereiche; gespeicherte Spots ohne Mode werden beim Digest neu eingeordnet.
   - Bandaktivität trägt dieselbe Abdeckung (`cov`) wie die Stationsseite; der Listener zeigt den Zeitraum in UTC wie die Tabelle.
+  - **Bandaktivität über dieselben relevanten Spots wie die Stationsliste** (entschieden 24.10.2026): Spotter in EU, ohne ausgeschlossene häufige Gebiete. Die Summe der Tabelle = Zahl der relevanten Spots im Kopf der DX-Zusammenfassung. Vorher zählten alle EU-Spots (auch Europa, USA …), die Zahlen passten nicht zusammen.
 
 ## 17. Refactoring (entschieden 17.10.2026)
 
