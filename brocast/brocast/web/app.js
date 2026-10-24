@@ -1273,9 +1273,13 @@ function dxRecords(item) {
   });
 }
 
+// modes sent as text by dxfeed (not in the dictionary list)
+const DX_MODE_TEXT = { "?": "ohne Angabe", "DIGI": "Digi" };
+
 function dxText(item, col, v) {                 // display text of a list value
   const t = item && item.texts && item.texts[col] ? item.texts[col][v] : null;
   if (t && t.t) return t.t;
+  if (col === "om" && typeof v === "string" && DX_MODE_TEXT[v]) return DX_MODE_TEXT[v];
   return typeof v === "number" ? `#${v}` : String(v ?? "");
 }
 
@@ -1351,12 +1355,21 @@ function dxSummaryView(p, graphic) {
   const parts = [];
   if (typeof dx.calls === "number") parts.push(`${dx.calls} DX-Rufzeichen`);
   if (typeof dx.spots === "number") parts.push(`${dx.spots} Spots${conts}`);
-  if (dx.st) parts.push(dx.tiers ? `gezeigt: Relevanz ${dx.tiers.split("").join("/")}`
-                                  : "ohne Most-Wanted-Liste (nur nach Spottern)");
-  if (dx.end) {
-    const fmt = t => new Date(t * 1000).toLocaleString("de-AT", { day: "2-digit", month: "2-digit",
-                                                                  hour: "2-digit", minute: "2-digit" });
-    parts.unshift(`${fmt(dx.end - dx.win * 60)} – ${fmt(dx.end)}`);
+  if (dx.st) {
+    const recs = dxRecords(dx.st);
+    if (!dx.tiers) parts.push(`${recs.length} Stationen nach Spottern (ohne Most-Wanted-Liste)`);
+    else {
+      const extra = recs.filter(o => !dx.tiers.includes(dxTier(o))).length;
+      parts.push(`gezeigt: Relevanz ${dx.tiers.split("").join("/")}` +
+                 (extra ? `, aufgefüllt auf ${recs.length} nach Relevanz` : ""));
+    }
+  }
+  if (dx.end) {               // UTC like the times in the table
+    const fmt = t => {
+      const d = new Date(t * 1000), p2 = x => String(x).padStart(2, "0");
+      return `${p2(d.getUTCDate())}.${p2(d.getUTCMonth() + 1)}. ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`;
+    };
+    parts.unshift(`${fmt(dx.end - dx.win * 60)} – ${fmt(dx.end)} UTC`);
   }
   if (parts.length) box.append(el("p", "dimtext", parts.join(" · ")));
   if (typeof dx.cov === "number")

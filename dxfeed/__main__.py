@@ -168,9 +168,16 @@ def cmd_status(cfg: Config, args) -> int:
     try:
         mw = mwmod.MostWanted.load(cfg.data.mostwanted)
         age = (now - cfg.data.mostwanted.stat().st_mtime) / 86400
-        line = f"Most Wanted: {len(mw)} Gebiete, {age:.0f} Tage alt"
+        line = (f"Most Wanted: {len(mw)} Gebiete ("
+                + ("nach DXCC-Nummer" if mw.by_adif else "nach Praefix") + f"), {age:.0f} Tage alt")
         if cty is not None:
-            missing = sorted({e.prefix for e, _ in cty.prefixes.values()} - set(mw.ranks))
+            dx = dxccmod.load_or_none(cfg.data.dictionary)
+            missing = []
+            for p, n in sorted({(e.prefix, e.name) for e, _ in cty.prefixes.values()}):
+                ent = dx.find(p, n) if dx is not None else None
+                if (mw.rank_code(ent.code) if ent else None) is None \
+                        and mw.rank(ent.clublog if ent else p) is None and mw.rank(p) is None:
+                    missing.append(p)
             if missing:
                 line += f"; ohne Rang: {' '.join(missing[:12])}" + (" ..." if len(missing) > 12 else "")
         print(line)

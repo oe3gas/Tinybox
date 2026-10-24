@@ -41,7 +41,7 @@ from pathlib import Path
 from . import dxcc as dxccmod
 from . import mostwanted as mwmod
 from .config import DigestCfg
-from .spots import BAND_ORDER
+from .spots import BAND_ORDER, mode_of
 
 MODE_GROUPS = ("CW", "SSB", "FT8")          # everything else is "other"
 ENTITY_TEXT_MAX = 30                        # dictionary: dxcc free_text
@@ -54,6 +54,17 @@ def mode_group(mode: str) -> int:
 
 def other_name(mode: str) -> str:
     return mode or "?"
+
+
+def spot_mode(r) -> str:
+    """The mode of a stored spot; spots stored without one (older band plan)
+    are placed again by comment and frequency."""
+    if r["mode"]:
+        return r["mode"]
+    try:
+        return mode_of(r["freq"], r["comment"] or "")
+    except (KeyError, IndexError, TypeError):
+        return ""
 
 
 @dataclass
@@ -155,9 +166,10 @@ def aggregate(rows, cfg: DigestCfg) -> tuple[list[DxLine], int]:
             d = by_call[r["dx"]] = DxLine(call=r["dx"], name=r["dx_name"],
                                           prefix=r["dx_prefix"], first=r["ts"])
         d.bands.add(r["band"])
-        d.band_modes.setdefault(r["band"], set()).add(r["mode"])
-        if r["mode"]:
-            d.modes.add(r["mode"])
+        mode = spot_mode(r)
+        d.band_modes.setdefault(r["band"], set()).add(mode)
+        if mode:
+            d.modes.add(mode)
         d.spotters.add(r["spotter"])
         d.first = min(d.first, r["ts"])
         d.last = max(d.last, r["ts"])
@@ -169,23 +181,37 @@ def aggregate(rows, cfg: DigestCfg) -> tuple[list[DxLine], int]:
 def rate(lines: list[DxLine], cfg: DigestCfg, mw: mwmod.MostWanted | None,
          dxcc: dxccmod.DxccList | None = None) -> None:
     """DXCC number, Most Wanted rank, score and tier for every line (in place).
-    Club Log writes some prefixes differently from AD1C (1A0 for 1A): the
-    dictionary's DXCC list knows both."""
+    The Club Log list names entities by ADIF number: the dictionary's DXCC list
+    gives the number for the AD1C prefix from cty.dat. A list by prefix (older
+    shape) is matched by the Club Log prefix, then the AD1C prefix."""
     for d in lines:
         ent = dxcc.find(d.prefix, d.name) if dxcc is not None else None
         d.dxcc = ent.code if ent else None
+        d.rank = None
         if mw is not None:
-            d.rank = mw.rank(ent.clublog) if ent else None
+            d.rank = mw.rank_code(d.dxcc)
+            if d.rank is None and ent is not None:
+                d.rank = mw.rank(ent.clublog)
             if d.rank is None:
                 d.rank = mw.rank(d.prefix)
-        else:
-            d.rank = None
         d.score = mwmod.score(d.rank, len(d.spotters))
         d.tier = mwmod.tier(d.score, cfg.relevance_a, cfg.relevance_b)
 
 
 def by_relevance(lines: list[DxLine]) -> list[DxLine]:
     return sorted(lines, key=lambda d: (-d.score, -len(d.spotters), d.call))
+
+
+def select_stations(shown: list[DxLine], cfg: DigestCfg, rated: bool) -> list[DxLine]:
+    """The stations for the brocast page, from shown (most relevant first): all of
+    the tiers in brocast_tiers, filled up to brocast_min_rows with the next most
+    relevant, at most brocast_max_rows. Without the Most Wanted list the tiers say
+    little: then simply the first brocast_min_rows by relevance (spotters)."""
+    want = [d for d in shown if d.tier in cfg.brocast_tiers] if rated else []
+    if len(want) < cfg.brocast_min_rows:
+        picked = set(id(d) for d in want)
+        want += [d for d in shown if id(d) not in picked][:cfg.brocast_min_rows - len(want)]
+    return want[:cfg.brocast_max_rows]
 
 
 def activity(rows, cfg: DigestCfg) -> list[BandActivity]:
@@ -199,10 +225,11 @@ def activity(rows, cfg: DigestCfg) -> list[BandActivity]:
         if a is None:
             continue
         a.spots += 1
-        g = mode_group(r["mode"])
+        mode = spot_mode(r)
+        g = mode_group(mode)
         a.by_group[g] += 1
         if g == 3:
-            a.others[other_name(r["mode"])] += 1
+            a.others[other_name(mode)] += 1
         a.hours[time.gmtime(r["ts"]).tm_hour] += 1
     return list(acts.values())
 
@@ -295,10 +322,14 @@ def station_page(sel: list[DxLine], cfg: DigestCfg, since: float, until: float,
     return _page(f"DX-Cluster {datetime.fromtimestamp(until):%d.%m.}", dat, cfg)
 
 
-def activity_page(acts: list[BandActivity], cfg: DigestCfg, since: float, until: float) -> dict:
+def activity_page(acts: list[BandActivity], cfg: DigestCfg, since: float, until: float,
+                  coverage_min: int | None = None) -> dict:
     """brocast page typ dxsum with the band activity: spots per band and mode
-    group, peak hour (UTC), other modes with counts. Bands without spots stay off."""
+    group, peak hour (UTC), other modes with counts. Bands without spots stay off.
+    Same window and coverage as the stations page."""
     dat = _dat_head(cfg, until, since)
+    if coverage_min is not None:
+        dat["cov"] = coverage_min
     dat["act"] = [[a.band, *a.by_group, a.peak,
                    sorted(a.others.items(), key=lambda x: (-x[1], x[0])) or None]
                   for a in acts if a.spots]
@@ -374,18 +405,18 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
     acts = activity(rows, cfg)
     act_text = "\n".join([f"DX-Bandaktivitaet {t0:%d.%m.%Y %H:%M} - {t1:%d.%m.%Y %H:%M} Lokalzeit",
                           f"Alle Spots von Stationen in {conts}, Spitze = Stunde (UTC) mit den",
-                          "meisten Spots. Andere: FT4, RTTY, FM ... (Anzahl).", "",
+                          "meisten Spots. Andere: FT4, RTTY, FM ... (Anzahl); DIGI = Digital-",
+                          "Segment ohne Modeangabe, ? = Mode unbekannt.", "",
                           *band_activity(rows, cfg), "", source]) + "\n"
     page = act_page = None
     if cfg.brocast:
         # without the Most Wanted list every entity has the same rarity and the
         # tiers say little: then the most relevant by spotters, up to the limit
-        sel = shown if mw is None else [d for d in shown if d.tier in cfg.brocast_tiers]
-        sel = sel[:cfg.brocast_max_rows]
+        sel = select_stations(shown, cfg, mw is not None)
         cov = round(coverage_sec / 60) if coverage_note else None
         page = station_page(sorted(sel, key=lambda d: d.call), cfg, since, until,
                             len(lines), n_rel, cov, mw is not None)
-        act_page = activity_page(acts, cfg, since, until)
+        act_page = activity_page(acts, cfg, since, until, cov)
 
     act = Bulletin(subject=f"DX-Bandaktivitaet {t1:%d.%m.%Y}", text=act_text,
                    replace=f"dxfeed-act-{t1:%Y%m%d}", page=act_page)

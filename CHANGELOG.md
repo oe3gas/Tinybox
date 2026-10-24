@@ -2,6 +2,9 @@
 
 ## Unveröffentlicht
 
+- dxfeed: Most-Wanted-Rang wirkt jetzt (Club Log liefert ADIF-Nummern, nicht
+  Präfixe); mindestens 10 Stationen auf der brocast-Seite (`brocast_min_rows`);
+  Modes aus dem Bandplan auch für Digital-Segmente (DIGI), Region-2-Phonie und FM.
 - brocast Dictionary v4: Seitentyp `dxsum` (DX-Zusammenfassung), Listen `band`,
   `mode` und `dxcc` (alle DXCC-Gebiete mit ADIF-Nummer), Feldtyp `rows`,
   Blockart `data` (PLANUNG 16b). dxfeed sendet Stationen und Bandaktivität als

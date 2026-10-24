@@ -5,14 +5,16 @@ users upload (rank 1 = most wanted). The list is fetched as JSON from
 mostwanted.php?api=1 and kept as a file next to cty.dat (refreshed like it).
 Accepted shapes, so a change on the Club Log side does not break the digest:
 
-    {"1": "P5", "2": "3Y/B", ...}      rank -> prefix (the Club Log API)
+    {"1": "344", "2": "123", ...}      rank -> ADIF DXCC number (the Club Log API,
+                                       checked 24.10.2026; numbers as strings)
+    {"1": "P5", "2": "3Y/B", ...}      rank -> prefix
     {"P5": 1, "3Y/B": 2, ...}          prefix -> rank
     ["P5", "3Y/B", ...]                list in rank order
 
-Entities are matched by their primary prefix (cty.dat uses the same ones,
-compared in upper case). A missing list or an unknown entity gets
-UNKNOWN_RANK - the middle of the list - so the digest still works, just
-without the rarity weighting.
+With ADIF numbers the entity is found through the DXCC list of the brocast
+dictionary (dxcc.py), with prefixes by the primary prefix. A missing list or
+an unknown entity gets UNKNOWN_RANK - the middle of the list - so the digest
+still works, just without the rarity weighting.
 
 Relevance (PLANUNG.md section 16a):
     rarity = 1 + 9 * ((341 - rank) / 340) ** 2       1 (common) ... 10 (rank 1)
@@ -42,13 +44,33 @@ class MostWantedError(Exception):
     pass
 
 
-def parse(text: str) -> dict[str, int]:
-    """JSON text -> {PREFIX: rank}. Raises MostWantedError if it is not a list."""
+def _num(v) -> int | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str) and v.strip().isdigit():
+        return int(v)
+    return None
+
+
+def parse(text: str) -> dict[str | int, int]:
+    """JSON text -> {PREFIX: rank} or {ADIF number: rank}.
+    Raises MostWantedError if it is not a usable list."""
     try:
         data = json.loads(text)
     except ValueError as exc:
         raise MostWantedError(f"most wanted list: no JSON ({exc})") from None
-    out: dict[str, int] = {}
+    out: dict[str | int, int] = {}
+    if isinstance(data, dict) and data and all(_num(k) is not None and _num(v) is not None
+                                               for k, v in data.items()):
+        for k, v in data.items():                            # rank -> ADIF number
+            rank, code = _num(k), _num(v)
+            if 1 <= rank <= 1000 and 1 <= code <= 999 and code not in out:
+                out[code] = rank
+        if len(out) < 100:
+            raise MostWantedError(f"most wanted list: only {len(out)} entities")
+        return out
     if isinstance(data, list):
         items = [(i + 1, p) for i, p in enumerate(data)]
     elif isinstance(data, dict):
@@ -70,15 +92,24 @@ def parse(text: str) -> dict[str, int]:
 
 
 class MostWanted:
-    def __init__(self, ranks: dict[str, int], source: str = "") -> None:
-        self.ranks = ranks
+    def __init__(self, ranks: dict[str | int, int], source: str = "") -> None:
+        self.by_code = {k: r for k, r in ranks.items() if isinstance(k, int)}
+        self.ranks = {k: r for k, r in ranks.items() if isinstance(k, str)}   # by prefix
         self.source = source
 
     def __len__(self) -> int:
-        return len(self.ranks)
+        return len(self.by_code) + len(self.ranks)
+
+    @property
+    def by_adif(self) -> bool:
+        """True: the list names entities by ADIF number (the Club Log API)."""
+        return bool(self.by_code)
 
     def rank(self, prefix: str) -> int | None:
         return self.ranks.get(prefix.upper()) if prefix else None
+
+    def rank_code(self, code: int | None) -> int | None:
+        return self.by_code.get(code) if code is not None else None
 
     @classmethod
     def load(cls, path: str | Path) -> MostWanted:

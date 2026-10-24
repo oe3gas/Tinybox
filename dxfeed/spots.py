@@ -55,13 +55,22 @@ FT8_DIAL = (1840, 3573, 5357, 7074, 10136, 14074, 18100, 21074, 24915, 28074, 50
             144174, 432174)
 FT4_DIAL = (3575.5, 7047.5, 10140, 14080, 18104, 21140, 24919, 28180, 50318, 144170)
 
-# IARU region 1 band plan, roughly: CW-only and phone segments (kHz)
-CW_SEGMENTS = ((1810, 1838), (3500, 3570), (7000, 7040), (10100, 10130),
+# IARU region 1 band plan, roughly: CW-only and phone segments (kHz). Phone also
+# up to the band edge used in region 2 (80 m to 4000, 40 m to 7300): DX from the
+# Americas is spotted there by European stations too.
+CW_SEGMENTS = ((1800, 1838), (3500, 3570), (7000, 7040), (10100, 10130),
                (14000, 14070), (18068, 18095), (21000, 21070), (24890, 24915),
-               (28000, 28070), (50000, 50100), (144000, 144150), (432000, 432100))
-PHONE_SEGMENTS = ((1843, 2000), (3600, 3800), (7060, 7200), (14101, 14350),
+               (28000, 28070), (50000, 50100), (70000, 70100), (144000, 144150),
+               (432000, 432100))
+# narrow-band digital segments (RTTY, PSK, Olivia ...) outside the FT8/FT4 dials
+DIGI_SEGMENTS = ((1838, 1843), (3570, 3600), (5351, 5366), (7040, 7060), (10130, 10150),
+                 (14070, 14101), (18095, 18111), (21070, 21151), (24915, 24931),
+                 (28070, 28300))
+PHONE_SEGMENTS = ((1843, 2000), (3600, 4000), (5366, 5450), (7060, 7300), (14101, 14350),
                   (18111, 18168), (21151, 21450), (24931, 24990), (28300, 29700),
-                  (50100, 50500), (144150, 144400), (432100, 432400))
+                  (50100, 50500), (70100, 70500), (144150, 144400), (432100, 432400))
+FM_SEGMENTS = ((29510, 29700), (51000, 54000), (145000, 148000), (433000, 440000))
+DIGI = "DIGI"          # mode name for the digital segments (dictionary: free text)
 
 
 @dataclass(frozen=True)
@@ -107,9 +116,15 @@ def mode_of(freq_khz: float, comment: str) -> str:
     for dial in FT4_DIAL:
         if dial <= freq_khz <= dial + 3:
             return "FT4"
-    for lo, hi in CW_SEGMENTS:
-        if lo <= freq_khz <= hi:
+    for lo, hi in CW_SEGMENTS:              # upper edge belongs to the next segment
+        if lo <= freq_khz < hi:
             return "CW"
+    for lo, hi in DIGI_SEGMENTS:
+        if lo <= freq_khz < hi:
+            return DIGI
+    for lo, hi in FM_SEGMENTS:              # before phone: 29.6 MHz FM lies in the 10 m phone part
+        if lo <= freq_khz <= hi:
+            return "FM"
     for lo, hi in PHONE_SEGMENTS:
         if lo <= freq_khz <= hi:
             return "SSB"

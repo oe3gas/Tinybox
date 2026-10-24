@@ -97,6 +97,16 @@ class SpotTests(unittest.TestCase):
         self.assertEqual((s.band, s.mode, s.skimmer), ("20m", "CW", False))
         self.assertEqual(s.comment, "CW 599 tnx QSO")
 
+    def test_mode_from_band_plan(self):
+        self.assertEqual(mode_of(7045.0, ""), "DIGI")      # narrow-band digital segment
+        self.assertEqual(mode_of(7074.5, ""), "FT8")
+        self.assertEqual(mode_of(7210.0, ""), "SSB")       # region 2 phone, spotted from EU
+        self.assertEqual(mode_of(3890.0, ""), "SSB")
+        self.assertEqual(mode_of(1805.0, ""), "CW")
+        self.assertEqual(mode_of(29600.0, ""), "FM")
+        self.assertEqual(mode_of(145500.0, ""), "FM")
+        self.assertEqual(mode_of(14200.0, "RTTY"), "RTTY")  # the comment wins
+
     def test_parse_skimmer_with_locator_and_ssid(self):
         s = parse("DX de DK9IP-#:     7012.0  JA1ABC       CW 12 dB 26 WPM CQ      0712Z JN48")
         self.assertTrue(s.skimmer)
@@ -125,7 +135,7 @@ class SpotTests(unittest.TestCase):
         self.assertEqual(mode_of(14010, ""), "CW")
         self.assertEqual(mode_of(14195, ""), "SSB")
         self.assertEqual(mode_of(14195, "rtty contest"), "RTTY")
-        self.assertEqual(mode_of(10145, ""), "")
+        self.assertEqual(mode_of(50700, ""), "")     # 6 m between phone and FM
         self.assertEqual((band_of(144300), band_of(432200)), ("2m", "70cm"))
         self.assertEqual(mode_of(144174.5, ""), "FT8")
         self.assertEqual(mode_of(144050, ""), "CW")
@@ -300,6 +310,11 @@ class DigestTests(unittest.TestCase):
         self.assertEqual(list(Path(self.cfg.digest.inbox).glob("*.tmp")), [])
 
 
+def load_cfg_default():
+    with tempfile.TemporaryDirectory() as d:
+        return make_cfg(d).digest
+
+
 def mw_sample(**ranks) -> mwmod.MostWanted:
     """A Most Wanted list: the given prefixes at the given ranks, the rest filler."""
     data = {str(r): p for p, r in ranks.items()}
@@ -309,7 +324,30 @@ def mw_sample(**ranks) -> mwmod.MostWanted:
     return mwmod.MostWanted(mwmod.parse(json.dumps(data)))
 
 
+def mw_adif(**ranks_by_code) -> mwmod.MostWanted:
+    """A Most Wanted list in the shape of the Club Log API (24.10.2026):
+    rank -> ADIF number, both as strings. Given codes at their ranks, the rest filler."""
+    data = {str(r): str(c) for c, r in ((int(k[1:]), v) for k, v in ranks_by_code.items())}
+    free = (c for c in range(600, 999) if str(c) not in data.values())
+    for r in range(1, 341):
+        data.setdefault(str(r), str(next(free)))
+    return mwmod.MostWanted(mwmod.parse(json.dumps(data)))
+
+
 class RelevanceTests(unittest.TestCase):
+    def test_clublog_api_shape_is_rank_to_adif(self):
+        mw = mw_adif(c24=45, c446=258)                 # Bouvet, Morocco
+        self.assertTrue(mw.by_adif)
+        self.assertEqual((mw.rank_code(24), mw.rank_code(446), mw.rank_code(1)), (45, 258, None))
+        self.assertIsNone(mw.rank("344"))              # numbers are no prefixes any more
+        dx = dxccmod.load_or_none()
+        lines = [DxLine(call="CN3A", name="Morocco", prefix="CN", spotters={"A"} | set("BCDEFGHIJKLMN")),
+                 DxLine(call="3Y0J", name="Bouvet", prefix="3Y/B", spotters={"A", "B", "C", "D", "E"})]
+        cfg = load_cfg_default()
+        rate(lines, cfg, mw, dx)
+        self.assertEqual([(d.dxcc, d.rank) for d in lines], [(446, 258), (24, 45)])
+        self.assertGreater(lines[1].score, lines[0].score)       # 5 for Bouvet beat 14 for CN
+
     def test_parse_accepts_three_shapes(self):
         prefixes = [f"P{i}" for i in range(150)]
         by_rank = {str(i + 1): p for i, p in enumerate(prefixes)}
@@ -380,6 +418,8 @@ class BrocastPageTests(unittest.TestCase):
         return self_blk[0]["v"]
 
     def test_only_relevant_tiers_go_over_the_air(self):
+        self.cfg = __import__("dataclasses").replace(
+            self.cfg, digest=__import__("dataclasses").replace(self.cfg.digest, brocast_min_rows=0))
         d = self.build(mw_sample(VP8=50, **{"3B8": 300}))     # VP8 rare, 3B8 common
         dat = self.data(d.page)
         self.assertEqual([r[1] for r in dat["st"]], ["VP8ABC"])    # 3B8XY is tier C
@@ -407,9 +447,34 @@ class BrocastPageTests(unittest.TestCase):
         self.assertEqual(st["st"][0][10:], [1 << spots_mod.BAND_ORDER.index("40m"), ["RTTY"]])
         self.assertEqual(st["tiers"], "")                  # not rated
 
+    def test_at_least_ten_stations_by_relevance(self):
+        c = cty()
+        for i in range(14):                             # 14 common calls, tier C
+            for sp in ("OE3GAS", "DK9IP"):
+                s = parse(f"DX de {sp}:  14025.0  3B8A{i:02d}  CW  1200Z")
+                self.st.add(s, self.base + 3000 + i, c.lookup(s.dx), c.lookup(s.spotter))
+        d = self.build(mw_sample(VP8=50, **{"3B8": 300}))
+        rows = self.data(d.page)["st"]
+        self.assertEqual(len(rows), 10)                 # VP8ABC (B) + 9 filled up
+        self.assertEqual([r[0] for r in rows].count("B"), 1)
+        self.assertIn("VP8ABC", [r[1] for r in rows])
+        self.assertEqual([r[1] for r in rows], sorted(r[1] for r in rows))   # page: alphabetical
+        many = __import__("dataclasses").replace(self.cfg.digest, brocast_min_rows=40)
+        d = build(self.st.spots(self.since, self.until), many, self.since, self.until,
+                  86400, "", mw_sample(VP8=50), self.dxcc)
+        self.assertEqual(len(self.data(d.page)["st"]), 12)    # brocast_max_rows wins
+
+    def test_stored_spot_without_mode_is_placed_again(self):
+        self.st.db.execute("UPDATE spot SET mode = '', comment = '' WHERE dx = '3B8XY'")
+        d = self.build(None)
+        act = {r[0]: r for r in self.data(d.act.page)["act"]}
+        self.assertEqual(act["40m"][-1], [("DIGI", 2)])        # 7040.0 = digital segment
+        self.assertEqual(self.data(d.act.page).get("cov"), None)
+
     def test_without_dictionary_the_entity_goes_as_text(self):
         d = self.build(mw_sample(VP8=50), dxcc=None)
-        self.assertEqual(self.data(d.page)["st"][0][2], "Falkland Islands")
+        vp8 = [r for r in self.data(d.page)["st"] if r[1] == "VP8ABC"][0]
+        self.assertEqual(vp8[2], "Falkland Islands")
         self.codec.to_wire({**d.page, "id": 412, "t": int(self.until)})   # still valid
 
     def test_clublog_prefix_for_the_rank(self):

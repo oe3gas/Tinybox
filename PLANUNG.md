@@ -1130,6 +1130,11 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - **Preis:** Das Dictionary wächst durch die Gebietsnamen auf rund 42 kB Text (`DICT`: 629 Zeilen) bzw. 11 kB gepackt über Funk (56 Frames statt rund 15). Bei `dict_broadcast_hours = 24` etwa 1,5–2 min Sendezeit pro Tag.
 - dxfeed liest die DXCC-Liste direkt aus `brocast/brocast-core.yaml` (`[data] dictionary`, braucht PyYAML). Fehlt sie, geht das Gebiet als Text und der Most-Wanted-Rang wird über den AD1C-Präfix gesucht. `dxfeed status` zeigt cty.dat-Gebiete ohne DXCC-Nummer.
 - Listener: zeichnet Raster, Heatmap und Listen aus `p.data`; Gebiets- und Mode-Namen liefert der Listener aus dem Dictionary (`texts`, `bits`).
+- **Korrekturen 24.10.2026 (erster echter Lauf):**
+  - Club Log liefert die Most-Wanted-Liste als **Rang → ADIF-Nummer** (`{"1":"344",…}`), nicht als Präfix: bis dahin bekam kein Gebiet einen Rang (alle „–“, Seltenheit = Mittelwert). Zuordnung jetzt über die DXCC-Liste des Dictionarys; die alten Formen werden weiter gelesen.
+  - **Mindestens 10 Stationen** auf der brocast-Seite (`brocast_min_rows`): Stufen aus `brocast_tiers`, nach Relevanz mit Stufe C aufgefüllt, höchstens `brocast_max_rows`. 10 Stationen ≈ 300 B in 2 Frames.
+  - Mode „?“ = weder im Kommentar noch aus dem Bandplan erkennbar. Bandplan ergänzt: Digital-Segmente als `DIGI`, Phonie bis 4000/7300 kHz (Region 2), FM-Bereiche; gespeicherte Spots ohne Mode werden beim Digest neu eingeordnet.
+  - Bandaktivität trägt dieselbe Abdeckung (`cov`) wie die Stationsseite; der Listener zeigt den Zeitraum in UTC wie die Tabelle.
 
 ## 17. Refactoring (entschieden 17.10.2026)
 

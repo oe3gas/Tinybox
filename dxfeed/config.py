@@ -74,6 +74,7 @@ class DigestCfg:
     brocast: bool = True            # Brocast: page with the bulletin (PLANUNG 16a)
     brocast_tiers: str = "AB"       # tiers that go over the air
     brocast_max_rows: int = 12
+    brocast_min_rows: int = 10      # fill up with the next most relevant (tier C)
 
 
 @dataclass(frozen=True)
@@ -181,7 +182,8 @@ def load(path: str | Path) -> Config:
         relevance_b=rel_b,
         brocast=get("digest", "brocast", True, bool),
         brocast_tiers=tiers,
-        brocast_max_rows=min(40, max(1, get("digest", "brocast_max_rows", 12, int))))
+        brocast_max_rows=min(40, max(1, get("digest", "brocast_max_rows", 12, int))),
+        brocast_min_rows=min(40, max(0, get("digest", "brocast_min_rows", 10, int))))
 
     # CR70: the inbox folder belongs to tinybox.conf ([inbox] dir); [digest] inbox
     # is only an override

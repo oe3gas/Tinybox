@@ -51,6 +51,7 @@ relevance_a  = 25                      ; score from here: tier A (look now)
 relevance_b  = 12                      ; from here: tier B (interesting), below: C
 brocast      = yes                     ; both bulletins carry a brocast page dxsum (header Brocast:)
 brocast_tiers    = AB                  ; tiers that go over the air (mailbox text: all)
+brocast_min_rows = 10                  ; at least this many: filled up by relevance (tier C)
 brocast_max_rows = 12                  ; stations page: 8 stations ~ 1 frame, 12 ~ 2 frames
 ; inbox      =                         ; default: [inbox] dir from tinybox.conf (only to override)
 
