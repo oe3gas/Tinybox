@@ -8,3 +8,5 @@
 *.db   binary
 *.png  binary
 *.bin  binary
+# Feeder-Pi: alles laeuft auf dem Pi (sh, systemd), daher immer LF
+feederpi/** text eol=lf

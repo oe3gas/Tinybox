@@ -1,0 +1,27 @@
+[Unit]
+Description=Feeder-Pi: dxfeed DX cluster spot collector
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tinybox
+Group=tinybox
+WorkingDirectory=/opt/tinybox
+# spots in /opt/tinybox/data/dxfeed.db (SD card), written about once a minute
+ExecStart=/usr/bin/python3 -m dxfeed -c /opt/tinybox/dxfeed.conf collect
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=always
+RestartSec=30
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/tinybox /run/tinybox/ausgang
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

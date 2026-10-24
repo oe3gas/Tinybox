@@ -34,6 +34,7 @@ tbclient.conf
 fwdsim.conf
 kisshub.conf
 dxfeed.conf
+dxfeed.conf.vor-feederpi
 kisshub.log
 brocast/brocastd.conf
 brocast/brocastd.conf.neu

@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- Feeder-Pi (PLANUNG 22, `feederpi/README.md`): dxfeed und GeoSphere laufen auf einem
+  Raspberry Pi (ab Modell 1, Raspberry Pi OS Lite 32-bit) mit systemd; der TinyBox-PC holt die
+  Bulletins alle 5 Minuten per SSH in den Eingang (`pi_abholung.py`, eingeschränkter Benutzer
+  `abholer`). Neu: `pi_sd_vorbereiten.bat`, `pi_abholung_einrichten.bat`,
+  `pi_abholung_entfernen.bat`, `feederpi/install.sh`.
 - Benutzerprofil (CR73, PLANUNG 21): Name, Locator, Home-BBS je Rufzeichen in der
   TinyBox. Terminal fragt nach dem Login nach fehlenden Angaben (`[mailbox]
   ask_profile`), Befehle `N`, `NL`, `NH`, `I call`; `/W` im Chat mit Name und Locator;

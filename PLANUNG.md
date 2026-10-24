@@ -1339,6 +1339,49 @@ Home-BBS. Die TinyBox soll das auch, und der Client soll dieselben Daten nutzen.
 **Später:** Home-BBS für die Zustellung persönlicher Post nutzen (White Pages / Forwarding);
 CR72 (Prognose auf Anfrage) nimmt den Locator aus dem Profil.
 
+## 22. Feeder-Pi: Content-Lieferanten auf einem Raspberry Pi (entschieden und umgesetzt 24.10.2026)
+
+Anlass: dxfeed und die GeoSphere-Jobs sollen nicht mehr auf dem TinyBox-PC laufen, sondern
+auf einem Raspberry Pi 1 (512 MB, SD-Karte 4 GB). Anleitung: `feederpi/README.md`.
+
+- **Leistung:** reicht deutlich. Beide Lieferanten brauchen nur die Standardbibliothek
+  (dxfeed zusätzlich PyYAML für die DXCC-Liste), der Sammler ein paar Prozent CPU, die Jobs
+  laufen Sekunden. Schwachstellen sind SD-Karte, fehlende Uhr und Netzteil, nicht die CPU.
+- **OS:** Raspberry Pi OS Lite (32-bit), Debian 13 „trixie“ (einzige aktuelle Ausgabe für ARMv6).
+- **Gleiche Programme, nur andere Starter:** `dxfeed/` und `geosphere_*.py` unverändert;
+  systemd-Units und Timer in `feederpi/systemd/` mit denselben Zeiten wie die Windows-Aufgaben
+  (Wetter `--region` xx:05, Warnungen 15 min, Prognose 3 h xx:35, DX 05:00). Locator(s) in
+  `/etc/default/feederpi`. Unabhängig von der NanoPi-Schiene (`deploy/`, OE3TEC): eigener
+  Ordner `feederpi/`, in `build_production.sh` unter `EXCLUDE`.
+- **Übergabe = Eingangsordner.** Die Jobs schreiben am Pi in `/run/tinybox/ausgang` (RAM,
+  `.tmp` → `.txt` wie bisher). Die brocast-Seite steckt in der Kopfzeile `Brocast:`; die
+  Ingest-API von brocastd bleibt auf 127.0.0.1.
+- **Der PC holt ab (Pull), der Pi liefert nicht:** `pi_abholung.py` alle 5 min aus der
+  Aufgabenplanung (`pi_abholung_einrichten.bat`), schreibt `NAME.abholung.tmp` und benennt in
+  `NAME.txt` um. Vorteile: PC bietet keine Freigabe an; ist der PC aus, warten die Dateien
+  (gleichnamige ersetzen sich). Eine Abholung = zwei SSH-Verbindungen (`bundle` als tar, `ack`).
+- **Sicherheit:** eigener Benutzer `abholer` mit eigenem Schlüssel (`~/.ssh/tinybox_feederpi`),
+  erzwungenes Kommando `abholung.sh` (nur `list`, `bundle`, `ack`) in `authorized_keys` und
+  sshd, kein Passwort, keine Shell, kein Forwarding. Host-Schlüssel beim ersten Kontakt gemerkt.
+  PC prüft Namen (`*.txt`, keine Pfade/Links) und Größe (512 KB). Jobs als `tinybox` mit
+  `ProtectSystem=strict`. `unattended-upgrades`. SSH-Passwörter aus, sobald der Admin einen
+  Schlüssel hat.
+- **Zeit:** NTP (`at.pool.ntp.org`) mit `systemd-time-wait-sync`; Kalender-Timer starten erst
+  mit synchroner Uhr (kein Pi 1 hat eine RTC).
+- **SD-Karte:** Ausgang und Journal im RAM, keine Auslagerungsdatei, Bytecode einmalig. Auf
+  der Karte nur Spot-Datenbank (≈ 1 Schreibvorgang/min), cty.dat, Most Wanted, Warnungszustand.
+- **Einrichten:** Imager → `pi_sd_vorbereiten.bat` (schreibt `feederpi\` auf die Boot-Partition:
+  Programme, Dictionary, `dxfeed.conf` des PCs, Locator, PC-Schlüssel) →
+  `sudo sh /boot/firmware/feederpi/install.sh` → `pi_abholung_einrichten.bat` (schaltet auf
+  Wunsch die PC-Aufgaben ab und benennt `dxfeed.conf` in `dxfeed.conf.vor-feederpi` um, damit
+  `start_alles.bat` den Sammler nicht mehr startet). Updates per `scp` + `install.sh`.
+- **Grenzen:** bis zu 5 min Verzögerung; nach Pi-Neustart sind wartende Dateien weg; `Valid:`
+  zählt ab Eintreffen in der TinyBox.
+- **Einschätzung (24.10.2026): TinyBox selbst auf einem zweiten Pi 1** – nur mit Hardware-TNC
+  (KISS) denkbar und ohne Reserve; mit Direwolf am selben Pi zu knapp. Eine SSD bringt dort
+  nichts (Datenbank wenige MB, kein USB-Boot, USB 2.0 teilt sich den Bus mit dem LAN). Ziel für
+  die TinyBox bleibt der NanoPi (`PRODUCTION.md`) bzw. ein Pi ab Modell 3.
+
 ## Quellen
 
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a
@@ -1347,3 +1390,4 @@ CR72 (Prognose auf Anfrage) nimmt den Locator aus dem Profil.
 - Direwolf-Dokumentation (AGW-Interface): https://github.com/wb2osz/direwolf/tree/master/doc
 - DXSpider-Wiki, Verbinden mit einem Knoten: https://wiki.dxcluster.org/wiki/How_to_connect
 - AD1C Country Files (cty.dat): https://www.country-files.com
+- Raspberry Pi OS (Downloads, unterstützte Modelle): https://www.raspberrypi.com/software/operating-systems/

@@ -45,6 +45,9 @@ tests
 production
 build_production.sh
 dxfeed_start.py
+feederpi
+pi_abholung.py
+pi_sd_vorbereiten.py
 fwdsim
 fwdsim.conf.example
 brocast/brocast-core.v*
