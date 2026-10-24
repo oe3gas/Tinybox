@@ -410,7 +410,7 @@ a.extlink:hover { color: var(--accent-dark); }
 .wxf-scroll { overflow-x: auto; background: #fff; border: 2px solid var(--ink); border-radius: 10px; }
 .wxf-grid { display: grid; grid-template-columns: 74px repeat(var(--wxf-n), minmax(48px, 1fr));
             min-width: calc(74px + var(--wxf-n) * 48px); align-items: stretch; }
-.wxf-lab { position: sticky; left: 0; z-index: 1; background: var(--paper-2); border-right: 1.5px solid var(--rule);
+.wxf-lab { position: sticky; left: 0; z-index: 2; background: var(--paper-2); border-right: 1.5px solid var(--rule);
            padding: 4px 8px; font-size: 12px; font-weight: 700; color: var(--ink-2); display: flex;
            flex-direction: column; justify-content: center; line-height: 1.15; }
 .wxf-lab small { font: 11px var(--mono); color: var(--ink-3); font-weight: 400; }
@@ -431,12 +431,12 @@ a.extlink:hover { color: var(--accent-dark); }
 .wxf-sky .cloud.dark { fill: #C3C8D0; stroke: #4F5663; }
 .wxf-sky .drop { stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; }
 .wxf-temp b { font: 700 14px var(--mono); }
-.wxf-curvec { grid-column: 2 / -1; position: relative; height: 70px; border-bottom: 1.5px solid var(--rule); }
+.wxf-curvec { position: relative; z-index: 1; height: 70px; border-bottom: 1.5px solid var(--rule); pointer-events: none; }
+.wxf-curvecell { height: 70px; border-bottom: 1.5px solid var(--rule); }
 .wxf-curve { position: absolute; inset: 0; width: 100%; height: 100%; }
 .wxf-curve .area { fill: #C0571B; opacity: .10; }
 .wxf-curve .line { fill: none; stroke: #C0571B; stroke-width: 2.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .wxf-curve .zero { stroke: #1F4E9A; stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
-.wxf-curve .dayline { stroke: var(--ink); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .wxf-dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
            background: #fff; border: 2px solid #C0571B; }
 .wxf-rain { justify-content: flex-end; }

@@ -1435,13 +1435,23 @@ function wxForecast(rows, cols, hdr, p) {
       c.append(b);
       grid.append(c);
     });
-    grid.append(el("div", "wxf-lab"));
+    // the curve row: one empty cell per step (day rule and night shading exactly as
+    // in the other rows, from the same grid tracks) and the curve laid over them.
+    // Placed explicitly in row 5 (day, hour, sky, temperature come before it).
+    const CURVE_ROW = 5;
+    const lab = el("div", "wxf-lab");
+    lab.style.gridArea = `${CURVE_ROW} / 1`;
+    grid.append(lab);
+    steps.forEach((st, i) => {
+      const c = cell(i, "wxf-curvecell");
+      c.style.gridArea = `${CURVE_ROW} / ${i + 2}`;
+      grid.append(c);
+    });
     const W = n * 100, H = 64, pad = 8;
     const tMin = Math.min(...ok), tMax = Math.max(...ok), span = (tMax - tMin) || 1;
     const x = i => i * 100 + 50, y = v => (pad + (1 - (v - tMin) / span) * (H - 2 * pad)).toFixed(1);
     const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", class: "wxf-curve",
                            role: "img", "aria-label": `Temperaturverlauf ${wxNum(tMin)} bis ${wxNum(tMax)} °C` });
-    for (let i = 1; i < n; i++) if (newDay(i)) s.append(svg("line", { x1: i * 100, x2: i * 100, y1: 0, y2: H, class: "dayline" }));
     if (tMin < 0 && tMax > 0) s.append(svg("line", { x1: 0, x2: W, y1: y(0), y2: y(0), class: "zero" }));
     let line = "", run = [];
     const runs = [];
@@ -1458,6 +1468,7 @@ function wxForecast(rows, cols, hdr, p) {
     }
     s.append(svg("path", { d: line, class: "line" }));
     const holder = el("div", "wxf-curvec");
+    holder.style.gridArea = `${CURVE_ROW} / 2 / ${CURVE_ROW + 1} / -1`;
     holder.append(s);
     // dots as HTML so they stay round (the svg is stretched)
     temps.forEach((v, i) => {
