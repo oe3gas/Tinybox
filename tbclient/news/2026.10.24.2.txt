@@ -1,0 +1,2 @@
+- Settings > Connection log: Text gekuerzt,
+  Export als CSV/ADIF in eigener Zeile.
