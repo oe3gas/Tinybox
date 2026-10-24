@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 16.10.2026 (CR53 umgesetzt)
+Stand: 24.10.2026 (CR73 umgesetzt)
 
 ## Übersicht
 
@@ -58,6 +58,7 @@ Stand: 16.10.2026 (CR53 umgesetzt)
 | 49 | Suche in Mails und Bulletins: Client (Suchfeld), TinyBox (Befehl `F`), Sysop-Weboberfläche | ✅ siehe unten |
 | 50 | Monitor: alter Monitor aus den Settings raus, ohne „fm“, Rufzeichen farbig, Filter nach Text und nach TinyBox-Sonderframes, Clear | ✅ siehe unten |
 | 53 | TinyBox-Web-GUI: Monitor auf schwarzem Hintergrund (wie im Client) | ✅ siehe unten |
+| 73 | Benutzerprofil: Name, Locator, Home-BBS in TinyBox und Client (Terminal-Fragen, Formular im Client, `//PROF`, `//WHOIS`) | ✅ siehe unten (Funktest offen) |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -2025,8 +2026,8 @@ Aufgabenplanung (Weg 1, PLANUNG Abschnitt 20).
 ### Vorschlag (zur Entscheidung)
 
 - **Befehl in der TinyBox**, z. B. `WX JN88BN` (Name noch offen; `WX` ist auch die Rubrik).
-  Ohne Locator: der zuletzt verwendete des Users (neu: Locator im User-Profil, einmal mit
-  `WX JN88BN` gesetzt). Prüfung wie in `geosphere_prognose.py` (6/8-stellig, im Modellgebiet).
+  Ohne Locator: der Locator aus dem User-Profil (CR73 – gibt es seit 24.10.2026; für die
+  Prognose muss er 6-stellig sein). Prüfung wie in `geosphere_prognose.py` (6/8-stellig, im Modellgebiet).
 - **Antwort an den Fragenden**, nicht als Bulletin: im Terminal sofort der Text aus
   `geosphere_prognose.bericht()` (≤ 60 Zeichen breit); im Client als persönliche Nachricht
   bzw. eigene Ansicht mit der Prognosegrafik (gleiche Tabelle wie die brocast-Seite).
@@ -2040,3 +2041,69 @@ Aufgabenplanung (Weg 1, PLANUNG Abschnitt 20).
   automatisch in Weg 1 aufnehmen?
 - Offen: Nur für angemeldete User oder für jeden Connect? Ausgabe-Schritte (3 h / 48 h wie
   Weg 1, im Terminal evtl. 24 h)?
+
+## CR73 – Benutzerprofil: Name, Locator, Home-BBS in TinyBox und Client (✅ umgesetzt 24.10.2026, Funktest offen)
+
+### Erfassung (OE3GAS, 19./24.10.2026)
+
+Bei der Recherche zu den Prompts anderer PR-BBS (FBB, BPQ, BayCom/OpenBCM, JNOS) fiel auf:
+Die üblichen Systeme fragen neue Benutzer nach **Name, QTH/Locator und Home-BBS**. Das soll
+die TinyBox auch können – und die Daten sind im Client genauso sinnvoll. Fragen: Wo werden
+sie gespeichert, und wie wird ein User, der mit dem Client kommt, zur Eingabe eingeladen?
+
+### Entscheidung (OE3GAS, 24.10.2026)
+
+- **Verbindlich in der TinyBox**, eine Kopie im Client. Eingegeben wird im Client (Formular)
+  oder im Terminal (Fragen nach dem Login, Befehle). Die TinyBox braucht die Daten selbst
+  (Home-BBS fürs Forwarding, Anzeige im Chat, Locator für CR72), auch Terminal-User haben ein
+  Profil, und ein neuer PC/Client findet das Profil wieder.
+- **Home-BBS gleich mitnehmen.**
+- **Sichtbar für alle**: im Chat, im Terminal (`I call`), in anderen Clients.
+- **Die neuere Änderung gilt**, egal ob aus Client oder Terminal.
+
+### Umsetzung
+
+- **Ein Profil je Rufzeichen ohne SSID** (OE3GAS-7 = OE3GAS). Felder: Name (bis 12 Buchstaben,
+  Leerzeichen, `-`, `.`, `'`; Umlaute erlaubt), Locator (4 oder 6 Stellen – der User wählt die
+  Genauigkeit, alle sehen genau das), Home-BBS (Rufzeichen oder hierarchische Adresse, SSID
+  fällt weg). Gemeinsame Prüfung, Prüfsumme und Zeilenformat: `prcore/profile.py`.
+- **TinyBox**: Tabelle `profiles` (Schema 9) mit Zeit der letzten Änderung und Zeitpunkt der
+  letzten Abfrage; Logik in `tinybox/profiles.py`.
+  - **Fragen nach dem Login** (nur Terminal, nicht Sysop-Konsole): nach dem Willkommenstext
+    `Please introduce yourself …`, dann nur die fehlenden Felder: `Your first name:`,
+    `Your locator (e.g. JN88EP):`, `Your home BBS (e.g. OE3XSR):`. Enter überspringt eine
+    Frage, `/AB` alle; eine falsche Eingabe wird erklärt und nochmals gefragt. Ein
+    unvollständiges Profil wird höchstens alle 30 Tage wieder abgefragt. Abschaltbar mit
+    `[mailbox] ask_profile = no`.
+  - Kommt währenddessen `//CLIENT` (der Client meldet sich ca. 1 s nach dem Willkommen),
+    enden die Fragen still – der Client hat sein eigenes Formular. Bei Verbindungsabbruch
+    bleibt, was schon beantwortet war.
+  - **Befehle**: `N name`, `NL locator`, `NH home-bbs` (`-` löscht, ohne Argument das eigene
+    Profil), `I [call]` zeigt das Profil einer Station. Hilfe ergänzt; der Prompt bleibt
+    gleich (kein Byte mehr je Prompt).
+  - **Chat im Terminal**: `/W` und die Liste beim Betreten zeigen `OE3ABC (Hans, JN88)`.
+  - **Sysop-Web-GUI**: Stationsliste (JLOG) mit Name, Locator, Home-BBS.
+- **Client-Protokoll TB1**, neue Fähigkeit `PROF`:
+  - `//OK … prof=<crc>` (4 Hex-Stellen) bzw. `prof=-`: der Client vergleicht mit seinem
+    Profil – **gleich = nichts über Funk** (ca. 10 Byte je Login).
+  - `//PROF t=<unix> loc=… home=… name=…` speichert (Antwort `//PROF OK <crc>`,
+    `//PROF ERR <feld>`; ist das Profil in der TinyBox neuer, kommt es als `//PROF = …` zurück).
+  - `//PROF ?` → `//PROF = <crc> t=… loc=… home=… name=…` bzw. `//PROF -`.
+  - `//WHOIS call,call…` (max. 10) → je Station `//WI <call> loc=… home=… name=…` bzw.
+    `//WI <call> -`, dann `//WIEND`.
+- **Client** (`tbclient/profiles.py`, Version 2026.10.24):
+  - Profil in den Client-Settings (nicht in `tbclient.conf`); Vorschlag für den Locator ist
+    `[station] locator`. Nach `//OK`: gleiche Prüfsumme → nichts; TinyBox ohne Profil und im
+    Client eingegeben → senden; sonst `//PROF ?` und die neuere Fassung (Zeit `t`) gewinnt.
+  - **Einladung**: Balken über dem Chat „Introduce yourself …“ mit *Fill in* / *Later*,
+    solange Name oder Locator fehlen und der Client mit einer TinyBox mit `PROF` verbunden ist;
+    *Later* = in einer Woche wieder. Formular „My profile“ (auch unter Settings > My profile).
+    Lehnt die TinyBox ab, öffnet sich das Formular mit dem Hinweis.
+  - **Andere Stationen**: für die Teilnehmer im Board (`//WHO`, Join) einmal `//WHOIS`
+    (gesammelt, eine Zeile für alle), eine Woche im Client gemerkt. Teilnehmerliste:
+    „Gerhard · JN88EP · 45 km NE“ (Entfernung vom eigenen Locator).
+- Tests: `tests/test_profile.py` (Prüfung, Format, TinyBox-Fragen, Befehle, `/W`, TB1,
+  Client-Abgleich in beide Richtungen, Einladung, `//WHOIS`).
+- **Offen / nächste Schritte**: Funktest PC1 ↔ PC2; Home-BBS für die Zustellung persönlicher
+  Post an andere Mailboxen nutzen (White Pages, mit dem Forwarding); CR72 kann den Locator
+  aus dem Profil nehmen (braucht 6 Stellen).

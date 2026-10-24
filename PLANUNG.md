@@ -1309,6 +1309,36 @@ Je Locator ein Bulletin an `WX`, `Replace: geosphere-prognose-<LOC>`, `Valid: 4h
 TinyBox die Prognose für **seinen** Locator an und bekommt sie zurück. Details siehe
 `docs/client-change-requests.md`, CR72.
 
+## 21. Benutzerprofil: Name, Locator, Home-BBS (entschieden und umgesetzt 24.10.2026, CR73)
+
+Anlass: Andere PR-BBS (FBB, BPQ, BayCom/OpenBCM) fragen neue Benutzer nach Name, QTH und
+Home-BBS. Die TinyBox soll das auch, und der Client soll dieselben Daten nutzen.
+
+**Entscheidungen (OE3GAS, 24.10.2026)**
+
+- **Wo:** verbindlich in der TinyBox (Tabelle `profiles`, ein Eintrag je Rufzeichen ohne SSID),
+  der Client hält eine Kopie. Eingabe im Client (Formular) oder im Terminal.
+- **Was:** Name, Locator (4 oder 6 Stellen, der User wählt die Genauigkeit) und Home-BBS.
+- **Wer sieht es:** alle – Chat, Terminal (`I call`), andere Clients, Sysop-Web-GUI.
+- **Konflikt:** die neuere Änderung gilt (Zeitstempel `t`), egal ob aus Client oder Terminal.
+
+**Ablauf**
+
+- *Terminal:* nach dem Login Fragen nur nach den fehlenden Feldern (Enter überspringt, `/AB`
+  bricht ab), höchstens alle 30 Tage; danach Befehle `N`, `NL`, `NH`. Schalter
+  `[mailbox] ask_profile`. Eine `//`-Zeile beendet die Fragen (Client).
+- *Client:* `//CLIENT … caps=…,PROF` → `//OK … prof=<crc>|-`. Gleiche Prüfsumme: nichts über
+  Funk. Sonst `//PROF …` (senden) bzw. `//PROF ?` (holen, neuere Fassung gewinnt).
+  Einladungsbalken, solange Name oder Locator fehlen („Later“ = eine Woche).
+- *Andere Stationen:* `//WHOIS` für die Board-Teilnehmer, im Client eine Woche gemerkt;
+  Anzeige mit Entfernung und Richtung vom eigenen Locator.
+
+**Bytes über Funk:** je Login ≈ 10 B (`prof=xxxx`); das Profil selbst (≈ 50 B) nur bei einer
+Änderung; je fremder Station einmal pro Woche ≈ 50 B. Der Prompt bleibt unverändert.
+
+**Später:** Home-BBS für die Zustellung persönlicher Post nutzen (White Pages / Forwarding);
+CR72 (Prognose auf Anfrage) nimmt den Locator aus dem Profil.
+
 ## Quellen
 
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a

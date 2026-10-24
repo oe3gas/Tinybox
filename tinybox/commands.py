@@ -6,7 +6,9 @@ import logging
 import re
 from typing import TYPE_CHECKING, Callable
 
-from . import addressing, chatcmd, dictfile, linkq, texts
+from prcore.profile import CALL_RE as BASE_CALL_RE, ProfileError
+
+from . import addressing, chatcmd, dictfile, linkq, profiles, texts
 from .service import ServiceError
 from .store import Message
 
@@ -305,6 +307,57 @@ def cmd_edit(s: Session, arg: str) -> None:
         s.error(exc, msg_id)
 
 
+# --- profile (CR73) ------------------------------------------------------------
+
+def _show_profile(s: Session, call: str) -> None:
+    p = profiles.get(s.service.store, call)
+    base = addressing.base_call(call)
+    if p is None:
+        s.out(texts.PROFILE_NONE.format(call=base))
+        return
+    s.out(texts.PROFILE_SHOW.format(call=base, name=p["name"] or "-", loc=p["loc"] or "-",
+                                    home=p["home"] or "-"))
+
+
+def _set_profile(s: Session, field: str, arg: str) -> None:
+    """N / NL / NH: without an argument the own profile, '-' clears the field."""
+    if not arg:
+        _show_profile(s, s.call)
+        return
+    try:
+        value = "" if arg.strip() == "-" else profiles.check_field(field, arg)
+    except ProfileError:
+        s.out(texts.PROFILE_BAD[field])
+        return
+    profiles.save(s.service.store, s.call, {field: value})
+    _show_profile(s, s.call)
+
+
+def cmd_name(s: Session, arg: str) -> None:
+    _set_profile(s, "name", arg)
+
+
+def cmd_locator(s: Session, arg: str) -> None:
+    _set_profile(s, "loc", arg)
+
+
+def cmd_home(s: Session, arg: str) -> None:
+    _set_profile(s, "home", arg)
+
+
+def cmd_info(s: Session, arg: str) -> None:
+    """I [call]: the profile of a station - everybody may see every profile."""
+    words = arg.split()
+    if len(words) > 1:
+        s.out(texts.USAGE_I)
+        return
+    call = words[0].upper() if words else s.call
+    if not BASE_CALL_RE.match(addressing.base_call(call)):
+        s.out(texts.INVALID_CALL.format(call=call))
+        return
+    _show_profile(s, call)
+
+
 COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "A": cmd_abort,
     "B": cmd_bye,
@@ -318,6 +371,7 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "H": cmd_help,
     "?": cmd_help,
     "HELP": cmd_help,
+    "I": cmd_info,
     "J": cmd_jlog,
     "K": cmd_kill,
     "KM": cmd_kill_mine,
@@ -325,6 +379,9 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "LB": cmd_list_bulletins,
     "LM": cmd_list_mine,
     "LP": cmd_list_private,
+    "N": cmd_name,
+    "NH": cmd_home,
+    "NL": cmd_locator,
     "R": cmd_read,
     "RM": cmd_read_mine,
     "S": cmd_send,

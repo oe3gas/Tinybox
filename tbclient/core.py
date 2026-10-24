@@ -26,6 +26,7 @@ from .kisslink import KissLink, KissPort
 from .links import AgwLink, AgwPort, TelnetLink
 from .logbook import Logbook
 from .mailstore import MailStore
+from .profiles import Profiles
 from .radio import RawFrame, aprs_symbol, guess_mod128, monitor_entry
 from .sync import Syncer
 
@@ -140,6 +141,8 @@ class ClientCore:
         # small images in the chat (CR12)
         self.images = Images(self, ImageStore(cfg.data_dir / "images"))
         self.images.store.purge()
+        # name, locator, home BBS - own and of the others (CR73)
+        self.profiles = Profiles(self)
 
     # --- settings --------------------------------------------------------
 
@@ -614,6 +617,7 @@ class ClientCore:
         self.pending.clear()
         self.sync.link_lost()
         self.images.link_lost()
+        self.profiles.link_lost()
         if self._hold is not None:           # held lines are gone with the link
             self._hold = []
         self.sysmsg = None                   # a shutdown warning is over now
@@ -658,7 +662,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE" + (",Z,IMG" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF" + (",Z,IMG" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -774,6 +778,7 @@ class ClientCore:
                              "steps": [float(x) for x in q.group(4).split(",") if x]}
             self._update_info(rest)
             self._send("//BOARDS")
+            self.profiles.on_ok(rest)                # CR73: profile only if it differs
             if self.cfg.sync_on_login and "SYNC" in self.caps and self.at_home \
                     and not self.sync.running:
                 # CR40: headers of mail and subscribed rubrics after every login,
@@ -848,6 +853,13 @@ class ClientCore:
                 if num:
                     self._set_number(num, call)
                     num = 0
+            self.profiles.want(self.members)         # CR73: names and locators
+        elif cmd == "PROF":
+            self.profiles.on_line(rest)
+        elif cmd == "WI":
+            self.profiles.on_whois(rest)
+        elif cmd == "WIEND":
+            self.profiles.on_whois_end()
         elif cmd == "OUT":
             self._clear_board()
             self.tset.pop("board", None)
@@ -956,6 +968,7 @@ class ClientCore:
                         break
         elif ev.kind == "join":
             self.members[ev.call] = ev.symbol
+            self.profiles.want([ev.call])
             if ev.num:
                 self._set_number(ev.num, ev.call)
             self._add({"id": pos, "seq": ev.seq, "kind": "join", "call": ev.call, "time": now})
@@ -1092,6 +1105,7 @@ class ClientCore:
                         for c, u in self.uploads.items()],
             "images": self.images.status(self._image_refs()),
             "img": {"rate": self.cfg.img_rate, "target": self.cfg.img_target},
+            **self.profiles.snapshot(calls),                            # CR73
         }
 
     def _image_refs(self) -> set[str]:

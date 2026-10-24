@@ -187,6 +187,13 @@ Station
   Fehler beginnen mit [ERROR] (rot), Warnungen mit [WARN] (gelb), stehende
   Verbindungen sind gruen. Farben nur in einem echten Konsolenfenster;
   abschalten mit [console] color = no. Technische Details mit -v.
+- Profil (CR73): Name, Locator und Home-BBS unter Settings > "My profile".
+  Fehlen Name oder Locator, laedt ein Balken ueber dem Chat zum Ausfuellen
+  ein ("Later" = in einer Woche wieder). Die TinyBox haelt das Profil fuer
+  das Rufzeichen (alle SSIDs); es geht nur ueber Funk, wenn es sich
+  geaendert hat. Aenderungen im Terminal (N, NL, NH) kommen zurueck in den
+  Client - die neuere Aenderung gilt. In der Teilnehmerliste stehen Name,
+  Locator und Entfernung mit Richtung der anderen.
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu

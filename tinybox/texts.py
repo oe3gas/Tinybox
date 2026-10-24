@@ -22,6 +22,7 @@ HELP = [
     "  DICT       Download the brocast dictionary (text, for the listener import)",
     "  F text     Find messages with text in subject, text or calls (FIND text)",
     "  H or ?     This help",
+    "  I call     Profile of a station: name, locator, home BBS (I: your own)",
     "  J          Recently connected stations",
     "  K n        Kill message n (K n n ... for several)",
     "  KM         Kill all read messages to you",
@@ -32,6 +33,9 @@ HELP = [
     "  L@ area    List messages @ area or mailbox, e.g. L@ WW",
     "  L> call    List messages to call (L< call: from call)",
     "  LM         List messages to you",
+    "  N name     Your first name (N - clears it, N alone shows your profile)",
+    "  NL loc     Your locator, 4 or 6 characters, e.g. NL JN88EP",
+    "  NH call    Your home BBS, e.g. NH OE3XSR or NH OE3XSR.#NOE.AUT.EU",
     "  R n        Read message n (R n n ... for several)",
     "  RM         Read all unread messages to you",
     "  S call     Send private message (same as SP call)",
@@ -100,6 +104,20 @@ BODY_PROMPT = "Enter message, end with /EX or ^Z  (/AB = cancel):"
 SAVED = "Msg {id} saved."
 LONG_OUTPUT = "*** {n} lines follow - send A to abort"   # CR40 (replaces the pages of CR29)
 CANCELLED = "Message cancelled."
+
+# --- profile (CR73) ---
+PROFILE_INTRO = "Please introduce yourself. Enter skips a question, /AB all of them."
+PROFILE_ASK = {"name": "Your first name: ",
+               "loc": "Your locator (e.g. JN88EP): ",
+               "home": "Your home BBS (e.g. OE3XSR): "}
+PROFILE_BAD = {"name": "Name: up to 12 letters, please.",
+               "loc": "Locator: 4 or 6 characters, e.g. JN88 or JN88EP.",
+               "home": "Home BBS: a mailbox call, e.g. OE3XSR or OE3XSR.#NOE.AUT.EU."}
+PROFILE_THANKS = "Thank you. Change it any time with N, NL and NH."
+PROFILE_LATER = "OK. Set it later with N name, NL locator, NH home BBS."
+PROFILE_SHOW = "{call}: name {name}, locator {loc}, home BBS {home}"
+PROFILE_NONE = "No profile for {call}."
+USAGE_I = "Usage: I [call]"
 INTERNAL_ERROR = "*** Internal error, command not completed. Sysop is informed."
 
 # chat boards

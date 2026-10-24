@@ -270,6 +270,7 @@ function render() {
   $("btn-img").title = inBoard && S.board.img ? `Send a picture (max. ${kbText(S.board.img)})`
     : inBoard ? "No pictures in this board" : "Picture";
   renderMail();
+  renderProfile();
   renderSys();
   renderUpdate();
   checkFetch();
@@ -566,13 +567,25 @@ function renderLink() {
   body.append(el("p", "muted small", `Received ${ago(Math.floor(Date.now() / 1000) - q.at)}.`));
 }
 
+/* CR73: name · locator · distance from the profile, else the symbol name */
+function profileNote(c) {
+  const p = (S.profiles || {})[c];
+  if (!p) return "";
+  const km = p.km === undefined ? "" : `${p.km} km ${compass(p.deg)}`;
+  return [p.name, p.loc, km].filter(Boolean).join(" · ");
+}
+function compass(deg) {
+  return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(((deg || 0) % 360) / 45) % 8];
+}
+
 function renderPeople() {
   const mem = $("members");
   mem.replaceChildren();
   if (S.board) {
     for (const c of S.members) {
       const name = SYMNAMES[symOf(c)];
-      mem.append(personRow(c, symOf(c), c === S.mycall ? "you" : (name || ""), true));
+      const mine = S.profile && S.profile.name ? `you · ${S.profile.name}` : "you";
+      mem.append(personRow(c, symOf(c), c === S.mycall ? mine : (profileNote(c) || name || ""), true));
     }
   } else {
     mem.append(el("li", "muted small", "Not in a board"));
@@ -2382,6 +2395,44 @@ async function loadConnlog() {
   }) : [(() => { const tr = el("tr"); const td = el("td", "end", "No connections yet."); td.colSpan = 5; tr.append(td); return tr; })()]));
 }
 
+// own profile (CR73): banner as long as name or locator are missing, form, settings line
+let profErrSeen = "";
+function renderProfile() {
+  $("prof-banner").classList.toggle("hidden", !S.profile_ask);
+  const p = S.profile || {};
+  $("prof-now").textContent = S.profile_set || p.loc
+    ? [p.name || "no name", p.loc || "no locator", p.home ? `home BBS ${p.home}` : ""].filter(Boolean).join(" · ")
+    : "not given yet";
+  $("prof-note").textContent = S.profile_err ? `The TinyBox refused it (${PROF_FIELDS[S.profile_err] || S.profile_err}) - please correct it.`
+    : S.profile_box ? "" : "Goes to the TinyBox with the next connection.";
+  if (S.profile_err && S.profile_err !== profErrSeen) { profErrSeen = S.profile_err; openProfile(); }
+  if (!S.profile_err) profErrSeen = "";
+}
+const PROF_FIELDS = { name: "name: up to 12 letters", loc: "locator: 4 or 6 characters, e.g. JN88EP",
+                      home: "home BBS: a mailbox call, e.g. OE3XSR" };
+function openProfile() {
+  const p = (S && S.profile) || {};
+  $("prof-name").value = p.name || "";
+  $("prof-loc").value = p.loc || "";
+  $("prof-home").value = p.home || "";
+  $("prof-err").classList.toggle("hidden", !(S && S.profile_err));
+  $("prof-err").textContent = S && S.profile_err ? `Check the ${PROF_FIELDS[S.profile_err]}.` : "";
+  $("sheet").classList.add("hidden");
+  $("profdlg").classList.remove("hidden");
+  $(p.name ? "prof-loc" : "prof-name").focus();
+}
+async function saveProfile(e) {
+  e.preventDefault();
+  const r = await postJson("profile", { name: $("prof-name").value, loc: $("prof-loc").value,
+                                        home: $("prof-home").value });
+  if (!r.ok) {
+    $("prof-err").textContent = `Check the ${PROF_FIELDS[r.data.error] || "input"}.`;
+    $("prof-err").classList.remove("hidden");
+    return;
+  }
+  $("profdlg").classList.add("hidden");
+}
+
 // frequency of this session (CR44): asked once per start of the client
 let freqShown = false;
 function renderFreq() {
@@ -2448,6 +2499,12 @@ async function start() {
   initEmoji();
   initMail();
   $("sys-disc").onclick = () => api("disconnect");
+  $("pb-fill").onclick = openProfile;                         // CR73
+  $("pb-later").onclick = () => api("profile/later");
+  $("prof-edit").onclick = openProfile;
+  $("prof-form").onsubmit = saveProfile;
+  $("prof-cancel").onclick = () => $("profdlg").classList.add("hidden");
+  $("profdlg").onclick = (e) => { if (e.target === $("profdlg")) $("profdlg").classList.add("hidden"); };
   $("upd-reload").onclick = () => location.reload();
   $("upd-close").onclick = () => {
     updDismissed = S && S.update ? S.update.cur : "";

@@ -218,6 +218,13 @@ class WebServer:
                 ok = core.react(int(data.get("seq", -1)), str(data.get("emoji", "")))
             elif path == "/api/symbol":
                 ok = core.set_symbol(str(data.get("symbol", "")))
+            elif path == "/api/profile":           # CR73: {"name", "loc", "home"}
+                err = core.profiles.set(str(data.get("name", "")), str(data.get("loc", "")),
+                                        str(data.get("home", "")))
+                return (200, {"ok": True}, None) if not err \
+                    else (400, {"ok": False, "error": err}, None)
+            elif path == "/api/profile/later":     # CR73: "Later" on the invitation
+                core.profiles.later()
             elif path == "/api/history":
                 ok = core.load_history(int(data.get("n", 10)))
             elif path == "/api/histmode":

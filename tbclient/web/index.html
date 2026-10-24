@@ -70,6 +70,10 @@
     <button id="bh-leave" class="leave-btn" title="Leave this board">Leave</button>
   </div>
 
+  <div id="prof-banner" class="mail-banner prof-banner hidden" role="status">
+    <span>👋 Introduce yourself: your <b>name</b> and <b>locator</b> are shown to the others.</span>
+    <span class="row nowrap"><button id="pb-fill" class="sm">Fill in</button><button id="pb-later" class="sm">Later</button></span>
+  </div>
   <div id="mail-banner" class="mail-banner hidden" role="status">
     <span>✉ <b id="mb-count"></b> <span id="mb-text"></span></span>
     <span class="row nowrap"><button id="mb-sync" class="sm">Sync now</button><button id="mb-close" class="icon-btn" aria-label="Dismiss">✕</button></span>
@@ -222,6 +226,18 @@
     <div class="row"><button type="submit" class="primary">Use</button><button type="button" id="freq-skip">Skip</button></div>
   </form>
 </div>
+<div id="profdlg" class="sheet hidden" role="dialog" aria-label="My profile">
+  <form id="prof-form" class="sheet-body profdlg" autocomplete="off">
+    <h2>My profile</h2>
+    <p class="muted small">Kept by the TinyBox for your call (all SSIDs) and shown to everybody: in the chat, in the terminal (I call) and in other clients. Sent only when it changes.</p>
+    <label>First name<input id="prof-name" type="text" maxlength="12" placeholder="Gerhard"></label>
+    <label>Locator<input id="prof-loc" type="text" maxlength="6" placeholder="JN88EP" class="mono"></label>
+    <p class="muted small">4 characters (JN88, about 150 × 110 km) or 6 (JN88EP, about 5 × 2.5 km) - the others see exactly what you enter.</p>
+    <label><span>Home BBS <span class="muted">(optional)</span></span><input id="prof-home" type="text" maxlength="40" placeholder="OE3XSR" class="mono"></label>
+    <p id="prof-err" class="hint hidden"></p>
+    <div class="row"><button type="submit" class="primary">Save</button><button type="button" id="prof-cancel">Cancel</button></div>
+  </form>
+</div>
 <div id="linkdlg" class="sheet hidden" role="dialog" aria-label="Link quality">
   <div class="sheet-body linkdlg">
     <div class="sheet-head"><h2 id="linkdlg-title">Link quality</h2><button id="linkdlg-close" class="icon-btn" aria-label="Close">✕</button></div>
@@ -235,6 +251,10 @@
     <h3>Connection</h3>
     <p id="conn-info" class="muted"></p>
     <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button><button id="btn-term">Terminal</button></div>
+
+    <h3>My profile</h3>
+    <p class="muted small"><span id="prof-now">-</span> <button id="prof-edit" class="sm">Edit</button></p>
+    <p id="prof-note" class="muted small"></p>
 
     <h3>Connection log</h3>
     <p class="muted small">Frequency of this session: <b id="freq-now">-</b> <button id="freq-change" class="sm">Change</button></p>

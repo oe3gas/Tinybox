@@ -179,6 +179,7 @@ class MailboxCfg:
     max_msg_bytes: int
     idle_timeout_min: int
     bulletin_expire_days: int
+    ask_profile: bool = True        # CR73: terminal asks for name, locator, home BBS
 
 
 @dataclass
@@ -696,6 +697,7 @@ def load(path: str | Path) -> Config:
         max_msg_bytes=_get(cp, "mailbox", "max_msg_bytes", 8192, int),
         idle_timeout_min=_get(cp, "mailbox", "idle_timeout_min", 10, int),
         bulletin_expire_days=_get(cp, "mailbox", "bulletin_expire_days", 30, int),
+        ask_profile=_get(cp, "mailbox", "ask_profile", True, bool),
     )
     _check_range("mailbox", "max_users", mailbox.max_users, 1, 50)
     _check_range("mailbox", "max_msg_bytes", mailbox.max_msg_bytes, 256, 65536)

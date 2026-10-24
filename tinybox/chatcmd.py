@@ -22,6 +22,8 @@ import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from prcore.profile import short as profile_short
+
 from . import clientnews, clientproto, texts
 from .config import ChatBoard
 
@@ -184,10 +186,18 @@ def enter(s: Session, board: ChatBoard) -> None:
 
 
 def _who_line(s: Session) -> str:
+    """'In this board: OE3ABC (Hans, JN88), OE3XYZ' - with name and locator
+    of the profile, where the station gave one (CR73)."""
+    from .addressing import base_call
     others = [m.call for m in s.service.chat.members(s.chat_board or "") if m is not s]
     if not others:
         return texts.CHAT_ALONE
-    return texts.CHAT_WHO.format(calls=", ".join(others))
+    known = s.service.store.profiles_get(sorted({base_call(c) for c in others}))
+    calls = []
+    for c in others:
+        extra = profile_short(known.get(base_call(c)))
+        calls.append(f"{c} ({extra})" if extra else c)
+    return texts.CHAT_WHO.format(calls=", ".join(calls))
 
 
 def _quit(s: Session) -> None:

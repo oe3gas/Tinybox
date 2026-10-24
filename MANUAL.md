@@ -466,6 +466,23 @@ Direwolf (`V20`). Bei AGW entscheidet Direwolf selbst.
 
 ---
 
+### 3.7 Benutzerprofil: Name, Locator, Home-BBS (CR73)
+
+Die TinyBox kennt zu jedem Rufzeichen (alle SSIDs zusammen) Name, Locator und Home-BBS.
+Alle Benutzer sehen diese Angaben.
+
+- **Terminal:** Nach dem Login fragt die TinyBox nach den fehlenden Angaben. Enter
+  überspringt eine Frage, `/AB` alle. Ist das Profil unvollständig, fragt sie höchstens
+  alle 30 Tage wieder. Ändern mit `N name`, `NL JN88EP`, `NH OE3XSR` (`-` löscht ein Feld),
+  ansehen mit `N` (eigenes) oder `I call`. Im Chat zeigt `/W` Name und Locator.
+  Abschalten der Fragen: `[mailbox] ask_profile = no` in `tinybox.conf`.
+- **Client:** Fehlen Name oder Locator, erscheint über dem Chat ein Balken
+  „Introduce yourself“ – *Fill in* öffnet das Formular, *Later* fragt in einer Woche wieder.
+  Jederzeit unter Settings > *My profile*. Vorschlag für den Locator ist `[station] locator`
+  aus `tbclient.conf`. Das Profil geht nur über Funk, wenn es sich geändert hat; eine
+  Änderung im Terminal kommt beim nächsten Connect in den Client (die neuere gilt).
+- **Sysop-Web-GUI:** Stationen (JLOG) zeigen Name, Locator und Home-BBS.
+
 ## 4. Verbindungsqualität messen (kisshub, CR67)
 
 Der kisshub wertet jede AX.25-Verbindung, die durch ihn läuft, passiv aus – für jeden TNC gleich,

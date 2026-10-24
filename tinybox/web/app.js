@@ -1045,18 +1045,20 @@ function viewMonitor() {
 }
 
 function viewJlog() {
-  const tbody = h("tbody", {}, h("tr", {}, h("td", { colspan: 4, text: "Loading ..." })));
+  const tbody = h("tbody", {}, h("tr", {}, h("td", { colspan: 7, text: "Loading ..." })));
   main().className = "one";
   main().replaceChildren(h("section", { class: "card" },
     h("div", { class: "card-head" }, h("h2", { text: "Stations (JLOG)" })),
     h("div", { class: "scroll" }, h("table", { class: "data" },
-      h("thead", {}, h("tr", {}, ["Call", "First seen (UTC)", "Last seen (UTC)", "Connects"].map((t) => h("th", { text: t })))),
+      h("thead", {}, h("tr", {}, ["Call", "Name", "Locator", "Home BBS", "First seen (UTC)", "Last seen (UTC)", "Connects"].map((t) => h("th", { text: t })))),
       tbody))));
   api("jlog").then((rows) => {
     tbody.replaceChildren(...(rows.length ? rows.map((r) => h("tr", {},
-      h("td", { class: "mono", text: r.call }), h("td", { class: "mono", text: fullDate(r.first_seen) }),
+      h("td", { class: "mono", text: r.call }), h("td", { text: r.name || "" }),
+      h("td", { class: "mono", text: r.loc || "" }), h("td", { class: "mono", text: r.home || "" }),
+      h("td", { class: "mono", text: fullDate(r.first_seen) }),
       h("td", { class: "mono", text: fullDate(r.last_seen) }), h("td", { class: "mono subject", text: r.count })))
-      : [h("tr", {}, h("td", { colspan: 4, text: "No stations logged yet." }))]));
+      : [h("tr", {}, h("td", { colspan: 7, text: "No stations logged yet." }))]));
   }).catch((e) => toast(e.message, true));
   return {};
 }

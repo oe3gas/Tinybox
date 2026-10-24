@@ -11,7 +11,9 @@ import time
 from enum import Enum
 from typing import Protocol
 
-from . import logsetup, texts
+from prcore.profile import ProfileError
+
+from . import logsetup, profiles, texts
 from .config import Config
 from .service import MessageService, ServiceError
 from .store import utc_now
@@ -40,6 +42,7 @@ class State(Enum):
     CLOSED = 4
     CHAT = 5
     COLLECT = 6     # client protocol: n raw lines for a callback (//SEND)
+    PROFILE = 7     # CR73: questions for name, locator, home BBS after the login
 
 
 PAGE_LINES = 10     # terminal output longer than this starts with the abort hint (CR40)
@@ -91,6 +94,9 @@ class Session:
         self._raw_chunk = None
         self._raw_done = None
         self._raw_cancel = None
+        # CR73: profile questions after the login (fields still to ask, answers)
+        self._ask_fields: list[str] = []
+        self._ask_answers: dict[str, str] = {}
 
     # --- output ---------------------------------------------------------
 
@@ -188,8 +194,61 @@ class Session:
             lines.append(texts.SHUTDOWN_WARNING.format(
                 mailbox=mailbox, sysop=self.cfg.station.sysop_call,
                 left="1 second" if left == 1 else f"{left} seconds"))
+        ask = self._profile_due()
+        if ask:
+            lines.append(texts.PROFILE_INTRO)
         self.out(*lines)
-        self.prompt()
+        if ask:
+            self.service.store.profile_asked(profiles.base_call(self.call))
+            self._ask_fields, self._ask_answers = ask, {}
+            self._ask_next()
+        else:
+            self.prompt()
+
+    # --- profile questions after the login (CR73) --------------------------
+
+    def _profile_due(self) -> list[str]:
+        """Fields to ask a terminal user for. Not on the sysop console; a
+        client announces itself with //CLIENT and has its own form (that line
+        ends the questions, see _handle_line)."""
+        if not self.cfg.mailbox.ask_profile or self.origin == "sysop" or self.client is not None:
+            return []
+        return profiles.ask_due(self.service.store, self.call)
+
+    def _ask_next(self) -> None:
+        if not self._ask_fields:
+            self._ask_end()
+            return
+        self.state = State.PROFILE
+        question = texts.PROFILE_ASK[self._ask_fields[0]]
+        if self.monitor:                     # without CR: the answer goes on the same line
+            log.info("> %s", question.rstrip())
+        self.transport.write(question)
+
+    def _ask_end(self, quiet: bool = False) -> None:
+        """Store what was answered, back to the commands."""
+        answers, self._ask_fields, self._ask_answers = self._ask_answers, [], {}
+        if answers:
+            profiles.save(self.service.store, self.call, answers)
+        self.state = State.COMMAND
+        if not quiet:
+            self.out(texts.PROFILE_THANKS if answers else texts.PROFILE_LATER)
+
+    def _on_profile(self, line: str) -> None:
+        if CTRL_Z in line or line.strip().upper() == "/AB":
+            self._ask_end()
+            return
+        field = self._ask_fields[0]
+        try:
+            value = profiles.check_field(field, line)
+        except ProfileError:
+            self.out(texts.PROFILE_BAD[field])
+            self._ask_next()                 # the same question again
+            return
+        if value:
+            self._ask_answers[field] = value
+        self._ask_fields.pop(0)
+        self._ask_next()
 
     def close(self) -> None:
         """Log off from the mailbox side (command B, timeout)."""
@@ -204,6 +263,8 @@ class Session:
         with logsetup.session_context(self.log_ctx):
             if self.state in (State.SEND_SUBJECT, State.SEND_BODY):
                 log.info("disconnected while sending, message discarded")
+            if self.state == State.PROFILE and self._ask_answers:
+                self._ask_end(quiet=True)        # what was answered so far is kept
             self.state = State.CLOSED
             self.service.chat.leave(self, reason=texts.CHAT_REASON_LOST if lost
                                     else texts.CHAT_REASON_DISC, lost=lost)
@@ -252,7 +313,13 @@ class Session:
                 log.info("< %s", line)
         started = time.monotonic()
         try:
-            if self.state == State.COLLECT:
+            if self.state == State.PROFILE and line.lstrip().startswith("//"):
+                # a TinyBox client announces itself (//CLIENT) while the terminal
+                # questions are up: they are over, the client has its own form
+                self._ask_end(quiet=True)
+            if self.state == State.PROFILE:
+                self._on_profile(line)
+            elif self.state == State.COLLECT:
                 self._on_collect(line)
             elif self.state == State.COMMAND:
                 from . import commands  # local import avoids a cycle

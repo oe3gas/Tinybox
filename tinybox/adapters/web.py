@@ -384,7 +384,12 @@ class WebServer:
             if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "linkq":
                 return self._linkq(parts[1])
             if parts == ["jlog"]:
-                return [asdict(e) for e in app.store.jlog_list(100)]
+                rows = [asdict(e) for e in app.store.jlog_list(100)]
+                known = app.store.profiles_get(sorted({r["call"].split("-", 1)[0] for r in rows}))
+                for r in rows:                   # CR73: name, locator, home BBS
+                    p = known.get(r["call"].split("-", 1)[0]) or {}
+                    r.update(name=p.get("name", ""), loc=p.get("loc", ""), home=p.get("home", ""))
+                return rows
             if parts == ["connlog"]:
                 return app.store.connlog_list(limit=1000)
             if parts == ["config"]:

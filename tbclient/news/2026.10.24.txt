@@ -1,0 +1,3 @@
+- Profil: Name, Locator, Home-BBS (Settings > My profile).
+  Liegt in der TinyBox, geht nur bei Aenderung ueber Funk.
+- Teilnehmerliste zeigt Name, Locator und Entfernung.

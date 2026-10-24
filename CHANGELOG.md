@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- Benutzerprofil (CR73, PLANUNG 21): Name, Locator, Home-BBS je Rufzeichen in der
+  TinyBox. Terminal fragt nach dem Login nach fehlenden Angaben (`[mailbox]
+  ask_profile`), Befehle `N`, `NL`, `NH`, `I call`; `/W` im Chat mit Name und Locator;
+  Sysop-Web-GUI zeigt die Profile bei den Stationen. Client-Protokoll `PROF`
+  (`prof=` im `//OK`, `//PROF`, `//WHOIS`). Client 2026.10.24: Formular „My profile“,
+  Einladungsbalken, Teilnehmerliste mit Name, Locator und Entfernung.
 - dxfeed: Most-Wanted-Rang wirkt jetzt (Club Log liefert ADIF-Nummern, nicht
   Präfixe); mindestens 10 Stationen auf der brocast-Seite (`brocast_min_rows`);
   Modes aus dem Bandplan auch für Digital-Segmente (DIGI), Region-2-Phonie und FM.

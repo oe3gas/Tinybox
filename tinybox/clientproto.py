@@ -53,6 +53,17 @@ the chat events (+n call, -n, =n, %n b) and the %Q statistics line (CR33);
 //OK then tells q=<frames>/<minutes>/<min frames>/<bar steps>.
 SHORT = //SYNC knows short=<bytes>: only personal mail up to that size comes
 with its text, everything else only as a header (CR40).
+
+PROF = profiles (CR73): name, locator and home BBS of a station, one per call
+without SSID (prcore/profile.py has the line format). //OK then tells
+prof=<crc> (4 hex digits) or prof=- (no profile stored here); the client
+compares it with its own and only sends or fetches when they differ:
+    //PROF t=<unix> loc=<loc> home=<bbs> name=<name>   store it (newer one wins)
+                          -> //PROF OK <crc>, //PROF ERR <field>, or - if the
+                             profile here is newer - //PROF = ... (see below)
+    //PROF ?              -> //PROF = <crc> t=<unix> loc=.. home=.. name=.. | //PROF -
+    //WHOIS <call>[,<call>...]   profiles of other stations (max. 10)
+                          -> //WI <call> loc=.. home=.. name=.. | //WI <call> - ... //WIEND
 """
 
 from __future__ import annotations
@@ -62,13 +73,16 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from . import clientnews, clientsync
+from prcore import profile as pf
+
+from . import clientnews, clientsync, profiles
+from .addressing import base_call
 
 if TYPE_CHECKING:
     from .session import Session
 
 PROTO = "TB1"
-KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE")
+KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
@@ -117,6 +131,10 @@ def handle(s: Session, line: str) -> None:
         _hist(s, parts[1:])
     elif cmd == "MOTD":
         _motd(s)
+    elif cmd == "PROF":
+        _profile(s, line.strip()[2:][4:].strip())
+    elif cmd == "WHOIS":
+        _whois(s, parts[1:])
     elif cmd in clientsync.COMMANDS:
         clientsync.handle(s, cmd, parts[1:])
     elif cmd in IMG_COMMANDS:
@@ -155,6 +173,8 @@ def _client(s: Session, parts: list[str]) -> None:
             extra += f" news={s.service.client_news_id}"
     if "NUM" in caps:                 # CR33: how the TinyBox turns the counters into bars
         extra += " " + s.service.chat.quality_config()
+    if "PROF" in caps:                # CR73: the client sends or fetches only on a change
+        extra += f" prof={pf.crc(profiles.get(s.service.store, s.call))}"
     # the human prompt is still on the line: start the answer on a fresh line
     s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}{extra}")
     if s.chat_board is not None:
@@ -166,6 +186,51 @@ def _client(s: Session, parts: list[str]) -> None:
         # hear nothing.
         from . import chatcmd          # local import avoids a cycle
         chatcmd.resync_client(s)
+
+
+def _profile_line(p: dict) -> str:
+    return f"//PROF = {pf.crc(p)} {pf.encode(p)}"
+
+
+def _profile(s: Session, rest: str) -> None:
+    """//PROF ? (fetch) or //PROF t=.. loc=.. home=.. name=.. (store, CR73)."""
+    store = s.service.store
+    mine = profiles.get(store, s.call)
+    if rest == "?":
+        s.out(_profile_line(mine) if mine else "//PROF -")
+        return
+    new = pf.decode(rest)
+    try:
+        fields = pf.check(new["name"], new["loc"], new["home"])
+    except pf.ProfileError as exc:
+        s.out(f"//PROF ERR {exc}")
+        return
+    if mine and mine["t"] > new["t"]:
+        # changed here after the client's change (e.g. NL in the terminal): the
+        # newer one wins - the client takes ours instead
+        s.out(_profile_line(mine))
+        return
+    saved = profiles.save(store, s.call, fields, changed=new["t"] or None)
+    s.out(f"//PROF OK {pf.crc(saved)}")
+
+
+def _whois(s: Session, parts: list[str]) -> None:
+    """//WHOIS call[,call...]: profiles of other stations (who is in the board)."""
+    calls = []
+    for c in " ".join(parts).replace(",", " ").upper().split():
+        b = base_call(c)
+        if pf.CALL_RE.match(b) and b not in calls:
+            calls.append(b)
+    if not calls or len(calls) > profiles.WHOIS_MAX:
+        s.out("//ERR whois")
+        return
+    known = s.service.store.profiles_get(calls)
+    rows = []
+    for c in calls:
+        p = known.get(c)
+        rows.append(f"//WI {c} {pf.encode(p, with_time=False)}" if p and not pf.empty(p)
+                    else f"//WI {c} -")
+    s.out(*rows, "//WIEND")
 
 
 def _iso(unix: str) -> str | None:

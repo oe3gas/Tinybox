@@ -66,6 +66,7 @@ max_users            = 3
 max_msg_bytes        = 8192
 idle_timeout_min     = 10
 bulletin_expire_days = 30      # 0 = keep bulletins forever; a rubric may have its own (| days in [rubrics])
+ask_profile          = yes     # terminal users are asked for name, locator, home BBS (at most every 30 days)
 
 [telnet]
 enabled = yes                  # local test port without radio

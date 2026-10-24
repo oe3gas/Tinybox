@@ -21,6 +21,8 @@ def make_app(**mailbox_overrides) -> App:
     # the template from the repo, not the PC-specific tinybox.conf
     cfg = config.load(ROOT / "tinybox.conf.example")
     cfg.logging.monitor = False
+    # the profile questions after the login (CR73) only where a test wants them
+    mailbox_overrides.setdefault("ask_profile", False)
     cfg.mailbox = dataclasses.replace(cfg.mailbox, **mailbox_overrides)
     return App.create(cfg, db_path=":memory:")
 

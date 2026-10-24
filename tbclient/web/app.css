@@ -166,6 +166,10 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 @media (max-width: 400px) { #me-avatar { display: none; } }
 
 .freqdlg { max-width: 360px; }
+.profdlg { max-width: 380px; }
+.profdlg label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; margin: 8px 0 2px; }
+.profdlg input { font-size: 14px; }
+.profdlg input.mono { font-family: ui-monospace, Consolas, monospace; text-transform: uppercase; }
 .freqdlg .row input { flex: none; width: 9em; font-family: ui-monospace, Consolas, monospace; }
 
 /* --- connection log (CR44) ------------------------------------------- */

@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 8   # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 9   # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
+                     # 9: profiles (name, locator, home BBS of a station, CR73)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -80,6 +81,14 @@ CREATE INDEX IF NOT EXISTS connlog_base ON connlog (base, id);
 CREATE TABLE IF NOT EXISTS users (
     call       TEXT PRIMARY KEY,
     last_login TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS profiles (                 -- CR73: one per call WITHOUT SSID
+    base      TEXT PRIMARY KEY,
+    name      TEXT NOT NULL DEFAULT '',
+    locator   TEXT NOT NULL DEFAULT '',
+    homebbs   TEXT NOT NULL DEFAULT '',
+    changed   INTEGER NOT NULL DEFAULT 0,               -- unix time of the last change
+    asked     TEXT                                      -- last time the terminal asked for it
 );
 CREATE TABLE IF NOT EXISTS chat_lines (               -- only boards with history
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -595,6 +604,39 @@ class Store:
             "SELECT * FROM jlog ORDER BY last_seen DESC LIMIT ?", (limit,)
         ).fetchall()
         return [JlogEntry(**dict(r)) for r in rows]
+
+    # --- profiles (CR73) --------------------------------------------------------
+
+    @staticmethod
+    def _profile(r) -> dict:
+        return {"name": r["name"], "loc": r["locator"], "home": r["homebbs"],
+                "t": r["changed"], "asked": r["asked"]}
+
+    def profile_get(self, base: str) -> dict | None:
+        r = self._db.execute("SELECT * FROM profiles WHERE base = ?", (base,)).fetchone()
+        return self._profile(r) if r else None
+
+    def profiles_get(self, bases: list[str]) -> dict[str, dict]:
+        if not bases:
+            return {}
+        rows = self._db.execute(
+            f"SELECT * FROM profiles WHERE base IN ({','.join('?' * len(bases))})", bases)
+        return {r["base"]: self._profile(r) for r in rows}
+
+    def profile_set(self, base: str, name: str, loc: str, home: str, changed: int) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO profiles (base, name, locator, homebbs, changed) VALUES (?, ?, ?, ?, ?)"
+                " ON CONFLICT(base) DO UPDATE SET name = excluded.name,"
+                " locator = excluded.locator, homebbs = excluded.homebbs,"
+                " changed = excluded.changed",
+                (base, name, loc, home, changed))
+
+    def profile_asked(self, base: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO profiles (base, asked) VALUES (?, ?)"
+                " ON CONFLICT(base) DO UPDATE SET asked = excluded.asked", (base, utc_now()))
 
     def user_login(self, call: str) -> None:
         with self._db:
