@@ -73,3 +73,7 @@ target_bytes  = 4096
 
 [storage]
 data_dir     = data/tbclient   # settings, mailbox, pictures; relative to this file
+
+[update]
+check        = yes             # once a day ask GitHub for a new TinyBox release (PLANUNG 24):
+                               # a banner in the web GUI, nothing is downloaded or installed

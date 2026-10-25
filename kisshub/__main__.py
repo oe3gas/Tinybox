@@ -15,7 +15,7 @@ import logging
 import sys
 from pathlib import Path
 
-from prcore import termcolor
+from prcore import release, termcolor
 
 from . import VERSION
 from .config import ConfigError, load, make_transport, radio_lines
@@ -47,10 +47,28 @@ async def main(cfg) -> None:
     hub.tnc.trace = cfg.trace
     if sys.stdin is not None and sys.stdin.isatty():
         Console(hub, LogControl(cfg.log_level, cfg.log_file)).start_stdin()
+    watcher = None
+    if cfg.update_check:                     # PLANUNG 24: a log line, nothing else
+        watcher = asyncio.create_task(release.watch(
+            release_logger(), cache=cfg.data_dir / "kisshub-release.json", program="kisshub"))
     try:
         await hub.run()
     finally:
+        if watcher is not None:
+            watcher.cancel()
         await asyncio.shield(hub.stop())
+
+
+def release_logger():
+    """Callback for prcore.release.watch(): one warning per new release."""
+    log = logging.getLogger("kisshub")
+    seen: set[str] = set()
+
+    def on_result(result) -> None:
+        if result.newer and result.latest not in seen:
+            seen.add(result.latest)
+            log.warning("update: %s", result.hint())
+    return on_result
 
 
 def log_lines(config_path: str, cfg) -> list[tuple]:
@@ -155,7 +173,8 @@ def run(argv: list[str] | None = None) -> int:
         return 2
     setup_logging(cfg.log_level, cfg.log_file, cfg.color)
     log = logging.getLogger("kisshub")
-    log.info("kisshub start - version %s", VERSION, extra=termcolor.HEAD)
+    log.info("kisshub start - version %s (release %s)", VERSION, release.RELEASE,
+             extra=termcolor.HEAD)
     termcolor.kv_block(log, start_items(args.config, cfg))
     for hint in cfg.hints:
         log.warning("config hint: %s", hint)

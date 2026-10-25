@@ -352,25 +352,38 @@ function renderMail() {
  *  - the client program was updated, but this page is still the old one -> reload */
 const PAGE_VERSION = (document.querySelector('meta[name="tbc-version"]') || {}).content || "";
 let updDismissed = "";
+let relDismissed = "";                     // PLANUNG 24: GitHub release, dismissed separately
 try { updDismissed = localStorage.getItem("tbc-upd-dismissed") || ""; } catch (e) { /* none */ }
+try { relDismissed = localStorage.getItem("tbc-rel-dismissed") || ""; } catch (e) { /* none */ }
 let newsWanted = null;                     // {id, seen}: bulletin to open after the sync
 
 function renderUpdate() {
   const stale = PAGE_VERSION && !PAGE_VERSION.startsWith("__") && S.client_version !== PAGE_VERSION;
   const u = S.update;
-  const show = stale || (!!u && u.cur !== updDismissed);
+  const r = S.release;                     // PLANUNG 24: newer release on GitHub
+  const tbShow = !!u && u.cur !== updDismissed;
+  const relShow = !tbShow && !!r && r.latest !== relDismissed;
+  const show = stale || tbShow || relShow;
   $("upd-banner").classList.toggle("hidden", !show);
   if (!show) return;
   const t = $("upd-text");
   if (stale) {
     t.replaceChildren("The client was updated to ", el("b", "", S.client_version),
                       " - reload the page to use it.");
-  } else {
+  } else if (tbShow) {
     t.replaceChildren("New client version ", el("b", "", u.cur), ` available (you have ${S.client_version}). ` +
                       "Get it with git pull and restart the client.");
+  } else {
+    const link = el("a", "", "on GitHub");
+    const url = String(r.url || "");
+    link.href = url.startsWith("https://github.com/") ? url : "https://github.com/oe3gas/Tinybox/releases";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    t.replaceChildren("New TinyBox release ", el("b", "", r.latest), " ", link,
+                      ` (you have ${r.current}). Get it with git pull and restart the client.`);
   }
   $("upd-reload").classList.toggle("hidden", !stale);
-  $("upd-news").classList.toggle("hidden", stale || !u || !u.news);
+  $("upd-news").classList.toggle("hidden", stale || !tbShow || !u.news);
   $("upd-close").classList.toggle("hidden", stale);
   // feature bulletin asked for: open it as soon as the sync has fetched it
   const running = !!(S.sync && S.sync.running);
@@ -2507,8 +2520,13 @@ async function start() {
   $("profdlg").onclick = (e) => { if (e.target === $("profdlg")) $("profdlg").classList.add("hidden"); };
   $("upd-reload").onclick = () => location.reload();
   $("upd-close").onclick = () => {
-    updDismissed = S && S.update ? S.update.cur : "";
-    try { localStorage.setItem("tbc-upd-dismissed", updDismissed); } catch (e) { /* ok */ }
+    if (S && S.update && S.update.cur !== updDismissed) {      // the TinyBox's hint is shown
+      updDismissed = S.update.cur;
+      try { localStorage.setItem("tbc-upd-dismissed", updDismissed); } catch (e) { /* ok */ }
+    } else if (S && S.release) {                                // the GitHub release is shown
+      relDismissed = S.release.latest;
+      try { localStorage.setItem("tbc-rel-dismissed", relDismissed); } catch (e) { /* ok */ }
+    }
     render();
   };
   $("upd-news").onclick = async () => {

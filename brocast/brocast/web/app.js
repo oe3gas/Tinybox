@@ -2103,6 +2103,10 @@ async function renderStatus() {
       : "keine neuere Version gehört"],
     ["Seiten gespeichert", st.pages], ["davon ungelesen", st.unread], ["Stationen gehört", st.stations],
   ];
+  if (st.release)                                                 // PLANUNG 24
+    rows.splice(1, 0, ["TinyBox-Release", st.release.newer
+      ? `${st.release.current} – neuer Release ${st.release.latest} auf GitHub (git pull)`
+      : `${st.release.current}` + (st.release.latest ? " – aktuell" : "")]);
   if (st.mode === "station") {
     rows.push(["Eigene Seiten im Karussell", st.pages_station !== undefined ? st.pages_station : ""]);
     rows.push(["Airtime (Fenster)", `${num(st.airtime_used_s)} s von ${num(st.airtime_limit_s)} s`]);

@@ -10,7 +10,7 @@ import sys
 
 from prcore import termcolor
 
-from . import VERSION, beacon, config, logsetup, notify, texts
+from . import VERSION, beacon, config, logsetup, notify, release, texts
 from .adapters import agw, brocast, inbox, sysop, telnet, web
 from .app import App
 
@@ -85,6 +85,9 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
              asyncio.create_task(housekeeping(app))]
     if cfg.beacon.enabled:
         tasks.append(asyncio.create_task(app.beacon.run()))
+    app.update = release.UpdateNotice(app)        # PLANUNG 24: new release on GitHub
+    if cfg.update.check:
+        tasks.append(asyncio.create_task(app.update.run()))
     if cfg.brocast.publish:
         tasks.append(await brocast.start(app))
     if cfg.inbox.enabled:

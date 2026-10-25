@@ -131,6 +131,14 @@ text         = TinyBox {call} - connect for mail and chat   # {call} = mailbox_c
 mail_list    = yes             # append "Mail for: CALL CALL ..." when there is new mail
 first_after_sec = 60           # the first beacon this long after the start
 
+[update]
+# PLANUNG 24: once a day TinyBox asks GitHub for the newest release (oe3gas/Tinybox).
+# Only a hint - nothing is downloaded or installed, updating stays `git pull`.
+check    = yes                 # no = never ask (stations without internet notice nothing anyway)
+announce = yes                 # yes: ONE bulletin per new release in TBNEWS (like the client
+                               # news; never forwarded, never on brocast). no: hint only,
+                               # the console command UPDATE NEWS sends it by hand
+
 [client]
 mail_notify   = yes            # TinyBox clients: a UI frame to TBMAIL ("OE3ABC 2 new")
                                # tells the addressee about new private mail, without connecting

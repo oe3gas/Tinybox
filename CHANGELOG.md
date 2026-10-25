@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- Update-Hinweis (PLANUNG 24): TinyBox, Client, brocastd und kisshub fragen einmal am Tag bei
+  GitHub nach dem neuesten Release (`prcore/release.py`, Cache mit ETag, still ohne
+  Internet, nichts wird installiert). Eine Release-Version für das ganze Repo (`RELEASE`).
+  TinyBox: Hinweis im Log, bei `STATUS` und in der Web-GUI, dazu genau **ein** Bulletin pro
+  Release in TBNEWS (`[update] announce`), Konsolenbefehle `UPDATE` und `UPDATE NEWS`.
+  Client 2026.10.25: Banner mit Link. brocastd: Statusseite. kisshub 2026.10.25: Logzeile.
+  Neuer Abschnitt `[update]` in allen vier `*.conf.example` (Vorgabe `check = yes`).
 - brocast Karussell (PLANUNG 23): **Fehler behoben** – die Alterung (`aging`) griff nie, weil der
   stündliche Sync das Alter zurücksetzte; alte Bulletins liefen dauerhaft alle 30 min. Das Alter
   zählt jetzt ab der Revision bzw. ab `born` (neues Ingest-Feld, TinyBox schickt das

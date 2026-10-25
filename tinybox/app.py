@@ -30,6 +30,7 @@ class App:
     restart: bool = False                # stop for a restart (RESTART), not for good
     config_path: str | None = None       # tinybox.conf, checked again before RESTART
     log_control: Any = None              # logsetup.LogControl for the LOG command (CR32)
+    update: Any = None                   # release.UpdateNotice (PLANUNG 24)
 
     @classmethod
     def create(cls, cfg: Config, db_path: str | None = None) -> "App":

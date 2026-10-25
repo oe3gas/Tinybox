@@ -515,6 +515,7 @@ class WebServer:
         agw = self.app.agw
         return {
             "version": VERSION, "mailbox": cfg.station.mailbox_call,
+            "update": self.app.update.status() if self.app.update is not None else None,
             "sysop": cfg.station.sysop_call, "started": self.app.started,
             "agw": "connected" if agw is not None and agw.connected.is_set()
                    else ("disconnected" if agw is not None else "not started"),

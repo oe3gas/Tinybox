@@ -55,3 +55,18 @@ git pull
 
 Danach TinyBox und brocastd neu starten. Neue Einstellungen in den
 `*.conf.example` bei Bedarf von Hand in die eigene .conf übernehmen.
+
+## Release veröffentlichen (PLANUNG 24)
+
+Eine Version für alles: ein Release `v1.1.0` gilt für TinyBox, Client, brocastd und kisshub.
+
+1. In `prcore/release.py` die Zeile `RELEASE = "1.1.0"` setzen (ohne `v`), committen, pushen.
+   Die TinyBox zeigt diese Version selbst an (`tinybox/__init__.py` übernimmt sie).
+2. Auf GitHub unter *Releases → Draft a new release* das Tag `v1.1.0` auf `main` anlegen.
+   Der Text des Releases geht gekürzt (ASCII, einige Zeilen) ins TBNEWS-Bulletin – die
+   ersten Zeilen sollten also das Wichtigste sagen.
+3. Veröffentlichen. Innerhalb eines Tages melden alle laufenden Installationen den neuen
+   Release; jede TinyBox schreibt dazu einmal ein Bulletin in TBNEWS.
+
+Pre-Releases und Entwürfe werden nicht gemeldet. Tags wie `prod-…` (NanoPi-Builds) zählen
+nicht als Release.

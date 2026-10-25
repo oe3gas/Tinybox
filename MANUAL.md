@@ -343,6 +343,35 @@ den kisshub-Wert 350 – kann entfernt werden`).
 | dxfeed `[digest] inbox` | aus `tinybox.conf` |
 | fwdsim `[tinybox] call / haddress / ax25_call / telnet_* / db` | aus `tinybox.conf` |
 
+### 2.9 `[update]` – Hinweis auf einen neuen Release (alle vier Programme)
+
+Einmal am Tag fragt jedes Programm bei GitHub nach dem neuesten Release von
+`oe3gas/Tinybox` und vergleicht ihn mit der eigenen Release-Version (`prcore/release.py`,
+`RELEASE`). Es ist nur ein Hinweis: heruntergeladen oder installiert wird nichts, das Update
+bleibt `git pull` (Abschnitt „Laufend“ in `GIT-ANLEITUNG.md`). Ohne Internet passiert nichts,
+auch keine Fehlermeldung.
+
+```ini
+[update]
+check    = yes   # alle vier Programme; no = nie fragen
+announce = yes   # nur tinybox.conf: EIN Bulletin pro neuem Release in TBNEWS
+```
+
+| Programm | Hinweis |
+|---|---|
+| TinyBox | Warnzeile im Log, `STATUS` an der Konsole, Link unter der Version in der Sysop-Web-GUI; mit `announce = yes` ein Bulletin in TBNEWS |
+| TBClient | Banner in der Web-GUI (wegklickbar) und Zeile im Konsolenfenster |
+| brocastd | Warnzeile im Log, Zeile „TinyBox-Release“ auf der Statusseite des Listeners |
+| kisshub | Warnzeile im Log |
+
+**Das Bulletin** (TinyBox): genau eines pro Release, auch nach Neustarts oder wenn der Sysop
+es löscht (gemerkt in `data/release.json`). Ein neuerer Release ersetzt das Bulletin des
+älteren. TBNEWS geht nie über Forwarding und nie über brocast – keine Kopien im Netz, keine
+Dauerbeschallung. Mit `announce = no` gibt es nur den Hinweis; Konsolenbefehle:
+
+- `UPDATE` – jetzt bei GitHub nachfragen (statt auf den Tagestakt zu warten)
+- `UPDATE NEWS` – das Bulletin zum neuen Release jetzt senden
+
 ---
 
 ## 3. Betriebsrezepte

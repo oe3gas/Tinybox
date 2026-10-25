@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from prcore import termcolor
+from prcore import release, termcolor
 from prcore.ax25.link import parse_calls
 
 CALL_RE = re.compile(r"^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$")
@@ -34,6 +34,7 @@ class Config:
     web_port: int = 7744
     color: str = "auto"               # [console] color: auto | yes | no
     data_dir: Path = Path("data/tbclient")
+    update_check: bool = True         # [update] check: GitHub once a day (PLANUNG 24)
     sync_chunk: int = 1024            # bytes per request of a mailbox sync (radio)
     sync_pause: float = 5.0           # seconds between two requests (radio)
     sync_short: int = 256             # personal mail up to this size comes with its text (CR40)
@@ -163,6 +164,10 @@ def load(path: str | Path) -> Config:
     if not 0 <= cfg.sync_short <= 8192:
         raise ConfigError("[sync] short_bytes must be 0 ... 8192")
     cfg.sync_on_login = get("sync", "on_login", "yes").lower() in ("yes", "true", "1", "on")
+    try:
+        cfg.update_check = release.load_cfg(cp).check          # PLANUNG 24
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
 
     # --- KISS: kisshub, values from its status --------------------------------------
     cfg.kiss_port = int(get("kiss", "port", str(cfg.kiss_port)))

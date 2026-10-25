@@ -214,6 +214,8 @@ HELP_CONSOLE = [
     "  DISC call  Disconnect a user",
     "  STATUS     Mailbox status",
     "  BEACON     Send the beacon now and show it",
+    "  UPDATE     Ask GitHub now for a new release (otherwise once a day)",
+    "  UPDATE NEWS  Send the TBNEWS bulletin of the new release now",
     "  WEB        Show the web GUI login link",
     "  FWD        Forward status of all partners",
     "  FWD call   Connect to a partner mailbox now",
@@ -226,6 +228,14 @@ HELP_CONSOLE = [
     "  RESTART [s]    Restart TinyBox (e.g. after changing tinybox.conf) in s",
     "                 seconds (default 60), users are warned; NOW, CANCEL as above",
 ]
+UPDATE_ASKING = "Asking GitHub for the newest release ..."
+UPDATE_UNKNOWN = "Update: no answer from GitHub (offline?)."
+UPDATE_CURRENT = "Update: release {cur} is current."
+UPDATE_NEWER = "Update: new release {tag} on GitHub (running {cur}): {url}"
+UPDATE_ANNOUNCED = "Update: the TBNEWS bulletin for it is out."
+UPDATE_NOT_ANNOUNCED = "Update: no bulletin yet ([update] announce = no) - UPDATE NEWS sends it."
+UPDATE_NO_NEWS = "Update: no newer release known (running {cur}) - ask first with UPDATE."
+UPDATE_NEWS_SENT = "Update: bulletin {n} in TBNEWS for {tag}."
 BEACON_SENT = "Beacon to {dest}: {text}"
 BEACON_EMPTY = "Beacon: nothing to send ([beacon] text is empty, no new mail)."
 BEACON_NO_RADIO = "Beacon not sent: the radio (Direwolf / KISS) is not connected."

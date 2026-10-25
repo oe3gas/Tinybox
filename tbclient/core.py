@@ -73,6 +73,7 @@ class ClientCore:
         self.cfg = cfg
         self.settings_path = cfg.data_dir / "settings.json"
         self.settings = self._load_settings()
+        self.release_info: dict | None = None     # newer release on GitHub (PLANUNG 24)
         # CR42: free target. home = the TinyBox of tbclient.conf, the mailbox belongs to it
         self.home = cfg.tinybox_call
         # CR45: up to 5 channels over one AGW port (telnet: one channel). chan is
@@ -185,6 +186,19 @@ class ClientCore:
             else:
                 self.settings.pop("update", None)
             self._save_settings()
+
+    # --- new release on GitHub (PLANUNG 24) ----------------------------------------
+
+    def on_release(self, result) -> None:
+        """From prcore.release.watch(): remember the newest release; the banner
+        shows it only when it is newer than the RELEASE of this installation."""
+        info = result.as_dict() if result.newer else None
+        if info != self.release_info:
+            self.release_info = info
+            if info:
+                self.console.append(f"*** new TinyBox release {result.latest} on GitHub "
+                                    f"(this is {result.current}): {result.url}")
+            self._touch()
 
     @property
     def update(self) -> dict | None:
@@ -1099,6 +1113,7 @@ class ClientCore:
             "mailbox": self.mailbox.summary(),
             "sync": self.sync.status,
             "update": self.update,
+            "release": self.release_info,                               # PLANUNG 24
             "history_mode": self.history_mode,
             # CR30: pictures other stations are sending right now
             "uploads": [{"call": c, "size": u["size"], "at": u["at"], "got": u["got"]}

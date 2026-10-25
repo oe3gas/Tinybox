@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from prcore import termcolor
+from prcore import release, termcolor
 from prcore.ax25.link import parse_calls
 
 # Amateur radio callsign as used in AX.25: 3-6 chars, letters and digits,
@@ -390,6 +390,7 @@ class Config:
     forward: ForwardCfg = field(default_factory=ForwardCfg)
     client: ClientCfg = field(default_factory=ClientCfg)
     beacon: BeaconCfg = field(default_factory=BeaconCfg)
+    update: release.UpdateCfg = field(default_factory=release.UpdateCfg)   # PLANUNG 24
     radio: RadioCfg = field(default_factory=RadioCfg)
     kiss: KissCfg = field(default_factory=KissCfg)
     ax25: Ax25Cfg = field(default_factory=Ax25Cfg)
@@ -832,7 +833,15 @@ def load(path: str | Path) -> Config:
                   forward=forward, radio=radio, kiss=kiss, ax25=ax25,
                   sources=rad.sources, hints=rad.hints, kiss_fixed=kiss_fixed,
                   client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)),
-                  beacon=_load_beacon(cp))
+                  beacon=_load_beacon(cp), update=_load_update(cp))
+
+
+def _load_update(cp: configparser.ConfigParser) -> release.UpdateCfg:
+    """[update] check / announce (PLANUNG 24)."""
+    try:
+        return release.load_cfg(cp)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
 
 
 def _load_beacon(cp: configparser.ConfigParser) -> BeaconCfg:

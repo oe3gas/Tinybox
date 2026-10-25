@@ -61,6 +61,10 @@ max_subpages       = 40        ; Format 2: höchstens so viele Fragmente je Seit
 dict_source        = Mailbox OE3GAS-1, Befehl DICT   ; wird mit der Dictionary-Version angekündigt (leer = nein)
 dict_broadcast_hours = 24     ; Dictionary gepackt über Funk senden, alle n Stunden (0 = aus)
 
+[update]
+check     = yes               ; 1x täglich bei GitHub nach neuem TinyBox-Release fragen (PLANUNG 24):
+                              ; Zeile im Log und auf der Statusseite, es wird nichts installiert
+
 [console]
 color     = auto              ; Farben im Konsolenfenster: auto | yes | no
 

@@ -216,6 +216,10 @@ class SysopConsole:
             data_dir=cfg.storage.data_dir,
         )
         self.out(*[line.format(**values) for line in texts.STATUS_LINES])
+        notice = getattr(self.app, "update", None)
+        if notice is not None and notice.result is not None and notice.result.newer:
+            r = notice.result
+            self.out(texts.UPDATE_NEWER.format(tag=r.latest, cur=r.current, url=r.url))
         left = self.app.shutdown.seconds_left() if self.app.shutdown else None
         if left is not None:
             self.out(texts.SHUTDOWN_PENDING.format(sec=left))
@@ -356,6 +360,37 @@ class SysopConsole:
             state=f"every {cfg.interval_min} min" if cfg.enabled else "off ([beacon] enabled = no)",
             n=b.sent))
 
+    def cmd_update(self, arg: str) -> None:
+        """UPDATE: ask GitHub now for a new release (PLANUNG 24).
+        UPDATE NEWS: send the TBNEWS bulletin of that release now (again)."""
+        notice = getattr(self.app, "update", None)
+        if notice is None:
+            from ..release import UpdateNotice
+            notice = self.app.update = UpdateNotice(self.app)
+        if arg.upper() == "NEWS":
+            r = notice.result
+            if r is None or not r.newer:
+                self.out(texts.UPDATE_NO_NEWS.format(cur=VERSION))
+                return
+            msg_id = notice.announce(r, force=True)
+            self.out(texts.UPDATE_NEWS_SENT.format(n=msg_id, tag=r.latest))
+            return
+        self.out(texts.UPDATE_ASKING)
+
+        async def ask() -> None:
+            r = await notice.check_now()
+            if r is None:
+                self.out(texts.UPDATE_UNKNOWN)
+            elif r.newer:
+                self.out(texts.UPDATE_NEWER.format(tag=r.latest, cur=r.current, url=r.url))
+                self.out(texts.UPDATE_ANNOUNCED if notice.announced() == r.latest
+                         else texts.UPDATE_NOT_ANNOUNCED)
+            else:
+                self.out(texts.UPDATE_CURRENT.format(cur=r.current))
+            self.session.prompt()
+
+        asyncio.get_running_loop().create_task(ask())
+
     COMMANDS: dict[str, Callable[["SysopConsole", str], None]] = {
         "H": cmd_help, "?": cmd_help, "HELP": cmd_help,
         "B": cmd_bye, "BYE": cmd_bye,
@@ -365,6 +400,7 @@ class SysopConsole:
         "DISC": cmd_disc,
         "STATUS": cmd_status,
         "BEACON": cmd_beacon,
+        "UPDATE": cmd_update,
         "WEB": cmd_web,
         "FWD": cmd_fwd,
         "FWQ": cmd_fwq,

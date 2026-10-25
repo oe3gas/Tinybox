@@ -1,0 +1,2 @@
+- Hinweis auf neuen TinyBox-Release auf GitHub
+  (Banner, 1x taeglich, [update] check).

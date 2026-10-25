@@ -67,6 +67,10 @@ status_every_sec = 600
 links_file = kisshub-links-{profile}.jsonl ; CR67: one JSON line per finished AX.25 link,
                            ; the same for PK-232 and VARA - compare runs; empty = off
 
+[update]
+check = yes                ; once a day ask GitHub for a new TinyBox release (PLANUNG 24):
+                           ; one warning line in the log, nothing is downloaded or installed
+
 [vara]                     ; only with profile vara-fm / vara-hf (CR67)
 monitor  = no              ; yes: listen on VARA's command port - read only, sends nothing.
                            ; Ignored (with a hint) when another profile is started.

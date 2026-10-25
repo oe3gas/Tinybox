@@ -1441,6 +1441,39 @@ Lieferant sie nicht mehr bestätigt.)
 **Hinweis Betrieb:** eine eigene `brocastd.conf` mit `aging = 24:120` behält diese Einstellung
 – für die neue Staffel dort anpassen oder die Zeile löschen.
 
+## 24. Update-Hinweis bei neuem Release (entschieden und umgesetzt 25.10.2026)
+
+**Ziel:** Wer TinyBox, Client, brocastd oder kisshub betreibt, erfährt von einem neuen
+GitHub-Release, ohne selbst nachzusehen.
+
+**Entscheidungen (25.10.2026):**
+- **Eine Version für alles** (Variante A): `RELEASE` in `prcore/release.py`, Tag `vX.Y.Z`.
+  TinyBox übernimmt sie als eigene Version; Client, kisshub, dxfeed behalten ihre
+  Datums-Builds. Variante B (eigene Tags je Modul, `tbclient-v…`) erst, wenn die Module
+  wirklich getrennt releast werden.
+- **Nur Hinweis, keine Installation.** Ein Auto-Updater wäre ein Weg auf jede Station für
+  den, der das Konto oder einen Release übernimmt. Update bleibt `git pull`.
+- **Ein Bulletin pro Release** in TBNEWS (wie die Client-News), keine Dauerbeschallung.
+  Die meisten PR-Nutzer haben Internet; das Bulletin ist für die Nutzer der TinyBox.
+  TBNEWS geht nie über Forwarding und nie über brocast – jede TinyBox informiert nur die
+  eigenen Nutzer, es kursieren keine Kopien. Ohne eigenen BID-Mechanismus.
+
+**Umsetzung:**
+- `prcore/release.py`: `GET https://api.github.com/repos/oe3gas/Tinybox/releases/latest`
+  (ohne Entwürfe und Pre-Releases), höchstens einmal pro Tag, Cache-Datei mit ETag
+  (`304 Not Modified` zählt nicht gegen das GitHub-Limit von 60/h ohne Token), Timeout 5 s,
+  TLS wie üblich geprüft, Fehler/offline still (nur DEBUG). `watch()` als asyncio-Task, erste
+  Prüfung 30 s nach dem Start. `ascii_notes()` macht aus dem Release-Text einige ASCII-Zeilen.
+- TinyBox (`tinybox/release.py`): Hinweis im Log, bei `STATUS`, in der Web-GUI; Bulletin
+  einmal je Tag-Name (gemerkt in `data/release.json` – Neustart oder gelöschtes Bulletin
+  bringen es nicht wieder), ein neuerer Release ersetzt das ältere Bulletin.
+  `[update] announce = no`: nur Hinweis. Konsole `UPDATE` (jetzt fragen), `UPDATE NEWS`
+  (Bulletin von Hand).
+- Client 2026.10.25: Banner (nach dem Hinweis der eigenen TinyBox auf einen neueren Client,
+  getrennt wegklickbar). brocastd: Zeile auf der Statusseite. kisshub 2026.10.25: Logzeile.
+- `[update] check` in allen vier `*.conf.example`; Handbuch 2.9, Release-Ablauf in
+  `GIT-ANLEITUNG.md`. Tests: `tests/test_release.py`.
+
 ## Quellen
 
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a

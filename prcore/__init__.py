@@ -9,6 +9,7 @@
     aprsstats.py  APRS statistics of the heard stations
     chatimg.py  image reference in a chat line (format, hash, size code)
     lzhuf.py    LZHUF codec (FBB B1 forwarding, mail sync)
+    release.py  release version of the repo, update check against GitHub (PLANUNG 24)
 
 Rule: prcore never imports from tinybox, tbclient, kisshub or brocast.
 """

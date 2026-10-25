@@ -7,7 +7,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
-from prcore import direwolfconf, kiss, termcolor
+from prcore import direwolfconf, kiss, release, termcolor
 
 from .hub import HubCfg
 from .profiles import PROFILES, TUNNEL_MODES, Profile, ax25_recommendation, with_init_lines
@@ -44,9 +44,11 @@ class Config:
     trace: bool = False               # [log] trace: every byte to/from the TNC in hex
     hints: tuple[str, ...] = ()       # CR70: old keys still in the file, shown at start
     direwolf: str = ""                # CR70: what was read from direwolf.conf
+    update_check: bool = True         # [update] check: GitHub once a day (PLANUNG 24)
+    data_dir: Path = Path("data")     # only the update check's cache (release state)
 
 
-SECTIONS = ("tnc", "kiss", "ax25", "server", "log", "vara", "console")
+SECTIONS = ("tnc", "kiss", "ax25", "server", "log", "vara", "console", "update")
 
 
 def load(path: str | Path, profile_name: str | None = None) -> Config:
@@ -226,7 +228,15 @@ def load(path: str | Path, profile_name: str | None = None) -> Config:
     return Config(tnc=tnc, hub=hub, log_level=get("log", "level", "INFO").upper(),
                   log_file=named(get("log", "file", "")), trace=get("log", "trace", False, bool),
                   hints=tuple(hints), direwolf=dw.describe() if dw else "",
-                  color=_color(get("console", "color", "auto")))
+                  color=_color(get("console", "color", "auto")),
+                  update_check=_update(cp).check, data_dir=Path(path).resolve().parent / "data")
+
+
+def _update(cp: configparser.ConfigParser) -> release.UpdateCfg:
+    try:
+        return release.load_cfg(cp)               # PLANUNG 24
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
 
 
 def _color(value: str) -> str:

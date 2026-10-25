@@ -98,6 +98,7 @@ class Config:
     listener: ListenerCfg = field(default_factory=ListenerCfg)
     sources: dict = field(default_factory=dict)   # CR70: woher baud / txdelay kommen
     hints: list = field(default_factory=list)     # CR70: alte Schlüssel in der Datei
+    update_check: bool = True            # [update] check: GitHub 1x täglich (PLANUNG 24)
 
     @property
     def is_station(self) -> bool:
@@ -137,6 +138,20 @@ def _float(text: str, what: str) -> float:
         return float(text)
     except ValueError:
         raise ConfigError(f"{what}: Zahl erwartet") from None
+
+
+def release_module():
+    """prcore/release.py of the TinyBox repo for the update check (PLANUNG 24);
+    None when brocast runs without the repo around it."""
+    import sys
+    root = Path(__file__).resolve().parents[2]
+    if (root / "prcore" / "release.py").is_file() and str(root) not in sys.path:
+        sys.path.append(str(root))
+    try:
+        from prcore import release
+    except ImportError:
+        return None
+    return release
 
 
 def _direwolfconf():
@@ -296,6 +311,10 @@ def load(path: str | Path) -> Config:
         raise ConfigError(str(exc)) from None
     log_dir = get("logging", "log_dir", "logs")
     cfg.log_dir = (base / log_dir) if log_dir else None
+    try:
+        cfg.update_check = cp.getboolean("update", "check", fallback=True)
+    except ValueError as exc:
+        raise ConfigError(f"[update] check: {exc}") from None
     cfg.txlog_dir = base / (get("logging", "txlog_dir", "logs") or "logs")
     dw, dwconf = _load_radio(cp, base, cfg.hints, get, getint)
     cfg.direwolf = dw

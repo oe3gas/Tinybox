@@ -33,3 +33,9 @@
   das Neue dieser Version, wenige Stichwort-Zeilen, ASCII ohne Emojis. Sie
   geht als eigenes Bulletin über Funk – jedes Byte zählt, also kurz halten.
 - `tbclient/FEATURES.txt` ist nur die Übersicht im Repo (wird nicht gesendet).
+
+## Release-Version
+- Eine Version für das ganze Repo: `RELEASE` in `prcore/release.py` (PLANUNG 24).
+- Nur vor einem GitHub-Release erhöhen, gleich mit dem Tag (`RELEASE = "1.1.0"` ↔ Tag
+  `v1.1.0`); Ablauf in `GIT-ANLEITUNG.md`. Die Datums-Versionen von Client, kisshub, dxfeed
+  bleiben Build-Versionen und laufen weiter wie bisher.

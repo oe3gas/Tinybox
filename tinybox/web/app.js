@@ -123,9 +123,20 @@ async function refreshStatus() {
   }
   $("nav-msgs").textContent = st.messages;
   $("nav-users").textContent = st.users || "";
-  $("nav-ver").replaceChildren("TinyBox " + st.version, h("br"), st.web + " · local only");
+  $("nav-ver").replaceChildren("TinyBox " + st.version, h("br"), st.web + " · local only",
+                               updateHint(st.update));
   document.title = "TinyBox " + st.mailbox;
   setShutdown(st.shutdown_in, st.restart_pending);
+}
+
+// PLANUNG 24: new release on GitHub - a link under the version, nothing else.
+function updateHint(u) {
+  if (!u || !u.newer) return "";
+  const url = String(u.url || "");
+  const safe = url.startsWith("https://github.com/") ? url : "https://github.com/oe3gas/Tinybox/releases";
+  return [h("br"), h("a", {class: "upd", href: safe, target: "_blank", rel: "noopener noreferrer",
+                           title: u.announced ? "Bulletin in TBNEWS is out" : "No bulletin yet ([update] announce = no)",
+                           text: "Update " + u.latest + " available"})];
 }
 
 // Header: AGW -> "Direwolf connected"; KISS (CR41) -> the TNC behind kisshub, e.g.

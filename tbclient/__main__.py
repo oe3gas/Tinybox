@@ -8,7 +8,7 @@ import logging
 import socket
 import sys
 
-from prcore import termcolor
+from prcore import release, termcolor
 
 from . import VERSION, config
 from .core import ClientCore
@@ -41,7 +41,15 @@ def main() -> int:
         core = ClientCore(cfg)
         await WebServer(core).start()
         web_line(log, cfg)
-        await core.run()
+        tasks = []
+        if cfg.update_check:                    # PLANUNG 24: hint only, never an install
+            tasks.append(asyncio.create_task(release.watch(
+                core.on_release, cache=cfg.data_dir / "release.json", program="tbclient")))
+        try:
+            await core.run()
+        finally:
+            for t in tasks:
+                t.cancel()
 
     try:
         asyncio.run(run())
@@ -55,7 +63,8 @@ def main() -> int:
 
 def start_block(log: logging.Logger, cfg: config.Config) -> None:
     """What the user wants to see at start: who am I, where to, over what."""
-    log.info("TinyBox client start - version %s", VERSION, extra=termcolor.HEAD)
+    log.info("TinyBox client start - version %s (release %s)", VERSION, release.RELEASE,
+             extra=termcolor.HEAD)
     termcolor.kv(log, "Your call", cfg.mycall)
     termcolor.kv(log, "Your locator", cfg.locator or "(not set)")
     termcolor.blank(log)

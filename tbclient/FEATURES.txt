@@ -10,6 +10,10 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Neuer TinyBox-Release (PLANUNG 24): einmal am Tag fragt der Client bei
+  GitHub nach; ist ein neuerer Release da, erscheint ein Hinweis-Banner mit
+  Link (wegklickbar). Es wird nichts heruntergeladen. Abschalten:
+  [update] check = no in tbclient.conf.
 - Neues Aussehen (CR54): die Bereiche links (Chat boards, Mail, Bulletins,
   Station) haben je eine Farbe - farbiger Rahmen, Kopf als farbiges Band,
   Symbole und gewaehlter Eintrag in der Bereichsfarbe. Rubriken und
@@ -197,4 +201,5 @@ Station
 
 Update holen
 Im Ordner des Clients "git pull" eingeben, dann tbclient.bat neu
-starten und die Seite im Browser neu laden.
+starten und die Seite im Browser neu laden. Auf einen neuen Release
+weisen ein Banner im Client und ein Bulletin in TBNEWS hin.

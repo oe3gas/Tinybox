@@ -50,6 +50,7 @@ class Daemon:
             self.link = AgwLink(dw.host, dw.agw_port, self.on_frame, dw.reconnect_sec)
         else:
             self.link = KissLink(dw.host, dw.kiss_port, self.on_frame, dw.reconnect_sec)
+        self.release: dict[str, Any] | None = None   # newest TinyBox release (PLANUNG 24)
         self.rx_pages = 0
         self.rx_errors = 0
         self.rx_fragments = 0
@@ -267,6 +268,14 @@ class Daemon:
                 log.info("Listener: %s Seiten entfernt (abgelaufen/Grenzen)", removed)
             await asyncio.sleep(HOUSEKEEPING_SEC)
 
+    def on_release(self, result) -> None:
+        """From prcore.release.watch(): shown on the listener's status page."""
+        new = result.as_dict()
+        if result.newer and (self.release or {}).get("latest") != result.latest:
+            log.warning("Update: neuer TinyBox-Release %s auf GitHub (läuft: %s): %s",
+                        result.latest, result.current, result.url)
+        self.release = new
+
     # -- status -------------------------------------------------------------
 
     def status(self) -> dict[str, Any]:
@@ -278,6 +287,7 @@ class Daemon:
             "rx_frames": self.link.rx_frames, "tx_frames": self.link.tx_frames,
             "rx_pages": self.rx_pages, "rx_errors": self.rx_errors,
             "dictionary": {"version": self.codec.d.version, "hash": self.codec.d.hash4.hex()},
+            "release": self.release,
             "wire": {"format": self.cfg.station.wire_format if self.cfg.is_station else None,
                      "compress": self.cfg.station.compress and self.zd.ok,
                      "zdict": self.zd.describe(),
@@ -328,6 +338,12 @@ class Daemon:
         if self.ingest and self.carousel:
             await self.ingest.start()
             tasks.append(asyncio.create_task(self.carousel.run(), name="carousel"))
+        rel = config.release_module() if cfg.update_check else None
+        if rel is not None:                      # PLANUNG 24: Hinweis, nie eine Installation
+            self.release = {"current": rel.RELEASE, "latest": None, "newer": False}
+            tasks.append(asyncio.create_task(rel.watch(
+                self.on_release, cache=cfg.data_dir / "release.json", program="brocastd"),
+                name="update"))
         try:
             await asyncio.gather(*tasks)
         finally:
