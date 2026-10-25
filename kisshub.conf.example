@@ -38,6 +38,7 @@ direwolf_conf = C:\direwolf ; only used by profile direwolf
 
 [kiss]                     ; ALL OPTIONAL - the profile (or direwolf.conf) has the defaults
 ; air_baud    =            ; vara-fm 350 | direwolf MODEM | others 1200
+;                          ; tm-d710: 1200 or 9600, sent to the TNC as HBAUD
 ; txdelay_ms  =            ; vara-fm 2700 | direwolf TXDELAY | others 300
 ; persist     = 63         ; hardware TNC only (sent as KISS P)
 ; slottime_ms = 100
@@ -83,8 +84,10 @@ sn_window_ms = 1500        ; an SN line belongs to a frame received this close t
 
 ; Per-profile overrides - only what differs, e.g.
 ; [tnc.tm-d710]            ; Kenwood TM-D710: kisshub.bat -p tm-d710
-; device = COM7            ; TNC key -> PACKET first; kisshub sends HBAUD 1200 /
+; device = COM7            ; TNC key -> PACKET first; kisshub sends HBAUD <air_baud> /
 ;                          ; KISS ON / RESTART, on stop C0 FF C0 + KISS OFF
+; [kiss.tm-d710]
+; air_baud = 9600          ; 1200 (default) or 9600 - goes to the TNC as HBAUD
 ; [kiss.pk232]
 ; txdelay_ms = 400
 ; [tnc.vara-fm]

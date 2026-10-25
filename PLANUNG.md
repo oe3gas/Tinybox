@@ -1098,6 +1098,12 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 - **Umgesetzt (K7):** `kisshub` (`python -m kisshub -c kisshub.conf`, `kisshub.bat`) besitzt den TNC, Standard-Port **8101** (8001 bleibt Direwolf). PK-232-Profil mit Weckkette und Schnittstellen-Einstellungen aus pk232py (8N1, ohne Flusskontrolle, DTR/RTS high) und Init nach TRM 4.7.1 + `VHF ON`/`HBAUD 1200`; beim Beenden `C0 FF C0` + `KISS OFF`. Sendewarteschlange: Steuer-Frames vor I-Frames vor UI, höchstens 1,5 s Sendezeit im TNC.
 - **Umgesetzt (CR41, 15.10.2026):** Kanalmonitor in der TinyBox (Auslastung, Heard), Status-Abfrage von kisshub (`127.0.0.1:8102/status`), Web-GUI-Karte *Channel* und Kopfzeile mit TNC-Zustand.
 
+**TM-D710 mit 9600 Bd (entschieden und umgesetzt 25.10.2026):** `[kiss] air_baud` (bzw.
+`[kiss.tm-d710]`) ist beim TM-D710 nicht mehr nur die Schätzung, sondern geht als
+`HBAUD <air_baud>` an den TNC; erlaubt 1200 (Standard) und 9600 (Profilfeld `hbaud`).
+Bei 9600 eigene AX.25-Empfehlung (Fenster 7, T1 1,5–15 s, T2 0,5 s) als Startwert.
+`init_lines` hat weiter Vorrang. PK-232 bleibt fest auf 1200. Funktest mit 9600 steht aus.
+
 ## 16. DX-Cluster-Feed `dxfeed` (entschieden 15.10.2026)
 
 - **Keine Live-Spots über Funk**, keine Dauerbeschallung: Der Spot-Strom wird gesammelt und **einmal täglich verdichtet**.

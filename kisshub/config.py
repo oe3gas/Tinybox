@@ -10,7 +10,7 @@ from pathlib import Path
 from prcore import direwolfconf, kiss, release, termcolor
 
 from .hub import HubCfg
-from .profiles import PROFILES, TUNNEL_MODES, Profile, ax25_recommendation, with_init_lines
+from .profiles import PROFILES, TUNNEL_MODES, Profile, ax25_recommendation, with_hbaud, with_init_lines
 
 # CR70: [ax25] in kisshub.conf may override the recommendation of the profile
 AX25_KEYS = {"paclen": (int, 16, 256), "maxframe": (int, 1, 7), "maxframe_ext": (int, 1, 127),
@@ -156,7 +156,12 @@ def load(path: str | Path, profile_name: str | None = None) -> Config:
     air_baud = radio("air_baud", profile.air_baud, dch.baud if dch else None)
     txdelay_ms = radio("txdelay_ms", profile.txdelay_ms, dch.txdelay_ms if dch else None)
     max_lead_ms = radio("max_lead_ms", profile.max_lead_ms, None)
-    ax25 = ax25_recommendation(profile)
+    if profile.hbaud and not lines:          # TM-D710: air_baud goes to the TNC (HBAUD)
+        try:
+            profile = with_hbaud(profile, air_baud)
+        except ValueError as exc:
+            raise ConfigError(f"[kiss] air_baud = {air_baud}: {exc}") from None
+    ax25 = ax25_recommendation(profile, air_baud)
     if dw:                                   # Direwolf's own AX.25 values as the hint
         if dw.paclen:
             ax25["paclen"] = dw.paclen

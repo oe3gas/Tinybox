@@ -221,6 +221,9 @@ txdelay_ms  = 600              ; Profil-Standard 300
 [tnc.tm-d710]                  ; TNC-Taste auf PACKET (3.3)
 device      = COM7
 serial_baud = 9600
+
+[kiss.tm-d710]                 ; nur für 9600 Bd auf dem Datenband
+air_baud    = 9600             ; 1200 (Standard) oder 9600 -> HBAUD
 ```
 
 **Alle Schlüssel:**
@@ -248,12 +251,13 @@ serial_baud = 9600
 | Profil | Weg | air_baud | txdelay_ms | send_params | max_lead_ms | AX.25-Empfehlung |
 |---|---|---|---|---|---|---|
 | `pk232` | seriell, Init-Dialog | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
-| `tm-d710` | seriell, Init-Dialog (`HBAUD 1200`, `KISS ON`, `RESTART`) | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
+| `tm-d710` | seriell, Init-Dialog (`HBAUD <air_baud>`, `KISS ON`, `RESTART`) | 1200 oder 9600 | 300 | yes | 1500 | 1200- bzw. 9600-Bd-Werte |
 | `th-d74`, `th-d75`, `tnc2-kiss`, `generic` | seriell/tcp, schon in KISS (kein Dialog) | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
 | `direwolf` | tcp, KISSPORT | aus MODEM | aus TXDELAY | no | 1500 | 1200-Bd-Werte |
 | `vara-fm`, `vara-hf` | tcp 8100, Tunnel | 350 | 2700 | **no** | 12000 | 256 B, Fenster 4, T1 18–90 s, T2 0,3 s |
 
 *1200-Bd-Werte:* paclen 256, Fenster 4 (Modulo 8) / 7 (Modulo 128), T1 3–30 s, T2 1,5 s.
+*9600-Bd-Werte* (Startwerte, am Funk noch zu prüfen): paclen 256, Fenster 7 / 7, T1 1,5–15 s, T2 0,5 s.
 Beim Profil `direwolf` kommen paclen und Fenster aus PACLEN/MAXFRAME/EMAXFRAME.
 Die VARA-Werte sind am 18.10.2026 gemessen (Konzept 8d). `th-d74`, `th-d75` und `tnc2-kiss`
 sind noch nicht am Gerät getestet.
@@ -401,10 +405,16 @@ weckt den PK-232 aus jedem Zustand (Autobaud, Converse, XOFF, Host Mode, KISS).
 ### 3.3 KISS mit Hardware-TNC: Kenwood TM-D710
 
 1. Am Funkgerät die **TNC-Taste** drücken, bis **PACKET** im Display steht. Im APRS-Modus
-   antwortet der TNC nicht. Datenband (A/B) und 1200 Bd im Menü des Funkgeräts prüfen.
+   antwortet der TNC nicht. Datenband (A/B) im Menü des Funkgeräts prüfen.
 2. `kisshub.conf`: `[tnc.tm-d710] device = COM7`, `serial_baud = 9600` (Beispiel 2.4).
-3. `kisshub.bat -p tm-d710`. Der kisshub schickt `HBAUD 1200`, `KISS ON`, `RESTART` (von
-   OE3GAS am Gerät geprüft, 22.10.2026) und wartet 2 s, bis der TNC in KISS hochgefahren ist.
+   `serial_baud` ist nur die Verbindung PC ↔ Funkgerät, nicht die Funkrate.
+   **Funkrate** 1200 oder 9600 Bd: `[kiss.tm-d710] air_baud = 9600` (ohne Eintrag 1200).
+   Andere Werte lehnt der kisshub beim Start ab. Bei 9600 auch die Gegenstation auf 9600
+   und ein für 9600 geeignetes Datenband (meist 70 cm) wählen; `txdelay_ms` ggf. kürzer.
+3. `kisshub.bat -p tm-d710`. Der kisshub schickt `HBAUD <air_baud>`, `KISS ON`, `RESTART`
+   (mit 1200 von OE3GAS am Gerät geprüft, 22.10.2026; 9600 noch nicht am Funk getestet) und
+   wartet 2 s, bis der TNC in KISS hochgefahren ist. Mit `air_baud` stimmen auch die
+   Sendezeit-Schätzung, die Statusabfrage (TinyBox, Client, brocastd) und die AX.25-Empfehlung.
 4. TinyBox/Client: `[radio] interface = kiss`, `[kiss] port = 8101`.
 5. Ende mit Strg+C: `C0 FF C0` und `KISS OFF` – ein Terminal findet wieder `cmd:`.
 

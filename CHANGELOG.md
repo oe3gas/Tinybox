@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+- kisshub 2026.10.25.2: TM-D710 wahlweise mit **1200 oder 9600 Bd** auf dem Funk –
+  `[kiss.tm-d710] air_baud = 9600` schickt `HBAUD 9600` an den TNC (bisher fest `HBAUD 1200`).
+  Andere Werte werden beim Start abgelehnt. Bei 9600 eigene AX.25-Empfehlung (Fenster 7,
+  T1 1,5–15 s, T2 0,5 s). 9600 noch nicht am Funk getestet.
 - Update-Hinweis (PLANUNG 24): TinyBox, Client, brocastd und kisshub fragen einmal am Tag bei
   GitHub nach dem neuesten Release (`prcore/release.py`, Cache mit ETag, still ohne
   Internet, nichts wird installiert). Eine Release-Version für das ganze Repo (`RELEASE`).

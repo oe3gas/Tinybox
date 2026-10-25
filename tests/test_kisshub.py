@@ -469,6 +469,36 @@ class HubConfigTests(unittest.TestCase):
                          ("tm-d710", "COM7", 9600))
         self.assertEqual([s.note for s in cfg.tnc.profile.init], ["HBAUD 1200", "KISS ON", "RESTART"])
 
+    def d710(self, extra: str = ""):
+        return self.load("[tnc]\nprofile=tm-d710\ndevice=COM7\n" + extra)
+
+    def test_tm_d710_hbaud_default_1200(self):
+        cfg = self.d710()
+        self.assertEqual([s.note for s in cfg.tnc.profile.init], ["HBAUD 1200", "KISS ON", "RESTART"])
+        self.assertEqual(cfg.hub.ax25["t1_min_sec"], 3.0)
+
+    def test_tm_d710_hbaud_9600(self):
+        cfg = self.d710("[kiss.tm-d710]\nair_baud = 9600\n")
+        init = cfg.tnc.profile.init
+        self.assertEqual([s.note for s in init], ["HBAUD 9600", "KISS ON", "RESTART"])
+        self.assertEqual(init[0].send, b"HBAUD 9600\r")
+        self.assertEqual(init[0].expect, profiles.TM_D710.init[0].expect)
+        self.assertEqual((cfg.hub.air_baud, cfg.hub.sources["air_baud"]), (9600, "kisshub.conf"))
+        self.assertEqual((cfg.hub.ax25["maxframe"], cfg.hub.ax25["t1_min_sec"]), (7, 1.5))
+
+    def test_tm_d710_hbaud_invalid(self):
+        with self.assertRaises(hubconfig.ConfigError) as cm:
+            self.d710("[kiss]\nair_baud = 4800\n")
+        self.assertIn("1200 or 9600", str(cm.exception))
+
+    def test_tm_d710_init_lines_win(self):
+        cfg = self.d710("init_lines = HBAUD 1200 | KISS ON\n[kiss]\nair_baud = 4800\n")
+        self.assertEqual([s.note for s in cfg.tnc.profile.init], ["HBAUD 1200", "KISS ON"])
+
+    def test_pk232_hbaud_stays_fixed(self):
+        cfg = self.load("[tnc]\nprofile=pk232\ndevice=COM6\n[kiss]\nair_baud=9600\n")
+        self.assertIn("HBAUD 1200", [s.note for s in cfg.tnc.profile.init])
+
     def test_init_lines_override(self):
         cfg = self.load("[tnc]\nprofile=generic\ntransport=tcp\nport=4001\n"
                         "init_lines = A ONE | B TWO | KISS ON\n")

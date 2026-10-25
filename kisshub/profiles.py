@@ -25,7 +25,8 @@ devices there (firmware 30.DEC.88, 01.AUG.91, 13.SEP.95):
 Kenwood TM-D710: the TNC must be in packet mode (TNC key on the panel until
 PACKET shows - in APRS mode the TNC gives no cmd:), then in terminal mode
 "HBAUD 1200" + "KISS ON" + "RESTART" (tested by Gerhard in a terminal,
-22.10.2026, COM7 at 9600 Bd). Leaving: C0 FF C0, then KISS OFF.
+22.10.2026, COM7 at 9600 Bd). [kiss] air_baud = 9600 sends "HBAUD 9600" instead
+(25.10.2026, not yet tried on the air). Leaving: C0 FF C0, then KISS OFF.
 TH-D74 / TH-D75: KISS is switched on in
 the radio's menu - nothing to send. TNC2 with a pure KISS EPROM: nothing to send.
 TH-D74/D75/TNC2 lines are from the manuals and still to be tried (K9/K10).
@@ -89,6 +90,9 @@ class Profile:
     ax25: tuple[tuple[str, float | int | str], ...] = ()   # AX.25 recommendation
                                        # (tinybox.conf [ax25] key names); () = AX25_1200
     reads_direwolf_conf: bool = False  # profile direwolf: values from direwolf.conf
+    hbaud: tuple[int, ...] = ()        # air rates the TNC can be set to with "HBAUD n";
+                                       # [kiss] air_baud picks one and replaces the
+                                       # HBAUD line of the init. () = rate fixed
 
 
 # CR70: AX.25 recommendation for the stations, the same key names as [ax25] in
@@ -98,6 +102,11 @@ AX25_1200 = (("paclen", 256), ("maxframe", 4), ("maxframe_ext", 7),
 # VARA FM Narrow over KISS, measured 18.10.2026 (docs/kiss-mode-konzept.md 8d):
 # about 350 bit/s net with 2.7 s from PTT to data - a window of 4 x 256 bytes
 # takes ~9 s, so T1 must not start below 18 s; T2 short, VARA is lossless
+# 9600 Bd (TM-D710 on the data band, 25.10.2026): eight times the 1200 Bd rate,
+# so a full window of 4-7 frames is on the air in ~1-2 s - T1 may start lower,
+# T2 shorter. A starting point, still to be checked on the air.
+AX25_9600 = (("paclen", 256), ("maxframe", 7), ("maxframe_ext", 7),
+             ("t1_min_sec", 1.5), ("t1_max_sec", 15.0), ("t2_sec", 0.5))
 AX25_VARA = (("paclen", 256), ("maxframe", 4), ("maxframe_ext", 4),
              ("t1_min_sec", 18.0), ("t1_max_sec", 90.0), ("t2_sec", 0.3))
 
@@ -163,9 +172,10 @@ TM_D710 = Profile(
     exit_kiss=True,
     exit_lines=(line("KISS OFF"),),    # a terminal finds cmd: again, also after RESTART
     settle_sec=2.0,
+    hbaud=(1200, 9600),                # [kiss] air_baud = 9600 -> "HBAUD 9600"
     hint="TM-D710: press the TNC key until PACKET shows (not APRS), PC port = COM "
          "speed of the radio menu (9600)",
-    notes="Kenwood TM-D710: TNC key -> packet mode first, 1200 Bd on the data band",
+    notes="Kenwood TM-D710: TNC key -> packet mode first, 1200 or 9600 Bd on the data band",
 )
 
 TH_D74 = Profile(name="th-d74", display="TH-D74", serial_baud=9600, exit_kiss=False,
@@ -212,8 +222,21 @@ PROFILES = {p.name: p for p in (PK232, TM_D710, TH_D74, TH_D75, TNC2_KISS, GENER
                                 VARA_FM, VARA_HF, DIREWOLF)}
 
 
-def ax25_recommendation(p: Profile) -> dict:
-    return dict(p.ax25 or AX25_1200)
+def ax25_recommendation(p: Profile, air_baud: int = 1200) -> dict:
+    if p.ax25:
+        return dict(p.ax25)
+    return dict(AX25_9600 if air_baud >= 9600 else AX25_1200)
+
+
+def with_hbaud(p: Profile, baud: int) -> Profile:
+    """[kiss] air_baud for a TNC with a switchable modem (TM-D710): the init line
+    "HBAUD ..." becomes "HBAUD <baud>". Raises ValueError for a rate the TNC
+    does not have."""
+    if baud not in p.hbaud:
+        raise ValueError(f"{p.display or p.name} knows {' or '.join(map(str, p.hbaud))} Bd")
+    steps = tuple(line(f"HBAUD {baud}", s.timeout, s.expect)
+                  if s.note.upper().startswith("HBAUD ") else s for s in p.init)
+    return dataclasses.replace(p, init=steps)
 TUNNEL_MODES = ("no", "connected", "all")
 
 
