@@ -11,6 +11,13 @@ SerialTransport uses pyserial with one reader and one writer thread: at
 Port settings as pk232py found them working on the PK-232 (P54.2): 8N1,
 no XON/XOFF, no RTS/CTS, DTR and RTS asserted.
 
+RTS/CTS (profile tm-d710, [tnc] rtscts = yes, 25.10.2026): the radio holds
+CTS low while its buffer is full and the port driver stops sending - the
+radio itself paces kisshub. RTS is then driven by the driver (we are ready
+to receive). The writer sends in small pieces and waits while CTS is low, so
+Ctrl+C never hangs in a blocked write; how long the radio held CTS low is
+counted and shown in the status (cts_waits, cts_wait_s).
+
 TcpTransport is for a TNC behind a network serial server (ser2net and the
 like) and for the tests.
 """
@@ -21,13 +28,21 @@ import asyncio
 import logging
 import queue
 import threading
+import time
 
 log = logging.getLogger(__name__)
 
+CHUNK = 64                 # bytes per write with RTS/CTS: a short block if CTS drops
+CTS_WARN_SEC = 5.0         # CTS low this long: one warning (radio busy, cable, menu)
+
 
 class SerialTransport:
-    def __init__(self, device: str, baud: int, dtr: bool = True, rts: bool = True) -> None:
+    def __init__(self, device: str, baud: int, dtr: bool = True, rts: bool = True,
+                 rtscts: bool = False) -> None:
         self.device, self.baud, self.dtr, self.rts = device, baud, dtr, rts
+        self.rtscts = rtscts
+        self.cts_waits = 0                 # times the writer waited for CTS
+        self.cts_wait_s = 0.0              # total time CTS held us back
         self._ser = None
         self._rx: asyncio.Queue | None = None
         self._tx: queue.Queue = queue.Queue()
@@ -35,19 +50,36 @@ class SerialTransport:
         self._threads: list[threading.Thread] = []
 
     def describe(self) -> str:
-        return f"{self.device} {self.baud} Bd"
+        return f"{self.device} {self.baud} Bd" + (" RTS/CTS" if self.rtscts else "")
+
+    def flow_status(self) -> dict:
+        cts = None
+        if self._ser is not None and self.rtscts:
+            try:
+                cts = bool(self._ser.cts)
+            except Exception:
+                pass
+        return {"flow": "rtscts" if self.rtscts else "none", "cts": cts,
+                "cts_waits": self.cts_waits, "cts_wait_s": round(self.cts_wait_s, 1)}
 
     async def open(self) -> None:
         import serial                                  # pyserial, only needed here
 
         def _open():
             ser = serial.Serial(port=None, baudrate=self.baud, bytesize=8, parity="N",
-                                stopbits=1, timeout=0.1, xonxoff=False, rtscts=False,
-                                dsrdtr=False)
+                                stopbits=1, timeout=0.1, xonxoff=False,
+                                rtscts=self.rtscts, dsrdtr=False,
+                                write_timeout=2.0 if self.rtscts else None)
             ser.port = self.device
-            ser.dtr, ser.rts = self.dtr, self.rts        # before open: no glitch
+            ser.dtr = self.dtr                           # before open: no glitch
+            if not self.rtscts:                          # with RTS/CTS the driver drives RTS
+                ser.rts = self.rts
             ser.open()
             ser.reset_input_buffer()
+            if self.rtscts and not ser.cts:
+                log.warning("%s: CTS is low - the radio does not take data yet "
+                            "(TNC busy, cable without RTS/CTS lines, or radio off?)",
+                            self.device)
             return ser
 
         self._ser = await asyncio.get_running_loop().run_in_executor(None, _open)
@@ -81,11 +113,41 @@ class SerialTransport:
             except queue.Empty:
                 continue
             try:
-                self._ser.write(data)
+                if self.rtscts:
+                    for i in range(0, len(data), CHUNK):
+                        if not self._wait_cts():
+                            return
+                        self._ser.write(data[i:i + CHUNK])
+                else:
+                    self._ser.write(data)
                 self._ser.flush()
             except Exception as exc:
                 log.warning("serial write failed: %s", exc)
                 return
+
+    def _wait_cts(self) -> bool:
+        """RTS/CTS: wait while the radio holds CTS low. False when stopping."""
+        if self._ser.cts:
+            return True
+        start = time.monotonic()
+        warned = False
+        self.cts_waits += 1
+        while not self._ser.cts:
+            if self._stop.is_set():
+                return False
+            waited = time.monotonic() - start
+            if not warned and waited >= CTS_WARN_SEC:
+                log.warning("%s: CTS low for %.0f s - the radio holds data back",
+                            self.device, waited)
+                warned = True
+            time.sleep(0.01)
+        waited = time.monotonic() - start
+        self.cts_wait_s += waited
+        if warned:
+            log.info("%s: CTS high again after %.1f s", self.device, waited)
+        else:
+            log.debug("%s: waited %.0f ms for CTS", self.device, waited * 1000)
+        return True
 
     def write(self, data: bytes) -> None:
         self._tx.put(data)

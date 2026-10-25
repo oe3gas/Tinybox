@@ -1104,6 +1104,12 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 Bei 9600 eigene AX.25-Empfehlung (Fenster 7, T1 1,5–15 s, T2 0,5 s) als Startwert.
 `init_lines` hat weiter Vorrang. PK-232 bleibt fest auf 1200. Funktest mit 9600 steht aus.
 
+**TM-D710 mit RTS/CTS (entschieden und umgesetzt 25.10.2026):** Zwischen kisshub und D710 gilt
+Hardware-Flusssteuerung RTS/CTS (`[tnc] rtscts`, Profil-Standard `yes`, andere Profile `no`).
+Das Funkgerät steuert damit selbst, wann es Daten nimmt; `max_lead_ms` bleibt als
+Vorlauf-Grenze für die Prioritäten. Geschrieben wird in 64-Byte-Stücken mit CTS-Prüfung
+davor, damit ein Stopp nie in einem blockierten Schreibvorgang hängt.
+
 ## 16. DX-Cluster-Feed `dxfeed` (entschieden 15.10.2026)
 
 - **Keine Live-Spots über Funk**, keine Dauerbeschallung: Der Spot-Strom wird gesammelt und **einmal täglich verdichtet**.

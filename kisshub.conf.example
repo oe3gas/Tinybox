@@ -16,6 +16,8 @@ profile   = pk232          ; default when started without -p: pk232 | tm-d710 | 
 ; transport = serial       ; serial | tcp - default: tcp for vara-* / direwolf, else serial
 device    = COM3           ; serial only: Windows COM3, Raspberry Pi /dev/ttyUSB0
 serial_baud = 9600         ; PC <-> TNC (PK-232: its TBAUD; 9600 as pk232py uses it)
+; rtscts    =              ; RTS/CTS hardware flow control - default: yes for tm-d710
+;                          ; (the radio paces kisshub over CTS), no for the others
 ; host = 127.0.0.1         ; tcp only
 ; port =                   ; tcp only - default: vara-* 8100, direwolf KISSPORT (else 8001)
 reconnect_sec = 10

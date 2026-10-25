@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+- kisshub 2026.10.25.3: **RTS/CTS-Flusssteuerung** zum TM-D710 (`[tnc] rtscts`, Standard `yes`
+  bei `tm-d710`, sonst `no`). Das Funkgerät bremst den kisshub über CTS, wenn sein
+  TNC-Puffer voll ist; geschrieben wird in 64-Byte-Stücken, Strg+C hängt nie. Warnung bei
+  CTS länger als 5 s tief, Zähler `cts_waits` / `cts_wait_s` in Status und Statuszeile.
 - kisshub 2026.10.25.2: TM-D710 wahlweise mit **1200 oder 9600 Bd** auf dem Funk –
   `[kiss.tm-d710] air_baud = 9600` schickt `HBAUD 9600` an den TNC (bisher fest `HBAUD 1200`).
   Andere Werte werden beim Start abgelehnt. Bei 9600 eigene AX.25-Empfehlung (Fenster 7,

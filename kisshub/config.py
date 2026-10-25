@@ -28,6 +28,7 @@ class TncCfg:
     transport: str = "serial"         # serial | tcp
     device: str = ""
     serial_baud: int = 9600
+    rtscts: bool = False              # RTS/CTS hardware flow control (serial only)
     host: str = "127.0.0.1"
     port: int = 0
     reconnect_sec: int = 10
@@ -192,6 +193,7 @@ def load(path: str | Path, profile_name: str | None = None) -> Config:
 
     tnc = TncCfg(profile=profile, transport=transport, device=device,
                  serial_baud=get("tnc", "serial_baud", profile.serial_baud, int),
+                 rtscts=get("tnc", "rtscts", profile.rtscts, bool),
                  host=get("tnc", "host", "127.0.0.1"), port=tport,
                  reconnect_sec=get("tnc", "reconnect_sec", 10, int), params=params)
     port = get("server", "port", 8101, int)
@@ -276,4 +278,4 @@ def make_transport(t: TncCfg):
     from .transport import SerialTransport, TcpTransport
     if t.transport == "tcp":
         return TcpTransport(t.host, t.port)
-    return SerialTransport(t.device, t.serial_baud, t.profile.dtr, t.profile.rts)
+    return SerialTransport(t.device, t.serial_baud, t.profile.dtr, t.profile.rts, t.rtscts)

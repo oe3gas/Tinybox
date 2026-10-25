@@ -345,7 +345,9 @@ class Tnc:
                 "bundle_ms": self.profile.bundle_ms, "bundles_tx": self.bundles_tx,
                 "bundles_rx": self.bundles_rx, "bundled_tx": self.bundled_tx,
                 "bundled_rx": self.bundled_rx,
-                "init_log": list(self.init_log)[-20:]}
+                "init_log": list(self.init_log)[-20:],
+                **(self.transport.flow_status() if hasattr(self.transport, "flow_status")
+                   else {"flow": "none"})}
 
     def _send_params(self) -> None:
         if not self.profile.kiss_params:

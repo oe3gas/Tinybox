@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import tempfile
+import time
+import threading
 import unittest
 from pathlib import Path
 
@@ -445,6 +447,55 @@ class TmD710Tests(HubTestBase):
         await self.wait(lambda: self.fake.state == "cmd" and not self.fake.kiss_on)
 
 
+class FakeSerial:
+    """pyserial stand-in for the RTS/CTS writer: CTS follows a script."""
+    def __init__(self, cts_low_sec: float = 0.0):
+        self.until = time.monotonic() + cts_low_sec
+        self.written = []
+
+    @property
+    def cts(self) -> bool:
+        return time.monotonic() >= self.until
+
+    def write(self, data):
+        assert self.cts, "written while CTS low"
+        self.written.append(bytes(data))
+
+    def flush(self):
+        pass
+
+
+class RtsCtsWriterTests(unittest.TestCase):
+    def run_writer(self, ser, data):
+        from kisshub.transport import SerialTransport
+        t = SerialTransport("COM7", 9600, rtscts=True)
+        t._ser = ser
+        t.write(data)
+        th = threading.Thread(target=t._writer, daemon=True)
+        th.start()
+        deadline = time.monotonic() + 3
+        while sum(map(len, ser.written)) < len(data) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        t._stop.set()
+        th.join(1)
+        return t
+
+    def test_chunks_and_waits_for_cts(self):
+        ser = FakeSerial(cts_low_sec=0.2)
+        t = self.run_writer(ser, bytes(200))
+        self.assertEqual([len(c) for c in ser.written], [64, 64, 64, 8])
+        f = t.flow_status()
+        self.assertEqual((f["flow"], f["cts_waits"]), ("rtscts", 1))
+        self.assertGreaterEqual(f["cts_wait_s"], 0.1)
+
+    def test_stop_while_cts_low(self):
+        from kisshub.transport import SerialTransport
+        t = SerialTransport("COM7", 9600, rtscts=True)
+        t._ser = FakeSerial(cts_low_sec=60)
+        t._stop.set()
+        self.assertFalse(t._wait_cts())
+
+
 class HubConfigTests(unittest.TestCase):
     def load(self, text: str):
         with tempfile.TemporaryDirectory() as d:
@@ -498,6 +549,15 @@ class HubConfigTests(unittest.TestCase):
     def test_pk232_hbaud_stays_fixed(self):
         cfg = self.load("[tnc]\nprofile=pk232\ndevice=COM6\n[kiss]\nair_baud=9600\n")
         self.assertIn("HBAUD 1200", [s.note for s in cfg.tnc.profile.init])
+
+    def test_rtscts_default_per_profile(self):
+        self.assertTrue(self.d710().tnc.rtscts)
+        self.assertFalse(self.load("[tnc]\nprofile=pk232\ndevice=COM6\n").tnc.rtscts)
+        self.assertFalse(self.d710("rtscts = no\n").tnc.rtscts)
+        cfg = self.load("[tnc]\nprofile=pk232\ndevice=COM6\n[tnc.pk232]\nrtscts = yes\n")
+        self.assertTrue(cfg.tnc.rtscts)
+        t = hubconfig.make_transport(self.d710().tnc)
+        self.assertEqual((t.rtscts, t.describe()), (True, "COM7 9600 Bd RTS/CTS"))
 
     def test_init_lines_override(self):
         cfg = self.load("[tnc]\nprofile=generic\ntransport=tcp\nport=4001\n"

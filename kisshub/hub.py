@@ -387,7 +387,14 @@ class Hub:
         names = ", ".join(f"{c.name} rx {c.rx} tx {c.tx}" for c in self.clients.values())
         return (f"TNC {self.tnc.describe()} {self.tnc.state}: rx {self.tnc.rx_frames} "
                 f"tx {self.tnc.tx_frames}, queued {len(self._queue)}, dropped "
-                f"{self.dropped}; clients: {names or 'none'}")
+                f"{self.dropped}{self._cts_text()}; clients: {names or 'none'}")
+
+    def _cts_text(self) -> str:
+        fs = getattr(self.tnc.transport, "flow_status", None)
+        if fs is None or not getattr(self.tnc.transport, "rtscts", False):
+            return ""
+        f = fs()
+        return f", CTS waits {f['cts_waits']} ({f['cts_wait_s']} s)"
 
     async def _status(self) -> None:
         if self.cfg.status_every_sec <= 0:

@@ -421,9 +421,15 @@ weckt den PK-232 aus jedem Zustand (Autobaud, Converse, XOFF, Host Mode, KISS).
 Antwortet der TNC nicht, nennt die Fehlermeldung im Log die TNC-Taste. Für den ersten Lauf
 `[log] level = DEBUG`: dann steht jedes Byte des Dialogs im Log.
 
+**Flusssteuerung:** Beim TM-D710 ist **RTS/CTS** eingeschaltet (`[tnc] rtscts`, Standard
+`yes` bei diesem Profil). Ist der kleine TNC-Puffer des Funkgeräts voll, nimmt es CTS weg und
+der kisshub wartet, bis CTS wieder kommt – das Funkgerät bremst selbst. Das Kabel muss RTS
+und CTS durchführen. Steht CTS länger als 5 s auf tief, meldet das Log eine Warnung; die
+Statuszeile zeigt `CTS waits` (wie oft und wie lange gebremst wurde). Ausschalten mit
+`[tnc.tm-d710] rtscts = no`. `max_lead_ms` bleibt zusätzlich aktiv (Vorrang für Quittungen).
+
 **Stand:** Profil und Dialog mit simuliertem TNC getestet, Funktest steht aus (Konzept K9).
-Offen: RTS/CTS-Flusssteuerung (der kisshub nutzt keine) und der kleine Puffer des D710 –
-gehen lange Frames verloren, zuerst `[ax25.tm-d710] paclen = 128` versuchen.
+Gehen trotz RTS/CTS lange Frames verloren, `[ax25.tm-d710] paclen = 128` versuchen.
 
 Als **KISS-TNC** sendet der D710 nur, was TinyBox oder Client liefern – AX.25 v2.2 geht daher
 durch ihn. Die v2.0-Grenze betrifft den D710 nur als **Digipeater** (3.6).

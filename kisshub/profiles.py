@@ -26,7 +26,8 @@ Kenwood TM-D710: the TNC must be in packet mode (TNC key on the panel until
 PACKET shows - in APRS mode the TNC gives no cmd:), then in terminal mode
 "HBAUD 1200" + "KISS ON" + "RESTART" (tested by Gerhard in a terminal,
 22.10.2026, COM7 at 9600 Bd). [kiss] air_baud = 9600 sends "HBAUD 9600" instead
-(25.10.2026, not yet tried on the air). Leaving: C0 FF C0, then KISS OFF.
+(25.10.2026, not yet tried on the air). RTS/CTS on by default: the radio holds
+CTS low while its small TNC buffer is full ([tnc] rtscts = no switches it off). Leaving: C0 FF C0, then KISS OFF.
 TH-D74 / TH-D75: KISS is switched on in
 the radio's menu - nothing to send. TNC2 with a pure KISS EPROM: nothing to send.
 TH-D74/D75/TNC2 lines are from the manuals and still to be tried (K9/K10).
@@ -68,6 +69,7 @@ class Profile:
     serial_baud: int = 9600
     dtr: bool = True
     rts: bool = True
+    rtscts: bool = False               # RTS/CTS hardware flow control ([tnc] rtscts)
     wake: tuple[Step, ...] = ()        # empty: the TNC is in KISS by itself
     init: tuple[Step, ...] = ()
     exit_kiss: bool = True             # C0 FF C0 when kisshub stops
@@ -172,6 +174,7 @@ TM_D710 = Profile(
     exit_kiss=True,
     exit_lines=(line("KISS OFF"),),    # a terminal finds cmd: again, also after RESTART
     settle_sec=2.0,
+    rtscts=True,                       # the radio paces kisshub over CTS (25.10.2026)
     hbaud=(1200, 9600),                # [kiss] air_baud = 9600 -> "HBAUD 9600"
     hint="TM-D710: press the TNC key until PACKET shows (not APRS), PC port = COM "
          "speed of the radio menu (9600)",
