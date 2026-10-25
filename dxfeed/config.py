@@ -78,10 +78,34 @@ class DigestCfg:
 
 
 @dataclass(frozen=True)
+class LiveCfg:
+    """dxfeed live (PLANUNG 16c): short-lived pages next to the 24 h overview."""
+    state: Path = Path("data/dxfeed-live.json")
+    now: bool = True                # "DX jetzt"
+    now_hours: float = 2.0
+    now_every: int = 30             # minutes between checks; sent only on change
+    now_refresh: int = 90           # ... or when the last one is this old (still valid)
+    now_tiers: str = "AB"
+    now_max_rows: int = 8
+    now_valid: str = "2h"
+    bands: bool = True              # "Baender jetzt": all DX spots, by DX continent
+    bands_every: int = 60
+    bands_valid: str = "90m"
+    new: bool = True                # "Neu auf dem Band"
+    new_max_rank: int = 100         # Club Log Most Wanted rank at most
+    new_min_spotters: int = 3       # different spotters (spotter continents) ...
+    new_window: int = 60            # ... within these minutes
+    new_quiet_hours: int = 24       # not spotted before for this long
+    new_per_hour: int = 3
+    new_valid: str = "2h"
+
+
+@dataclass(frozen=True)
 class Config:
     cluster: ClusterCfg
     data: DataCfg = field(default_factory=DataCfg)
     digest: DigestCfg = field(default_factory=DigestCfg)
+    live: LiveCfg = field(default_factory=LiveCfg)
     log_level: str = "INFO"
     log_file: str = ""
     inbox_source: str = "default"     # CR70: tinybox.conf | dxfeed.conf | default
@@ -211,7 +235,43 @@ def load(path: str | Path) -> Config:
         inbox, source = Path("eingang"), "default (no tinybox.conf found)"
     digest = dataclasses.replace(digest, inbox=inbox)
 
-    return Config(cluster=cluster, data=data, digest=digest,
+    def valid_of(key, default):
+        v = get("live", key, default)
+        if v and not VALID_RE.match(v):
+            raise ConfigError(f"[live] {key}: '{v}' - e.g. 90m, 2h")
+        return v or default
+
+    def tiers_of(key, default):
+        t = "".join(x for x in "ABC" if x in get("live", key, default).upper())
+        if not t:
+            raise ConfigError(f"[live] {key}: one or more of A B C")
+        return t
+
+    try:
+        now_hours = float(get("live", "now_hours", "2") or 2)
+    except ValueError as exc:
+        raise ConfigError(f"[live] now_hours: {exc}") from None
+    live = LiveCfg(
+        state=Path(get("live", "state", "data/dxfeed-live.json")),
+        now=get("live", "now", True, bool),
+        now_hours=min(12.0, max(0.5, now_hours)),
+        now_every=max(10, get("live", "now_every", 30, int)),
+        now_refresh=max(30, get("live", "now_refresh", 90, int)),
+        now_tiers=tiers_of("now_tiers", "AB"),
+        now_max_rows=min(20, max(1, get("live", "now_max_rows", 8, int))),
+        now_valid=valid_of("now_valid", "2h"),
+        bands=get("live", "bands", True, bool),
+        bands_every=max(10, get("live", "bands_every", 60, int)),
+        bands_valid=valid_of("bands_valid", "90m"),
+        new=get("live", "new", True, bool),
+        new_max_rank=min(340, max(1, get("live", "new_max_rank", 100, int))),
+        new_min_spotters=max(1, get("live", "new_min_spotters", 3, int)),
+        new_window=min(240, max(10, get("live", "new_window", 60, int))),
+        new_quiet_hours=min(144, max(1, get("live", "new_quiet_hours", 24, int))),
+        new_per_hour=min(20, max(1, get("live", "new_per_hour", 3, int))),
+        new_valid=valid_of("new_valid", "2h"))
+
+    return Config(cluster=cluster, data=data, digest=digest, live=live,
                   log_level=get("log", "level", "INFO").upper(),
                   log_file=get("log", "file", ""), inbox_source=source, hints=tuple(hints))
 

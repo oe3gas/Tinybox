@@ -44,6 +44,8 @@ from .config import DigestCfg
 from .spots import BAND_ORDER, mode_of
 
 MODE_GROUPS = ("CW", "SSB", "FT8")          # everything else is "other"
+REPLACE_DIGEST = "dxfeed-24h"               # rolling 24 h overview (PLANUNG 16c)
+REPLACE_ACT = "dxfeed-24h-act"
 ENTITY_TEXT_MAX = 30                        # dictionary: dxcc free_text
 
 
@@ -83,6 +85,8 @@ class DxLine:
     dxcc: int | None = None         # ADIF DXCC number (brocast dictionary v4), None = unknown
     score: float = 0.0
     tier: str = "C"
+    qrg: float = 0.0                # frequency of the last spot (kHz)
+    last_mode: str = ""             # mode of the last spot
 
 
 @dataclass
@@ -109,6 +113,7 @@ class Bulletin:
     text: str
     replace: str
     page: dict | None = None    # brocast page (header "Brocast:"), None = text only
+    valid: str | None = None    # header Valid:, None = [digest] valid
 
 
 @dataclass
@@ -177,7 +182,8 @@ def aggregate(rows, cfg: DigestCfg) -> tuple[list[DxLine], int]:
             d.modes.add(mode)
         d.spotters.add(r["spotter"])
         d.first = min(d.first, r["ts"])
-        d.last = max(d.last, r["ts"])
+        if r["ts"] >= d.last:
+            d.last, d.qrg, d.last_mode = r["ts"], r["freq"], mode
         d.count += 1
     lines = sorted(by_call.values(), key=lambda d: (-len(d.spotters), -d.count, d.call))
     return lines, n
@@ -293,28 +299,35 @@ def _dat_head(cfg: DigestCfg, until: float, since: float) -> dict:
     return dat
 
 
-def _page(title: str, dat: dict, cfg: DigestCfg) -> dict:
+def _page(title: str, dat: dict, cfg: DigestCfg, valid: str | None = None) -> dict:
     # the data go into a block k data, not into dat: the envelope (with dat) has
     # to fit into the first frame, the block list is packed and fragmented
     page = {"typ": "dxsum", "cat": ["dx"], "src": ["tinybox"], "ti": title,
             "blk": [{"k": "data", "v": dat}]}
-    exp = valid_minutes(cfg.valid)
+    exp = valid_minutes(cfg.valid if valid is None else valid)
     if exp:
         page["exp"] = exp
     return page
 
 
+def utc_hm(ts: float) -> str:
+    return time.strftime("%H:%M", time.gmtime(ts))
+
+
 def station_page(sel: list[DxLine], cfg: DigestCfg, since: float, until: float,
-                 n_calls: int, n_spots: int, coverage_min: int | None, rated: bool) -> dict:
+                 n_calls: int, n_spots: int, coverage_min: int | None, rated: bool,
+                 title: str | None = None, valid: str | None = None,
+                 with_qrg: bool = False, tiers: str | None = None) -> dict:
     """brocast page typ dxsum (dictionary v4) with the DX stations.
 
     st rows: tier, call, entity (ADIF number, else name as text), spotters,
     Most Wanted rank, first/last spot as minutes before end, bands per mode
     group as bit masks (bit i = band i of the dictionary list band), other
-    modes. Names go as dictionary names, the codec turns them into numbers."""
+    modes; with_qrg (dictionary v5) the frequency of the last spot in kHz.
+    Names go as dictionary names, the codec turns them into numbers."""
     dat = _dat_head(cfg, until, since)
     dat.update({"calls": n_calls, "spots": n_spots,
-                "tiers": "".join(cfg.brocast_tiers) if rated else ""})
+                "tiers": (cfg.brocast_tiers if tiers is None else tiers) if rated else ""})
     if coverage_min is not None:
         dat["cov"] = coverage_min
     rows = []
@@ -324,8 +337,10 @@ def station_page(sel: list[DxLine], cfg: DigestCfg, since: float, until: float,
                      len(d.spotters), d.rank,
                      max(0, round((until - d.first) / 60)), max(0, round((until - d.last) / 60)),
                      _mask(d, 0), _mask(d, 1), _mask(d, 2), _mask(d, 3), om or None])
+        if with_qrg:
+            rows[-1].append(round(d.qrg) if d.qrg else None)
     dat["st"] = rows
-    return _page(f"DX-Cluster {datetime.fromtimestamp(until):%d.%m.}", dat, cfg)
+    return _page(title or f"DX 24 h bis {utc_hm(until)} UTC", dat, cfg, valid)
 
 
 def activity_page(acts: list[BandActivity], cfg: DigestCfg, since: float, until: float,
@@ -341,7 +356,7 @@ def activity_page(acts: list[BandActivity], cfg: DigestCfg, since: float, until:
     dat["act"] = [[a.band, *a.by_group, a.peak,
                    sorted(a.others.items(), key=lambda x: (-x[1], x[0])) or None]
                   for a in acts if a.spots]
-    return _page(f"DX-Bandaktivität {datetime.fromtimestamp(until):%d.%m.}", dat, cfg)
+    return _page(f"DX-Bänder 24 h bis {utc_hm(until)} UTC", dat, cfg)
 
 
 def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
@@ -427,10 +442,12 @@ def build(rows, cfg: DigestCfg, since: float, until: float, coverage_sec: float,
                             len(lines), n_rel, cov, mw is not None)
         act_page = activity_page(acts, cfg, since, until, cov, n_rel)
 
-    act = Bulletin(subject=f"DX-Bandaktivitaet {t1:%d.%m.%Y}", text=act_text,
-                   replace=f"dxfeed-act-{t1:%Y%m%d}", page=act_page)
-    return Digest(subject=f"DX-Zusammenfassung {t1:%d.%m.%Y}",
-                  text=text, replace=f"dxfeed-{t1:%Y%m%d}",
+    # rolling (PLANUNG 16c): every run replaces the one before, whatever the day
+    end = f"{time.strftime('%d.%m. %H:%M', time.gmtime(until))} UTC"
+    act = Bulletin(subject=f"DX-Bandaktivitaet 24 h bis {end}", text=act_text,
+                   replace=REPLACE_ACT, page=act_page)
+    return Digest(subject=f"DX-Zusammenfassung 24 h bis {end}",
+                  text=text, replace=REPLACE_DIGEST,
                   lines=len(kept), spots=len(rows), page=page, act=act)
 
 
@@ -442,8 +459,9 @@ def write_inbox(directory: str | Path, d: Digest | Bulletin, cfg: DigestCfg) -> 
     out = []
     for b in d.bulletins() if isinstance(d, Digest) else [d]:
         head = {"To": cfg.to, "Subject": b.subject, "Replace": b.replace}
-        if cfg.valid:
-            head["Valid"] = cfg.valid
+        valid = cfg.valid if b.valid is None else b.valid
+        if valid:
+            head["Valid"] = valid
         if b.page is not None:
             head["Brocast"] = json.dumps(b.page, ensure_ascii=True, separators=(",", ":"))
         content = "".join(f"{k}: {v}\n" for k, v in head.items()) + "\n" + b.text

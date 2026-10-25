@@ -19,11 +19,13 @@
 # feste Quellenangaben (z. B. GeoSphere-Lizenzhinweis) nur 1 Byte kosten.
 # Version 4 (23.10.2026): DX-Zusammenfassung typ 13 dxsum mit Thema dxsum,
 # Listen band, mode, dxtier und dxcc (ADIF-Nummern, für alle Seitentypen).
+# Version 5 (25.10.2026): dxsum path (Band × DX-Kontinent, "Bänder jetzt"),
+# kind (Liste dxkind), Spalte qrg am Ende der Stationszeilen st.
 # Kommentare dürfen geändert werden – sie gehen
 # nicht in die Prüfsumme ein. Der Test test_v1_is_frozen wacht darüber.
 
 dictionary: brocast-core
-version: 4
+version: 5
 languages: [de, en]
 
 # ---------------------------------------------------------------------------
@@ -168,6 +170,13 @@ enums:
     13: { name: VARA,   de: "VARA",   en: "VARA" }
     14: { name: JT65,   de: "JT65",   en: "JT65" }
     15: { name: WSPR,   de: "WSPR",   en: "WSPR" }
+
+  # ab v5: Art einer DX-Seite (dxfeed)
+  dxkind:
+    0: { name: day,   de: "24 Stunden",       en: "24 hours" }
+    1: { name: now,   de: "DX jetzt",         en: "DX now" }
+    2: { name: new,   de: "Neu auf dem Band", en: "New on the air" }
+    3: { name: paths, de: "Bänder jetzt",     en: "Bands now" }
 
   # Relevanz einer DX-Station (dxfeed: Club Log Most Wanted × Spotter)
   dxtier:
@@ -691,7 +700,8 @@ types:
                   { name: ssb,  bits: band, de: "Bänder SSB" },
                   { name: ft8,  bits: band, de: "Bänder FT8" },
                   { name: oth,  bits: band, de: "Bänder andere" },
-                  { name: om,   enums: mode, free_text: 10, de: "Andere Modes" } ] }
+                  { name: om,   enums: mode, free_text: 10, de: "Andere Modes" },
+                  { name: qrg,  unit: kHz, de: "Letzte Frequenz (kHz)" } ] }
     8:  { name: act,   type: rows, de: "Bandaktivität", en: "Band activity",
           cols: [ { name: band, enum: band, de: "Band" },
                   { name: cw,   de: "CW" },
@@ -700,3 +710,12 @@ types:
                   { name: oth,  de: "Andere" },
                   { name: peak, de: "Spitze (UTC-Stunde)" },
                   { name: om,   counts: mode, free_text: 10, de: "Andere Modes" } ] }
+    10: { name: kind,  type: enum, enum: dxkind, de: "Art", en: "Kind" }   # ab v5
+    # ab v5: Spots der letzten Stunde je Band und Kontinent der DX-Station
+    # (alle DXCC-Gebiete, Spotter laut conts) - "Bänder jetzt"
+    9:  { name: path,  type: rows, de: "Pfade", en: "Paths",
+          cols: [ { name: band, enum: band, de: "Band" },
+                  { name: af, de: "Afrika" }, { name: an, de: "Antarktis" },
+                  { name: as, de: "Asien" },  { name: eu, de: "Europa" },
+                  { name: na, de: "Nordamerika" }, { name: oc, de: "Ozeanien" },
+                  { name: sa, de: "Südamerika" } ] }

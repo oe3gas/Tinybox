@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- dxfeed live (PLANUNG 16c): „DX jetzt“ (letzte 2 h, nur bei Änderung), „Bänder jetzt“
+  (letzte Stunde nach Kontinent der DX-Station, alle Gebiete) und „Neu auf dem Band“
+  (seltenes DX, gedrosselt) als eigene, sich selbst ersetzende Bulletins; Aufgabe/Timer
+  alle 10 min. Die 24-Stunden-Übersicht läuft gleitend alle 3 Stunden.
+- brocast Dictionary v5: `dxsum` kind, path und Spalte qrg; Listener zeigt das Alter der
+  DX-Seiten, die Pfad-Matrix und den Neu-Hinweis.
 - Feeder-Pi (PLANUNG 22, `feederpi/README.md`): dxfeed und GeoSphere laufen auf einem
   Raspberry Pi (ab Modell 1, Raspberry Pi OS Lite 32-bit) mit systemd; der TinyBox-PC holt die
   Bulletins alle 5 Minuten per SSH in den Eingang (`pi_abholung.py`, eingeschränkter Benutzer

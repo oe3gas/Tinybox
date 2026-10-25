@@ -502,8 +502,28 @@ a.extlink:hover { color: var(--accent-dark); }
 .dxa-peak td { font: 12px var(--mono); color: var(--ink-3); }
 .dxa-others { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 3px 16px; font-size: 14px; }
 .dxa-others div { border-left: 3px solid var(--m-oth); padding-left: 8px; }
+/* dxfeed live (PLANUNG 16c): age line, "Neu auf dem Band", "Bänder jetzt" */
+.dx-age { display: inline-block; font: 700 13px var(--mono); padding: 2px 8px; margin-bottom: 8px;
+  border: 1.5px solid var(--ink); background: #fff; }
+.dx-age.stale { color: var(--danger); border-color: var(--danger); }
+.dx-newhead { border: 2px solid var(--ink); background: #fff; padding: 12px 16px; margin: 4px 0 14px; }
+.dx-new-call { font: 700 30px var(--mono); line-height: 1.1; }
+.dx-new-ent { font-size: 18px; font-weight: 700; margin-top: 2px; }
+.dx-new-facts { font-size: 15px; margin-top: 6px; color: var(--ink-2, var(--ink)); }
+.dxa-cell.path { background: color-mix(in srgb, #0F6E56 var(--a), #F1F1EE); font: 700 11px var(--mono);
+  line-height: 18px; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.4); }
+.dxa-cell.path.zero { background: #F1F1EE; }
+.dxg-tbl .dx-num.qrg { font-size: 13px; padding-left: 6px; }
+.dxk-new .dxg-bar { display: none; }   /* one station: nothing to sort */
+.ttscreen .dx-age { background: none; border: 0; padding: 0; color: #FFFF00; font: inherit; }
+.ttscreen .dx-age.stale { color: #FF0000; }
+.ttscreen .dx-newhead { background: none; border: 0; padding: 0; color: #FFFFFF; }
+.ttscreen .dx-newhead .dx-new-call { font: inherit; color: #00FFFF; }
+.ttscreen .dx-newhead .dx-new-ent, .ttscreen .dx-newhead .dx-new-facts { font: inherit; color: inherit; }
 /* narrow page pane: the time span moves into the tooltip of the call */
 @container (max-width: 780px) {
+  .dxk-now .dxg-tbl .dx-time { display: table-cell; }
+  .dxk-now .dxg-tbl .mw, .dxk-new .dxg-tbl .mw { display: none; }
   .dxg-tbl .dx-time { display: none; }
   .dxg-tbl .dx-ent { max-width: 120px; }
 }
@@ -512,6 +532,7 @@ a.extlink:hover { color: var(--accent-dark); }
   .dxg-tbl .mw { display: none; }
   .dxg-tbl .dx-ent { max-width: 96px; }
   .dxg-tbl th.dx-b, .dxg-tbl td.dx-b { width: 19px; padding-left: 0; padding-right: 0; }
+  .dxg-tbl th.dx-b { font-size: 10px; letter-spacing: -.03em; }
 }
 
 .wx-wrap { container-type: inline-size; }

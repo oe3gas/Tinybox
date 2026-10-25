@@ -1550,9 +1550,10 @@ const DX_TIERS = ["A", "B", "C"];
 function dxData(p) {
   if (!Array.isArray(p.data)) return null;
   const by = Object.fromEntries(p.data.map(d => [d.key, d]));
-  if (!by.st && !by.act) return null;
+  if (!by.st && !by.act && !by.path) return null;
   const val = k => by[k] ? by[k].value : undefined;
-  return { st: by.st, act: by.act, end: val("end"), calls: val("calls"), spots: val("spots"),
+  return { st: by.st, act: by.act, path: by.path, kind: val("kind") || "day",
+           end: val("end"), calls: val("calls"), spots: val("spots"),
            conts: val("conts"), tiers: val("tiers"), cov: val("cov"), win: val("win") || 1440 };
 }
 
@@ -1614,6 +1615,15 @@ function dxTime(end, minutesBefore) {
   return { day: p2(d.getUTCDate()), hm: p2(d.getUTCHours()) + p2(d.getUTCMinutes()) };
 }
 
+/* short windows (DX jetzt, neu): time of the last spot only */
+function dxWhen(dx, o) {
+  if (dx.kind === "day") return dxSpan(dx.end, o);
+  const b = dxTime(dx.end, o.t1);
+  return b ? `${b.hm.slice(0, 2)}:${b.hm.slice(2)}` : "";
+}
+
+function dxHasQrg(recs) { return recs.some(o => typeof o.qrg === "number"); }
+
 function dxSpan(end, o) {
   const a = dxTime(end, o.t0), b = dxTime(end, o.t1);
   if (!a) return "";
@@ -1641,16 +1651,33 @@ function dxSorted(recs) {
   return [...recs].sort((a, b) => rank(a) - rank(b) || dxScore(b) - dxScore(a) || byCall(a, b));
 }
 
+/* "vor 12 min", "vor 3 h", "vor 2 Tagen" */
+function dxAgo(ts) {
+  const min = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
+  if (min < 1) return "gerade eben";
+  if (min < 90) return `vor ${min} min`;
+  const h = Math.round(min / 60);
+  return h < 36 ? `vor ${h} h` : `vor ${Math.round(h / 24)} Tagen`;
+}
+
 function dxSummaryView(p, graphic) {
   const dx = dxData(p);
-  const box = el("div", "dxsum");
+  const box = el("div", "dxsum dxk-" + dx.kind);
+  if (dx.end) {               // how old: the point of the "jetzt" pages (PLANUNG 16c)
+    const age = Date.now() / 1000 - dx.end;
+    const stale = age > (dx.kind === "day" ? 4 * 3600 : 2 * 3600);
+    box.append(el("div", "dx-age" + (stale ? " stale" : ""),
+                  `Stand ${dxAgo(dx.end)}` + (stale ? " – nicht mehr aktuell" : "")));
+  }
+  if (dx.kind === "new" && dx.st) box.append(dxNewHead(dx));
   const conts = dx.conts ? ` aus ${dx.conts}` : "";
   const parts = [];
-  if (typeof dx.calls === "number") parts.push(`${dx.calls} DX-Rufzeichen`);
-  if (typeof dx.spots === "number")
-    parts.push(dx.st ? `${dx.spots} Spots${conts}`
-                     : `${dx.spots} Spots${conts}, dieselben wie in der DX-Zusammenfassung`);
-  if (dx.st) {
+  if (typeof dx.calls === "number" && dx.kind !== "new") parts.push(`${dx.calls} DX-Rufzeichen`);
+  if (typeof dx.spots === "number" && dx.kind !== "new")
+    parts.push(dx.path ? `${dx.spots} Spots${conts}, alle Gebiete, nach Kontinent der DX-Station`
+               : dx.st ? `${dx.spots} Spots${conts}`
+               : `${dx.spots} Spots${conts}, dieselben wie in der DX-Zusammenfassung`);
+  if (dx.st && dx.kind !== "new") {
     const recs = dxRecords(dx.st);
     if (!dx.tiers) parts.push(`${recs.length} Stationen nach Spottern (ohne Most-Wanted-Liste)`);
     else {
@@ -1676,7 +1703,71 @@ function dxSummaryView(p, graphic) {
     box.append(node);
   }
   if (dx.act) box.append(graphic ? dxActivityGrid(dx.act) : dxActivityPlain(dx.act));
+  if (dx.path) box.append(graphic ? dxPathGrid(dx.path) : dxPathPlain(dx.path));
   return box;
+}
+
+/* "Neu auf dem Band": the one station in large letters */
+function dxNewHead(dx) {
+  const o = dxRecords(dx.st)[0] || {};
+  const head = el("div", "dx-newhead");
+  head.append(el("div", "dx-new-call", String(o.call ?? "")),
+              el("div", "dx-new-ent", dxText(dx.st, "dxcc", o.dxcc)));
+  const facts = [];
+  if (typeof o.qrg === "number") facts.push(`${o.qrg} kHz`);
+  const modes = dxModeList(dx.st, o);
+  if (modes) facts.push(modes);
+  if (typeof o.sp === "number") facts.push(`${o.sp} Spotter`);
+  if (typeof o.mw === "number") facts.push(`Most Wanted ${o.mw}`);
+  if (dx.end && typeof o.t1 === "number") facts.push(`zuletzt ${dxAgo(dx.end - o.t1 * 60)}`);
+  head.append(el("div", "dx-new-facts", facts.join(" · ")));
+  return head;
+}
+
+const DX_CONTS = [["af", "AF", "Afrika"], ["an", "AN", "Antarktis"], ["as", "AS", "Asien"],
+                  ["eu", "EU", "Europa"], ["na", "NA", "Nordamerika"], ["oc", "OC", "Ozeanien"],
+                  ["sa", "SA", "Südamerika"]];
+
+/* "Bänder jetzt": spots of the last hour, band x continent of the DX station */
+function dxPathGrid(item) {
+  const recs = dxRecords(item);
+  const byBand = new Map(recs.map(o => [o.band, o]));
+  const counts = DX_BANDS.map(b => byBand.get(b) || {});
+  const top = Math.max(1, ...counts.flatMap(o => DX_CONTS.map(([k]) => Number(o[k]) || 0)));
+  const vhf = i => DX_BANDS[i] === "6m" ? "vhf" : null;
+  const wrap = el("div", "dxa");
+  wrap.append(el("h4", null, "Bänder jetzt: Spots der letzten Stunde nach Kontinent"));
+  const t = el("table", "dxa-tbl dxp-tbl");
+  const head = el("tr");
+  head.append(el("th"));
+  DX_BANDS.forEach((b, i) => head.append(el("th", vhf(i), dxBandLabel(b))));
+  t.append(head);
+  for (const [k, short, name] of DX_CONTS) {
+    if (k === "an" && !counts.some(o => Number(o.an))) continue;      // Antarctica only when heard
+    const tr = el("tr");
+    const lab = el("th", "dxa-mode", short);
+    lab.title = name;
+    tr.append(lab);
+    counts.forEach((o, i) => {
+      const n = Number(o[k]) || 0;
+      const td = el("td", vhf(i));
+      const cell = el("span", "dxa-cell path" + (n ? "" : " zero"), n ? String(n) : "");
+      if (n) cell.style.setProperty("--a", Math.round(Math.max(0.18, Math.log(n + 1) / Math.log(top + 1)) * 100) + "%");
+      td.title = `${DX_BANDS[i]} → ${name}: ${n} Spots`;
+      td.append(cell);
+      tr.append(td);
+    });
+    t.append(tr);
+  }
+  const scroll = el("div", "dxg-scroll");
+  scroll.append(t);
+  wrap.append(scroll);
+  return wrap;
+}
+
+function dxPathPlain(item) {
+  return dxPlainTable(["Band", ...DX_CONTS.map(c => c[1])],
+    dxRecords(item).map(o => [dxText(item, "band", o.band), ...DX_CONTS.map(([k]) => o[k] || "")]));
 }
 
 function dxPlainTable(head, rows) {
@@ -1702,9 +1793,11 @@ function dxStationPlain(dx) {
     return dxPlainTable(["R", "Call", "Gebiet", "Bänder"],
       dxSorted(recs).map(o => [dxTier(o), o.call, ent(o).slice(0, 12), bandText(o)]));
   }
-  return dxPlainTable(["R", "Call", "Gebiet", "Bänder", "Modes", "Zeit UTC", "Sp", "MW"],
-    dxSorted(recs).map(o => [dxTier(o), o.call, ent(o), bandText(o), dxModeList(item, o),
-                             dxSpan(dx.end, o), o.sp, o.mw ?? "–"]));
+  const qrg = dxHasQrg(recs);
+  return dxPlainTable(["R", "Call", "Gebiet", ...(qrg ? ["QRG"] : []), "Bänder", "Modes",
+                       dx.kind === "day" ? "Zeit UTC" : "zuletzt UTC", "Sp", "MW"],
+    dxSorted(recs).map(o => [dxTier(o), o.call, ent(o), ...(qrg ? [o.qrg ?? ""] : []), bandText(o),
+                             dxModeList(item, o), dxWhen(dx, o), o.sp, o.mw ?? "–"]));
 }
 
 function dxOtherCounts(item, o) {
@@ -1761,7 +1854,10 @@ function dxStationGrid(dx, redraw) {
   const head = el("tr");
   head.append(el("th", "dx-r", "R"), el("th", "dx-call", "Call"), el("th", "dx-ent", "Gebiet"));
   bands.forEach(b => head.append(el("th", "dx-b" + (b === "6m" ? " vhf" : ""), dxBandLabel(b))));
-  head.append(el("th", "dx-num mw", "MW"), el("th", "dx-time", "Zeit UTC"), el("th", "dx-num", "Sp"));
+  const qrg = dxHasQrg(recs);
+  if (qrg) head.append(el("th", "dx-num qrg", "QRG"));
+  head.append(el("th", "dx-num mw", "MW"), el("th", "dx-time", dx.kind === "day" ? "Zeit UTC" : "zuletzt"),
+              el("th", "dx-num", "Sp"));
   t.append(head);
   for (const o of dxSorted(recs)) {
     const tier = dxTier(o);
@@ -1784,7 +1880,8 @@ function dxStationGrid(dx, redraw) {
       td.append(q);
       tr.append(td);
     });
-    tr.append(el("td", "dx-num mw", o.mw ?? "–"), el("td", "dx-time", dxSpan(dx.end, o)),
+    if (qrg) tr.append(el("td", "dx-num qrg", typeof o.qrg === "number" ? String(o.qrg) : ""));
+    tr.append(el("td", "dx-num mw", o.mw ?? "–"), el("td", "dx-time", dxWhen(dx, o)),
               el("td", "dx-num sp", String(o.sp ?? "")));
     t.append(tr);
   }

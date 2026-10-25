@@ -1138,6 +1138,35 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
   - Bandaktivität trägt dieselbe Abdeckung (`cov`) wie die Stationsseite; der Listener zeigt den Zeitraum in UTC wie die Tabelle.
   - **Bandaktivität über dieselben relevanten Spots wie die Stationsliste** (entschieden 24.10.2026): Spotter in EU, ohne ausgeschlossene häufige Gebiete. Die Summe der Tabelle = Zahl der relevanten Spots im Kopf der DX-Zusammenfassung. Vorher zählten alle EU-Spots (auch Europa, USA …), die Zahlen passten nicht zusammen.
 
+### 16c. DX live: Bezug zum Jetzt (entschieden und umgesetzt 25.10.2026)
+
+Anlass: Die 24-Stunden-Übersicht ist für „wer war aktiv“ ideal, um 10:30 aber schon 5 Stunden alt.
+Ergänzung in eigenen Bulletins, ohne Dauerbeschallung: jede Art ersetzt sich selbst (`Replace:`),
+läuft per `Valid:` von selbst aus und wird nur bei Bedarf gesendet.
+
+- **Neuer Befehl `dxfeed live`**, alle 10 Minuten (PC: Aufgabe `TinyBox\DX-Live`; Feeder-Pi:
+  `dxfeed-live.timer`). Entscheidet selbst, was fällig ist; Zustand in `data/dxfeed-live.json`,
+  nur bei Änderung geschrieben (SD-Karte). `dxfeed live` ohne `--tinybox` zeigt alles nur an.
+- **DX jetzt** (`Replace: dxfeed-jetzt`, Valid 2 h): Stufen A/B der letzten 2 Stunden, höchstens 8,
+  mit letzter Frequenz und Uhrzeit. Prüfung alle 30 min, gesendet nur wenn sich Stationen oder
+  Bänder ändern (oder die letzte Seite 90 min alt ist).
+- **Bänder jetzt** (`Replace: dxfeed-baender`, Valid 90 min, stündlich): Spots der letzten Stunde
+  je Band und **Kontinent der DX-Station** – hier **alle Gebiete** (CE, LU … zeigen den Pfad nach
+  Südamerika), Spotter in EU. Ohne Spots in der Stunde: nichts.
+- **Neu auf dem Band** (`Replace: dxfeed-neu-<Call>`, Valid 2 h): Most-Wanted-Rang ≤ 100, mindestens
+  3 EU-Spotter in 60 min, in den 24 Stunden davor nicht gespottet. Je Call einmal am Tag, höchstens
+  3 pro Stunde. Statt „Stufe A“: mit 3 Spottern erreicht selbst Rang 1 rechnerisch nur Stufe B.
+- **24-Stunden-Übersicht gleitend** alle 3 Stunden (02:00, 05:00, 08:00 …) statt einmal um 05:00;
+  feste Replace-Schlüssel `dxfeed-24h` / `dxfeed-24h-act`, es gibt also immer genau eine.
+- **Dictionary v5** (nur Ergänzungen): `dxsum.kind` (Liste `dxkind`: day, now, new, paths),
+  `dxsum.path` (Band × AF AN AS EU NA OC SA), Spalte `qrg` am Ende der Stationszeilen. Spalten von
+  `rows` dürfen nur hinten angehängt werden (Prüfung in `dictimport`).
+- **Listener:** Alter groß („Stand vor 12 min“, rot wenn veraltet), Neu-Hinweis mit Call, Gebiet,
+  QRG und Mode in großer Schrift, Pfad-Matrix als Heatmap mit Zahlen, QRG-Spalte bei „jetzt“.
+- **Größe:** DX jetzt mit 8 Stationen 1–2 Frames, Bänder jetzt und Neu je 1 Frame.
+- Einstellungen: `[live]` in `dxfeed.conf` (Vorlage `dxfeed.conf.example`).
+- Offen: Ausbreitungsdaten (SFI, A/K) als eigenes Bulletin – später (Gerhard, 25.10.2026).
+
 ## 17. Refactoring (entschieden 17.10.2026)
 
 Gezielt in Schritten, kein Großumbau. Sicherheitsnetz sind die bestehenden Tests (TinyBox und brocast).

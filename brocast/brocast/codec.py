@@ -259,6 +259,8 @@ class Codec:
                 out[entry.num] = self._rows_to_wire(value, entry.spec, f"dat.{key}")
             elif entry.spec.get("type") == "time":
                 out[entry.num] = _time_to_wire(value, f"dat.{key}")
+            elif entry.spec.get("type") == "enum":                 # ab v5 (dxsum kind)
+                out[entry.num] = self._enum(entry.spec["enum"], value, f"dat.{key}")
             else:
                 out[entry.num] = _scaled_to_wire(value, entry.spec, f"dat.{key}")
         return out
@@ -415,6 +417,8 @@ class Codec:
                 out[num] = value
             elif entry.spec.get("type") == "rows":
                 out[entry.name] = self._rows_from_wire(value, entry.spec)
+            elif entry.spec.get("type") == "enum" and isinstance(value, int):
+                out[entry.name] = self.d.enums[entry.spec["enum"]].name(value)
             else:
                 out[entry.name] = _scaled_from_wire(value, entry.spec)
         return out

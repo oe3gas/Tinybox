@@ -1,8 +1,8 @@
 [Unit]
-Description=Feeder-Pi: DX digest daily at 05:00 local time
+Description=Feeder-Pi: DX digest (last 24 h) every 3 hours, 02:00 05:00 08:00 ... local time
 
 [Timer]
-OnCalendar=*-*-* 05:00:00
+OnCalendar=*-*-* 02/3:00:00
 Persistent=true
 
 [Install]

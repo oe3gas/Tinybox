@@ -101,6 +101,12 @@ def _compare(old: Table, new: Table | None, where: str, added: dict[str, int]) -
         if other is None or other.name != entry.name:
             raise ImportError_(f"{where}: Nummer {num} ({entry.name}) würde umgedeutet oder "
                                "entfernt – das ist nicht erlaubt")
+        old_cols = entry.spec.get("cols")
+        if isinstance(old_cols, list):          # rows (ab v4): Spalten nur hinten anhängen
+            new_cols = other.spec.get("cols") or []
+            if [c.get("name") for c in new_cols[:len(old_cols)]] != [c.get("name") for c in old_cols]:
+                raise ImportError_(f"{where}: Spalten von {entry.name} würden umgestellt – "
+                                   "neue Spalten nur am Ende")
     extra = len(new.by_num) - len(old.by_num)
     if extra:
         added[where] = extra

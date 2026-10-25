@@ -13,6 +13,7 @@ import sys
 
 from dxfeed import cty as ctymod
 from dxfeed import dxcc as dxccmod
+from dxfeed import live as livemod
 from dxfeed import mostwanted as mwmod
 from dxfeed.collector import Collector, TelnetFilter
 from dxfeed.config import ConfigError, load
@@ -312,8 +313,8 @@ class DigestTests(unittest.TestCase):
         self.assertEqual(len(files), 2)                     # stations + band activity
         b, a = (inbox.parse(f.read_bytes()) for f in files)
         self.assertEqual((b.to, b.subject, b.valid_min), ("DX", d.subject, 7 * 1440))
-        self.assertTrue(b.replace.startswith("dxfeed-2"))
-        self.assertTrue(a.replace.startswith("dxfeed-act-"))
+        self.assertEqual(b.replace, "dxfeed-24h")                 # rolling: one key
+        self.assertEqual(a.replace, "dxfeed-24h-act")
         self.assertEqual((a.to, a.subject), ("DX", d.act.subject))
         self.assertIsNone(b.sender)
         self.assertEqual(list(Path(self.cfg.digest.inbox).glob("*.tmp")), [])
@@ -606,3 +607,130 @@ class ConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveTests(unittest.TestCase):
+    """dxfeed live (PLANUNG 16c): DX jetzt, Baender jetzt, Neu auf dem Band."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "brocast"))
+        from brocast import Codec, fragment, zdict
+        cls.codec, cls.fragment, cls.zd = Codec(), fragment, zdict.load()
+        cls.dxcc = dxccmod.load_or_none()
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cfg = make_cfg(self.tmp.name)
+        self.st = Store(self.cfg.data.db)
+        self.c = cty()
+        self.now = 1792054800.0
+        self.mw = mw_sample(VP8=50, **{"3B8": 300})
+        self.state = livemod.State(Path(self.tmp.name) / "live.json")
+
+    def tearDown(self):
+        self.st.close()
+        self.tmp.cleanup()
+
+    def spot(self, ago_min, line):
+        s = parse(line)
+        self.st.add(s, self.now - ago_min * 60, self.c.lookup(s.dx), self.c.lookup(s.spotter))
+
+    def rare(self, ago=20, call="VP8ABC", qrg="14025.0", spotters=("OE3GAS", "DK9IP", "I2XYZ")):
+        for i, sp in enumerate(spotters):
+            self.spot(ago - i, f"DX de {sp}:  {qrg}  {call}  CW  1200Z")
+
+    def run_live(self, at=0, state="default", force=False):
+        rows = self.st.spots(livemod.window_start(self.cfg, self.now + at), self.now + at + 60)
+        return livemod.run(rows, self.cfg, self.state if state == "default" else state,
+                           self.now + at, self.mw, self.dxcc, force=force)
+
+    def by_replace(self, res):
+        return {b.replace: b for b in res.bulletins}
+
+    def test_now_page_only_relevant_and_only_on_change(self):
+        self.rare()
+        for sp in ("OE3GAS", "DK9IP"):                       # common: tier C, not on "jetzt"
+            self.spot(15, f"DX de {sp}:  21074.0  3B8XY  FT8  1205Z")
+        res = self.by_replace(self.run_live())
+        b = res["dxfeed-jetzt"]
+        dat = b.page["blk"][0]["v"]
+        self.assertEqual(dat["kind"], "now")
+        self.assertEqual([r[1] for r in dat["st"]], ["VP8ABC"])
+        self.assertEqual(dat["st"][0][-1], 14025)                # qrg (v5), last column
+        self.assertEqual((b.valid, dat["win"]), ("2h", 120))
+        self.assertIn("14025.0", b.text)
+        # 10 min later: not due; 30 min later: due but unchanged -> nothing
+        self.assertNotIn("dxfeed-jetzt", self.by_replace(self.run_live(at=600)))
+        res = self.run_live(at=1800)
+        self.assertNotIn("dxfeed-jetzt", self.by_replace(res))
+        self.assertIn("jetzt: unveraendert", res.notes)
+        # a new rare station: changed -> sent
+        self.rare(ago=-25, call="VP8XYZ")
+        self.assertIn("dxfeed-jetzt", self.by_replace(self.run_live(at=3600)))
+
+    def test_bands_all_entities_by_dx_continent_hourly(self):
+        self.spot(10, "DX de OE3GAS:  14200.0  DL1XX  SSB  1200Z")      # excluded entity: counts here
+        self.spot(11, "DX de DK9IP:   14074.0  W1ABC  FT8  1200Z")       # NA
+        self.spot(12, "DX de OE3GAS:  28400.0  VP8ABC SSB  1200Z")       # SA
+        self.spot(13, "DX de W1AW:    14025.0  JA1XX  CW   1200Z")       # NA spotter: no
+        self.spot(90, "DX de OE3GAS:  14025.0  JA1XX  CW   1200Z")       # older than 1 h: no
+        b = self.by_replace(self.run_live())["dxfeed-baender"]
+        dat = b.page["blk"][0]["v"]
+        self.assertEqual((dat["kind"], dat["spots"], b.valid), ("paths", 3, "90m"))
+        rows = {r[0]: r[1:] for r in dat["path"]}
+        eu, na, sa = (livemod.CONTS.index(x) for x in ("EU", "NA", "SA"))
+        self.assertEqual((rows["20m"][eu], rows["20m"][na], rows["10m"][sa]), (1, 1, 1))
+        self.assertNotIn("dxfeed-baender", self.by_replace(self.run_live(at=1800)))
+        self.assertNotIn("dxfeed-baender", self.by_replace(self.run_live(at=3600)))  # no spots: none
+        self.spot(-100, "DX de OE3GAS:  14200.0  DL1XX  SSB  1340Z")   # 20 min before the run
+        self.assertIn("dxfeed-baender", self.by_replace(self.run_live(at=7200)))
+
+    def test_new_on_the_air_once_and_throttled(self):
+        self.rare()
+        res = self.by_replace(self.run_live())
+        b = res["dxfeed-neu-VP8ABC"]
+        self.assertEqual(b.page["blk"][0]["v"]["kind"], "new")
+        self.assertIn("Falkland Islands", b.subject)
+        self.assertIn("14025", b.subject)
+        self.assertNotIn("dxfeed-neu-VP8ABC", self.by_replace(self.run_live(at=600)))  # once a day
+        # spotted before the window (quiet hours): not new
+        self.spot(300, "DX de OE3GAS:  14025.0  VP8OLD  CW  0800Z")
+        self.rare(call="VP8OLD")
+        self.assertNotIn("dxfeed-neu-VP8OLD", self.by_replace(self.run_live(at=1200)))
+        # common entity (rank 300 > 100): never
+        self.rare(call="3B8NEW")
+        self.assertNotIn("dxfeed-neu-3B8NEW", self.by_replace(self.run_live(at=1800)))
+
+    def test_new_limit_per_hour(self):
+        for i in range(5):
+            self.rare(call=f"VP8N{i}", qrg=f"1402{i}.0")
+        res = self.run_live()
+        news = [b for b in res.bulletins if b.replace.startswith("dxfeed-neu-")]
+        self.assertEqual(len(news), 3)                          # new_per_hour
+        self.assertTrue(any("zurueckgestellt" in n for n in res.notes))
+
+    def test_no_state_write_when_nothing_changes(self):
+        self.rare()
+        self.run_live()
+        mtime = self.state.path.stat().st_mtime_ns
+        state2 = livemod.State(self.state.path)
+        livemod.run([], self.cfg, state2, self.now + 60, self.mw, self.dxcc)   # nothing due
+        self.assertEqual(self.state.path.stat().st_mtime_ns, mtime)
+
+    def test_pages_fit_and_inbox_accepts_them(self):
+        for i in range(8):
+            self.rare(call=f"VP8Q{i}", qrg=f"{14020 + i}.0")
+        res = self.run_live(state=None, force=True)
+        kinds = {b.page["blk"][0]["v"]["kind"]: b for b in res.bulletins}
+        self.assertEqual(set(kinds), {"now", "paths", "new"})
+        for kind, b in kinds.items():
+            page = {**b.page, "id": 500, "rev": 0, "t": int(self.now)}
+            built = self.fragment.build(self.codec, page, self.zd)
+            self.assertLessEqual(built.fragments, 2 if kind == "now" else 1, kind)
+            back = self.codec.from_wire(self.codec.to_wire(page))
+            self.assertEqual(back["blk"][0]["v"]["kind"], kind)
+            f, = write_inbox(self.cfg.digest.inbox, b, self.cfg.digest)
+            msg = inbox.parse(f.read_bytes())
+            self.assertEqual(msg.replace, b.replace)
+            self.assertEqual(msg.valid_min, {"now": 120, "paths": 90, "new": 120}[kind])

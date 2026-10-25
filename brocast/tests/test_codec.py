@@ -361,3 +361,42 @@ class DxSummaryV4Tests(unittest.TestCase):
         del data["types"]["dxsum"][7]["cols"]
         with self.assertRaises(DictionaryError):
             Dictionary(data)
+
+
+class DxLiveV5Tests(unittest.TestCase):
+    """Dictionary v5: dxsum kind, path matrix, qrg column (PLANUNG 16c)."""
+
+    def setUp(self):
+        self.codec = Codec()
+
+    def test_kind_path_and_qrg(self):
+        self.assertGreaterEqual(self.codec.d.version, 5)
+        page = {"id": 7, "t": 1790000000, "typ": "dxsum", "blk": [{"k": "data", "v": {
+            "kind": "paths", "path": [["10m", 0, 0, 1, 12, 8, 0, 4]],
+            "st": [["B", "VP8ABC", "VP8", 4, 50, 20, 3, 1 << 5, 0, 0, 0, None, 14025]]}}]}
+        wire = self.codec.to_wire(page)
+        v = wire[19][0][-3]
+        self.assertEqual(v[10], 3)                       # paths
+        self.assertEqual(v[9][0][0], 9)                  # 10m
+        self.assertEqual(v[7][0][-1], 14025)
+        back = self.codec.decode(cbor2.dumps(wire))["blk"][0]["v"]
+        self.assertEqual(back["kind"], "paths")
+        self.assertEqual(back["path"][0][:2], ["10m", 0])
+        self.assertEqual(back["st"][0][-1], 14025)
+
+    def test_columns_may_only_be_appended(self):
+        import copy
+        import yaml
+        from brocast import dictimport
+        data = yaml.safe_load((ROOT / "brocast-core.yaml").read_text(encoding="utf-8"))
+        old = Dictionary(data)
+        new = copy.deepcopy(data)
+        new["version"] += 1
+        cols = new["types"]["dxsum"][7]["cols"]
+        cols[1], cols[2] = cols[2], cols[1]               # swap call and dxcc
+        with self.assertRaises(dictimport.ImportError_):
+            dictimport.check(old, Dictionary(new))
+        ok = copy.deepcopy(data)
+        ok["version"] += 1
+        ok["types"]["dxsum"][7]["cols"].append({"name": "extra"})
+        dictimport.check(old, Dictionary(ok))             # appending is fine

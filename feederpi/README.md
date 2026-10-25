@@ -5,7 +5,8 @@ Der Feeder-Pi übernimmt die Content-Lieferanten, die bisher auf dem TinyBox-PC 
 | Job | Zeitplan | Ergebnis |
 |---|---|---|
 | dxfeed-Sammler (`dxfeed collect`) | Dauerbetrieb | Spots in `/opt/tinybox/data/dxfeed.db` |
-| DX-Zusammenfassung (`dxfeed digest`) | täglich 05:00 | Bulletins an `DX` |
+| DX-Zusammenfassung (`dxfeed digest`) | alle 3 Stunden (02:00, 05:00 …) | Bulletins an `DX` (gleitend 24 h) |
+| DX live (`dxfeed live`) | alle 10 min | DX jetzt, Bänder jetzt, Neu auf dem Band (PLANUNG 16c) |
 | GeoSphere-Wetter (`--region`) | stündlich xx:05 | 24 Einzelberichte + Überblick an `WX` |
 | GeoSphere-Warnungen | alle 15 min | Bulletin an `WARN` (nur bei Änderung) |
 | GeoSphere-Prognose | alle 3 h, xx:35 | je Locator ein Bulletin an `WX` |
@@ -79,7 +80,7 @@ sudo sh /boot/firmware/feederpi/install.sh
 die Benutzer `tinybox` (Jobs) und `abholer` (nur für den PC), den SSH-Zugang des PCs, die
 Programme in `/opt/tinybox`, die Zeitpläne und die automatischen Sicherheitsupdates. Das
 dauert auf dem Pi 1 rund 10 Minuten, vor allem wegen `apt`. Danach laufen sofort ein
-Wetter- und ein Warnungsabruf; die erste DX-Zusammenfassung kommt am nächsten Morgen um 05:00.
+Wetter- und ein Warnungsabruf; „DX jetzt“ und „Bänder jetzt“ kommen nach 10–60 Minuten, die DX-Zusammenfassung alle 3 Stunden (vollständig nach einem Tag Sammeln).
 
 ### 4. Abholung einrichten (am TinyBox-PC)
 
@@ -105,7 +106,7 @@ schaltet es ab, indem es `dxfeed.conf` in `dxfeed.conf.vor-feederpi` umbenennt
 |---|---|
 | Zeitpläne | `systemctl list-timers 'geosphere*' 'dxfeed*'` |
 | Sammler | `systemctl status dxfeed` · `journalctl -u dxfeed -f` |
-| Logs eines Jobs | `journalctl -u geosphere-wetter -n 30` (ebenso `geosphere-warnungen`, `geosphere-prognose`, `dxfeed-digest`) |
+| Logs eines Jobs | `journalctl -u geosphere-wetter -n 30` (ebenso `geosphere-warnungen`, `geosphere-prognose`, `dxfeed-digest`, `dxfeed-live`) |
 | Job sofort laufen lassen | `sudo systemctl start geosphere-prognose.service` |
 | DX-Zusammenfassung ansehen | `cd /opt/tinybox && sudo -u tinybox python3 -m dxfeed -c dxfeed.conf digest` |
 | Was wartet auf Abholung | `ls -l /run/tinybox/ausgang` |

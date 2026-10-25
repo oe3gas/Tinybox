@@ -1,7 +1,7 @@
 #!/bin/sh
 # shellcheck disable=SC2086,SC1091   # word lists on purpose; os-release only on the Pi
 # Feeder-Pi: install or update the content jobs on a Raspberry Pi (model 1 and up).
-#   dxfeed   (DX cluster collector + daily digest 05:00)
+#   dxfeed   (DX cluster collector, digest every 3 h, live every 10 min)
 #   GeoSphere weather (hourly), warnings (15 min), forecast (3 h)
 # The results land in /run/tinybox/ausgang (RAM); the PC fetches them over SSH
 # (pi_abholung.py) into the TinyBox inbox. Details: feederpi/README.md
@@ -27,11 +27,12 @@ PC_USER=abholer
 PC_HOME=/var/lib/abholer
 PC_CMD=/usr/local/lib/feederpi/abholung.sh   # root-owned, outside /opt/tinybox
 UNITS="dxfeed.service dxfeed-digest.service dxfeed-digest.timer
+dxfeed-live.service dxfeed-live.timer
 geosphere-wetter.service geosphere-wetter.timer
 geosphere-warnungen.service geosphere-warnungen.timer
 geosphere-prognose.service geosphere-prognose.timer"
 TIMERS="geosphere-wetter.timer geosphere-warnungen.timer geosphere-prognose.timer"
-DXFEED="dxfeed.service dxfeed-digest.timer"
+DXFEED="dxfeed.service dxfeed-digest.timer dxfeed-live.timer"
 
 say()  { printf '\n=== %s\n' "$*"; }
 hint() { printf 'HINWEIS: %s\n' "$*"; }
@@ -202,7 +203,7 @@ for u in $TIMERS; do systemctl restart "$u"; done
 if grep -Eq '^[[:space:]]*login[[:space:]]*=[[:space:]]*[A-Za-z0-9]' "$DEST/dxfeed.conf"; then
     systemctl enable $DXFEED >/dev/null 2>&1
     for u in $DXFEED; do systemctl restart "$u"; done
-    echo "dxfeed laeuft (Sammler + Zusammenfassung 05:00)"
+    echo "dxfeed laeuft (Sammler, Zusammenfassung alle 3 h, live alle 10 min)"
     DX_OK=1
 else
     systemctl disable $DXFEED >/dev/null 2>&1 || true
@@ -233,5 +234,5 @@ if [ "$DX_OK" -eq 0 ]; then
     hint "dxfeed ist aus: in $DEST/dxfeed.conf unter [cluster] login das Rufzeichen eintragen,"
     echo "         dann: sudo systemctl enable --now $DXFEED"
 elif [ "$FIRST_DX" -eq 1 ]; then
-    echo "dxfeed:    erste Zusammenfassung morgen 05:00 (der Sammler braucht 24 Stunden Spots)"
+    echo "dxfeed:    DX jetzt / Baender jetzt nach 10-60 min, volle 24-h-Zusammenfassung nach einem Tag"
 fi

@@ -2,7 +2,8 @@
 ; Copy to dxfeed.conf and enter your callsign. Never put dxfeed.conf into git.
 ;
 ;   collector:  dxfeed.bat collect   (or start_alles.bat with START_DXFEED=1)
-;   digest:     daily at 05:00 by dxfeed_aufgabe_einrichten.bat
+;   digest:     every 3 hours (rolling 24 h) by dxfeed_aufgabe_einrichten.bat
+;   live:       every 10 minutes (DX jetzt, Baender jetzt, Neu auf dem Band), same script
 ;   check:      dxfeed.bat status  |  dxfeed.bat show  |  dxfeed.bat digest
 ;   lists:      dxfeed.bat cty-update  |  dxfeed.bat mw-update (Club Log Most Wanted)
 
@@ -54,6 +55,27 @@ brocast_tiers    = AB                  ; tiers that go over the air (mailbox tex
 brocast_min_rows = 10                  ; at least this many: filled up by relevance (tier C)
 brocast_max_rows = 12                  ; stations page: 8 stations ~ 1 frame, 12 ~ 2 frames
 ; inbox      =                         ; default: [inbox] dir from tinybox.conf (only to override)
+
+[live]
+; PLANUNG 16c: short-lived bulletins next to the 24 h overview, run every 10 min
+; ("dxfeed live --tinybox"); each replaces the one before and runs out by Valid
+; state = data/dxfeed-live.json        ; written only when it changes
+now          = yes                     ; "DX jetzt": tiers now_tiers of the last now_hours
+now_hours    = 2
+now_every    = 30                      ; minutes between checks, sent only on change
+now_tiers    = AB
+now_max_rows = 8                       ; 8 stations ~ 1-2 frames
+now_valid    = 2h
+bands        = yes                     ; "Baender jetzt": last hour, all entities, by DX continent
+bands_every  = 60
+bands_valid  = 90m
+new          = yes                     ; "Neu auf dem Band" (needs the Most Wanted list)
+new_max_rank     = 100                 ; Club Log rank at most
+new_min_spotters = 3                   ; different spotters within new_window minutes
+new_window       = 60
+new_quiet_hours  = 24                  ; not spotted at all before for this long
+new_per_hour     = 3
+new_valid        = 2h
 
 [log]
 level = INFO

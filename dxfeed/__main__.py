@@ -3,6 +3,8 @@
     collect              connect to the cluster and store spots (runs until Ctrl+C)
     digest               print the DX digest of the last 24 hours
     digest --tinybox     ... and put it into the TinyBox inbox folder (bulletin to DX)
+    live                 DX jetzt / Baender jetzt / Neu auf dem Band - only show
+    live --tinybox       ... what is due now into the inbox (every 10 min, PLANUNG 16c)
     show [-n 20]         the last spots in the database
     status               spots, coverage, cty.dat and Most Wanted state
     cty-update           download the AD1C country file now
@@ -25,6 +27,7 @@ from pathlib import Path
 from . import VERSION
 from . import cty as ctymod
 from . import dxcc as dxccmod
+from . import live as livemod
 from . import mostwanted as mwmod
 from .collector import Collector
 from .config import Config, ConfigError, load
@@ -132,6 +135,37 @@ def cmd_digest(cfg: Config, args) -> int:
     return 0
 
 
+def cmd_live(cfg: Config, args) -> int:
+    now = time.time() // 60 * 60
+    store = Store(cfg.data.db)
+    try:
+        rows = store.spots(livemod.window_start(cfg, now), now + 60)
+    finally:
+        store.close()
+    show = args.tinybox is None
+    # only show: everything, regardless of intervals, and the state stays as it is
+    state = None if show else livemod.State(cfg.live.state)
+    mw = load_mostwanted(cfg)
+    res = livemod.run(rows, cfg, state, now, mw, dxccmod.load_or_none(cfg.data.dictionary),
+                      force=show)
+    if show:
+        for i, b in enumerate(res.bulletins):
+            if i:
+                print("\n" + "=" * 73 + "\n")
+            print(f"Subject: {b.subject}   (Replace: {b.replace}, Valid: {b.valid})\n")
+            print(b.text, end="")
+            if b.page is not None:
+                size = len(json.dumps(b.page, separators=(",", ":")))
+                print(f"[brocast-Seite dxsum {b.page['blk'][0]['v'].get('kind')}, JSON {size} Bytes]")
+        print("\n" + "; ".join(res.notes))
+        return 0 if res.bulletins else 1
+    for b in res.bulletins:
+        for target in write_inbox(args.tinybox or cfg.digest.inbox, b, cfg.digest):
+            log.info("live: %s -> %s", b.subject, target.name)
+    log.info("live: %s", "; ".join(res.notes) or "nothing due")
+    return 0
+
+
 def cmd_show(cfg: Config, args) -> int:
     store = Store(cfg.data.db)
     try:
@@ -233,6 +267,9 @@ def run(argv: list[str] | None = None) -> int:
                    help="put it into the TinyBox inbox folder (default from dxfeed.conf)")
     p.add_argument("--until", metavar="'YYYY-MM-DD HH:MM'",
                    help="end of the window, local time (default: now)")
+    p = sub.add_parser("live", help="DX jetzt, Baender jetzt, Neu auf dem Band")
+    p.add_argument("--tinybox", nargs="?", const="", metavar="DIR",
+                   help="put what is due into the TinyBox inbox folder (else only show all)")
     p = sub.add_parser("show", help="last spots")
     p.add_argument("-n", type=int, default=20)
     sub.add_parser("status", help="database and cty.dat state")
@@ -246,7 +283,7 @@ def run(argv: list[str] | None = None) -> int:
         print(f"dxfeed: {exc}", file=sys.stderr)
         return 2
     setup_logging(cfg.log_level, args.log or cfg.log_file)
-    handler = {"collect": cmd_collect, "digest": cmd_digest, "show": cmd_show,
+    handler = {"collect": cmd_collect, "digest": cmd_digest, "live": cmd_live, "show": cmd_show,
                "status": cmd_status, "cty-update": cmd_cty_update,
                "mw-update": cmd_mw_update}[args.cmd]
     try:

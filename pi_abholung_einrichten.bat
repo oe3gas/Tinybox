@@ -54,6 +54,7 @@ schtasks /Delete /F /TN "brocast\GeoSphere Wetter" 2>nul
 schtasks /Delete /F /TN "brocast\GeoSphere Warnungen" 2>nul
 schtasks /Delete /F /TN "brocast\GeoSphere Prognose" 2>nul
 schtasks /Delete /F /TN "TinyBox\DX-Zusammenfassung" 2>nul
+schtasks /Delete /F /TN "TinyBox\DX-Live" 2>nul
 rem start_alles.bat startet den Sammler nur, wenn dxfeed.conf da ist
 if exist "%~dp0dxfeed.conf" (
     move /Y "%~dp0dxfeed.conf" "%~dp0dxfeed.conf.vor-feederpi" >nul
