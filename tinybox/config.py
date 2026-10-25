@@ -250,6 +250,8 @@ class BrocastCfg:
     destinations: list[str] = field(default_factory=list)   # empty = all bulletins
     rubrics: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_RUBRICS))
     sync_min: int = 60              # full sync interval
+    air_days: int = 0               # on air only n days after the bulletin was written,
+                                    # 0 = as long as it is in the mailbox
     alert_destinations: list[str] = field(default_factory=lambda: ["WARN"])  # -> warning pages
 
 
@@ -778,6 +780,8 @@ def load(path: str | Path) -> Config:
     _check_range("brocast", "max_bytes", brocast.max_bytes, 256, 65536)
     brocast.sync_min = _get(cp, "brocast", "sync_min", 60, int)
     _check_range("brocast", "sync_min", brocast.sync_min, 1, 1440)
+    brocast.air_days = _get(cp, "brocast", "air_days", 0, int)
+    _check_range("brocast", "air_days", brocast.air_days, 0, 3650)
     alerts = _get(cp, "brocast", "alert_destinations", "WARN").replace(",", " ").split()
     brocast.alert_destinations = [normalize_call(d) for d in alerts]
     dests = _get(cp, "brocast", "destinations", "").replace(",", " ").split()

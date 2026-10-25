@@ -41,10 +41,15 @@ burst_frames       = 4         ; höchstens n Frames pro Aussendung (PTT-Zyklus)
 burst_gap_s        = 3         ; Pause nach jeder Aussendung, Kanal frei für andere Stationen
 repeat_minutes     = 0,2,5,10  ; neue Revision sofort, dann nach 2, 5, 10 min ...
 max_interval_min   = 30        ; ... danach alle 30 min
-aging              = 24:120    ; ... und ab 24 h Alter nur noch alle 120 min.
-                               ; Mehrere Stufen mit Komma, 0 min = gar nicht mehr senden
-                               ; (die Seite bleibt, eine neue Revision weckt sie wieder),
-                               ; z. B.  aging = 24:120, 168:0   ; leer = keine Alterung
+aging              = 24:120, 72:360, 168:1440
+                               ; ... ab 24 h Alter alle 2 h, ab 3 Tagen alle 6 h, ab 7 Tagen
+                               ; einmal am Tag (spaet einschaltende Listener bekommen die Seite
+                               ; so noch; Pull gibt es nicht). Alter = seit der Lieferant den
+                               ; Inhalt geschrieben hat ("born", TinyBox: Bulletin-Datum), sonst
+                               ; seit der Revision - stuendliche Bestaetigungen zaehlen nicht.
+                               ; 0 min = gar nicht mehr senden (die Seite bleibt, eine neue
+                               ; Revision weckt sie wieder), z. B. 24:120, 168:0
+                               ; leer = keine Alterung
 wire_format        = 2         ; 2 = Umschlag einmal, Inhalt gepackt in Fragmenten (Standard)
                                ; 1 = eine vollständige Seite je Frame (alt, ca. doppelte
                                ; Sendezeit; nur für Vergleichsmessungen)

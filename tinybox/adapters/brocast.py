@@ -24,8 +24,15 @@ Mapping bulletin -> page (agreed 02.10.2026):
     ti   subject (max 40 chars; longer: full subject as heading)
     cat  from the destination via [brocast] rubrics (unknown: own rubric)
     to   destination, src ["tinybox", author] (Liste src, ab Dictionary v3), exp = bulletin lifetime
+         (at most [brocast] air_days)
+    born creation time of the bulletin (ingest-only, not on air): brocastd's
+         carousel ages the page from it ([station] aging)
     blk  body, paragraphs split at blank lines; cut at max_bytes with a
          hint "Vollständig in der Mailbox <call>: R <n>"
+
+[brocast] air_days limits the time on air independent of the mailbox: older
+bulletins are left out of the sync, so brocastd withdraws them, while TinyBox
+keeps them until bulletin_expire_days.
 
 Bulletins from the inbox may carry a ready page ("Brocast:" header, PLANUNG
 6d, e.g. a weather page typ wx). Then that page is sent instead; TinyBox only
@@ -36,8 +43,10 @@ sent as a fallback.
 from __future__ import annotations
 
 import asyncio
+import calendar
 import json
 import logging
+import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -90,14 +99,34 @@ def lifetime_min(days: int) -> int:
     return FOREVER_MIN if days <= 0 else days * 1440
 
 
+TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def born(msg: Message) -> int | None:
+    """Creation time of the bulletin as Unix seconds (UTC), None if unknown."""
+    try:
+        return calendar.timegm(time.strptime(msg.created, TIME_FMT))
+    except (TypeError, ValueError):
+        return None
+
+
+def on_air(msg: Message, app: App, now: float | None = None) -> bool:
+    """False once the bulletin is older than [brocast] air_days."""
+    days = app.cfg.brocast.air_days
+    t = born(msg)
+    if days <= 0 or t is None:
+        return True
+    return (time.time() if now is None else now) - t < days * 86400
+
+
 def _valid_min(msg: Message) -> int | None:
     """Bulletins from the inbox with "Valid:": the same validity for the page.
     expires - created is constant per content, so syncs stay idempotent."""
     if not msg.expires:
         return None
-    fmt = "%Y-%m-%dT%H:%M:%SZ"
     try:
-        span = datetime.strptime(msg.expires, fmt) - datetime.strptime(msg.created, fmt)
+        span = (datetime.strptime(msg.expires, TIME_FMT)
+                - datetime.strptime(msg.created, TIME_FMT))
     except ValueError:
         return None
     return max(int(span.total_seconds() // 60), 1)
@@ -120,7 +149,7 @@ def text_page(msg: Message, app: App) -> dict[str, Any]:
                             f"{app.cfg.station.mailbox_call}: R {msg.id}"})
     if not blocks:
         blocks.append({"k": "para", "x": "(leer)"})
-    return {
+    page = {
         # bulletins to an alert destination (WARN) become warning pages: the
         # listener always shows them, highlighted, even if the rubric is deselected
         "typ": "alert" if msg.to_call in cfg.alert_destinations else "text",
@@ -131,10 +160,20 @@ def text_page(msg: Message, app: App) -> dict[str, Any]:
         "exp": _exp(msg, app),
         "blk": blocks,
     }
+    _set_born(page, msg)
+    return page
+
+
+def _set_born(page: dict[str, Any], msg: Message) -> None:
+    t = born(msg)
+    if t is not None:
+        page.setdefault("born", t)
 
 
 def _exp(msg: Message, app: App) -> int:
-    return _valid_min(msg) or lifetime_min(app.cfg.mailbox.bulletin_expire_days)
+    exp = _valid_min(msg) or lifetime_min(app.cfg.mailbox.bulletin_expire_days)
+    air = app.cfg.brocast.air_days
+    return min(exp, air * 1440) if air > 0 else exp
 
 
 def delivered_page(msg: Message, app: App) -> dict[str, Any] | None:
@@ -153,6 +192,7 @@ def delivered_page(msg: Message, app: App) -> dict[str, Any] | None:
                     else subject[:TITLE_MAX - 1].rstrip() + "…")
     page.setdefault("cat", [cfg.rubrics.get(msg.to_call, msg.to_call)])
     page.setdefault("exp", _exp(msg, app))
+    _set_born(page, msg)
     return page
 
 
@@ -185,6 +225,8 @@ def wanted(msg: Message, app: App) -> bool:
         return False                    # held for the sysop (e.g. new rubric, CR19)
     if msg.to_call == NEWS_RUBRIC:
         return False                    # client news: for TinyBox users only, not on brocast
+    if not on_air(msg, app):
+        return False                    # older than air_days: off the air, still in the mailbox
     return msg.type == "B" and (not dests or msg.to_call in dests)
 
 

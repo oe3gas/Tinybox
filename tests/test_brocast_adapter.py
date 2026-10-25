@@ -284,3 +284,42 @@ class UnreachableTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AirDaysTests(unittest.TestCase):
+    """born (Bulletin-Datum für das Alter im Karussell) und air_days (Funkdauer)."""
+
+    def setUp(self):
+        self.app = make_app()
+        self.app.cfg.brocast = BrocastCfg(publish=True)
+
+    def test_born_is_the_creation_time(self):
+        page = brocast.to_page(msg(created="2026-10-05T12:00:00Z"), self.app)
+        self.assertEqual(page["born"], 1791201600)     # 2026-10-05 12:00 UTC
+
+    def test_no_born_for_unknown_date(self):
+        self.assertNotIn("born", brocast.to_page(msg(created="kaputt"), self.app))
+
+    def test_delivered_page_gets_born(self):
+        page = brocast.to_page(msg(brocast=json.dumps({"typ": "wx", "dat": {}})), self.app)
+        self.assertIn("born", page)
+
+    def test_air_days_off_by_default(self):
+        self.assertTrue(brocast.on_air(msg(), self.app, now=1791201600 + 400 * 86400))
+
+    def test_air_days_limits_the_time_on_air(self):
+        self.app.cfg.brocast.air_days = 7
+        born = 1791201600
+        m = msg(created="2026-10-05T12:00:00Z")
+        self.assertTrue(brocast.on_air(m, self.app, now=born + 6 * 86400))
+        self.assertFalse(brocast.on_air(m, self.app, now=born + 8 * 86400))
+
+    def test_old_bulletin_is_not_wanted(self):
+        self.app.cfg.brocast.air_days = 1
+        self.assertFalse(brocast.wanted(msg(created="2020-01-01T00:00:00Z"), self.app))
+
+    def test_exp_at_most_air_days(self):
+        self.app.cfg.brocast.air_days = 7
+        self.assertEqual(brocast.to_page(msg(), self.app)["exp"], 7 * 1440)
+        self.app.cfg.brocast.air_days = 60          # Mailbox-Frist (30 Tage) ist kürzer
+        self.assertEqual(brocast.to_page(msg(), self.app)["exp"], 30 * 1440)

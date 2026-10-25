@@ -124,10 +124,19 @@ Eine neue Revision geht sofort hinaus, dann nach `repeat_minutes`, danach alle
 
 ```
 [station]
-aging = 24:120, 168:0   ; ab 24 h alle 120 min, ab 7 Tagen nicht mehr senden
+aging = 24:120, 72:360, 168:1440   ; Vorgabe: ab 24 h alle 2 h, ab 3 Tagen alle 6 h,
+                                   ; ab 7 Tagen einmal am Tag
 ```
 
-`0` heißt: die Seite ruht. Sie bleibt im Bestand und geht wieder auf Funk,
+Das Alter zählt ab dem Zeitpunkt, an dem der Inhalt entstanden ist: liefert
+der Lieferant das Ingest-Feld `born` (Unix-Sekunden, geht nicht über Funk),
+gilt dieses – TinyBox schickt das Erstelldatum des Bulletins mit. Sonst zählt
+der Zeitpunkt der Revision. Die regelmäßigen Bestätigungen (stündlicher Sync)
+setzen das Alter nicht zurück; sie halten nur `t` frisch, wovon der Ablauf
+(`exp`) abhängt. `born` verändert den Inhalt nicht: wird es nachgeliefert,
+entsteht keine neue Revision, nur das Alter wird korrigiert.
+
+Mit `168:0` statt `168:1440` ruht eine Seite nach 7 Tagen ganz. `0` heißt: die Seite ruht. Sie bleibt im Bestand und geht wieder auf Funk,
 sobald der Lieferant sie ändert (neue Revision). Das ist der größte Hebel,
 wenn viele alte Bulletins im Karussell liegen – zum Beispiel ein Dutzend
 Client-News, die sich nicht mehr ändern.

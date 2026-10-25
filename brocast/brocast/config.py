@@ -63,7 +63,8 @@ class StationCfg:
     # Alterung: (Alter der Revision in Stunden, Intervall in Minuten), aufsteigend.
     # Eine alte Seite muss nicht so oft wiederholt werden wie eine frische;
     # 0 Minuten = gar nicht mehr senden (bleibt im Bestand, neue Revision weckt sie).
-    aging: list[tuple[int, int]] = field(default_factory=lambda: [(24, 120)])
+    aging: list[tuple[int, int]] = field(
+        default_factory=lambda: [(24, 120), (72, 360), (168, 1440)])
     withdraw_repeats: int = 3
     wire_format: int = 2          # 1 = eine Seite je Frame (alt), 2 = Fragmente (fragment.py)
     compress: bool = True         # Format 2: Blockliste mit Preset-Wörterbuch packen
@@ -315,7 +316,7 @@ def load(path: str | Path) -> Config:
             repeat_minutes=_ints(get("station", "repeat_minutes", "0,2,5,10"),
                                  "[station] repeat_minutes"),
             max_interval_min=getint("station", "max_interval_min", st.max_interval_min),
-            aging=_aging(get("station", "aging", "24:120"), "[station] aging"),
+            aging=_aging(get("station", "aging", "24:120, 72:360, 168:1440"), "[station] aging"),
             withdraw_repeats=getint("station", "withdraw_repeats", st.withdraw_repeats),
             wire_format=getint("station", "wire_format", st.wire_format),
             compress=getbool("station", "compress", st.compress),

@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- brocast Karussell (PLANUNG 23): **Fehler behoben** – die Alterung (`aging`) griff nie, weil der
+  stündliche Sync das Alter zurücksetzte; alte Bulletins liefen dauerhaft alle 30 min. Das Alter
+  zählt jetzt ab der Revision bzw. ab `born` (neues Ingest-Feld, TinyBox schickt das
+  Bulletin-Datum). Neue Vorgabe `aging = 24:120, 72:360, 168:1440`. Datenbank-Schema 4
+  (`pages.rev_t`, wird automatisch nachgezogen).
+- TinyBox `[brocast] air_days`: Bulletins nur n Tage nach dem Schreiben über brocast, in der
+  Mailbox bleiben sie länger (0 = wie bisher).
 - dxfeed live (PLANUNG 16c): „DX jetzt“ (letzte 2 h, nur bei Änderung), „Bänder jetzt“
   (letzte Stunde nach Kontinent der DX-Station, alle Gebiete) und „Neu auf dem Band“
   (seltenes DX, gedrosselt) als eigene, sich selbst ersetzende Bulletins; Aufgabe/Timer

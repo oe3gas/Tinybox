@@ -109,6 +109,9 @@ max_bytes  = 4096                        # longer bulletins are cut, with a hint
 destinations =                           # empty = all bulletins, e.g. DX WX ALL
 rubrics    =                             # extra DEST:rubric pairs, e.g. FUCHS:Fuchsjagd
 sync_min   = 60                          # full sync with brocastd every n minutes
+air_days   = 0                           # on air only n days after writing (then withdrawn
+                                         # from brocast, stays in the mailbox); 0 = as long
+                                         # as the mailbox keeps it (bulletin_expire_days)
 alert_destinations = WARN                # these bulletins become warning pages in brocast
 
 [inbox]

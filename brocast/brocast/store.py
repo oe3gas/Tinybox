@@ -11,7 +11,8 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-SCHEMA_VERSION = 3          # 2: pages.hdr (Frame-Format je Seite); 3: lpages.wire_*
+SCHEMA_VERSION = 4          # 2: pages.hdr (Frame-Format je Seite); 3: lpages.wire_*;
+                            # 4: pages.rev_t (Alter der Revision fuer aging)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS pages (
     last_tx       INTEGER,
     next_tx       INTEGER NOT NULL,
     hdr           INTEGER NOT NULL DEFAULT 16, -- header byte of this page's frames
+    rev_t         INTEGER NOT NULL DEFAULT 0,  -- Unix time the content was born (aging)
     UNIQUE (provider, pkey)
 );
 CREATE TABLE IF NOT EXISTS frames (
@@ -154,6 +156,8 @@ class PageRow:
     last_tx: int | None
     next_tx: int
     hdr: int = 16               # Header-Byte der Frames (frame.header(); 16 = Format 1)
+    rev_t: int = 0              # Geburt des Inhalts (Lieferant "born" oder neue Revision);
+                                # davon haengt aging ab, nicht von t (= letzte Bestaetigung)
 
 
 class Store:
@@ -176,6 +180,10 @@ class Store:
         cols = {r["name"] for r in self.db.execute("PRAGMA table_info(pages)")}
         if "hdr" not in cols:                    # Schema 1 -> 2 (Frame-Format je Seite)
             self.db.execute("ALTER TABLE pages ADD COLUMN hdr INTEGER NOT NULL DEFAULT 16")
+        if "rev_t" not in cols:                  # Schema 3 -> 4 (Alter der Revision)
+            self.db.execute("ALTER TABLE pages ADD COLUMN rev_t INTEGER NOT NULL DEFAULT 0")
+        # unbekanntes Alter (alte DB, frueher Bug: t wurde stuendlich erneuert): jetzt
+        self.db.execute("UPDATE pages SET rev_t = t WHERE rev_t = 0")
         lcols = {r["name"] for r in self.db.execute("PRAGMA table_info(lpages)")}
         for name in ("wire_frames", "wire_bytes"):   # Schema 2 -> 3 (echte Funkgröße)
             if name not in lcols:
@@ -222,7 +230,8 @@ class Store:
     def save_page(self, row: PageRow, frames: list[bytes]) -> int:
         """Insert (pid == 0) or update a page together with its frames."""
         fields = ("provider", "pkey", "id", "rev", "t", "content", "content_hash", "exp_min",
-                  "pri", "state", "withdraw_left", "tx_count", "last_tx", "next_tx", "hdr")
+                  "pri", "state", "withdraw_left", "tx_count", "last_tx", "next_tx", "hdr",
+                  "rev_t")
         values = tuple(getattr(row, f) for f in fields)
         with self.lock, self.db:
             if row.pid:

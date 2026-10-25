@@ -277,7 +277,7 @@ Der AX.25-Kopf selbst (17 B, ≈ 8 %) ist kein Hebel: größere Frames als 256 B
 
 1. **Frame-Format 2** (`[station] wire_format = 2`, Standard, `brocast/brocast/fragment.py`): Fragment 1 trägt den Umschlag, die folgenden nur `id`, `rev`, `sub`; der Inhalt (Blockliste) geht als **ein** Blob über Funk und die Frames sind randvoll. Die Formatnummer steht im hohen Nibble des Header-Bytes – ältere Listener lassen die Frames liegen (keine halben Seiten) und melden „neueres Format“.
 2. **Kompression mit Preset-Wörterbuch** (`compress = yes`, `brocast/zdict/brocast-zdict-1.bin`, 32 kB, erzeugt mit `tools/build_zdict.py`): raw deflate, Wörterbuch auf beiden Seiten vorhanden, Generation im Frame, SHA-256 beim Start geprüft. Passt es nicht, wird unkomprimiert gesendet. brotli, zstd und unishox brachten im Vergleich keinen Vorteil, der eine zusätzliche Abhängigkeit rechtfertigt (zlib ist Standardbibliothek und wird für das Dictionary über Funk schon benutzt).
-3. **Alterung im Karussell** (`aging = 24:120`): eine Revision, die älter als 24 h ist, wird nur noch alle 120 min wiederholt; `168:0` lässt sie ruhen, bis der Lieferant sie ändert.
+3. **Alterung im Karussell** (`aging = 24:120`): eine Revision, die älter als 24 h ist, wird nur noch alle 120 min wiederholt; `168:0` lässt sie ruhen, bis der Lieferant sie ändert. (Griff bis 25.10.2026 wegen eines Fehlers nicht; Vorgabe jetzt feiner, siehe Abschnitt 23.)
 4. Unvollständige Seiten werden **nur im Arbeitsspeicher** gesammelt (15 min, höchstens 64) – kein Datenbankschreiben je Frame (offener Punkt 9).
 
 **Rechnung** (1200 Bd, TXDELAY 300 ms, 4 Frames je Aussendung, 3 s Pause; „Dauer“ = Kanalbelegung mit Pausen):
@@ -1410,6 +1410,36 @@ auf einem Raspberry Pi 1 (512 MB, SD-Karte 4 GB). Anleitung: `feederpi/README.md
   (KISS) denkbar und ohne Reserve; mit Direwolf am selben Pi zu knapp. Eine SSD bringt dort
   nichts (Datenbank wenige MB, kein USB-Boot, USB 2.0 teilt sich den Bus mit dem LAN). Ziel für
   die TinyBox bleibt der NanoPi (`PRODUCTION.md`) bzw. ein Pi ab Modell 3.
+
+## 23. Karussell: Alter der Revision, Funkdauer getrennt von der Mailbox (entschieden und umgesetzt 25.10.2026)
+
+**Befund:** Bulletins vom 5.10. liefen am 25.10. noch alle 30 min. Ursache war ein Fehler:
+`aging` rechnete mit `pages.t`, und `t` ist der Zeitpunkt der *letzten Bestätigung* – der
+stündliche Sync der TinyBox setzte das Alter jedes Mal auf 0. Die Stufe `24:120` griff nie.
+(Dasselbe gilt für den Ablauf `exp`; dort ist es aber gewollt: eine Seite läuft ab, wenn der
+Lieferant sie nicht mehr bestätigt.)
+
+**Umgesetzt:**
+
+1. **Alter der Revision** (brocastd, Schema 4): neue Spalte `pages.rev_t`, gesetzt nur bei einer
+   neuen Revision. `aging` rechnet damit, `t` bleibt für Ablauf und Frame-Kopf. Alte
+   Datenbanken bekommen `rev_t = t` (Alter ab dem Update, bis der Lieferant `born` schickt).
+2. **Feinere Staffel als Vorgabe:** `aging = 24:120, 72:360, 168:1440` – ab 24 h alle 2 h, ab
+   3 Tagen alle 6 h, ab 7 Tagen einmal am Tag. Nicht ganz still, weil es kein Pull gibt:
+   ein Listener, der später einschaltet, bekommt die Seite so noch. Eine Seite: Tag 1 ≈ 48,
+   Tag 2–3 12, Tag 4–7 4, danach 1 Aussendung pro Tag.
+3. **`born` im Ingest:** Lieferanten dürfen das Entstehungsdatum mitschicken (Unix-Sekunden,
+   nur für brocastd, nie auf Funk, nicht Teil des Inhalts-Hashes – nachgeliefert gibt es
+   keine neue Revision, nur das Alter wird korrigiert). TinyBox schickt das Erstelldatum des
+   Bulletins. Ein geändertes Bulletin bekommt die Staffel `repeat_minutes` neu, altert danach
+   aber ab dem ursprünglichen Datum.
+4. **Funkdauer unabhängig von der Mailbox:** `[brocast] air_days` in `tinybox.conf` (Vorgabe
+   0 = so lange wie in der Mailbox). Ältere Bulletins fehlen im Sync, brocastd zieht sie
+   zurück (Listener entfernen sie); in der Mailbox bleiben sie bis `bulletin_expire_days`
+   bzw. zur Frist der Rubrik. `exp` der Seite ist höchstens `air_days`.
+
+**Hinweis Betrieb:** eine eigene `brocastd.conf` mit `aging = 24:120` behält diese Einstellung
+– für die neue Staffel dort anpassen oder die Zeile löschen.
 
 ## Quellen
 

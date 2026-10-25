@@ -239,7 +239,7 @@ class Carousel:
         if own is not None:                            # eigener Takt (Dictionary-Daten)
             minutes = own(sends_done)
         else:
-            minutes = self.gap_min(sends_done, max(now - row.t, 0))
+            minutes = self.gap_min(sends_done, max(now - (row.rev_t or row.t), 0))
         if minutes <= 0:                               # ruht, bis eine neue Revision kommt
             self.store.mark_sent(row.pid, now, RESTING)
             log.info("Seite %s ruht (Revision älter als %s h)", row.id,

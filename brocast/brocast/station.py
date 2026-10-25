@@ -32,6 +32,7 @@ from .zdict import ZDict
 PROVIDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$")
 MANAGED = ("dv", "rev", "t", "org", "sub")      # set by brocastd, never by providers
+INGEST_ONLY = ("parts", "born")                  # only for brocastd, never on air
 
 # The station's rubric index page (typ index): the rubrics its providers declared
 # (TinyBox [rubrics]), so listeners know them before the first page of a rubric
@@ -90,6 +91,10 @@ class Station:
             if not isinstance(parts, list) or not all(
                     isinstance(p, list) and all(isinstance(b, dict) for b in p) for p in parts):
                 raise BrocastError("'parts' muss eine Liste von Block-Listen sein")
+        born = content.get("born")
+        if born is not None and (not isinstance(born, int) or isinstance(born, bool)
+                                 or born <= 0):
+            raise BrocastError("'born' muss eine Unix-Zeit (Sekunden) sein")
         return content
 
     def _exp_min(self, content: dict[str, Any]) -> int | None:
@@ -105,8 +110,9 @@ class Station:
     def _frames(self, content: dict[str, Any], page_id: int, rev: int,
                 t: int) -> tuple[list[bytes], int]:
         """Frames (Nutzdaten ohne Header-Byte) und das Header-Byte dieser Seite."""
-        # "parts" is an ingest-only field: thematic sections, each starts a subpage
-        page = {k: v for k, v in content.items() if k != "parts"}
+        # ingest-only fields: "parts" = thematic sections, each starts a subpage;
+        # "born" = when the content was written (aging only, never on air)
+        page = {k: v for k, v in content.items() if k not in INGEST_ONLY}
         page.update({"id": page_id, "rev": rev, "t": t})
         st = self.cfg.station
         if st.wire_format == FORMAT_PAGE:
@@ -141,7 +147,9 @@ class Station:
         self.check_names(provider, key)
         content = self._check_content(content)
         now = int(self.clock())
-        h = self.content_hash(content)
+        # "born" is no content: adding it later must not make a new revision
+        h = self.content_hash({k: v for k, v in content.items() if k != "born"})
+        born = min(content.get("born") or now, now)
         row = self.store.get_page(provider, key)
 
         fixed_id = content.get("id")
@@ -156,6 +164,8 @@ class Station:
             frames, hdr = self._frames(body, row.id, row.rev, now)  # confirm: refresh t only
             row.t = now
             row.hdr = hdr
+            if born < row.rev_t:                    # lieferant kennt das echte Alter
+                row.rev_t = born
             self.store.save_page(row, frames)
             return self._result(row, frames, changed=False)
 
@@ -169,7 +179,7 @@ class Station:
                       rev=rev, t=now, content=json.dumps(content, ensure_ascii=False),
                       content_hash=h, exp_min=self._exp_min(content), pri=self._pri(content),
                       state="active", withdraw_left=0, tx_count=0, last_tx=None, next_tx=now,
-                      hdr=hdr)
+                      hdr=hdr, rev_t=born)
         new.pid = self.store.save_page(new, frames)
         self.on_change()
         return self._result(new, frames, changed=True)
@@ -189,7 +199,7 @@ class Station:
         new = PageRow(pid=row.pid if row else 0, provider=provider, pkey=key, id=page_id,
                       rev=rev, t=now, content=json.dumps(description, ensure_ascii=False),
                       content_hash=content_hash, exp_min=None, pri=0, state="active",
-                      withdraw_left=0, tx_count=0, last_tx=None, next_tx=now)
+                      withdraw_left=0, tx_count=0, last_tx=None, next_tx=now, rev_t=now)
         new.pid = self.store.save_page(new, frames)
         self.on_change()
         return self._result(new, frames, changed=True)
