@@ -121,10 +121,10 @@ port = 8101                    ; kisshub; Status automatisch auf port + 1, Host 
 ; maxframe_ext =               ; nur kiss (Modulo 128)
 ; version      = 2.2           ; nur kiss: 2.2 (SABME/SREJ/XID, fällt selbst auf 2.0 zurück) | 2.0
 ; srej         = yes           ; nur kiss
-; v20_digis    = OE3XTC-5      ; nur kiss: Digis, die nur v2.0 können (z. B. TM-D710E) –
+; v20_digis    = OE3XTC-5      ; nur kiss: Digis, die nur v2.0 können (z. B. TM-D700) –
 ;                              ; Verbindungen über sie mit SABM/Modulo 8, alle anderen Digis = v2.2
 ; v20_digi_paclen = 128        ; nur kiss: längster I-Frame über einen solchen Digi
-;                              ; (TM-D710E: 256 nein, 128 ja)
+;                              ; (TM-D700: 256 nein, 128 ja)
 ; n2 / t1_min_sec / t1_max_sec / t2_sec / t3_sec   ; nur kiss, Standard aus dem kisshub-Profil
 ```
 
@@ -508,7 +508,7 @@ Komma oder Leerzeichen, höchstens 8). Unter dem Feld zeigt eine Vorschau den Pf
 letzten Ziele merkt sich den ganzen Pfad. Via ist nur Digipeating – einen Node connectet man
 selbst und verbindet dort mit `C` weiter.
 
-**v2.0-Digis** (nur bei `interface = kiss`): Ältere Hardware-Digis wie der TM-D710E OE3XTC-5
+**v2.0-Digis** (nur bei `interface = kiss`): Ältere Hardware-Digis wie der TM-D700 OE3XTC-5
 kennen nur AX.25 v2.0. Über sie scheitern SABME/Modulo 128 und 256-Byte-Frames. Deshalb in
 `tinybox.conf` **und** `tbclient.conf`:
 

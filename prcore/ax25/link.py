@@ -11,7 +11,7 @@ v2.2 and the fall back to v2.0
     so the next connect can start with SABM directly (`peer_v20=True`).
     Incoming SABME is accepted with cfg.version "2.2", answered DM with "2.0".
     Known v2.0 digipeaters (cfg.v20_digis, like V20 in direwolf.conf): some
-    digis (e.g. the TNC of a Kenwood TM-D710E) know only modulo 8. They repeat
+    digis (e.g. the TNC of a Kenwood TM-D700) know only modulo 8. They repeat
     SABME, UA, XID and RR, but read the second control byte of a modulo-128
     I frame as PID 0x00 and drop the frame - the link comes up, but no data
     ever arrives (bug 18.10.2026, OE3GAS-2 via OE3XTC-5). A link over such a

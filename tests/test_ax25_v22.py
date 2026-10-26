@@ -295,7 +295,7 @@ class SrejAnswerTests(unittest.TestCase):
 
 
 class V20DigiTests(unittest.TestCase):
-    """Known v2.0 digis (TM-D710E): modulo 128 I frames are dropped there,
+    """Known v2.0 digis (TM-D700): modulo 128 I frames are dropped there,
     so links over them use v2.0 (bug 18.10.2026, OE3GAS-2 via OE3XTC-5)."""
 
     DIGI = "OE3XTC-5"
@@ -344,7 +344,7 @@ class V20DigiTests(unittest.TestCase):
         self.assertEqual(parse_calls(""), frozenset())
 
     def test_short_frames_over_v20_digi(self):
-        """The TM-D710E also drops 256-byte I frames: 128 at most over it."""
+        """The TM-D700 also drops 256-byte I frames: 128 at most over it."""
         cfg = dataclasses.replace(self.CFG, paclen=256)
         a, b, sim = self.make(V22, cfg, [self.DIGI])
         connect(a, b, sim)
