@@ -73,6 +73,19 @@ enabled = yes                  # local test port without radio
 host    = 127.0.0.1            # loopback only
 port    = 6300
 
+[axudp]
+# AX.25 over UDP next to the radio (PLANUNG.md section 25): the TinyBox client on
+# this PC reaches the mailbox without the radio and keeps the radio for all other
+# stations. Same wire format as BPQ32/LinBPQ (AXIP UDP), XNet, JNOS.
+# No login on AXUDP: only frames from a listed peer (IP AND callsign) are taken;
+# for now listen and peers must be loopback.
+enabled = no
+listen  = 127.0.0.1            # loopback only (for now)
+port    = 10093                # UDP
+peers   = OE3GAS 127.0.0.1:10094   # CALL ip:port, several separated by commas;
+                               # without SSID = every SSID of that call
+# paclen = 256 / maxframe_ext = 32 / t1_sec = 3 / n2 = 10   # AX.25 without airtime
+
 [web]
 enabled = yes                  # sysop web GUI in the browser
 host    = 127.0.0.1            # loopback only

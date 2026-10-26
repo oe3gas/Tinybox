@@ -60,6 +60,7 @@ KISS:  TinyBox / Client ──KISS 8101──► kisshub ──► TNC ──►
 | 8101 | kisshub | KISS-TCP für TinyBox, Client, brocastd |
 | 8102 | kisshub | Status (`GET /status`, JSON) – immer kisshub-Port + 1 |
 | 6300 | TinyBox | Telnet-Testport |
+| 10093 (UDP) | TinyBox | AXUDP-Port (`[axudp]`, PLANUNG 25) |
 | 8080 | TinyBox | Sysop-Web-GUI |
 | 7744 | Client | Web-GUI des Clients |
 | 8090 | brocastd | Ingest (TinyBox meldet Bulletins) |
@@ -527,6 +528,30 @@ Alle Benutzer sehen diese Angaben.
   aus `tbclient.conf`. Das Profil geht nur über Funk, wenn es sich geändert hat; eine
   Änderung im Terminal kommt beim nächsten Connect in den Client (die neuere gilt).
 - **Sysop-Web-GUI:** Stationen (JLOG) zeigen Name, Locator und Home-BBS.
+
+### 3.8 AXUDP: Client und TinyBox am selben PC (PLANUNG 25)
+
+Ein Funkgerät, TinyBox und Client am selben PC: Die TinyBox bekommt neben dem Funk einen
+AXUDP-Port. Der Client erreicht die eigene Box darüber, alle anderen Stationen über Funk.
+
+```ini
+[axudp]                        ; tinybox.conf
+enabled = yes
+listen  = 127.0.0.1
+port    = 10093
+peers   = OE3GAS 127.0.0.1:10094   ; Rufzeichen des Clients und sein UDP-Port
+```
+
+- Über AXUDP läuft das eigene AX.25 der TinyBox (auch wenn der Funk über Direwolf/AGW
+  geht): Fenster 32, PACLEN 256, T1 3 s – keine Sendezeit. Login, Chat, Mail-Sync, Bilder
+  und Kompression wie über Funk; UI-Frames (Chat-Ereignisse, Bake) nur über Funk.
+- Angenommen wird nur, was von der IP einer Gegenstelle **und** mit deren Rufzeichen kommt;
+  alles andere wird still verworfen. Vorerst nur Loopback. Sysop-Rechte nur für das
+  Sysop-Rufzeichen von Loopback (wie Telnet).
+- Dieselbe Station nur einmal: über Funk **oder** AXUDP.
+- `STATUS` (Konsole) zeigt eine Zeile `AXUDP:` mit Gegenstellen, Verbindungen, Zählern und
+  verworfenen Paketen. Log-Komponente `axudp` (`[logging] debug = axudp`).
+- Der Client-Teil (Kanal zur Heim-Box über AXUDP) folgt mit PLANUNG 25, Schritt 3.
 
 ## 4. Verbindungsqualität messen (kisshub, CR67)
 

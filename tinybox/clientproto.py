@@ -156,8 +156,8 @@ def _client(s: Session, parts: list[str]) -> None:
     caps = {c for c in wanted if c in KNOWN_CAPS}
     if s.origin != "radio" or s.service.chat.ui_send is None:
         caps.discard("UI")        # telnet, or no radio link: chat lines come as I-frames
-    if s.origin != "radio" or not hasattr(s.transport, "write_bytes"):
-        caps.discard("Z")         # compressed texts are binary: radio (AGW) only
+    if s.origin not in ("radio", "axudp") or not hasattr(s.transport, "write_bytes"):
+        caps.discard("Z")         # compressed texts are binary: AX.25 only (radio, AXUDP)
         caps.discard("IMG")       # images too (and the raw bytes of an upload)
     if s.cfg.chat.image_max <= 0:
         caps.discard("IMG")       # the sysop switched images off

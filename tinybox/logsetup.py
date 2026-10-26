@@ -67,6 +67,8 @@ COMPONENT = {
     "prcore.kiss": "kiss",
     "prcore.ax25.link": "kiss",
     "prcore.kissport": "kiss",
+    "tinybox.adapters.axudp": "axudp",
+    "prcore.axudp": "axudp",
     "tinybox.adapters.telnet": "telnet",
     "tinybox.adapters.web": "web",
     "tinybox.adapters.brocast": "brocast",
@@ -496,7 +498,7 @@ def start_block(cfg, version: str, config_path: str | None,
     a string = a line as it is (the head line)."""
     root = Path(__file__).resolve().parent.parent
     adapters = " ".join(f"{name}={'on' if on else 'off'}" for name, on in (
-        ("telnet", cfg.telnet.enabled), ("web", cfg.web.enabled),
+        ("telnet", cfg.telnet.enabled), ("axudp", cfg.axudp.enabled), ("web", cfg.web.enabled),
         ("brocast", cfg.brocast.publish), ("inbox", cfg.inbox.enabled),
         ("forward", cfg.forward.enabled), ("mqtt", cfg.mqtt.enabled),
         ("console", cfg.console.enabled)))

@@ -143,6 +143,13 @@ def _port(p: str, text: str) -> int:
     return port
 
 
+def is_loopback(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _valid_call(call: str) -> bool:
     base, _, ssid = call.partition("-")
     if not (1 <= len(base) <= 6 and base.isalnum()):
@@ -185,6 +192,15 @@ class PeerTable:
         """Peer for a destination call: with SSID first, then the bare call."""
         dest = norm_call(dest)
         return self.peers.get(dest) or self.peers.get(base_call(dest))
+
+    def owner(self, call: str) -> Peer | None:
+        """The peer whose station call is (with SSID first, then every SSID)."""
+        call = norm_call(call)
+        exact = self.peers.get(call)
+        if exact is not None:
+            return exact
+        bare = self.peers.get(base_call(call))
+        return bare if bare is not None and "-" not in bare.call else None
 
     def sender(self, ip: str, src: str) -> Peer | None:
         """The peer a datagram from ip with source call src belongs to, or None."""

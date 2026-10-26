@@ -83,6 +83,10 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
     app.beacon = beacon.Beacon(app)               # CR48: console BEACON works without [beacon]
     tasks = [asyncio.create_task(app.agw.run()),
              asyncio.create_task(housekeeping(app))]
+    if cfg.axudp.enabled:                         # PLANUNG 25: second port next to the radio
+        from .adapters import axudp
+        app.axudp = axudp.AxudpAdapter(app)
+        tasks.append(asyncio.create_task(app.axudp.run()))
     if cfg.beacon.enabled:
         tasks.append(asyncio.create_task(app.beacon.run()))
     app.update = release.UpdateNotice(app)        # PLANUNG 24: new release on GitHub

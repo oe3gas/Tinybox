@@ -22,6 +22,7 @@ class App:
     registry: SessionRegistry
     started: str = field(default_factory=utc_now)
     agw: Any = None                      # radio adapter: AgwAdapter or KissAdapter
+    axudp: Any = None                    # AxudpAdapter, only with [axudp] enabled (PLANUNG 25)
     stop_event: asyncio.Event | None = None
     web_login_url: str | None = None     # set when the web GUI runs
     brocast: Any = None                  # BrocastPublisher, set when publishing

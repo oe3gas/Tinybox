@@ -150,7 +150,7 @@ class KissAdapter(AgwAdapter):
     def __init__(self, app: App) -> None:
         super().__init__(app)
         k = self.cfg.kiss
-        self.port = _BoxPort(self)
+        self.port = self._make_port()
         self.mycall = self.port.mycall
         self.radio_port = k.channel
         self.link_cfg = self.port.link_cfg
@@ -162,6 +162,12 @@ class KissAdapter(AgwAdapter):
         self.hub_status: dict | None = None     # last answer of kisshub's /status
         self.hub_status_at: float | None = None  # time.monotonic() of that answer
         self.hub_error: str | None = None       # why the last query failed
+
+    def _make_port(self) -> KissPort:
+        return _BoxPort(self)
+
+    def port_label(self) -> str:
+        return f"kiss port {self.radio_port}"
 
     @property
     def links(self) -> dict[str, Ax25Link]:

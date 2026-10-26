@@ -1486,7 +1486,7 @@ GitHub-Release, ohne selbst nachzusehen.
 - `[update] check` in allen vier `*.conf.example`; Handbuch 2.9, Release-Ablauf in
   `GIT-ANLEITUNG.md`. Tests: `tests/test_release.py`.
 
-## 25. AXUDP: zweiter Port neben dem Funk (entschieden 25.10.2026, Schritt 1 umgesetzt)
+## 25. AXUDP: zweiter Port neben dem Funk (entschieden 25.10.2026, Schritte 1–2 umgesetzt)
 
 **Anlass:** Auf PC1 gibt es nur ein Funkgerät (9600 Bd). TinyBox und Client sollen dort
 gemeinsam laufen, und der Client soll vollwertig mitfunken. Über AGW erreicht der Client die
@@ -1529,11 +1529,19 @@ nur eine Behauptung.
    `AxudpEndpoint` mit derselben Schnittstelle wie `KissTcpClient` (`run`, `send`,
    `connected`, `describe`, Zähler), Ziel aus der Zieladresse des Frames.
    Tests `tests/test_axudp.py`.
-2. TinyBox mit zwei Ports: `[axudp]` in `tinybox.conf`; `KissPort` bekommt den Transport
-   von außen (KISS-TCP oder AXUDP). Monitor, Bake, brocast, Qualität über Direwolf und
-   UI-Chat bleiben am Funk-Port; Sessions und Forwarding kommen von beiden Ports.
-   Eigene AX.25-Werte für AXUDP (Bandbreite kostet nichts: großes Fenster, PACLEN 256,
-   kurzes T1).
+2. ✅ TinyBox mit zwei Ports (26.10.2026): `[axudp]` in `tinybox.conf` (`enabled`,
+   `listen`, `port`, `peers`; optional `paclen`, `maxframe_ext`, `t1_sec`, `n2`), vorerst
+   nur Loopback. `KissPort` bekommt den Transport von außen (`transport=`, Standard
+   KISS-TCP) und `half_duplex=False` für AXUDP (keine Sendezeit, Frames pausieren die
+   anderen Links nicht). `tinybox/adapters/axudp.py`: `AxudpAdapter` = `KissAdapter` mit
+   AXUDP-Port, `app.axudp` neben `app.agw`. Monitor, Bake, brocast, Qualität und
+   UI-Chat bleiben am Funk-Port (`owns_ui`); der AXUDP-Adapter ändert `chat.ui_send` nicht.
+   Session-Herkunft `axudp` (auch in `ORIGINS` der Nachrichten); `Z` und `IMG` wie über
+   Funk, `UI` nicht. AX.25-Werte: v2.2, Fenster 32, PACLEN 256, T1 3 s, T2 0,05 s.
+   Dieselbe Station nur einmal (Funk **oder** AXUDP, sonst *busy*). Sysop nur für das
+   Sysop-Rufzeichen von einer Loopback-Gegenstelle. Konsole `STATUS`: Zeile `AXUDP:`;
+   Web-GUI `/api/status`: `axudp`. Log-Komponente `axudp`. Forwarding über AXUDP noch
+   nicht (Schritt 4). Tests `tests/test_axudp_adapter.py`.
 3. Client: Kanal-Weiche in `ClientCore._new_link()`; `[tinybox] axudp = 127.0.0.1:10093`
    → Kanal zur Heim-Box über AXUDP, im Chat nur verbunden (`ui = no` auf diesem Kanal).
    Brocast hört der Client über seinen Funk-Monitor (prüfen: meldet Direwolf dem Client

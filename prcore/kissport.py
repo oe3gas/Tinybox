@@ -50,12 +50,22 @@ def norm_call(call: str) -> str:
 
 
 class KissPort:
+    """transport: a factory on_frame -> transport (PLANUNG 25). Default KISS-TCP to
+    host:port; prcore.axudp.AxudpEndpoint fits as well (run, send, connected).
+    half_duplex = False (AXUDP): no shared transmitter, frames do not pause the
+    other links."""
+
     def __init__(self, mycall: str, host: str, port: int, link_cfg: LinkCfg, *,
-                 channel: int = 0, reconnect_sec: float = 5) -> None:
+                 channel: int = 0, reconnect_sec: float = 5,
+                 transport: Callable | None = None, half_duplex: bool = True) -> None:
         self.mycall = norm_call(mycall)
         self.link_cfg = link_cfg
-        self.kiss = KissTcpClient(host, port, self._on_kiss, reconnect_sec=reconnect_sec,
-                                  kiss_port=channel)
+        self.half_duplex = half_duplex
+        if transport is None:
+            self.kiss = KissTcpClient(host, port, self._on_kiss, reconnect_sec=reconnect_sec,
+                                      kiss_port=channel)
+        else:
+            self.kiss = transport(self._on_kiss)
         self.connected = self.kiss.connected      # set while KISS-TCP is up
         self.links: dict[str, Ax25Link] = {}      # remote call -> its link
         self.v20: set[str] = set()                # answered SABME with DM: call with SABM
@@ -170,9 +180,11 @@ class KissPort:
     def transmit(self, f: Frame, source: Ax25Link | None) -> None:
         raw = f.encode()
         if not self.kiss.send(raw):
-            log.debug("KISS down, frame lost: %s", f)
+            log.debug("%s: frame not sent: %s", self.kiss.describe(), f)
         log.debug(">> %s", f)
         self.on_transmit(f, raw)
+        if not self.half_duplex:
+            return
         # one transmitter for all: our other links could not be answered meanwhile
         air, now = self.airtime(len(raw)), self.now()
         for link in self.links.values():
@@ -192,10 +204,11 @@ class KissPort:
         dest, src = norm_call(dest), norm_call(src)
         target = self.links.get(src) if dest == self.mycall else None
         self.on_heard(data, (dest, src, path, repeated), target)
-        air = self.airtime(len(data))
-        for link in self.links.values():
-            if link is not target:
-                link.channel_busy(air, now)       # half duplex: nobody else got through
+        if self.half_duplex:
+            air = self.airtime(len(data))
+            for link in self.links.values():
+                if link is not target:
+                    link.channel_busy(air, now)   # half duplex: nobody else got through
         if dest != self.mycall or (path and not all(repeated)):
             return
         try:

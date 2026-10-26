@@ -267,6 +267,7 @@ STATUS_LINES = [
     "Messages:  {msgs} ({private} private, {bulletins} bulletins, {unread} unread)",
     "Data:      {data_dir}",
 ]
+STATUS_AXUDP = "AXUDP:     {listen} {up}, peers {peers}, links {links}, rx {rx} tx {tx}{dropped}"
 SHUTTING_DOWN = "Shutting down ..."
 SHUTDOWN_SCHEDULED = ("Shutdown in {sec} s, {n} station(s) warned. "
                       "SHUTDOWN CANCEL calls it off.")

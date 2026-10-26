@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- AXUDP (PLANUNG 25, Schritt 2): die TinyBox hat neben dem Funk einen **AXUDP-Port**
+  (`[axudp]` in `tinybox.conf`, vorerst nur 127.0.0.1). Darauf läuft das eigene AX.25 –
+  auch wenn der Funk über Direwolf/AGW geht – mit Login, Chat, Mail-Sync, Bildern und
+  Kompression; UI-Frames bleiben beim Funk. Nur eingetragene Gegenstellen (IP und
+  Rufzeichen), Sysop nur von Loopback, dieselbe Station nur einmal. `STATUS` zeigt den
+  Port. Der Client folgt mit Schritt 3. Tests `tests/test_axudp_adapter.py`.
 - Live-Monitore mit **Millisekunden** (`HH:MM:SS.mmm`): TinyBox-Web-GUI (Monitor und
   Frame-Monitor), Client 2026.10.26 (Monitor), brocastd (Empfangslog; neue Zeilen speichern
   `ts` mit ms, ältere zeigen `.000`).

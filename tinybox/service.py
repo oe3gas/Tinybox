@@ -20,7 +20,7 @@ from .store import Message, Store, utc_now
 
 log = logging.getLogger(__name__)
 
-ORIGINS = {"radio", "telnet", "sysop", "mqtt", "inbox", "forward"}
+ORIGINS = {"radio", "axudp", "telnet", "sysop", "mqtt", "inbox", "forward"}
 MAX_SUBJECT = 60          # what local users may type
 MAX_SUBJECT_FWD = 80      # what partner mailboxes may send (FBB limit)
 FWD_STATES = {"", "$", "F", "H"}

@@ -199,6 +199,8 @@ class AgwConnection:
 
 class AgwAdapter:
     conn_class = AgwConnection      # the KISS adapter plugs in its own connection type
+    origin = "radio"                # Session.origin of incoming connects (AXUDP: "axudp")
+    owns_ui = True                  # this adapter sends the chat's UI frames (the radio)
 
     def __init__(self, app: App) -> None:
         self.app = app
@@ -209,7 +211,8 @@ class AgwAdapter:
         self._pending: dict[str, asyncio.Future] = {}   # outgoing connects (forward)
         self._writer: asyncio.StreamWriter | None = None
         self.connected = asyncio.Event()  # AGW link up (used by tests)
-        app.service.chat.ui_send = self.send_ui
+        if self.owns_ui:
+            app.service.chat.ui_send = self.send_ui
         self.quality_cfg = linkq.cfg_from(self.cfg.direwolf)
         self.q_supported: bool | None = None    # None = not known yet (per AGW connect)
         self._q_reply = asyncio.Event()
@@ -358,12 +361,20 @@ class AgwAdapter:
             conn.write(texts.INVALID_CALL.format(call=remote) + "\r")
             conn.close()
             return
+        other = self._connected_elsewhere(remote)
+        if other:
+            log.warning("%s: already connected via %s, connect refused", remote, other)
+            conn.write(texts.BUSY + "\r")
+            conn.close()
+            return
         fwd = self.app.forward
-        if fwd is not None and fwd.partner_for_radio(remote) is not None:
+        if fwd is not None and self.origin == "radio" and \
+                fwd.partner_for_radio(remote) is not None:
             fwd.attach_agw(conn, remote)           # a partner mailbox: forward session
             return
-        sysop = self.cfg.station.sysop_via_radio and self.app.service.is_sysop_call(remote)
-        session = Session(remote, self.app.service, self.cfg, conn, origin="radio", sysop=sysop)
+        sysop = self._sysop_allowed(remote)
+        session = Session(remote, self.app.service, self.cfg, conn, origin=self.origin,
+                          sysop=sysop)
         if not self.app.registry.add(session):
             log.info("%s: busy (max_users reached)", remote)
             conn.write(texts.BUSY + "\r")
@@ -371,9 +382,23 @@ class AgwAdapter:
             return
         conn.session = session
         with logsetup.session_context(session.log_ctx):
-            log.info("radio connect, agw port %d%s", self.radio_port,
+            log.info("%s connect, %s%s", self.origin, self.port_label(),
                      " (sysop)" if sysop else "")
             session.start()
+
+    def port_label(self) -> str:
+        return f"agw port {self.radio_port}"
+
+    def _sysop_allowed(self, remote: str) -> bool:
+        return self.cfg.station.sysop_via_radio and self.app.service.is_sysop_call(remote)
+
+    def _connected_elsewhere(self, remote: str) -> str | None:
+        """PLANUNG 25: one station once - over the radio or AXUDP, not both
+        (service.links and the chat are keyed by the call)."""
+        for other in (self.app.agw, getattr(self.app, "axudp", None)):
+            if other is not None and other is not self and remote in other.conns:
+                return other.origin
+        return None
 
     # --- outgoing connects (forward module) ------------------------------------
 
@@ -437,7 +462,7 @@ class AgwAdapter:
             else:
                 conn.session.end()                  # forward link
             self.app.registry.remove(conn.session)
-        log.info("radio disconnect %s%s", remote,
+        log.info("%s disconnect %s%s", self.origin, remote,
                  " (connection lost)" if lost else "")
 
     def _drop_all(self) -> None:

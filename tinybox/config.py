@@ -190,6 +190,19 @@ class TelnetCfg:
 
 
 @dataclass
+class AxudpCfg:
+    """[axudp] AX.25 over UDP next to the radio (PLANUNG 25). Own AX.25 (prcore)."""
+    enabled: bool = False
+    listen: str = "127.0.0.1"
+    port: int = 10093
+    peers: dict = field(default_factory=dict)       # call -> prcore.axudp.Peer
+    paclen: int = 256
+    maxframe_ext: int = 32       # window (modulo 128); v2.0 peers: 7
+    t1_sec: float = 3.0          # no airtime: short T1
+    n2: int = 10
+
+
+@dataclass
 class WebCfg:
     enabled: bool
     host: str
@@ -394,6 +407,7 @@ class Config:
     radio: RadioCfg = field(default_factory=RadioCfg)
     kiss: KissCfg = field(default_factory=KissCfg)
     ax25: Ax25Cfg = field(default_factory=Ax25Cfg)
+    axudp: AxudpCfg = field(default_factory=AxudpCfg)       # PLANUNG 25
     # CR70: where the radio values came from, old keys still in the file, and the
     # LinkCfg fields set in tinybox.conf (they win over kisshub's values)
     sources: dict = field(default_factory=dict)
@@ -716,6 +730,8 @@ def load(path: str | Path) -> Config:
     if telnet.host not in LOOPBACK_HOSTS:
         raise ConfigError("[telnet] host must be a loopback address (127.0.0.1)")
 
+    axudp = _load_axudp(cp)
+
     web = WebCfg(
         enabled=_get(cp, "web", "enabled", True, bool),
         host=_get(cp, "web", "host", "127.0.0.1"),
@@ -833,7 +849,41 @@ def load(path: str | Path) -> Config:
                   forward=forward, radio=radio, kiss=kiss, ax25=ax25,
                   sources=rad.sources, hints=rad.hints, kiss_fixed=kiss_fixed,
                   client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)),
-                  beacon=_load_beacon(cp), update=_load_update(cp))
+                  beacon=_load_beacon(cp), update=_load_update(cp), axudp=axudp)
+
+
+def _load_axudp(cp: configparser.ConfigParser) -> AxudpCfg:
+    """[axudp] (PLANUNG 25). Loopback only until the internet step (25, step 4)."""
+    from prcore import axudp as ax_udp
+    a = AxudpCfg(enabled=_get(cp, "axudp", "enabled", False, bool),
+                 listen=_get(cp, "axudp", "listen", "127.0.0.1").strip(),
+                 port=_get(cp, "axudp", "port", ax_udp.DEFAULT_PORT, int),
+                 paclen=_get(cp, "axudp", "paclen", 256, int),
+                 maxframe_ext=_get(cp, "axudp", "maxframe_ext", 32, int),
+                 t1_sec=_get(cp, "axudp", "t1_sec", 3.0, float),
+                 n2=_get(cp, "axudp", "n2", 10, int))
+    _check_port("axudp", "port", a.port)
+    _check_range("axudp", "paclen", a.paclen, 32, 256)
+    _check_range("axudp", "maxframe_ext", a.maxframe_ext, 1, 127)
+    _check_range("axudp", "n2", a.n2, 1, 50)
+    if not 0.2 <= a.t1_sec <= 60:
+        raise ConfigError(f"[axudp] t1_sec: {a.t1_sec} must be between 0.2 and 60")
+    if a.listen not in ("127.0.0.1", "::1"):
+        raise ConfigError("[axudp] listen: only 127.0.0.1 or ::1 for now "
+                          "(AXUDP has no login; network access follows, PLANUNG 25)")
+    text = _get(cp, "axudp", "peers", "")
+    try:
+        a.peers = ax_udp.parse_peers(text.replace(",", "\n").splitlines())
+    except ax_udp.AxudpError as exc:
+        raise ConfigError(f"[axudp] peers: {exc}") from None
+    for peer in a.peers.values():
+        if not ax_udp.is_loopback(peer.host):
+            raise ConfigError(f"[axudp] peers: {peer.call} {peer.host} - only loopback "
+                              "addresses for now (PLANUNG 25)")
+    if a.enabled and not a.peers:
+        raise ConfigError("[axudp] enabled = yes needs at least one peer "
+                          "(peers = OE3GAS 127.0.0.1:10094)")
+    return a
 
 
 def _load_update(cp: configparser.ConfigParser) -> release.UpdateCfg:

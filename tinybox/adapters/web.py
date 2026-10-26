@@ -521,6 +521,7 @@ class WebServer:
             "agw": "connected" if agw is not None and agw.connected.is_set()
                    else ("disconnected" if agw is not None else "not started"),
             "interface": cfg.radio.interface,
+            "axudp": self.app.axudp.state() if self.app.axudp is not None else None,
             # KISS mode (CR41): kisshub and the TNC behind it
             "radio": agw.radio_state() if agw is not None and hasattr(agw, "radio_state") else None,
             "users": len(self.app.registry), "max_users": cfg.mailbox.max_users,

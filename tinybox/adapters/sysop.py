@@ -216,6 +216,13 @@ class SysopConsole:
             data_dir=cfg.storage.data_dir,
         )
         self.out(*[line.format(**values) for line in texts.STATUS_LINES])
+        if self.app.axudp is not None:                  # PLANUNG 25
+            st = self.app.axudp.state()
+            drop = ", ".join(f"{k} {v}" for k, v in st["dropped"].items() if v)
+            self.out(texts.STATUS_AXUDP.format(
+                listen=st["listen"], up="up" if st["up"] else "DOWN",
+                peers=",".join(st["peers"]) or "-", links=",".join(st["links"]) or "-",
+                rx=st["rx"], tx=st["tx"], dropped=f", dropped: {drop}" if drop else ""))
         notice = getattr(self.app, "update", None)
         if notice is not None and notice.result is not None and notice.result.newer:
             r = notice.result
