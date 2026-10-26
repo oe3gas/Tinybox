@@ -35,6 +35,20 @@ class EntryTests(unittest.TestCase):
                            tx=False, mycall="X")
         self.assertEqual(e["typ"], "REJ 100")
 
+    def test_paclen_and_hex(self):
+        payload = bytes(range(256))[:64]               # binary, like a picture upload
+        for mod in (False, True):
+            f = ax.i_frame("OE3TEC", "OE3GAS-1", 8 if mod else 1, 2, payload,
+                           modulo=128 if mod else 8)
+            e = framemon.entry(f.encode(), tx=False, mycall="X", mod128=mod)
+            self.assertEqual((e["len"], e["hex"]), (64, payload.hex()))
+        e = framemon.entry(ax.ui_frame("APRS", "OE3TEC", b"!48").encode(), tx=False, mycall="X")
+        self.assertEqual((e["len"], e["hex"]), (3, "213438"))
+        e = framemon.entry(ax.s_frame("RR", "OE3TEC", "OE3GAS-1", nr=4).encode(),
+                           tx=False, mycall="X")
+        self.assertNotIn("len", e)                     # no payload, no [n]
+        self.assertNotIn("hex", e)
+
     def test_garbage_and_no_listener(self):
         self.assertIsNone(framemon.entry(b"\x01\x02", tx=False, mycall="X"))
         framemon.emit(b"\x01\x02", tx=False, mycall="X")          # no handler: nothing

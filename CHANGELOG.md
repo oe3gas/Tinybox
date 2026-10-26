@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+- TinyBox-Monitor (KISS-Modus): **PacLen** `[n]` hinter dem Frametyp bei I- und UI-Frames,
+  Knopf **HEX** im Kopf zeigt die Nutzlast als Hex-Bytes statt Text (bleibt gemerkt, APRS-Karte
+  dann aus), **Frametypen in festen Farben** (I grün, RR blau, RNR orange, REJ/SREJ rot,
+  SABM violett, UA türkis, DISC/DM rosa, UI gelb). `framemon` liefert dazu `len` und `hex`.
 - AXUDP (PLANUNG 25, Schritt 2): die TinyBox hat neben dem Funk einen **AXUDP-Port**
   (`[axudp]` in `tinybox.conf`, vorerst nur 127.0.0.1). Darauf läuft das eigene AX.25 –
   auch wenn der Funk über Direwolf/AGW geht – mit Login, Chat, Mail-Sync, Bildern und

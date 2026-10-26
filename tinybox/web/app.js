@@ -16,6 +16,8 @@ const S = {
   rubrics: [],         // [rubrics] of tinybox.conf plus the ones only used by bulletins
   monQ: "",            // CR52: monitor filter text
   monKind: "",         // CR52: monitor selection (see MON_KINDS)
+  monHex: (() => { try { return localStorage.getItem("tinybox.monhex") === "1"; }
+                   catch (e) { return false; } })(),   // payload as hex instead of text
   view: null,        // references to live parts of the current view
   currentId: null,
   prefill: null,     // CR51: Reply -> #/compose with this
@@ -285,9 +287,21 @@ function callSpan(call) {
 }
 function myCall() { return (S.status && S.status.mailbox) || "TINYBOX"; }
 
+// Frame types in fixed colours: "I 3,5+" -> class "ft-I", "RR 4" -> "ft-RR", "U7F" -> "ft-U"
+function frameClass(typ) {
+  const name = String(typ || "").split(/[ +]/)[0];
+  return "ft-" + (/^U[0-9A-F]{2}$/.test(name) ? "U" : name);
+}
+// payload as hex: "48 61 6C 6C 6F  0D ..." - a wider gap after every 8 bytes
+function hexText(hex) {
+  const b = (hex || "").toUpperCase().match(/../g) || [];
+  return b.map((x, i) => (i && i % 8 === 0 ? " " : "") + x).join(" ");
+}
+
 function monText(it) {
   if (it.type === "frame")
-    return `${it.t} ${it.tx ? "tx " : ""}${it.src} ${it.dst} ${(it.via || []).join(",")} <${it.typ}> ${it.kind} ${it.text}` +
+    return `${it.t} ${it.tx ? "tx " : ""}${it.src} ${it.dst} ${(it.via || []).join(",")} <${it.typ}>` +
+      `${it.len != null ? ` [${it.len}]` : ""} ${it.kind} ${S.monHex && it.hex ? hexText(it.hex) : it.text}` +
       (it.aprs ? " aprs" + AprsView.searchText(it) : "");
   if (it.type === "mon") return `${it.t} ${it.call} ${myCall()} ${it.text}`;
   return `${it.t} ${it.text}`;
@@ -305,7 +319,7 @@ function monMatch(it) {
 
 function feedLine(item) {
   if (item.type === "frame") {
-    const ap = AprsView.active(item);
+    const ap = !S.monHex && AprsView.active(item);     // HEX view: raw bytes, no APRS card
     const head = h(ap ? "span" : "div", { class: ap ? "" : "line frame" + (item.tx ? " tx" : "") },
       h("span", { class: "t", text: item.t }), " ",
       h("span", { class: "rt", text: item.tx ? "TX" : "RX" }), " ",
@@ -314,10 +328,12 @@ function feedLine(item) {
       head.append(" via ");
       item.via.forEach((v, i) => { if (i) head.append(","); head.append(callSpan(v)); });
     }
-    head.append(h("span", { class: "typ", text: " <" + item.typ + ">" }));
+    head.append(" ", h("span", { class: "typ " + frameClass(item.typ), text: "<" + item.typ + ">" }));
+    if (item.len != null) head.append(" ", h("span", { class: "plen", text: `[${item.len}]` }));  // PacLen
     if (item.kind) head.append(" ", h("span", { class: "kind " + item.kind, text: item.kind }));
     if (ap) return AprsView.card(item, head, "line frame" + (item.tx ? " tx" : ""));   // CR62
-    if (item.text) head.append(": " + item.text);
+    if (S.monHex && item.hex) head.append(": ", h("span", { class: "hex", text: hexText(item.hex) }));
+    else if (item.text) head.append(": " + item.text);
     return head;
   }
   if (item.type === "mon") {                     // ">" TinyBox to the station, "<" back
@@ -675,6 +691,16 @@ function monitorCard(withLens) {
   const kind = h("select", { title: "Show only", onchange: (e) => { S.monKind = e.target.value; redraw(); } },
     MON_KINDS.map(([v, t]) => h("option", { value: v, text: t })));
   kind.value = S.monKind;
+  const hex = h("button", { class: "btn sm hex-btn" + (S.monHex ? " on" : ""), type: "button",
+                             "aria-pressed": S.monHex ? "true" : "false",
+                             title: "Payload of I and UI frames as hex bytes instead of text" }, "HEX");
+  hex.onclick = () => {
+    S.monHex = !S.monHex;
+    hex.classList.toggle("on", S.monHex);
+    hex.setAttribute("aria-pressed", S.monHex ? "true" : "false");
+    try { localStorage.setItem("tinybox.monhex", S.monHex ? "1" : "0"); } catch (e) { /* private mode */ }
+    redraw();
+  };
   const clear = async () => {
     S.feed = []; body.replaceChildren(); AprsView.forget();
     try { await api("monitor/clear", {}); } catch (e) { /* only this tab then */ }
@@ -685,6 +711,7 @@ function monitorCard(withLens) {
       h("label", { class: "search mon-q" }, h("span", { class: "sr-only", text: "Filter" }), q),
       h("label", {}, h("span", { class: "sr-only", text: "Show only" }), kind),
       AprsView.toggleButton("btn sm aprs-btn"),
+      hex,
       h("button", { class: "btn sm", type: "button", onclick: clear }, "Clear")),
     lens ? h("div", { class: "mon-split" }, body, lens) : body);
   const showLens = () => { if (lens) lens.hidden = !AprsView.lensOn(); };   // CR62: only in step 2

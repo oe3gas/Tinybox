@@ -211,6 +211,19 @@ table.raw tr.dim td { color: var(--ink-3); }
 .monitor .line.tx .rt { color: #85b7eb; }
 .monitor .line.mon .rt { color: #6f7b86; }
 .monitor .typ { color: #8b959e; }
+/* frame types, always the same colour: data, supervisory, link setup/teardown, UI */
+.monitor .ft-I { color: #7ee787; }                                   /* I: data */
+.monitor .ft-RR { color: #79c0ff; }                                  /* RR: acknowledge */
+.monitor .ft-RNR { color: #ffa657; }                                 /* RNR: busy */
+.monitor .ft-REJ, .monitor .ft-SREJ { color: #ff7b72; font-weight: 700; }   /* repeat */
+.monitor .ft-SABM, .monitor .ft-SABME { color: #d2a8ff; font-weight: 700; } /* connect */
+.monitor .ft-UA { color: #56d4dd; }                                  /* confirm */
+.monitor .ft-DISC, .monitor .ft-DM { color: #f778ba; font-weight: 700; }    /* disconnect */
+.monitor .ft-FRMR { color: #ff7b72; font-weight: 700; text-decoration: underline; }
+.monitor .ft-UI { color: #e3b341; }                                  /* UI: beacons, APRS */
+.monitor .ft-XID, .monitor .ft-TEST, .monitor .ft-U { color: #b1bac4; }
+.monitor .plen { color: #6f7b86; }                                   /* [PacLen] */
+.monitor .hex { color: #a5b4c3; }
 .monitor .kind { padding: 0 5px; border: 1px solid #4a5560; border-radius: 3px; font-size: 11px; font-weight: 700;
                  background: #26384a; color: #dfe6ec; }
 .monitor .kind.chat { background: #1c4a3a; } .monitor .kind.quality { background: #4a3a12; }
@@ -219,7 +232,7 @@ table.raw tr.dim td { color: var(--ink-3); }
 .card-head .mon-q input { width: 16em; }
 .mon-split { flex-grow: 1; display: flex; min-height: 0; }      /* monitor + APRS lens (CR55) */
 .mon-split .monitor { min-width: 0; }
-.btn.aprs-btn.on { background: var(--ink); color: var(--paper); }
+.btn.aprs-btn.on, .btn.hex-btn.on { background: var(--ink); color: var(--paper); }
 .card-head select { font: inherit; font-size: 14px; padding: 6px 8px; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper); }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 
