@@ -1486,6 +1486,64 @@ GitHub-Release, ohne selbst nachzusehen.
 - `[update] check` in allen vier `*.conf.example`; Handbuch 2.9, Release-Ablauf in
   `GIT-ANLEITUNG.md`. Tests: `tests/test_release.py`.
 
+## 25. AXUDP: zweiter Port neben dem Funk (entschieden 25.10.2026, Schritt 1 umgesetzt)
+
+**Anlass:** Auf PC1 gibt es nur ein Funkgerät (9600 Bd). TinyBox und Client sollen dort
+gemeinsam laufen, und der Client soll vollwertig mitfunken. Über AGW erreicht der Client die
+eigene TinyBox nicht: Direwolf sendet das SABM in die Luft und hört sich selbst nicht. Der
+Telnet-Testport ist nur ein Kanal ohne Bilder, `Z`, Monitor und UI. Mittelfristig braucht die
+TinyBox ohnehin einen Netzweg zu anderen Knoten (Internet, HAMNET).
+
+**Entscheidung (OE3GAS, 25.10.2026):** Die TinyBox bekommt neben dem Funk-Port (`agw` oder
+`kiss`, unverändert) einen **AXUDP-Port**. Darauf läuft das eigene AX.25 (`prcore/ax25/link.py`,
+wie im KISS-Modus); Session, Chat, Sync und Forwarding darüber wie beim Funk. Der Client
+verbindet die Heim-TinyBox über AXUDP, alle anderen Ziele über Funk (AGW an denselben
+Direwolf bzw. KISS). Direwolf darf im AGW-Betrieb bleiben (Fork, Qualitätsbalken).
+
+```
+                 ┌── Port 1: Funk (agw → Direwolf | kiss → kisshub)  ── 9600 Bd
+TinyBox OE3GAS-1 ┤
+                 └── Port 2: AXUDP 127.0.0.1:10093 ◄──┐
+                                                      │  UDP, eigenes AX.25
+tbclient OE3GAS ── Kanal zur Heim-Box ────────────────┘
+                └─ alle anderen Kanäle ── Funk
+```
+
+**AXUDP (wie BPQ32/LinBPQ "AXIP UDP", XNet, JNOS):** ein UDP-Paket = ein AX.25-Frame
+(Adressen, Control, PID, Info, ohne HDLC-Flags) + **FCS** 2 Byte, CRC-16/X.25 (wie HDLC),
+niederwertiges Byte zuerst. Falsche FCS → verworfen. Gegenstellen fest in einer Tabelle
+Rufzeichen → IP:Port (wie `MAP` bei BPQ); Rufzeichen mit SSID vor Rufzeichen ohne SSID.
+Üblicher Port 10093. Direwolf kann kein AXUDP – nicht nötig.
+
+**Sicherheit:** AXUDP hat weder Anmeldung noch Verschlüsselung, das Rufzeichen im Frame ist
+nur eine Behauptung.
+- Zuerst nur `127.0.0.1`.
+- Angenommen wird nur von eingetragenen Gegenstellen: Absender-IP muss zu einer Gegenstelle
+  passen **und** das Absender-Rufzeichen des Frames zu dieser Gegenstelle gehören.
+  Alles andere wird still verworfen (kein DM, nur gezählt).
+- Übers Internet später nur durch WireGuard oder über HAMNET.
+- Sysop-Rechte über AXUDP nur von Loopback (wie Telnet), für fremde Gegenstellen nie.
+
+**Schritte:**
+1. ✅ `prcore/axudp.py`: FCS, Kodieren/Dekodieren, Gegenstellen (`parse_peers`),
+   `AxudpEndpoint` mit derselben Schnittstelle wie `KissTcpClient` (`run`, `send`,
+   `connected`, `describe`, Zähler), Ziel aus der Zieladresse des Frames.
+   Tests `tests/test_axudp.py`.
+2. TinyBox mit zwei Ports: `[axudp]` in `tinybox.conf`; `KissPort` bekommt den Transport
+   von außen (KISS-TCP oder AXUDP). Monitor, Bake, brocast, Qualität über Direwolf und
+   UI-Chat bleiben am Funk-Port; Sessions und Forwarding kommen von beiden Ports.
+   Eigene AX.25-Werte für AXUDP (Bandbreite kostet nichts: großes Fenster, PACLEN 256,
+   kurzes T1).
+3. Client: Kanal-Weiche in `ClientCore._new_link()`; `[tinybox] axudp = 127.0.0.1:10093`
+   → Kanal zur Heim-Box über AXUDP, im Chat nur verbunden (`ui = no` auf diesem Kanal).
+   Brocast hört der Client über seinen Funk-Monitor (prüfen: meldet Direwolf dem Client
+   die Frames, die die TinyBox sendet?).
+4. Forwarding: `transport = axudp` in `[partner.*]` (z. B. LinBPQ über HAMNET).
+
+**Offen:** UI-Frames an Ziele ohne Gegenstelle (Bake, CQ) über AXUDP – vorerst nicht
+gesendet (gezählt als `no_route`). Gegenstellen per Hostname (DynDNS) und dynamisch gelernte
+Adressen erst mit Schritt 4.
+
 ## Quellen
 
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a

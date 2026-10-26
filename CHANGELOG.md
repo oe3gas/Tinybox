@@ -5,6 +5,11 @@
 - Live-Monitore mit **Millisekunden** (`HH:MM:SS.mmm`): TinyBox-Web-GUI (Monitor und
   Frame-Monitor), Client 2026.10.26 (Monitor), brocastd (Empfangslog; neue Zeilen speichern
   `ts` mit ms, ältere zeigen `.000`).
+- AXUDP (PLANUNG 25, Schritt 1): neues Modul `prcore/axudp.py` – AX.25 über UDP im Format von
+  BPQ32/LinBPQ, XNet und JNOS (Frame + FCS CRC-16/X.25). Gegenstellen fest als Rufzeichen →
+  IP:Port, angenommen wird nur, wenn IP **und** Absender-Rufzeichen zu einer Gegenstelle
+  passen. `AxudpEndpoint` hat dieselbe Schnittstelle wie `KissTcpClient`. Noch nicht in
+  TinyBox und Client eingebunden (Schritte 2 und 3). Tests `tests/test_axudp.py`.
 - kisshub 2026.10.25.3: **RTS/CTS-Flusssteuerung** zum TM-D710 (`[tnc] rtscts`, Standard `yes`
   bei `tm-d710`, sonst `no`). Das Funkgerät bremst den kisshub über CTS, wenn sein
   TNC-Puffer voll ist; geschrieben wird in 64-Byte-Stücken, Strg+C hängt nie. Warnung bei
