@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import os
 import tempfile
 import time
 import threading
@@ -448,28 +449,39 @@ class TmD710Tests(HubTestBase):
 
 
 class FakeSerial:
-    """pyserial stand-in for the RTS/CTS writer: CTS follows a script."""
-    def __init__(self, cts_low_sec: float = 0.0):
-        self.until = time.monotonic() + cts_low_sec
+    """pyserial stand-in for the RTS/CTS writer: CTS follows a script of
+    (start, end) low phases in seconds from creation."""
+    def __init__(self, cts_low_sec: float = 0.0, low=(), fail_write: bool = False):
+        self.t0 = time.monotonic()
+        self.low = list(low) + ([(0.0, cts_low_sec)] if cts_low_sec else [])
         self.written = []
+        self.flushes = 0
+        self.fail_write = fail_write
 
     @property
     def cts(self) -> bool:
-        return time.monotonic() >= self.until
+        t = time.monotonic() - self.t0
+        return not any(a <= t < b for a, b in self.low)
 
     def write(self, data):
+        if self.fail_write:
+            raise OSError("device unplugged")
         assert self.cts, "written while CTS low"
         self.written.append(bytes(data))
 
     def flush(self):
-        pass
+        self.flushes += 1
 
 
 class RtsCtsWriterTests(unittest.TestCase):
-    def run_writer(self, ser, data):
+    def transport(self, ser):
         from kisshub.transport import SerialTransport
         t = SerialTransport("COM7", 9600, rtscts=True)
         t._ser = ser
+        return t
+
+    def run_writer(self, ser, data):
+        t = self.transport(ser)
         t.write(data)
         th = threading.Thread(target=t._writer, daemon=True)
         th.start()
@@ -480,20 +492,80 @@ class RtsCtsWriterTests(unittest.TestCase):
         th.join(1)
         return t
 
-    def test_chunks_and_waits_for_cts(self):
+    def test_small_pieces_each_flushed_and_waits_for_cts(self):
         ser = FakeSerial(cts_low_sec=0.2)
         t = self.run_writer(ser, bytes(200))
-        self.assertEqual([len(c) for c in ser.written], [64, 64, 64, 8])
+        self.assertEqual([len(c) for c in ser.written], [32] * 6 + [8])
+        self.assertEqual(ser.flushes, 7)               # every piece out before the next check
         f = t.flow_status()
-        self.assertEqual((f["flow"], f["cts_waits"]), ("rtscts", 1))
+        self.assertEqual((f["flow"], f["cts_waits"], f["tx_bytes"]), ("rtscts", 1, 200))
         self.assertGreaterEqual(f["cts_wait_s"], 0.1)
 
     def test_stop_while_cts_low(self):
-        from kisshub.transport import SerialTransport
-        t = SerialTransport("COM7", 9600, rtscts=True)
-        t._ser = FakeSerial(cts_low_sec=60)
+        t = self.transport(FakeSerial(cts_low_sec=60))
         t._stop.set()
         self.assertFalse(t._wait_cts())
+
+    def test_monitor_counts_every_low_phase(self):
+        ser = FakeSerial(low=[(0.05, 0.10), (0.20, 0.35)])
+        t = self.transport(ser)
+        th = threading.Thread(target=t._cts_monitor, daemon=True)
+        with self.assertLogs("kisshub.transport", "DEBUG") as logs:
+            th.start()
+            time.sleep(0.5)
+            t._stop.set()
+            th.join(1)
+        f = t.flow_status()
+        self.assertEqual(f["cts_drops"], 2)
+        self.assertAlmostEqual(f["cts_low_s"], 0.2, delta=0.06)
+        self.assertAlmostEqual(f["cts_low_max_ms"], 150, delta=40)
+        self.assertEqual(sum("CTS low" in o for o in logs.output), 2)
+        self.assertEqual(sum("CTS high again" in o for o in logs.output), 2)
+
+    def test_monitor_sees_cts_never_drop(self):
+        t = self.transport(FakeSerial())
+        th = threading.Thread(target=t._cts_monitor, daemon=True)
+        th.start()
+        time.sleep(0.1)
+        t._stop.set()
+        th.join(1)
+        self.assertEqual((t.cts_drops, t.cts_low_s), (0, 0.0))
+
+    def test_write_error_reopens_the_port(self):
+        async def go():
+            t = self.transport(FakeSerial(fail_write=True))
+            t._loop, t._rx = asyncio.get_running_loop(), asyncio.Queue()
+            t.write(b"\xc0\x00abc\xc0")
+            th = threading.Thread(target=t._writer, daemon=True)
+            with self.assertLogs("kisshub.transport", "WARNING"):
+                th.start()
+                with self.assertRaises(ConnectionError):
+                    await asyncio.wait_for(t.read(), 2)
+            t._stop.set()
+            th.join(1)
+            self.assertFalse(th.is_alive())
+        asyncio.run(go())
+
+    @unittest.skipUnless(hasattr(os, "openpty"), "termios only on Linux/macOS")
+    def test_driver_rtscts_reads_termios(self):
+        import termios
+        from kisshub.transport import driver_rtscts
+        master, slave = os.openpty()
+        try:
+            class Port:
+                def fileno(self):
+                    return slave
+            attrs = termios.tcgetattr(slave)
+            attrs[2] |= termios.CRTSCTS
+            termios.tcsetattr(slave, termios.TCSANOW, attrs)
+            self.assertIs(driver_rtscts(Port()), True)
+            attrs[2] &= ~termios.CRTSCTS
+            termios.tcsetattr(slave, termios.TCSANOW, attrs)
+            self.assertIs(driver_rtscts(Port()), False)
+        finally:
+            os.close(master)
+            os.close(slave)
+        self.assertIsNone(driver_rtscts(object()))
 
 
 class HubConfigTests(unittest.TestCase):

@@ -394,7 +394,8 @@ class Hub:
         if fs is None or not getattr(self.tnc.transport, "rtscts", False):
             return ""
         f = fs()
-        return f", CTS waits {f['cts_waits']} ({f['cts_wait_s']} s)"
+        return (f", CTS low {f['cts_drops']}x ({f['cts_low_s']} s, max {f['cts_low_max_ms']} ms)"
+                f", writer waits {f['cts_waits']} ({f['cts_wait_s']} s)")
 
     async def _status(self) -> None:
         if self.cfg.status_every_sec <= 0:

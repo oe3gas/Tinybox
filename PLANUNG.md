@@ -1110,6 +1110,27 @@ Das Funkgerät steuert damit selbst, wann es Daten nimmt; `max_lead_ms` bleibt a
 Vorlauf-Grenze für die Prioritäten. Geschrieben wird in 64-Byte-Stücken mit CTS-Prüfung
 davor, damit ein Stopp nie in einem blockierten Schreibvorgang hängt.
 
+**RTS/CTS wirksam machen (entschieden und umgesetzt 26.10.2026, kisshub 2026.10.26):** Funktest
+OE3GAS (TM-D710) ↔ OE3TEC (TM-D700) mit 9600 Bd: Bei 57600 Bd seriell verschmolzen Frames von
+OE3TEC (Anfang von I7 + Ende von I10 als *ein* Frame mit gültiger FCS) – Bytes gingen zwischen
+PC und TNC verloren, die Statuszeile zeigte trotzdem `CTS waits 0`. Befund im Code: `write()`
+kehrt zurück, sobald die Daten im Puffer des Betriebssystems liegen; die CTS-Prüfung vor jedem
+64-Byte-Stück lief also durch, bevor ein Byte auf der Leitung war, und zählte nur Zufälle. Die
+Flusssteuerung hing ganz am Treiber und am USB-Adapter (PL2303). Ein Schreibfehler (auch der
+2-s-`write_timeout`) beendete den Schreib-Thread still. Entscheidung, Gerhard: RTS/CTS ist die
+Kontrolle, die der TNC bietet, und muss vom kisshub selbst ausgewertet werden:
+- 32-Byte-Stücke, jedes mit `flush()` aus der Schnittstelle, dann CTS prüfen; kein
+  `write_timeout` mehr (ein abgebrochenes Stück könnte zwei Frames verbinden), Strg+C über
+  `cancel_write()` und Daemon-Threads.
+- CTS-Monitor-Thread (2 ms): zählt jede Tief-Phase (`cts_drops`, `cts_low_s`,
+  `cts_low_max_ms`), jeder Wechsel im DEBUG-Log, Warnung nach 5 s; Status und Statuszeile.
+- Linux: Startmeldung, ob der Treiber `CRTSCTS` wirklich gesetzt hat.
+- Schreibfehler → Port neu öffnen wie bei einem Lesefehler.
+Befund TM-D700 (OE3TEC, GTKTerm): CTS arbeitet nur im Befehlsmodus, **im KISS-Modus ist CTS
+immer frei** – dort hilft RTS/CTS nicht; laut Handbuch verlangt der D700 außerdem 9600 Bd
+seriell (Menü 1–9–5 nicht ändern). Ein Profil `tm-d700` (Taktung durch den kisshub, gemessene
+effektive Rate statt 9600, Puffergröße messen) folgt nach Absprache mit OE3TEC.
+
 ## 16. DX-Cluster-Feed `dxfeed` (entschieden 15.10.2026)
 
 - **Keine Live-Spots über Funk**, keine Dauerbeschallung: Der Spot-Strom wird gesammelt und **einmal täglich verdichtet**.

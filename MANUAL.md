@@ -425,9 +425,20 @@ Antwortet der TNC nicht, nennt die Fehlermeldung im Log die TNC-Taste. Für den 
 **Flusssteuerung:** Beim TM-D710 ist **RTS/CTS** eingeschaltet (`[tnc] rtscts`, Standard
 `yes` bei diesem Profil). Ist der kleine TNC-Puffer des Funkgeräts voll, nimmt es CTS weg und
 der kisshub wartet, bis CTS wieder kommt – das Funkgerät bremst selbst. Das Kabel muss RTS
-und CTS durchführen. Steht CTS länger als 5 s auf tief, meldet das Log eine Warnung; die
-Statuszeile zeigt `CTS waits` (wie oft und wie lange gebremst wurde). Ausschalten mit
-`[tnc.tm-d710] rtscts = no`. `max_lead_ms` bleibt zusätzlich aktiv (Vorrang für Quittungen).
+und CTS durchführen. Der kisshub verlässt sich dabei nicht allein auf den Treiber: Er schreibt
+in 32-Byte-Stücken, schiebt jedes Stück ganz aus der Schnittstelle und prüft CTS vor dem
+nächsten. So läuft höchstens ein Stück (plus der FIFO des USB-Adapters) über, wenn Treiber
+oder Adapter CTS nicht rechtzeitig beachten. Ausschalten mit `[tnc.tm-d710] rtscts = no`.
+`max_lead_ms` bleibt zusätzlich aktiv (Vorrang für Quittungen).
+
+Ob das Funkgerät überhaupt bremst, zeigt der **CTS-Monitor**: Er fragt CTS alle 2 ms ab, mit
+`[log] level = DEBUG` steht jeder Wechsel im Log (`CTS low …` / `CTS high again after … ms`),
+die Statuszeile zeigt `CTS low 3x (0.4 s, max 210 ms), writer waits 1 (0.1 s)`. Bleibt `CTS low`
+bei einer langen Übertragung auf `0x`, bremst das Gerät nicht über CTS (so der TM-D700 im
+KISS-Modus, 26.10.2026). Steht CTS länger als 5 s auf tief, kommt eine Warnung. Unter Linux
+meldet der Start zusätzlich, ob der Treiber die Flusssteuerung wirklich eingeschaltet hat
+(`driver flow control (termios CRTSCTS) on`). Bricht ein Schreibvorgang ab (Adapter gezogen),
+öffnet der kisshub die Schnittstelle neu, statt still nichts mehr zu senden.
 
 **Stand:** Profil und Dialog mit simuliertem TNC getestet, Funktest steht aus (Konzept K9).
 Gehen trotz RTS/CTS lange Frames verloren, `[ax25.tm-d710] paclen = 128` versuchen.

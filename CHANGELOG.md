@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- kisshub 2026.10.26: **RTS/CTS wirklich ausgewertet** (PLANUNG 15). 32-Byte-Stücke, jedes
+  ganz aus der Schnittstelle, bevor CTS erneut geprüft wird – nicht mehr nur der Treiber.
+  **CTS-Monitor** (2 ms): Statuszeile `CTS low 3x (0.4 s, max 210 ms), writer waits …`, jeder
+  Wechsel im DEBUG-Log. Linux meldet, ob der Treiber `CRTSCTS` gesetzt hat. Ein Schreibfehler
+  öffnet den Port neu, statt den Sender still zu beenden. Tests in `tests/test_kisshub.py`.
 - Client 2026.10.26.2 – AXUDP (PLANUNG 25, Schritt 3): mit `[tinybox] axudp =
   127.0.0.1:10093` (und `axudp_port`) erreicht der Client die Heim-TinyBox am selben PC
   über AXUDP, alle anderen Stationen weiter über Funk – ein Funkgerät für beide. Voller
