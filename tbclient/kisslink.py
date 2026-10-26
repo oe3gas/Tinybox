@@ -49,10 +49,24 @@ def link_cfg(cfg: Config) -> LinkCfg:
                    max_rx_info=max(512, cfg.ax25_paclen))
 
 
+def axudp_link_cfg(cfg: Config) -> LinkCfg:
+    """PLANUNG 25: AX.25 to the home TinyBox over AXUDP - no airtime (as the
+    TinyBox's [axudp] defaults)."""
+    return LinkCfg(paclen=256, maxframe=7, maxframe_ext=32, n2=10, version="2.2",
+                   srt_init_sec=1.5, t1_min_sec=3.0, t1_max_sec=12.0, t2_sec=0.05,
+                   t3_sec=300.0, air_baud=10_000_000, txdelay_sec=0.0, srej=cfg.ax25_srej,
+                   max_rx_info=512)
+
+
 class KissPort(SharedKissPort):
-    def __init__(self, cfg: Config, on_frame, on_incoming=None) -> None:
-        super().__init__(cfg.mycall, cfg.kiss_host, cfg.kiss_port, link_cfg(cfg),
-                         channel=cfg.kiss_channel, reconnect_sec=5)
+    link_kind = "kiss"                            # KissLink.kind of its channels
+    down_text = "kisshub not reachable"
+
+    def __init__(self, cfg: Config, on_frame, on_incoming=None, *,
+                 lcfg: LinkCfg | None = None, transport=None) -> None:
+        super().__init__(cfg.mycall, cfg.kiss_host, cfg.kiss_port, lcfg or link_cfg(cfg),
+                         channel=cfg.kiss_channel, reconnect_sec=5, transport=transport,
+                         half_duplex=transport is None)
         self.cfg = cfg
         self.on_frame = on_frame                  # monitor: radio.RawFrame
         self.on_incoming = on_incoming            # remote -> KissLink of a free channel, or None
@@ -116,13 +130,47 @@ class KissPort(SharedKissPort):
                 "tnc_state": h.get("state"), "error": h.get("error")}
 
 
+class AxudpPort(KissPort):
+    """PLANUNG 25: the home TinyBox over AXUDP - the client's own AX.25 over UDP
+    on loopback, next to the radio port. Only the home TinyBox is a peer; its
+    frames do not go to the monitor (they are not on the air)."""
+    link_kind = "axudp"
+    down_text = "AXUDP port not open"
+
+    def __init__(self, cfg: Config, on_incoming=None) -> None:
+        from prcore import axudp as udp
+        peers = {cfg.tinybox_call: udp.Peer(cfg.tinybox_call, cfg.axudp_host, cfg.axudp_port)}
+        listen = "::1" if ":" in cfg.axudp_host else "127.0.0.1"
+        super().__init__(cfg, lambda rf: None, on_incoming, lcfg=axudp_link_cfg(cfg),
+                         transport=lambda on_frame: udp.AxudpEndpoint(
+                             listen, cfg.axudp_listen, peers, on_frame))
+
+    async def run(self) -> None:
+        log.info("AXUDP 127.0.0.1:%d -> home TinyBox %s at %s:%d", self.cfg.axudp_listen,
+                 self.cfg.tinybox_call, self.cfg.axudp_host, self.cfg.axudp_port)
+        await SharedKissPort.run(self)
+
+    def on_heard(self, data: bytes, peeked: tuple | None, target: Ax25Link | None) -> None:
+        pass
+
+    def on_transmit(self, f: Frame, raw: bytes) -> None:
+        pass
+
+    def radio_state(self) -> dict:
+        ep = self.kiss
+        return {"via": "axudp", "up": ep.connected.is_set(),
+                "addr": f"{self.cfg.axudp_host}:{self.cfg.axudp_port}",
+                "dropped": sum(ep.dropped.values())}
+
+
 class KissLink(BaseLink):
-    """One AX.25 connection over the KissPort, for one channel."""
+    """One AX.25 connection over the KissPort (or the AxudpPort), for one channel."""
     kind = "kiss"
 
     def __init__(self, port: KissPort, cfg: Config, on_state, on_line) -> None:
         super().__init__(cfg, on_state, on_line)
         self.port = port
+        self.kind = port.link_kind
         self.agw_up = port.agw_up
         self.ax: Ax25Link | None = None
 
@@ -150,7 +198,7 @@ class KissLink(BaseLink):
 
     async def connect(self) -> None:
         if not self.agw_up.is_set():
-            self._set("offline", "kisshub not reachable")
+            self._set("offline", self.port.down_text)
             return
         remote = norm_call(self.target)
         if remote in self.port.links or remote in self.port.chans:

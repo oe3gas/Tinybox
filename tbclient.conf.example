@@ -14,6 +14,10 @@ ui           = auto            # chat events as UI frames: auto = if the TinyBox
 auto_connect = no              # connect when the client starts
 telnet_host  = 127.0.0.1       # only with interface = telnet
 telnet_port  = 6300
+# axudp      = 127.0.0.1:10093 # PLANUNG 25: TinyBox on this PC, one transceiver - the home
+#                              # TinyBox over AXUDP ([axudp] in tinybox.conf), every other
+#                              # station over the radio. Empty = all over the radio.
+# axudp_port = 10094           # own UDP port; the TinyBox lists "OE3GAS 127.0.0.1:10094"
 
 [radio]
 interface    = agw             # agw = radio via Direwolf; kiss = TNC / VARA via kisshub, the

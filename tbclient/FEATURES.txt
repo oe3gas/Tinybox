@@ -10,6 +10,13 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- AXUDP (PLANUNG 25): laufen TinyBox und Client am selben PC mit nur einem
+  Funkgeraet, erreicht der Client die eigene TinyBox ueber AXUDP (UDP auf
+  127.0.0.1) und alle anderen Stationen ueber Funk. [tinybox] axudp =
+  127.0.0.1:10093 und axudp_port = 10094 in tbclient.conf; die TinyBox
+  braucht [axudp] mit dem Client als Gegenstelle. Ueber AXUDP: voller
+  Client-Modus mit Bildern und Kompression, ohne Funkpausen, Chat ohne
+  UI-Frames. Der Kanal-Chip zeigt "AXUDP".
 - Monitor: Zeitstempel mit Millisekunden (HH:MM:SS.mmm).
 - Neuer TinyBox-Release (PLANUNG 24): einmal am Tag fragt der Client bei
   GitHub nach; ist ein neuerer Release da, erscheint ein Hinweis-Banner mit

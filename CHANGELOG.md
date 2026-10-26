@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- Client 2026.10.26.2 – AXUDP (PLANUNG 25, Schritt 3): mit `[tinybox] axudp =
+  127.0.0.1:10093` (und `axudp_port`) erreicht der Client die Heim-TinyBox am selben PC
+  über AXUDP, alle anderen Stationen weiter über Funk – ein Funkgerät für beide. Voller
+  Client-Modus mit Bildern und Kompression, Mail-Sync ohne Funkpausen, Chat ohne
+  UI-Frames. Kanal-Chip „AXUDP“. Tests `tests/test_tbclient_axudp.py`.
 - TinyBox-Monitor (KISS-Modus): **PacLen** `[n]` hinter dem Frametyp bei I- und UI-Frames,
   Knopf **HEX** im Kopf zeigt die Nutzlast als Hex-Bytes statt Text (bleibt gemerkt, APRS-Karte
   dann aus), **Frametypen in festen Farben** (I grün, RR blau, RNR orange, REJ/SREJ rot,

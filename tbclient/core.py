@@ -22,7 +22,7 @@ from . import target as tgt
 from .config import CALL_RE, Config
 from .images import Images, ImageStore
 from .channels import MAX_CHANNELS, TERM_SNAPSHOT, Channel
-from .kisslink import KissLink, KissPort
+from .kisslink import AxudpPort, KissLink, KissPort
 from .links import AgwLink, AgwPort, TelnetLink
 from .logbook import Logbook
 from .mailstore import MailStore
@@ -82,6 +82,9 @@ class ClientCore:
         self.port = (AgwPort(cfg, self._on_frame, self._incoming) if cfg.link == "agw"
                      else KissPort(cfg, self._on_frame, self._incoming) if cfg.link == "kiss"
                      else None)
+        # PLANUNG 25: the home TinyBox over AXUDP, the radio for everything else
+        self.udp = AxudpPort(cfg, lambda remote: self._incoming(remote, udp=True)) \
+            if cfg.axudp_host and self.port is not None else None
         self.channels: dict[int, Channel] = {}
         self.nochat = Channel(self, 0, self._new_link())
         last = self.settings.get("target", "")
@@ -255,7 +258,20 @@ class ClientCore:
             return AgwLink(self.port, self.cfg, None, None)
         return TelnetLink(self.cfg, None, None)
 
-    def _incoming(self, remote: str):
+    def _udp_link(self):
+        return KissLink(self.udp, self.cfg, None, None)
+
+    def uses_axudp(self, target: str, via: list[str] | None = None) -> bool:
+        """PLANUNG 25: the home TinyBox, directly, while AXUDP is configured."""
+        return self.udp is not None and target == self.home and not via
+
+    def relink(self, ch: Channel, target: str, via: list[str] | None = None) -> None:
+        """Before a connect: the channel's link fits the way to target."""
+        want = self.uses_axudp(target, via)
+        if want != (ch.link.kind == "axudp"):
+            ch.set_link(self._udp_link() if want else self._new_link())
+
+    def _incoming(self, remote: str, udp: bool = False):
         """CR46: somebody connected to us - the first free channel takes it as a
         terminal. None = no channel free (or that station is already connected)."""
         if any(c.target == remote and c.state != "offline" for c in self.channels.values()):
@@ -266,6 +282,8 @@ class ClientCore:
         ch = self.open_channel(n)
         if ch.state != "offline":
             return None
+        if udp != (ch.link.kind == "axudp"):         # PLANUNG 25: over the port it came in
+            ch.set_link(self._udp_link() if udp else self._new_link())
         ch.target = ch.link.target = remote
         ch.via, ch.link.via = [], []          # their path is in their frames, not ours
         ch.incoming, ch.view, ch.auto, ch._user_disc = True, "term", False, False
@@ -664,7 +682,7 @@ class ClientCore:
             self._handshake()
 
     def _want_ui(self) -> bool:
-        if self.link.kind == "telnet" or self.cfg.ui == "no":
+        if self.link.kind in ("telnet", "axudp") or self.cfg.ui == "no":
             return False
         if self.cfg.ui == "yes":
             return True
@@ -1093,6 +1111,7 @@ class ClientCore:
             "channels": [c.summary(now) for _, c in sorted(self.channels.items())],
             "chat_ch": self.chan.n, "max_ch": MAX_CHANNELS, "monitor_n": self.monitor_n,
             "radio": self.radio_state(),                                # CR46
+            "axudp": self.udp.radio_state() if self.udp is not None else None,   # PLANUNG 25
             "ch": ch,
             "term": self._term_of(ch), "term_n": self._term_n_of(ch),
             "client": self.handshake_done and bool(self.caps or self.boards),
@@ -1190,7 +1209,10 @@ class ClientCore:
             await asyncio.Event().wait()     # telnet: nothing to keep open between sessions
             return
         poller = asyncio.ensure_future(self._poll_outstanding())
+        udp = asyncio.ensure_future(self.udp.run()) if self.udp is not None else None
         try:
             await self.port.run()
         finally:
             poller.cancel()
+            if udp is not None:
+                udp.cancel()

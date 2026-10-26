@@ -551,7 +551,20 @@ peers   = OE3GAS 127.0.0.1:10094   ; Rufzeichen des Clients und sein UDP-Port
 - Dieselbe Station nur einmal: über Funk **oder** AXUDP.
 - `STATUS` (Konsole) zeigt eine Zeile `AXUDP:` mit Gegenstellen, Verbindungen, Zählern und
   verworfenen Paketen. Log-Komponente `axudp` (`[logging] debug = axudp`).
-- Der Client-Teil (Kanal zur Heim-Box über AXUDP) folgt mit PLANUNG 25, Schritt 3.
+- **Client** (ab 2026.10.26.2): in `tbclient.conf`
+
+  ```ini
+  [tinybox]
+  call       = OE3GAS-1
+  axudp      = 127.0.0.1:10093   ; die TinyBox ([axudp] port)
+  axudp_port = 10094             ; eigener UDP-Port = Eintrag in den peers der TinyBox
+  ```
+
+  Ein Connect zur Heim-TinyBox (ohne Digi) läuft dann über AXUDP, jeder andere über Funk
+  (`[radio] interface = agw` an denselben Direwolf oder `kiss`). Über AXUDP: voller
+  Client-Modus mit Bildern und Kompression, Mail-Sync ohne Funkpausen, Chat ohne UI-Frames;
+  der Kanal-Chip zeigt „AXUDP“, das Logbuch `via axudp`. Mit Digi-Pfad geht auch die
+  Heim-TinyBox über Funk. Mit `interface = telnet` ist `axudp` nicht erlaubt.
 
 ## 4. Verbindungsqualität messen (kisshub, CR67)
 

@@ -64,7 +64,14 @@ class Channel:
         """'OE3XYZ-1' or 'OE3XYZ-1 via OE3XTC-5' (CR71)."""
         return target_label(self.target, self.via)
 
+    def set_link(self, link) -> None:
+        """PLANUNG 25: another way for the next connection (AXUDP or radio)."""
+        self.link = link
+        link.on_state = self._on_state
+        link.on_line = self._on_line
+
     async def connect(self, target: str, via: list[str] | None = None) -> None:
+        self.core.relink(self, target, via)
         self.target = target
         self.via = list(via or [])
         self.link.target = target
@@ -206,6 +213,7 @@ class Channel:
 
     def summary(self, now: float) -> dict:
         return {"n": self.n, "target": self.target, "via": self.via, "label": self.label,
+                "link": self.link.kind,                       # PLANUNG 25: axudp | agw | kiss ...
                 "state": self.state, "reason": self.reason,
                 "state_age": round(now - self.state_at, 1), "ended": self.ended,
                 "mode": self.mode, "view": self.view, "chat": self.core.chan is self,

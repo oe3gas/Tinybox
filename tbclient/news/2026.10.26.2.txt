@@ -1,0 +1,2 @@
+- Heim-TinyBox am selben PC ueber AXUDP, alle anderen
+  Stationen ueber Funk: [tinybox] axudp.

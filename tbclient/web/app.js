@@ -2126,7 +2126,7 @@ function topStatus() {
     if (c.mode === "terminal") return "connected · terminal";
     if (!c.chat || c.mode !== "tinybox") return "connected";
     return (S.board ? `${S.board.name} · ${S.members.length} here` : "connected")
-      + (S.ui ? " · UI" : " · I-frames");
+      + (c.link === "axudp" ? " · AXUDP" : S.ui ? " · UI" : " · I-frames");
   }
   return endedText(c) || (radioUp() ? "offline" : radioText());
 }

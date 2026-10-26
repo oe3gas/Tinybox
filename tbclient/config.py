@@ -27,6 +27,10 @@ class Config:
     auto_connect: bool = False
     telnet_host: str = "127.0.0.1"
     telnet_port: int = 6300
+    # PLANUNG 25: the home TinyBox over AXUDP (same PC), everything else over the radio
+    axudp_host: str = ""              # "" = off; the TinyBox's [axudp] address
+    axudp_port: int = 10093
+    axudp_listen: int = 10094         # own UDP port (the TinyBox lists it in its peers)
     agw_host: str = "127.0.0.1"
     agw_port: int = 8000
     radio_port: int = 0
@@ -124,6 +128,18 @@ def load(path: str | Path) -> Config:
     cfg.auto_connect = get("tinybox", "auto_connect", "no").lower() in ("yes", "true", "1", "on")
     cfg.telnet_host = get("tinybox", "telnet_host", cfg.telnet_host)
     cfg.telnet_port = int(get("tinybox", "telnet_port", str(cfg.telnet_port)))
+    if has("tinybox", "axudp"):                                  # PLANUNG 25
+        from prcore import axudp as udp
+        try:
+            cfg.axudp_host, cfg.axudp_port = udp.parse_addr(get("tinybox", "axudp", ""))
+        except udp.AxudpError as exc:
+            raise ConfigError(f"[tinybox] axudp: {exc}") from None
+        cfg.axudp_listen = int(get("tinybox", "axudp_port", str(cfg.axudp_listen)))
+        if not udp.is_loopback(cfg.axudp_host):
+            raise ConfigError("[tinybox] axudp: only the TinyBox on this PC for now "
+                              "(127.0.0.1)")
+        if not 1 <= cfg.axudp_listen <= 65535:
+            raise ConfigError("[tinybox] axudp_port must be 1 ... 65535")
 
     # --- AGW: Direwolf, values from direwolf.conf -----------------------------------
     dw = None
@@ -246,6 +262,9 @@ def load(path: str | Path) -> Config:
         raise ConfigError("[radio] interface must be agw, kiss or telnet")
     if cfg.ui not in ("auto", "yes", "no"):
         raise ConfigError("[tinybox] ui must be auto, yes or no")
+    if cfg.axudp_host and cfg.link == "telnet":
+        raise ConfigError("[tinybox] axudp needs [radio] interface = agw or kiss "
+                          "(telnet already is the way to the own TinyBox)")
     return cfg
 
 
@@ -267,6 +286,9 @@ def radio_lines(cfg: Config) -> list[str]:
         lines.append(f"picture estimate {cfg.img_rate} B/s ({src.get('img_rate')})")
     if src.get("direwolf.conf"):
         lines.append(f"direwolf.conf {src['direwolf.conf']}")
+    if cfg.axudp_host:
+        lines.append(f"home TinyBox {cfg.tinybox_call} over AXUDP {cfg.axudp_host}:"
+                     f"{cfg.axudp_port} (own UDP port {cfg.axudp_listen}), the rest over radio")
     return lines + [f"config hint: {h}" for h in cfg.hints]
 
 

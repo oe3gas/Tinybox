@@ -1486,7 +1486,7 @@ GitHub-Release, ohne selbst nachzusehen.
 - `[update] check` in allen vier `*.conf.example`; Handbuch 2.9, Release-Ablauf in
   `GIT-ANLEITUNG.md`. Tests: `tests/test_release.py`.
 
-## 25. AXUDP: zweiter Port neben dem Funk (entschieden 25.10.2026, Schritte 1–2 umgesetzt)
+## 25. AXUDP: zweiter Port neben dem Funk (entschieden 25.10.2026, Schritte 1–3 umgesetzt)
 
 **Anlass:** Auf PC1 gibt es nur ein Funkgerät (9600 Bd). TinyBox und Client sollen dort
 gemeinsam laufen, und der Client soll vollwertig mitfunken. Über AGW erreicht der Client die
@@ -1542,10 +1542,18 @@ nur eine Behauptung.
    Sysop-Rufzeichen von einer Loopback-Gegenstelle. Konsole `STATUS`: Zeile `AXUDP:`;
    Web-GUI `/api/status`: `axudp`. Log-Komponente `axudp`. Forwarding über AXUDP noch
    nicht (Schritt 4). Tests `tests/test_axudp_adapter.py`.
-3. Client: Kanal-Weiche in `ClientCore._new_link()`; `[tinybox] axudp = 127.0.0.1:10093`
-   → Kanal zur Heim-Box über AXUDP, im Chat nur verbunden (`ui = no` auf diesem Kanal).
-   Brocast hört der Client über seinen Funk-Monitor (prüfen: meldet Direwolf dem Client
-   die Frames, die die TinyBox sendet?).
+3. ✅ Client (26.10.2026, Version 2026.10.26.2): `[tinybox] axudp = 127.0.0.1:10093`,
+   `axudp_port = 10094` (eigener UDP-Port), vorerst nur Loopback, nicht mit
+   `interface = telnet`. `AxudpPort` (`tbclient/kisslink.py`) = der KISS-Port des Clients
+   mit AXUDP-Transport, einzige Gegenstelle die Heim-TinyBox; Frames nicht im Monitor
+   (nicht auf der Luft). Weiche `ClientCore.relink()` vor jedem Connect: Heim-TinyBox ohne
+   Digi → AXUDP-Link, sonst Funk-Link; `Channel.set_link()` tauscht den Link des Kanals.
+   Eingehende Connects über AXUDP bekommen einen AXUDP-Link. Handshake ohne `UI`, mit
+   `Z` und `IMG`; Mail-Sync ohne Funkpausen (`Syncer.radio` falsch wie bei Telnet).
+   Snapshot: `axudp` (Port offen?) und `link` je Kanal; Kanal-Chip „AXUDP“; Logbuch
+   `via axudp`. Offen: brocast hört der Client über seinen Funk-Monitor – meldet Direwolf
+   über AGW dem Client die Frames, die die TinyBox sendet? (Funktest auf PC1.)
+   Tests `tests/test_tbclient_axudp.py`.
 4. Forwarding: `transport = axudp` in `[partner.*]` (z. B. LinBPQ über HAMNET).
 
 **Offen:** UI-Frames an Ziele ohne Gegenstelle (Bake, CQ) über AXUDP – vorerst nicht

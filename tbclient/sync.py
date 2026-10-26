@@ -571,7 +571,9 @@ class Syncer:
 
     @property
     def radio(self) -> bool:
-        return self.core.link.kind != "telnet"
+        """Over the air: pauses between requests, compressed pieces. Telnet and
+        AXUDP (PLANUNG 25) have no airtime."""
+        return self.core.link.kind not in ("telnet", "axudp")
 
     async def _send(self, *lines: str) -> None:
         """One request. On radio with a pause before it (not before the first),
