@@ -2,6 +2,9 @@
 
 ## Unveröffentlicht
 
+- Live-Monitore mit **Millisekunden** (`HH:MM:SS.mmm`): TinyBox-Web-GUI (Monitor und
+  Frame-Monitor), Client 2026.10.26 (Monitor), brocastd (Empfangslog; neue Zeilen speichern
+  `ts` mit ms, ältere zeigen `.000`).
 - kisshub 2026.10.25.3: **RTS/CTS-Flusssteuerung** zum TM-D710 (`[tnc] rtscts`, Standard `yes`
   bei `tm-d710`, sonst `no`). Das Funkgerät bremst den kisshub über CTS, wenn sein
   TNC-Puffer voll ist; geschrieben wird in 64-Byte-Stücken, Strg+C hängt nie. Warnung bei

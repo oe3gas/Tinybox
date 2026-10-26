@@ -97,7 +97,7 @@ class Daemon:
             self._receive(data, own=False)
 
     def _receive(self, data: bytes, own: bool) -> None:
-        now = int(self.clock())
+        now = round(self.clock(), 3)                 # with milliseconds for the receive log
         parsed = parse_frame(data)
         if parsed is None:                           # not a brocast frame: log it briefly
             src, dest, kind = describe_other(data)

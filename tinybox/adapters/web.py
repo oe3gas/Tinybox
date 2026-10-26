@@ -134,8 +134,9 @@ class HubLogHandler(logging.Handler):
 
     @staticmethod
     def formatter_time(record: logging.LogRecord) -> str:
-        import time
-        return time.strftime("%H:%M:%S", time.localtime(record.created))
+        import time                                  # HH:MM:SS.mmm - milliseconds for the monitor
+        return (time.strftime("%H:%M:%S", time.localtime(record.created))
+                + f".{int(record.msecs):03d}")
 
 
 # --- the server ----------------------------------------------------------------

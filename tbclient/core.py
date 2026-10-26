@@ -722,7 +722,8 @@ class ClientCore:
         entry = monitor_entry(f, pair in self._mod128,
                               frozenset([self.home, *self.settings.get("tinyboxes", [])]),
                               self.aprs_memory, self.aprs_home)
-        entry["t"] = time.strftime("%H:%M:%S")
+        now = time.time()                        # HH:MM:SS.mmm - milliseconds for the monitor
+        entry["t"] = time.strftime("%H:%M:%S", time.localtime(now)) + f".{int(now * 1000) % 1000:03d}"
         self.monitor.append((self.monitor_n, entry))
         if "aprs" in entry:                      # CR61: APRS statistics
             try:

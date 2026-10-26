@@ -111,6 +111,12 @@ def iso(ts: int | None) -> str | None:
     return datetime.fromtimestamp(ts, timezone.utc).isoformat() if ts is not None else None
 
 
+def iso_ms(ts: float | None) -> str | None:
+    """Like iso(), with milliseconds (receive log: older rows have whole seconds)."""
+    return (datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="milliseconds")
+            if ts is not None else None)
+
+
 class Listener:
     def __init__(self, store: Store, codec: Codec, clock: Callable[[], float] = time.time,
                  baud: int = 1200, txdelay_ms: int = 300):
@@ -861,7 +867,7 @@ class Listener:
                 p = self.store.lpage(e["org"], e["id"])
                 visible = bool(p and p["deleted_rev"] is None)
             out.append({
-                "time": iso(e["ts"]), "heard_from": e["heard_from"], "dest": e["dest"],
+                "time": iso_ms(e["ts"]), "heard_from": e["heard_from"], "dest": e["dest"],
                 "org": e["org"], "id": e["id"], "sub": e["sub"], "sub_total": e["sub_total"],
                 "rev": e["rev"], "ti": e["ti"], "bytes": e["bytes"], "own": bool(e["own"]),
                 "result": e["result"], "text": RESULT_TEXT.get(e["result"], e["result"]),

@@ -2265,7 +2265,8 @@ async function renderRxlog(filter) {
   for (const r of rows) {
     const tr = el("tr", r.kind === "foreign" ? "dim" : "");
     const d = new Date(r.time);
-    tr.append(el("td", "mono", d.toLocaleTimeString("de-AT") + (d.toDateString() !== new Date().toDateString()
+    tr.append(el("td", "mono", d.toLocaleTimeString("de-AT") + "." + String(d.getMilliseconds()).padStart(3, "0")
+      + (d.toDateString() !== new Date().toDateString()
       ? " " + d.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit" }) : "")));
     const from = el("td", "mono", r.heard_from);
     if (r.result === "foreign" && r.dest) from.append(el("span", "dimtext", " > " + r.dest));

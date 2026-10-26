@@ -10,6 +10,7 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Monitor: Zeitstempel mit Millisekunden (HH:MM:SS.mmm).
 - Neuer TinyBox-Release (PLANUNG 24): einmal am Tag fragt der Client bei
   GitHub nach; ist ein neuerer Release da, erscheint ein Hinweis-Banner mit
   Link (wegklickbar). Es wird nichts heruntergeladen. Abschalten:

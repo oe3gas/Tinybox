@@ -1,0 +1,2 @@
+- Monitor: Zeitstempel mit Millisekunden
+  (HH:MM:SS.mmm).
