@@ -97,7 +97,15 @@ schaltet es ab, indem es `dxfeed.conf` in `dxfeed.conf.vor-feederpi` umbenennt
 ### 5. Prüfen
 
 - Am PC: `py -3 pi_abholung.py --host <IP> --test` zeigt, was am Pi wartet.
-- Am PC: `logs\pi_abholung.log` – jede Abholung mit Dateinamen, Ausfälle einmal pro Ausfall.
+- Am PC: `logs\pi_abholung.log` – jede Abholung mit Dateinamen, Ausfälle einmal pro Ausfall,
+  nach 60 min ohne Abholung einmal eine `WARNUNG`.
+
+### Wenn der PC nicht abholt
+
+Am Pi staut sich nichts: Jeder Job schreibt pro Thema eine Datei und überschreibt sie beim
+nächsten Lauf. Holt der PC später ab, zieht `pi_abholung.py` das Alter der Datei von ihrem
+`Valid:` ab. Was schon abgelaufen ist, kommt nicht mehr in die TinyBox. Startet der Pi in der
+Zwischenzeit neu, ist der Ausgang leer (RAM), und die nächsten Läufe füllen ihn wieder.
 - Am Pi: `systemctl list-timers 'geosphere*' 'dxfeed*'` und `journalctl -u dxfeed -n 30`.
 
 ## Betrieb am Pi

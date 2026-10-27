@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **Feeder-Pi, späte Abholung**: `pi_abholung.py` zieht das Alter einer Datei am Pi von ihrem
+  `Valid:` ab, damit ein spät abgeholter Wetterbericht nicht noch 2 h als aktuell gilt;
+  schon abgelaufene Bulletins werden nicht zugestellt (nur quittiert). Dauert ein Ausfall länger
+  als `--warnen-nach` (Standard 60 min), steht einmal eine `WARNUNG` im Protokoll; `--test`
+  zeigt die letzte erfolgreiche Abholung.
 - **CR74 – Rauschen als Rufzeichen**: Frames mit ungültigem Adressfeld (Rufzeichen nicht nur
   A–Z/0–9, SSID nicht 0–15) kommen nicht mehr in die Heard-Listen. Ursache: der TNC (TM-D710,
   9600 Bd, offene Rauschsperre) liefert ab und zu Rauschen, bei dem die Prüfsumme zufällig

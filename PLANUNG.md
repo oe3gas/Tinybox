@@ -1437,8 +1437,14 @@ auf einem Raspberry Pi 1 (512 MB, SD-Karte 4 GB). Anleitung: `feederpi/README.md
   `sudo sh /boot/firmware/feederpi/install.sh` → `pi_abholung_einrichten.bat` (schaltet auf
   Wunsch die PC-Aufgaben ab und benennt `dxfeed.conf` in `dxfeed.conf.vor-feederpi` um, damit
   `start_alles.bat` den Sammler nicht mehr startet). Updates per `scp` + `install.sh`.
-- **Grenzen:** bis zu 5 min Verzögerung; nach Pi-Neustart sind wartende Dateien weg; `Valid:`
-  zählt ab Eintreffen in der TinyBox.
+- **Grenzen:** bis zu 5 min Verzögerung; nach Pi-Neustart sind wartende Dateien weg.
+- **Späte Abholung (27.10.2026):** Ist der PC länger weg, staut sich nichts – je Thema eine
+  Datei, der nächste Lauf überschreibt sie (nur `dxfeed_neu_<call>` sammeln sich, je wenige KB).
+  Weil die TinyBox `Valid:` ab dem Einlesen zählt, zieht `pi_abholung.py` das Alter der Datei
+  (Zeitstempel am Pi) von `Valid:` ab; ist die Gültigkeit schon vorbei, wird die Datei nicht
+  zugestellt, aber quittiert. Ausfall: einmal `FEHLER`, nach `--warnen-nach` (60 min) einmal
+  `WARNUNG`, danach „wieder in Ordnung (letzte Abholung vor …)“ in `logs\pi_abholung.log`.
+  Zustand in `data\pi_abholung.state` (JSON, letzte erfolgreiche Abholung).
 - **Einschätzung (24.10.2026): TinyBox selbst auf einem zweiten Pi 1** – nur mit Hardware-TNC
   (KISS) denkbar und ohne Reserve; mit Direwolf am selben Pi zu knapp. Eine SSD bringt dort
   nichts (Datenbank wenige MB, kein USB-Boot, USB 2.0 teilt sich den Bus mit dem LAN). Ziel für
