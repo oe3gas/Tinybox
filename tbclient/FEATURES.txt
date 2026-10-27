@@ -10,6 +10,8 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Chat ueber lokales AXUDP: in der Teilnehmerliste keine Balken fuer die
+  eigene Station (die TinyBox misst dort nichts), nur "you - axudp".
 - Heard-Liste und Monitor: Frames mit ungueltigen Rufzeichen (nur A-Z,
   0-9, SSID 0-15 gelten) werden verworfen - Rauschen, bei dem die
   Pruefsumme im TNC zufaellig stimmte (CR74).

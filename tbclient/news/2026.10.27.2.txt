@@ -1,0 +1,2 @@
+- Chat ueber lokales AXUDP: keine Balken fuer
+  die eigene Station, nur die Verbindungsart.

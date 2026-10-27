@@ -455,15 +455,21 @@ function qualityBars(call) {
   return box;
 }
 
+// own chat over AXUDP or the telnet test port: no radio path, no link quality
+function localLink() { return S.chat_link === "axudp" || S.chat_link === "telnet"; }
+
 function personRow(call, sym, note, member) {
   const li = el("li");
   const txt = el("div", "ptxt");
   txt.append(el("div", "c", call));
   if (note) txt.append(el("div", "x", note));
   li.append(avatar(call, sym, true), txt);
-  const q = qualityBars(call);
+  const local = call === S.mycall && localLink();
+  const q = local ? null : qualityBars(call);
   if (q) li.append(q);
-  if (member) {                          // CR33: tap = the numbers behind the bars
+  // CR33: tap = the numbers behind the bars - only where there are bars; a station
+  // over local AXUDP has none (the TinyBox measures nothing for it)
+  if (member && !local && ((S.quality && call in S.quality) || (S.linkq && S.linkq[call]))) {
     li.classList.add("tap");
     li.onclick = () => openLink(call);
   }
@@ -597,7 +603,8 @@ function renderPeople() {
   if (S.board) {
     for (const c of S.members) {
       const name = SYMNAMES[symOf(c)];
-      const mine = S.profile && S.profile.name ? `you · ${S.profile.name}` : "you";
+      const mine = (S.profile && S.profile.name ? `you · ${S.profile.name}` : "you") +
+                   (localLink() ? ` · ${S.chat_link}` : "");
       mem.append(personRow(c, symOf(c), c === S.mycall ? mine : (profileNote(c) || name || ""), true));
     }
   } else {

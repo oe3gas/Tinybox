@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- Client 2026.10.27.2: läuft der Chat über lokales AXUDP (oder den Telnet-Testport), zeigt die
+  Teilnehmerliste für die eigene Station keine Balken und keine Detailansicht, nur „you · axudp“.
+  Andere lokale Teilnehmer haben keine Balken, weil die TinyBox für sie nichts mehr sendet;
+  angetippt werden kann nur noch, wer Balken hat. Status-Feld `chat_link`.
+
 - TinyBox: **keine Verbindungsqualität für lokale Stationen über AXUDP** (PLANUNG 25). Für eine
   AXUDP-Session wird nichts ermittelt (`linkq.is_local`): keine Balken in „Connected“, die
   Detailseite zeigt nur Verbindungsart, Connect-Zeit und Dauer; kein `%`-Balken im Chat,

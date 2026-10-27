@@ -1119,6 +1119,9 @@ class ClientCore:
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),
             "quality": self.quality,
+            # PLANUNG 25: the chat runs over AXUDP (or the telnet test port) - no radio
+            # path, so no link quality for the own station: only the connection type
+            "chat_link": self.link.kind,
             "linkq": self.linkq, "qcfg": self.qcfg,      # CR33: detail view per station
             "mail": self.mail,
             "sysmsg": self.sysmsg,
