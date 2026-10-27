@@ -606,8 +606,9 @@ function sessionsCard() {
           h("div", { class: "who-call", text: s.call }),
           h("div", { class: "meta", text: meta.join(" \u00b7 ") },
             s.client ? [" \u00b7 ", h("span", { class: "client", text: clientText(s.client) })] : [])),
-        h("div", { class: "qcell" }, barsEl(s.quality),
-          h("span", { class: "sub", text: barsNote(s.quality) })),
+        s.origin === "axudp" ? "" :                 // local station: no link quality
+          h("div", { class: "qcell" }, barsEl(s.quality),
+            h("span", { class: "sub", text: barsNote(s.quality) })),
         h("button", { class: "btn sm danger", type: "button", onclick: () => disconnect(s.call) }, "Disconnect"));
     }));
   }
@@ -1051,6 +1052,7 @@ function viewUser(call) {
 }
 
 function renderUser(card, d) {
+  if (d.local) return renderLocalUser(card, d.session);
   const s = d.session, q = d.quality, r = d.result, w = d.window;
   const pct = (x) => x === null || x === undefined ? "-" : x.toFixed(1).replace(/\.0$/, "") + " %";
   const n = (x) => x === null || x === undefined ? "-" : String(x);
@@ -1179,6 +1181,23 @@ function renderUser(card, d) {
         raw,
         h("div", { class: "legend", text: "Window = difference to the oldest sample in the window (what the bars are made of). " +
                                            "Since link start = raw counter from " + src + ". Grey rows are current values, not differences." }))));
+}
+
+// a station on the same PC over AXUDP: no radio path, so no link quality -
+// connect type and time are enough
+function renderLocalUser(card, s) {
+  card.replaceChildren(
+    h("div", { class: "card-head" },
+      h("div", { class: "crumb grow" }, h("a", { href: "#/users", text: "Users" }), "\u203a",
+        h("span", { class: "mono", text: s.call })),
+      h("button", { class: "btn sm danger", type: "button", onclick: () => disconnect(s.call) }, "Disconnect")),
+    h("div", { class: "detail" },
+      h("div", { class: "hero" },
+        h("div", { class: "grow" },
+          h("div", { class: "call", text: s.call }),
+          h("div", { class: "meta", text: s.origin + " \u00b7 connect time " + hhmm(s.since) +
+                                          " (" + durationText(s.since) + ") \u00b7 " + s.state }),
+          s.client ? h("div", { class: "meta client", text: clientText(s.client) }) : ""))));
 }
 
 function viewMonitor() {

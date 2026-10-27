@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- TinyBox: **keine Verbindungsqualität für lokale Stationen über AXUDP** (PLANUNG 25). Für eine
+  AXUDP-Session wird nichts ermittelt (`linkq.is_local`): keine Balken in „Connected“, die
+  Detailseite zeigt nur Verbindungsart, Connect-Zeit und Dauer; kein `%`-Balken im Chat,
+  kein Empfangsfenster, `STAT` meldet keine Daten.
+
 - **Feeder-Pi, späte Abholung**: `pi_abholung.py` zieht das Alter einer Datei am Pi von ihrem
   `Valid:` ab, damit ein spät abgeholter Wetterbericht nicht noch 2 h als aktuell gilt;
   schon abgelaufene Bulletins werden nicht zugestellt (nur quittiert). Dauert ein Ausfall länger

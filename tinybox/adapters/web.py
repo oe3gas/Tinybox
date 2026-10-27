@@ -580,6 +580,8 @@ class WebServer:
         if not sessions:
             raise HttpError(404, f"{call} is not connected")
         s = sessions[0]
+        if linkq.is_local(s):                          # AXUDP: connect type and time only
+            return {"session": self._session_json(s), "local": True}
         dw = self.app.cfg.direwolf
         r = linkq.result_for(self.app.service, call, s)
         q = self.app.service.links.get(call)

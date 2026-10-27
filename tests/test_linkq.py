@@ -407,3 +407,18 @@ class ClientQualityTests(unittest.TestCase):
                 self.assertEqual(core.numbers, {3: "OE1ABC", 2: "OE9XYZ"})
 
         asyncio.run(scenario())
+
+
+class LocalStationTests(unittest.TestCase):
+    """A client on the same PC over AXUDP: no link quality at all."""
+
+    def test_axudp_session_has_no_result(self):
+        from types import SimpleNamespace
+        q = SimpleNamespace(evaluate=lambda now, rx=None: "result")
+        service = SimpleNamespace(links={"OE3GAS": q})
+        radio = SimpleNamespace(origin="radio", ui_rx=None)
+        local = SimpleNamespace(origin="axudp", ui_rx=None)
+        self.assertIsNotNone(linkq.result_for(service, "OE3GAS", radio))
+        self.assertIsNone(linkq.result_for(service, "OE3GAS", local))
+        self.assertTrue(linkq.is_local(local))
+        self.assertFalse(linkq.is_local(None))

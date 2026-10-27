@@ -176,7 +176,7 @@ class ChatHub:
 
     def _rx_window(self, session: Session) -> linkq.RxWindow | None:
         return (linkq.RxWindow(linkq.cfg_from(self.cfg.direwolf))
-                if session.client and session.client.ui else None)
+                if session.client and session.client.ui and not linkq.is_local(session) else None)
 
     def rebind(self, session: Session) -> None:
         """A client announced itself again on a session that is still in a board
@@ -375,6 +375,8 @@ class ChatHub:
                 continue
             items, legacy, stats = [], [], []
             for s in members:
+                if linkq.is_local(s):                    # AXUDP: no bars for a local station
+                    continue
                 r = linkq.result_for(service, s.call, s)
                 n = self.member_no(b.name, s.call)
                 if r is not None or s.call in service.links:

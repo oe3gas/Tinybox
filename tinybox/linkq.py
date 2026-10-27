@@ -217,9 +217,17 @@ def cfg_from(dw) -> QualityCfg:
                       min_frames=dw.quality_min_frames, steps=dw.quality_steps)
 
 
+def is_local(session) -> bool:
+    """A station on the same PC over AXUDP (PLANUNG 25) - no link quality."""
+    return getattr(session, "origin", None) == "axudp"
+
+
 def result_for(service, call: str, session=None, now: float | None = None) -> Result | None:
     """Everything known about one station: Direwolf counters (radio link) and,
-    for a client in UI mode, its receive window."""
+    for a client in UI mode, its receive window. None for a local station over
+    AXUDP: no radio path, nothing to measure - connect type and time are enough."""
+    if is_local(session):
+        return None
     q = service.links.get(call)
     rxw = getattr(session, "ui_rx", None)
     rx = rxw.direction(now) if rxw is not None else None
