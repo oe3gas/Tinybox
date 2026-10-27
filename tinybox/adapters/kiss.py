@@ -209,7 +209,8 @@ class KissAdapter(AgwAdapter):
             log.warning("UI frame to %s not sent: %s", dest, exc)
             return
         self.port.transmit(f, None)
-        monitor.info("UI %s > %s", dest, text)
+        monitor.info("UI %s > %s", dest, text,
+                     extra={"ui_hex": text.encode("utf-8").hex()})   # HEX view
 
     # --- link events (the port keeps links and v2.0 memory up to date) ---------------
 

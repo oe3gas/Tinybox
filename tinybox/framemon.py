@@ -3,7 +3,9 @@
 In KISS mode TinyBox does AX.25 itself, so it knows every frame it hears on the
 channel and every frame it sends - also its own, which Direwolf never shows.
 Each frame becomes one monitor entry in parts (time, calls, type, text, kind;
-I and UI frames also len = payload bytes and hex = the payload as hex):
+I and UI frames also len = payload bytes and hex = the payload as hex; every
+frame raw = all its bytes as hex and ctl = offset of the control field, for
+the frame inspector of the HEX view):
 the web GUI colours the calls and filters, like the client's monitor (CR50).
 
 The entries go to the logger "tinybox.frames". It does not propagate: the
@@ -110,7 +112,8 @@ def entry(data: bytes, *, tx: bool, mycall: str, mod128: bool | None = None) -> 
             kind = "quality"
     e = {"src": src, "dst": dest,
          "via": [c + ("*" if h else "") for c, h in zip(path, repeated)],
-         "typ": typ, "text": text, "kind": kind, "tx": tx}
+         "typ": typ, "text": text, "kind": kind, "tx": tx,
+         "raw": data.hex(), "ctl": off}             # whole frame for the inspector; control at ctl
     if control & 0x01 == 0 or (control & 0xEF) == 0x03:       # I and UI carry a payload
         e["len"] = len(info)                           # PacLen, shown as [n]
         e["hex"] = info.hex()                          # for the HEX view of the monitor

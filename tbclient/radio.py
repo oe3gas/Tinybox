@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from prcore import aprs
+from prcore.ax25.frame import addresses_valid
 
 UI_CONTROL = 0x03
 
@@ -52,7 +53,10 @@ def _hbit(raw: bytes) -> bool:
 
 
 def decode(data: bytes) -> RawFrame | None:
-    """None for anything that is not a sane AX.25 frame."""
+    """None for anything that is not a sane AX.25 frame - also for callsigns
+    that are not upper case letters and digits (CR74: noise from the TNC)."""
+    if not addresses_valid(data):
+        return None
     calls: list[str] = []
     hbits: list[bool] = []
     pos = 0

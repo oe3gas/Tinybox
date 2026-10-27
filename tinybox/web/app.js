@@ -304,7 +304,7 @@ function monText(it) {
       `${it.len != null ? ` [${it.len}]` : ""} ${it.kind} ${S.monHex && it.hex ? hexText(it.hex) : it.text}` +
       (it.aprs ? " aprs" + AprsView.searchText(it) : "");
   if (it.type === "mon") return `${it.t} ${it.call} ${myCall()} ${it.text}`;
-  return `${it.t} ${it.text}`;
+  return `${it.t} ${it.text}${S.monHex && it.hex ? " " + hexText(it.hex) : ""}`;
 }
 function monMatch(it) {
   const k = S.monKind;
@@ -334,7 +334,7 @@ function feedLine(item) {
     if (ap) return AprsView.card(item, head, "line frame" + (item.tx ? " tx" : ""));   // CR62
     if (S.monHex && item.hex) head.append(": ", h("span", { class: "hex", text: hexText(item.hex) }));
     else if (item.text) head.append(": " + item.text);
-    return head;
+    return Insp.clickable(head, item);
   }
   if (item.type === "mon") {                     // ">" TinyBox to the station, "<" back
     const [a, b] = item.dir === "<" ? [item.call, myCall()] : [myCall(), item.call];
@@ -344,9 +344,109 @@ function feedLine(item) {
       callSpan(a), " → ", callSpan(b), ": ", item.text);
   }
   const cls = item.level === "WARNING" || item.level === "ERROR" ? "warn" : "sys";
+  if (S.monHex && item.hex != null)               // a UI frame TinyBox sent (also AGW mode)
+    return Insp.clickable(h("div", { class: "line log" },
+      h("span", { class: "t", text: item.t }), " ", h("span", { class: cls, text: `UI ${item.dst} > ` }),
+      h("span", { class: "hex", text: hexText(item.hex) })), item);
   return h("div", { class: "line log" },
     h("span", { class: "t", text: item.t }), " ", h("span", { class: cls, text: item.text }));
 }
+
+// ---- frame inspector (HEX view): a click on a frame opens a bar below the monitor
+// with all its bytes - offset, 16 bytes hex, decoded text; address bytes are shown
+// shifted back (AX.25 stores each callsign character << 1)
+const PID_NAMES = { 0xF0: "no layer 3", 0xCF: "NET/ROM", 0xCC: "IP", 0xCD: "ARP", 0x08: "segment" };
+const Insp = {
+  bar: null, item: null,
+  clickable(line, item) {
+    if (!S.monHex || !(item.raw || item.hex != null)) return line;
+    line.classList.add("inspectable");
+    if (item === this.item) line.classList.add("sel");
+    line.title = "Inspect this frame";
+    line.addEventListener("click", () => this.show(item, line));
+    return line;
+  },
+  // what every byte is: [{cls, what}] - from the raw frame, or only the payload
+  regions(item) {
+    const b = (item.raw || item.hex || "").match(/../g)?.map((x) => parseInt(x, 16)) || [];
+    if (!item.raw) return { b, map: b.map((_, i) => ({ cls: "r-info", what: "Info byte " + i, info: 0 })) };
+    const ctl = item.ctl, po = item.len != null ? b.length - item.len : null;
+    const map = [];
+    for (let i = 0; i < b.length; i++) {
+      if (i < ctl) {
+        const a = Math.floor(i / 7), k = i % 7;
+        const name = a === 0 ? "Destination" : a === 1 ? "Source" : "Digipeater " + (a - 1);
+        const call = [item.dst, item.src, ...(item.via || [])][a] || "";
+        if (k < 6) map.push({ cls: "r-addr" + (a % 2), what: `${name} ${call} · character '${String.fromCharCode(b[i] >> 1)}'`, addr: 1 });
+        else map.push({ cls: "r-addr" + (a % 2), what: `${name} ${call} · SSID ${(b[i] >> 1) & 15} · ` +
+          `${a < 2 ? "C" : "H"} bit ${b[i] >> 7} · reserved ${(b[i] >> 5) & 3} · last address ${b[i] & 1}`, ssid: 1 });
+      } else if (po != null && i === po - 1) {
+        map.push({ cls: "r-pid", what: `PID 0x${b[i].toString(16).toUpperCase().padStart(2, "0")}` +
+          (PID_NAMES[b[i]] ? " · " + PID_NAMES[b[i]] : "") });
+      } else if (po != null ? i < po - 1 : i < ctl + (/^(I|RR|RNR|REJ|SREJ)\b/.test(item.typ) && b.length - ctl === 2 ? 2 : 1)) {
+        map.push({ cls: "r-ctl", what: `Control · <${item.typ}>` });
+      } else {
+        map.push({ cls: "r-info", what: "Info byte " + (i - (po != null ? po : ctl + 1)), info: 1 });
+      }
+    }
+    return { b, map };
+  },
+  show(item, line) {
+    if (!this.bar) return;
+    this.item = item;
+    document.querySelectorAll(".monitor .line.sel").forEach((x) => x.classList.remove("sel"));
+    if (line) line.classList.add("sel");
+    const { b, map } = this.regions(item);
+    const hx = (n, w = 2) => n.toString(16).toUpperCase().padStart(w, "0");
+    const detail = h("div", { class: "insp-detail", text: "Point at a byte for details." });
+    const cells = [];                              // [hex span, text span] per byte
+    const mark = (i, on) => cells[i].forEach((c) => c.classList.toggle("hot", on));
+    const point = (i) => {
+      const v = b[i];
+      detail.textContent = `Offset 0x${hx(i, 4)} (${i}) · 0x${hx(v)} · ${v} · ${v.toString(2).padStart(8, "0")} · ${map[i].what}`;
+    };
+    const rows = [h("div", { class: "insp-row insp-colhead" },
+      h("span", { class: "insp-off", text: "Offset(h)" }),
+      h("span", { class: "insp-hex" }, ...Array.from({ length: 16 }, (_, k) => h("span", { class: "insp-b", text: hx(k) }))),
+      h("span", { class: "insp-txt", text: "Decoded text" }))];
+    for (let r = 0; r < b.length; r += 16) {
+      const hexs = [], txts = [];
+      for (let i = r; i < Math.min(r + 16, b.length); i++) {
+        const m = map[i], v = b[i];
+        const ch = m.addr ? String.fromCharCode(v >> 1) : m.ssid ? hx((v >> 1) & 15, 1) : (v >= 32 && v < 127 ? String.fromCharCode(v) : ".");
+        const a = h("span", { class: "insp-b " + m.cls, text: hx(v) });
+        const t = h("span", { class: "insp-c " + m.cls + (m.addr || m.ssid ? " shifted" : ""), text: ch });
+        cells[i] = [a, t];
+        for (const c of [a, t]) {
+          c.addEventListener("mouseenter", () => { mark(i, true); point(i); });
+          c.addEventListener("mouseleave", () => mark(i, false));
+        }
+        hexs.push(a); txts.push(t);
+      }
+      rows.push(h("div", { class: "insp-row" }, h("span", { class: "insp-off", text: hx(r, 8) }),
+        h("span", { class: "insp-hex" }, ...hexs), h("span", { class: "insp-txt" }, ...txts)));
+    }
+    const title = item.type === "frame"
+      ? `${item.t} ${item.tx ? "TX" : "RX"} ${item.src} → ${item.dst}${item.via && item.via.length ? " via " + item.via.join(",") : ""} <${item.typ}>`
+      : `${item.t} TX UI → ${item.dst} (payload only)`;
+    const legend = item.raw ? [["r-addr0", "Address"], ["r-ctl", "Control"], ["r-pid", "PID"], ["r-info", "Info"]] : [["r-info", "Info"]];
+    this.bar.replaceChildren(
+      h("div", { class: "insp-head" },
+        h("strong", { class: "grow", text: title }),
+        h("span", { class: "insp-n", text: b.length + " bytes" }),
+        h("span", { class: "insp-legend" }, ...legend.map(([c, t]) => h("span", { class: "insp-key " + c, text: t }))),
+        h("button", { class: "btn sm", type: "button", title: "Close (Esc)", onclick: () => this.hide() }, "Close")),
+      h("div", { class: "insp-grid" }, ...rows),
+      detail);
+    this.bar.hidden = false;
+  },
+  hide() {
+    this.item = null;
+    if (this.bar) this.bar.hidden = true;
+    document.querySelectorAll(".monitor .line.sel").forEach((x) => x.classList.remove("sel"));
+  },
+};
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Insp.item) Insp.hide(); });
 
 function appendLine(box, item) {
   if (!monMatch(item)) return;
@@ -648,7 +748,7 @@ function channelCard() {
           kv("Queued now", q.queued.control + " ctl · " + q.queued.i + " I · " + q.queued.ui + " UI"),
           kv("Wait avg (10 min)", "ctl " + msTxt(q.wait_10min.control.avg_ms) + " · I " + msTxt(q.wait_10min.i.avg_ms) +
                                   " · UI " + msTxt(q.wait_10min.ui.avg_ms)),
-          kv("Dropped", String(q.dropped)),
+          kv("Dropped / invalid", q.dropped + " / " + (q.invalid != null ? q.invalid : "-")),   // CR74: invalid = noise from the TNC
           kv("Clients", hub.clients.length ? hub.clients.map((c) => (c.calls[0] || "client") + " (" + c.rx + "/" + c.tx + ")").join(", ") : "none")),
         ...(t.last_error ? [h("div", { class: "warnline", text: t.last_error })] : []),
         h("details", { class: "initlog" }, h("summary", { text: "TNC dialog (last " + t.init_log.length + " lines)" }),
@@ -693,15 +793,21 @@ function monitorCard(withLens) {
   kind.value = S.monKind;
   const hex = h("button", { class: "btn sm hex-btn" + (S.monHex ? " on" : ""), type: "button",
                              "aria-pressed": S.monHex ? "true" : "false",
-                             title: "Payload of I and UI frames as hex bytes instead of text" }, "HEX");
+                             title: "Payload of I and UI frames as hex bytes - click a frame to inspect all its bytes" }, "HEX");
   hex.onclick = () => {
     S.monHex = !S.monHex;
     hex.classList.toggle("on", S.monHex);
     hex.setAttribute("aria-pressed", S.monHex ? "true" : "false");
     try { localStorage.setItem("tinybox.monhex", S.monHex ? "1" : "0"); } catch (e) { /* private mode */ }
+    if (!S.monHex) Insp.hide();
     redraw();
   };
+  const inspBar = h("div", { class: "insp", hidden: true, "aria-label": "Frame inspector" });
+  Insp.bar = inspBar;
+  if (Insp.item && S.monHex) queueMicrotask(() => Insp.show(Insp.item));   // page switched back
+  else Insp.item = null;
   const clear = async () => {
+    Insp.hide();
     S.feed = []; body.replaceChildren(); AprsView.forget();
     try { await api("monitor/clear", {}); } catch (e) { /* only this tab then */ }
   };
@@ -713,7 +819,8 @@ function monitorCard(withLens) {
       AprsView.toggleButton("btn sm aprs-btn"),
       hex,
       h("button", { class: "btn sm", type: "button", onclick: clear }, "Clear")),
-    lens ? h("div", { class: "mon-split" }, body, lens) : body);
+    lens ? h("div", { class: "mon-split" }, body, lens) : body,
+    inspBar);
   const showLens = () => { if (lens) lens.hidden = !AprsView.lensOn(); };   // CR62: only in step 2
   if (lens) AprsView.attachLens(lens);
   AprsView.onChange(() => { if (card.isConnected) { showLens(); redraw(); } });

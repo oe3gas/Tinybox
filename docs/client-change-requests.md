@@ -2107,3 +2107,24 @@ sie gespeichert, und wie wird ein User, der mit dem Client kommt, zur Eingabe ei
 - **Offen / nächste Schritte**: Funktest PC1 ↔ PC2; Home-BBS für die Zustellung persönlicher
   Post an andere Mailboxen nutzen (White Pages, mit dem Forwarding); CR72 kann den Locator
   aus dem Profil nehmen (braucht 6 Stellen).
+
+## CR74 – Heard: Rauschen mit gültiger Prüfsumme als „Rufzeichen“ (✅ 27.10.2026)
+
+- **Beobachtung**: In „Heard on the channel“ standen Einträge wie `^?kDa?-8`, `??&/K?-8`
+  oder `?%j?K-8`, in den kisshub-Verbindungsdaten eine Verbindung mit `OE3cAS-1`.
+- **Ursache**: kisshub mit dem TNC des TM-D710 (9600 Bd, Datenband). Bei offener
+  Rauschsperre wertet der TNC laufend Rauschen aus; ab und zu stimmt die 16-Bit-Prüfsumme
+  zufällig. Weder kisshub noch Client prüften die Adressen – der Client nahm jede
+  Quelladresse in die Heard-Liste.
+- **Umsetzung**:
+  - `prcore/ax25/frame.py`: `addresses_valid()` – Adressfeld vollständig, Rufzeichen nur
+    A–Z und 0–9 (1–6 Zeichen), SSID 0–15.
+  - kisshub 2026.10.27: Frames vom TNC mit ungültigem Adressfeld werden verworfen und gezählt
+    (`invalid` in der Statuszeile und unter `queue` der Statusabfrage, INFO-Logzeile mit den
+    ersten 32 Bytes hex). TinyBox-Kanalkarte zeigt „Dropped / invalid“.
+  - Client 2026.10.27: `radio.decode()` liefert für solche Frames `None` (auch über
+    Direwolf/AGW).
+- Tests: `tests/test_kisshub.py` (`test_garbage_address_dropped`), `tests/test_ax25_v22.py`
+  (`AddressesValidTests`).
+- **Hinweis**: Ein Bitfehler, der zufällig ein gültiges Rufzeichen ergibt, kommt durch –
+  dagegen hilft nur die Rauschsperre des Datenbands etwas zuzudrehen.

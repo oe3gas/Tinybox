@@ -10,6 +10,9 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Heard-Liste und Monitor: Frames mit ungueltigen Rufzeichen (nur A-Z,
+  0-9, SSID 0-15 gelten) werden verworfen - Rauschen, bei dem die
+  Pruefsumme im TNC zufaellig stimmte (CR74).
 - AXUDP (PLANUNG 25): laufen TinyBox und Client am selben PC mit nur einem
   Funkgeraet, erreicht der Client die eigene TinyBox ueber AXUDP (UDP auf
   127.0.0.1) und alle anderen Stationen ueber Funk. [tinybox] axudp =

@@ -2,6 +2,19 @@
 
 ## Unveröffentlicht
 
+- **CR74 – Rauschen als Rufzeichen**: Frames mit ungültigem Adressfeld (Rufzeichen nicht nur
+  A–Z/0–9, SSID nicht 0–15) kommen nicht mehr in die Heard-Listen. Ursache: der TNC (TM-D710,
+  9600 Bd, offene Rauschsperre) liefert ab und zu Rauschen, bei dem die Prüfsumme zufällig
+  stimmt. kisshub 2026.10.27 verwirft sie gleich vom TNC (Zähler `invalid` in Statuszeile und
+  Statusabfrage, INFO-Logzeile mit den ersten 32 Bytes), Client 2026.10.27 prüft dasselbe
+  (`prcore.ax25.frame.addresses_valid`). TinyBox-Kanalkarte: „Dropped / invalid“.
+- TinyBox-Monitor, **HEX-Ansicht**: auch die UI-Frames, die die TinyBox sendet (Baken, Chat),
+  zeigen ihre Nutzlast als Hex – auch im AGW-Modus. **Frame-Inspektor**: in der HEX-Ansicht
+  öffnet ein Klick auf einen Frame unten eine Leiste mit allen Bytes (Offset, 16 Bytes Hex,
+  Text); Adresse, Control, PID und Info farbig, Rufzeichen-Bytes zurückgeschoben lesbar,
+  Zeigen auf ein Byte erklärt es (Wert, Bits, SSID-/C-/H-Bit, PID). Esc oder Close schließt.
+  `framemon` liefert dazu `raw` (ganzer Frame) und `ctl` (Offset des Control-Felds).
+
 - kisshub 2026.10.26: **RTS/CTS wirklich ausgewertet** (PLANUNG 15). 32-Byte-Stücke, jedes
   ganz aus der Schnittstelle, bevor CTS erneut geprüft wird – nicht mehr nur der Treiber.
   **CTS-Monitor** (2 ms): Statuszeile `CTS low 3x (0.4 s, max 210 ms), writer waits …`, jeder

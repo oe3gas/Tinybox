@@ -359,3 +359,22 @@ class V20DigiTests(unittest.TestCase):
         a, b, sim = self.make(V22, cfg, ["OE3XYZ-2"])
         connect(a, b, sim)
         self.assertEqual(b.n1, 256)
+
+
+class AddressesValidTests(unittest.TestCase):
+    """CR74: only upper case letters and digits pass as callsigns."""
+
+    def test_valid_and_garbage(self):
+        good = ax.ui_frame("TBCHAT-1", "OE3GAS-1", b"hi", path=["OE3XTC-5"]).encode()
+        self.assertTrue(ax.addresses_valid(good))
+        self.assertFalse(ax.addresses_valid(good[:10]))
+        for bad in (b"OE3cAS", b"^%j\x01K ", b"OE3G.S"):
+            raw = bytes(b << 1 for b in bad.ljust(6)) + good[13:]
+            self.assertFalse(ax.addresses_valid(good[:7] + raw), bad)
+
+    def test_client_decode_drops_garbage(self):
+        from tbclient import radio
+        good = ax.ui_frame("BEACON", "OE3GAS-1", b"hi").encode()
+        self.assertEqual(radio.decode(good).src, "OE3GAS-1")
+        bad = good[:7] + bytes(b << 1 for b in b"^%&/K ") + good[13:]
+        self.assertIsNone(radio.decode(bad))

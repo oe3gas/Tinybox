@@ -125,6 +125,9 @@ class HubLogHandler(logging.Handler):
             else:
                 item = {"type": "log", "t": t, "level": record.levelname,
                         "text": record.getMessage()}
+                if getattr(record, "ui_hex", None) is not None and isinstance(record.args, tuple):
+                    # a UI frame TinyBox sent: payload for the HEX view (AGW mode has no frames)
+                    item.update(dst=str(record.args[0]), hex=record.ui_hex)
             if threading.current_thread() is threading.main_thread():
                 self.hub.push(item)
             else:

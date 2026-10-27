@@ -1,0 +1,2 @@
+- Heard-Liste: Frames mit kaputten Rufzeichen
+  (Rauschen vom TNC) werden verworfen.

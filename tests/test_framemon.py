@@ -49,6 +49,15 @@ class EntryTests(unittest.TestCase):
         self.assertNotIn("len", e)                     # no payload, no [n]
         self.assertNotIn("hex", e)
 
+    def test_raw_for_the_inspector(self):
+        f = ax.ui_frame("BEACON", "OE3GAS-1", b"TinyBox", path=["OE3XTC-5"]).encode()
+        e = framemon.entry(f, tx=True, mycall="OE3GAS-1")
+        self.assertEqual((e["raw"], e["ctl"]), (f.hex(), 21))
+        self.assertEqual(bytes.fromhex(e["raw"])[-e["len"]:].hex(), e["hex"])
+        rr = ax.s_frame("RR", "OE3TEC", "OE3GAS-1", nr=4).encode()
+        e = framemon.entry(rr, tx=False, mycall="X")
+        self.assertEqual((e["raw"], e["ctl"]), (rr.hex(), 14))
+
     def test_garbage_and_no_listener(self):
         self.assertIsNone(framemon.entry(b"\x01\x02", tx=False, mycall="X"))
         framemon.emit(b"\x01\x02", tx=False, mycall="X")          # no handler: nothing
@@ -70,6 +79,8 @@ class HubTests(unittest.TestCase):
                               tx=True, mycall="OE3GAS-1")
                 with logsetup.session_context("#7 OE3TEC"):
                     mon.info("> %s", "Welcome")
+                logging.getLogger("tinybox.monitor.kiss").info(
+                    "UI %s > %s", "BEACON", "Hi", extra={"ui_hex": "4869"})
             finally:
                 framemon.flog.removeHandler(handler)
                 mon.removeHandler(handler)
@@ -79,6 +90,9 @@ class HubTests(unittest.TestCase):
             self.assertEqual((items[0]["dst"], items[0]["kind"]), ("TBCHAT-1", "chat"))
             self.assertIn({"call": "OE3TEC", "dir": ">", "text": "Welcome"},
                           [{k: i.get(k) for k in ("call", "dir", "text")} for i in items])
+            ui = items[-1]                             # HEX view of a sent UI frame (AGW too)
+            self.assertEqual((ui["type"], ui["text"], ui["dst"], ui["hex"]),
+                             ("log", "UI BEACON > Hi", "BEACON", "4869"))
         finally:
             loop.close()
 

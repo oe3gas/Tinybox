@@ -286,6 +286,21 @@ class HubTests(HubTestBase):
         self.assertEqual(got1, [heard])                           # not echoed to sender
         self.assertNotIn((kiss.CMD_TXDELAY, b"\x01"), self.fake.params)
 
+    async def test_garbage_address_dropped(self):
+        """CR74: noise whose checksum passed in the TNC never reaches the clients."""
+        await self.start_hub(FakePK232("cmd"))
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        _, got = await self.client()
+        good = ax.ui_frame("APRS", "OE1ABC", b"!test").encode()
+        noise = bytes(b << 1 for b in b"^\x1bkDa\x7f") + b"\x70" + good[7:]   # source '^?kDa?-8'
+        lower = good.replace(bytes(b << 1 for b in b"OE1ABC"), bytes(b << 1 for b in b"OE1aBC"))
+        for f in (noise, lower, good):
+            self.fake.receive(f)
+        await self.wait(lambda: got == [good])
+        self.assertEqual(self.hub.invalid, 2)
+        self.assertEqual(self.hub.status_dict()["queue"]["invalid"], 2)
+        self.assertIn("invalid 2", self.hub.status())
+
     async def test_acknowledgement_overtakes_ui_frames(self):
         # 1200 Bd, 0.3 s lead: only about one 100-byte frame at a time goes to the TNC
         await self.start_hub(FakePK232("cmd"), air_baud=1200, txdelay_sec=0.0,

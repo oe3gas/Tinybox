@@ -31,6 +31,8 @@ since v2.2 multi-SREJ, optionally SREJ - kept as raw bytes).
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 
 PID_NO_L3 = 0xF0
@@ -327,6 +329,21 @@ def peek(data: bytes) -> tuple[str, str, list[str], list[bool]]:
     if len(addrs) < 2:
         raise AX25Error("only one address")
     return addrs[0][0], addrs[1][0], [a[0] for a in addrs[2:]], [a[1] for a in addrs[2:]]
+
+
+_CALL_RE = re.compile(r"[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?")
+
+
+def addresses_valid(data: bytes) -> bool:
+    """True when the address field is a sane AX.25 address field with callsigns
+    of upper case letters and digits only. A TNC whose checksum passed by chance
+    on noise (9600 Bd, open squelch) delivers '^?kDa?-8' - such frames must not
+    reach the heard lists (CR74)."""
+    try:
+        dest, src, path, _ = peek(data)
+    except AX25Error:
+        return False
+    return all(_CALL_RE.fullmatch(c) for c in (dest, src, *path))
 
 
 # --- constructors for the frames the link layer sends --------------------------------

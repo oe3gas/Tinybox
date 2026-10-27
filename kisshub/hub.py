@@ -42,6 +42,7 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from prcore import kiss
+from prcore.ax25.frame import addresses_valid
 from prcore.termcolor import OK
 
 from .linkstats import LinkStats, describe
@@ -142,6 +143,7 @@ class Hub:
         self._server: asyncio.base_events.Server | None = None
         self._tasks: list[asyncio.Task] = []
         self.dropped = 0
+        self.invalid = 0                                # CR74: frames with a garbage address field
         self._names = itertools.count(1)
         # CR67: link quality from the frames passing the hub, VARA's own reports
         self.stats = LinkStats(airtime=self.airtime, on_closed=self._link_closed,
@@ -241,6 +243,13 @@ class Hub:
     # --- from the TNC ---------------------------------------------------------------------
 
     def _from_tnc(self, port: int, frame: bytes) -> None:
+        if not addresses_valid(frame):
+            # CR74: the TNC's checksum passed by chance (noise, open squelch at
+            # 9600 Bd) - '^?kDa?-8' must not reach the heard lists of the stations
+            self.invalid += 1
+            log.info("invalid frame from the TNC dropped (%d bytes): %s", len(frame),
+                     frame[:32].hex(" "))
+            return
         self._to_clients(port, frame)
         now = self.now()
         self.stats.frame(frame, now, tx=False)           # CR67
@@ -347,6 +356,7 @@ class Hub:
             "quality": self.stats.status(now),                       # CR67 B + C
             "vara": self.vara.status(now) if self.vara is not None else None,   # CR67 A
             "queue": {"queued": queued, "wait_10min": waits, "dropped": self.dropped,
+                      "invalid": self.invalid,
                       "backlog_ms": max(0, round((self._busy_until - now) * 1000)),
                       "max_lead_ms": round(self.cfg.max_lead_sec * 1000)},
             "clients": [{"name": c.name, "since": c.since, "rx": c.rx, "tx": c.tx,
@@ -387,7 +397,7 @@ class Hub:
         names = ", ".join(f"{c.name} rx {c.rx} tx {c.tx}" for c in self.clients.values())
         return (f"TNC {self.tnc.describe()} {self.tnc.state}: rx {self.tnc.rx_frames} "
                 f"tx {self.tnc.tx_frames}, queued {len(self._queue)}, dropped "
-                f"{self.dropped}{self._cts_text()}; clients: {names or 'none'}")
+                f"{self.dropped}, invalid {self.invalid}{self._cts_text()}; clients: {names or 'none'}")
 
     def _cts_text(self) -> str:
         fs = getattr(self.tnc.transport, "flow_status", None)

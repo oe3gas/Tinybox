@@ -239,7 +239,8 @@ class AgwAdapter:
         else:
             self.send(Frame("M", self.radio_port, PID_NO_L3, self.mycall, dest,
                             text.encode("utf-8")))
-        logging.getLogger("tinybox.monitor.agw").info("UI %s > %s", dest, text)
+        logging.getLogger("tinybox.monitor.agw").info("UI %s > %s", dest, text,
+                                                      extra={"ui_hex": text.encode("utf-8").hex()})   # HEX view
 
     # --- main loop --------------------------------------------------------
 

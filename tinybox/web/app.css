@@ -229,6 +229,37 @@ table.raw tr.dim td { color: var(--ink-3); }
 .monitor .kind.chat { background: #1c4a3a; } .monitor .kind.quality { background: #4a3a12; }
 .monitor .kind.mail { background: #4a1c3b; } .monitor .kind.beacon { background: #1c3b5c; }
 .monitor .kind.proto { background: #3a3a3a; }
+/* frame inspector (HEX view): click a frame, its bytes in a bar below the monitor */
+.monitor .line.inspectable { cursor: pointer; border-radius: 3px; padding-left: 6px; margin-left: -6px; }
+.monitor .line.inspectable:hover { background: #16212b; }
+.monitor .line.sel { background: #1d2f40; box-shadow: inset 3px 0 0 #79c0ff; }
+.insp { flex-shrink: 0; height: 300px; display: flex; flex-direction: column; border-top: 2px solid var(--ink);
+        background: #0f171f; color: #d3e6d3; font-family: var(--mono); font-size: 13px; }
+.insp[hidden] { display: none; }
+.insp-head { display: flex; align-items: center; gap: 14px; padding: 6px 18px; border-bottom: 1px solid #2a3642;
+             flex-wrap: wrap; }
+.insp-head strong { color: #e6edf3; font-weight: 700; }
+.insp-head .btn { background: #26384a; color: #e6edf3; border-color: #4a5560; }
+.insp-n { color: #8b959e; }
+.insp-legend { display: flex; gap: 6px; }
+.insp-key { padding: 0 6px; border-radius: 3px; font-size: 11px; font-weight: 700; }
+.insp-grid { flex-grow: 1; overflow: auto; padding: 6px 18px; line-height: 1.55; }
+.insp-row { display: flex; gap: 22px; white-space: pre; }
+.insp-colhead { color: #6f9bd1; position: sticky; top: 0; background: #0f171f; }
+.insp-off { width: 9ch; flex-shrink: 0; color: #6f9bd1; }
+.insp-hex { display: grid; grid-template-columns: repeat(16, 2ch); column-gap: 1ch; width: 47ch; flex-shrink: 0; }
+.insp-hex .insp-b:nth-child(8) { margin-right: -0.4ch; }
+.insp-txt { display: flex; }
+.insp-c { width: 1ch; text-align: center; }
+.insp-c.shifted { font-style: italic; }
+.insp-b, .insp-c { border-radius: 2px; cursor: default; }
+.insp-b.hot, .insp-c.hot { outline: 1px solid #ffffff; background: #3b5168 !important; color: #fff; }
+.insp-detail { padding: 5px 18px; border-top: 1px solid #2a3642; color: #a5b4c3; min-height: 1.6em; }
+/* byte regions: address (two shades, alternating per address), control, PID, info */
+.r-addr0 { color: #d2a8ff; } .r-addr1 { color: #b48cf0; background: #231a33; }
+.r-ctl { color: #e3b341; background: #2e2610; } .r-pid { color: #56d4dd; background: #10292b; }
+.r-info { color: #d3e6d3; }
+.insp-key.r-addr0 { background: #2b2140; } .insp-key.r-info { background: #26384a; }
 .card-head .mon-q input { width: 16em; }
 .mon-split { flex-grow: 1; display: flex; min-height: 0; }      /* monitor + APRS lens (CR55) */
 .mon-split .monitor { min-width: 0; }
