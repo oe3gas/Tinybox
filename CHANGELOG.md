@@ -2,6 +2,14 @@
 
 ## Unveröffentlicht
 
+- **NanoPi-Deployment** (PLANUNG 26): brocastd schreibt nicht mehr bei jedem Funk-Frame in die
+  Datenbank (Major Fix P1, offener Punkt 9). WAL-Journal mit `synchronous=NORMAL`; Empfangslog,
+  gehörte Stationen, Sendezeitplan und Seiten-Wiederholungen gehen erst alle `db_flush_sec`
+  (neu, Standard 600 s) und beim Beenden auf die Platte, echte Änderungen sofort. Leeres
+  `txlog_dir` schaltet das Sendeprotokoll ab. `deploy/install.sh` installiert jetzt auch
+  `prcore/`, `brocast/zdict/` und die Client-News (ohne `prcore` startete die TinyBox am NanoPi
+  nicht); `build_production.sh` liefert `LICENSE` mit und schließt `kisshub/` und `*.sh` aus.
+
 - Client 2026.10.27.2: läuft der Chat über lokales AXUDP (oder den Telnet-Testport), zeigt die
   Teilnehmerliste für die eigene Station keine Balken und keine Detailansicht, nur „you · axudp“.
   Andere lokale Teilnehmer haben keine Balken, weil die TinyBox für sie nichts mehr sendet;

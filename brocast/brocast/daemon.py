@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import signal
 import sys
 import time
 from pathlib import Path
@@ -268,6 +269,13 @@ class Daemon:
                 log.info("Listener: %s Seiten entfernt (abgelaufen/Grenzen)", removed)
             await asyncio.sleep(HOUSEKEEPING_SEC)
 
+    async def _flush_loop(self) -> None:
+        """Flüchtige Daten (rxlog, Stationen, Sendezeitplan) gebündelt schreiben."""
+        while True:
+            await asyncio.sleep(self.cfg.db_flush_sec)
+            if self.store.flush():
+                log.debug("Datenbank: flüchtige Daten geschrieben")
+
     def on_release(self, result) -> None:
         """From prcore.release.watch(): shown on the listener's status page."""
         new = result.as_dict()
@@ -334,7 +342,8 @@ class Daemon:
         await self.web.start()
         colorlog.kv(log, "Listener-Oberfläche", f"http://{self.web.host}:{self.web.port}/", url=True)
         tasks = [asyncio.create_task(self.link.run(), name="direwolf"),
-                 asyncio.create_task(self._housekeeping(), name="housekeeping")]
+                 asyncio.create_task(self._housekeeping(), name="housekeeping"),
+                 asyncio.create_task(self._flush_loop(), name="db-flush")]
         if self.ingest and self.carousel:
             await self.ingest.start()
             tasks.append(asyncio.create_task(self.carousel.run(), name="carousel"))
@@ -386,12 +395,19 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(cfg)
 
     async def run() -> None:
+        # systemd stoppt mit SIGTERM: sauber beenden, damit Daemon.run() im finally
+        # die flüchtigen Datenbank-Daten noch schreibt (PLANUNG 11, Punkt 9)
+        task = asyncio.current_task()
+        try:
+            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+        except (NotImplementedError, AttributeError, RuntimeError):
+            pass                                 # Windows: kein SIGTERM vom Dienst
         # create the daemon inside the running loop (asyncio.Event on Python 3.9)
         await Daemon(cfg).run()
 
     try:
         asyncio.run(run())
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         log.info("beendet")
     return 0
 

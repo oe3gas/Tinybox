@@ -37,12 +37,20 @@ fi
 for u in $ENABLE $DXFEED; do systemctl stop "$u" 2>/dev/null || true; done
 
 # --- program files (always replaced) -----------------------------------------
-mkdir -p "$DEST/brocast"
-rm -rf "$DEST/tinybox" "$DEST/dxfeed" "$DEST/brocast/brocast"
+# prcore: shared radio basics, imported by tinybox and brocastd (PLANUNG 17.1)
+# brocast/zdict: preset dictionary for compressed frames (PLANUNG 6e)
+# tbclient/: only __init__.py (client version) and news/ for TBNEWS (CR18)
+mkdir -p "$DEST/brocast" "$DEST/tbclient"
+rm -rf "$DEST/tinybox" "$DEST/prcore" "$DEST/dxfeed" "$DEST/brocast/brocast" \
+       "$DEST/brocast/zdict" "$DEST/tbclient/news"
 cp -R "$SRC/tinybox" "$DEST/tinybox"
+cp -R "$SRC/prcore" "$DEST/prcore"
 cp -R "$SRC/dxfeed" "$DEST/dxfeed"
 cp -R "$SRC/brocast/brocast" "$DEST/brocast/brocast"
-cp "$SRC/geosphere_station.py" "$SRC/geosphere_prognose.py" "$SRC/geosphere_warnungen.py" "$SRC/tinybox.conf.example" "$SRC/dxfeed.conf.example" "$SRC/VERSION" "$DEST/"
+cp -R "$SRC/brocast/zdict" "$DEST/brocast/zdict"
+cp "$SRC/tbclient/__init__.py" "$DEST/tbclient/"
+cp -R "$SRC/tbclient/news" "$DEST/tbclient/news"
+cp "$SRC/geosphere_station.py" "$SRC/geosphere_prognose.py" "$SRC/geosphere_warnungen.py" "$SRC/tinybox.conf.example" "$SRC/dxfeed.conf.example" "$SRC/LICENSE" "$SRC/VERSION" "$DEST/"
 cp "$SRC/brocast/brocastd.conf.example" "$SRC/brocast/requirements.txt" "$DEST/brocast/"
 
 # --- machine files (only on first install) -----------------------------------
@@ -62,7 +70,7 @@ fi
 [ -f "$DEST/brocast/brocast-core.yaml" ] || cp "$SRC/brocast/brocast-core.yaml" "$DEST/brocast/"
 
 # precompile once: faster first start on the small CPU
-python3 -m compileall -q "$DEST/tinybox" "$DEST/dxfeed" "$DEST/brocast/brocast" "$DEST"/geosphere_*.py >/dev/null || true
+python3 -m compileall -q "$DEST/tinybox" "$DEST/prcore" "$DEST/dxfeed" "$DEST/brocast/brocast" "$DEST"/geosphere_*.py >/dev/null || true
 chown -R "$SVC_USER:$SVC_USER" "$DEST"
 
 # --- systemd -----------------------------------------------------------------

@@ -477,7 +477,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 | M3g ✅ | Chat-Boards mit Aufbewahrung, Befehl `C`, /-Kommandos, Anzeige in Konsole und Web (Abschnitt 2a) | Fertig 04.10.2026 |
 | M3h ✅ | brocast: Frame-Format 2 (Umschlag einmal, Inhalt gepackt), Preset-Wörterbuch, Karussell-Alterung (Abschnitt 6e) | Fertig 14.10.2026, 27 neue Tests grün; rund 45 % weniger Bytes, 42 % weniger Kanalzeit |
 | M4 | Limits, Timeouts, Logging, Tests | Dauerbetrieb |
-| P1 ❗ | **Major Fix** brocastd: kein Datenbank-Schreiben pro Funk-Frame, Sendeprotokoll abschaltbar (offener Punkt 9) | Voraussetzung für Dauerbetrieb auf dem NanoPi (eMMC) |
+| P1 ✅ | **Major Fix** brocastd: kein Datenbank-Schreiben pro Funk-Frame, Sendeprotokoll abschaltbar (offener Punkt 9) | Umgesetzt 28.10.2026 (Abschnitt 26), Voraussetzung für Dauerbetrieb auf dem NanoPi (eMMC) |
 | M5 | MQTT-Adapter (Ein-/Ausgang) | Anbindung an Broker |
 | M6 (opt.) | Beacon (UI-Frame) | Mailbox kündigt sich an |
 | F0–F7 | Forwarding-Modul (Abschnitt 13) | F1–F5 fertig (06.–08.10.2026), mit LinBPQ getestet; F0 teilweise. Als Nächstes F6 |
@@ -496,7 +496,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 6. Direwolf: Wie viele Programme gleichzeitig am AGW-Port (`MAX_NET_CLIENTS`)? Relevant für PC2 mit TinyBox, brocastd und ggf. Client.
 7. Forwarding über Funk ohne Aufsicht ist vermutlich eine Relaisfunkstelle mit Clubrufzeichen: mit Fernmeldebüro oder ÖVSV klären (F0). Bis dahin Forwarding nur über TCP/HAMNET.
 8. Forwarding: OE-Hub-Partner finden, eigene Region für `haddress` mit dem Hub-Sysop abstimmen (F0/F6).
-9. **MAJOR FIX (vor Dauerbetrieb auf dem NanoPi, eMMC 8 GB):** brocastd schreibt bei **jedem Funk-Frame** mehrfach in die SQLite-Datenbank, jeweils als eigener Commit ohne PRAGMAs (Rollback-Journal, `synchronous=FULL`, also mehrere fsync pro Commit). Das ist verschwenderisch und verschleißt den eMMC. Gefunden am 07.10.2026 bei der Produktionsversion (`PRODUCTION.md`).
+9. ✅ **MAJOR FIX (vor Dauerbetrieb auf dem NanoPi, eMMC 8 GB)** – umgesetzt 28.10.2026, siehe Abschnitt 26. Befund: brocastd schreibt bei **jedem Funk-Frame** mehrfach in die SQLite-Datenbank, jeweils als eigener Commit ohne PRAGMAs (Rollback-Journal, `synchronous=FULL`, also mehrere fsync pro Commit). Das ist verschwenderisch und verschleißt den eMMC. Gefunden am 07.10.2026 bei der Produktionsversion (`PRODUCTION.md`).
    - Jeder gesendete Frame wird über `_send` → `_receive(own=True)` (`brocast/brocast/daemon.py:79-84`) als eigener Empfang verbucht. Das sind die Commits `heard()` (`store.py:326`), `save_received`, `update_lpage` (`listener.py:191-258`) und `add_rxlog` (`store.py:347`). Pro Seite kommt noch `mark_sent` dazu (`carousel.py:225`).
    - Jeder empfangene Frame, auch fremde wie APRS, schreibt `add_rxlog` (`daemon.py:95-100`). Brocast-Frames schreiben zusätzlich `heard()` und die lpage-Commits.
    - Das Sendeprotokoll schreibt eine Zeile pro Frame (`txlog.py:46-59`). Es lässt sich nicht abschalten: Ein leeres `txlog_dir` wird zu `logs` (`config.py:138`), deshalb ist die Prüfung `is not None` in `daemon.py:65` toter Code.
@@ -510,6 +510,8 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
    - Danach dieselben PRAGMAs für die TinyBox-Datenbank prüfen, die nur bei Login, Nachrichten und Chat schreibt (niedrige Priorität).
 
    Bis zum Fix bleibt die brocastd-Datenbank auf dem eMMC. Das Sendeprotokoll legt die Produktionsversion in den RAM (`/run/tinybox`).
+
+   Offen bleibt nur der letzte Vorschlag: PRAGMAs für die TinyBox-Datenbank (niedrige Priorität).
 
 ---
 
@@ -1254,7 +1256,7 @@ Regel: `prcore` importiert nie aus `tinybox`, `tbclient`, `kisshub` oder `brocas
 
 **Entscheidungen (17.10.2026):** brocast bleibt eigenständig; Name `prcore`; im NanoPi-Build nur `prcore` in `INCLUDE`.
 
-Offen aus Schritt 1: `kisshub/` ist in `build_production.sh` weder in `INCLUDE` noch in `EXCLUDE`. Laut Abschnitt 15 ist der NanoPi kein Ziel für den KISS-Mode → bei Gelegenheit in `EXCLUDE` eintragen.
+✅ Offen aus Schritt 1: `kisshub/` ist in `build_production.sh` weder in `INCLUDE` noch in `EXCLUDE`. Laut Abschnitt 15 ist der NanoPi kein Ziel für den KISS-Mode → bei Gelegenheit in `EXCLUDE` eintragen. Erledigt 28.10.2026 (Abschnitt 26).
 
 ---
 
@@ -1586,6 +1588,47 @@ nur eine Behauptung.
 **Offen:** UI-Frames an Ziele ohne Gegenstelle (Bake, CQ) über AXUDP – vorerst nicht
 gesendet (gezählt als `no_route`). Gegenstellen per Hostname (DynDNS) und dynamisch gelernte
 Adressen erst mit Schritt 4.
+
+## 26. NanoPi-Deployment für OE3TEC (umgesetzt 28.10.2026)
+
+**Ziel:** ein aktueller, installierbarer Produktionsbuild für den NanoPi, mit dem OE3TEC
+weiterarbeiten kann. Der letzte Build `prod-f16d5a3` war älter als `prcore` (17.10.2026).
+
+**brocastd schreibt nur noch bei echten Änderungen** (offener Punkt 9, P1):
+- Pro Verbindung `PRAGMA journal_mode=WAL` und `synchronous=NORMAL` (`store.py`).
+- Flüchtiges läuft über `Store._volatile()` ohne Commit und ist trotzdem sofort lesbar
+  (dieselbe Verbindung, Web-GUI unverändert): rxlog und `prune_rxlog`, gehörte Stationen
+  (`heard`), Sendezeitplan (`mark_sent`), `received_at` und `last_seen`/`t` bei reiner
+  Wiederholung einer Seite, `seen` der Rubrikenliste, `dict_seen.last`.
+- Geschrieben wird mit `Store.flush()` alle `db_flush_sec` Sekunden (neu in `[brocastd]`,
+  Standard 600), beim Beenden (`close()`) und mit jeder echten Änderung, die ohnehin committet.
+  Ein Stromausfall kostet höchstens diese Spanne: Empfangslog und Stationsliste fehlen dann,
+  und Seiten werden womöglich etwas früher wieder gesendet.
+- Wichtig für später: ein `with self.db:` committet beim Verlassen auch dann, wenn darin nichts
+  geschrieben wurde. Lesen daher nie in so einem Block, sonst gehen die flüchtigen Daten mit.
+- Leeres `txlog_dir` = Sendeprotokoll aus (bisher wurde daraus `logs`).
+- SIGTERM beendet brocastd sauber (die systemd-Unit nutzt ohnehin SIGINT).
+- Tests: `brocast/tests/test_dbwrites.py` prüft mit einer zweiten Verbindung, was wirklich
+  auf der Platte steht.
+
+**Build und Installation:**
+- `deploy/install.sh` kopierte `prcore/`, `brocast/zdict/` und `tbclient/` (Version + News)
+  nicht nach `/opt/tinybox`, obwohl sie im Build lagen. Ohne `prcore` startet die TinyBox
+  nicht, ohne `zdict` sendet brocastd unkomprimiert, ohne News gibt es kein TBNEWS. Behoben.
+- `build_production.sh`: `LICENSE` (GPLv3) wird mitgeliefert; `kisshub/`,
+  `kisshub.conf.example` und die Linux-Starter `*.sh` stehen unter `EXCLUDE`. Der Build läuft
+  ohne „not classified“-Warnung.
+- Probe-Installation in einem Linux-Container (systemd nur nachgebildet): TinyBox und
+  brocastd starten als Benutzer `tinybox` aus `/opt/tinybox`, Datenbank im WAL-Modus,
+  GeoSphere-Skripte und `dxfeed` laufen an. Nicht getestet: echte NanoPi-Hardware, systemd,
+  Direwolf am NanoPi – das ist der nächste Schritt für OE3TEC.
+
+**Noch offen für den NanoPi:**
+- Offener Punkt 6: Wie viele AGW-Clients lässt Direwolf am NanoPi zu? TinyBox und brocastd
+  hängen beide am AGW-Port.
+- PRAGMAs für die TinyBox-Datenbank (Punkt 9, letzter Vorschlag, niedrige Priorität).
+
+---
 
 ## Quellen
 

@@ -11,6 +11,8 @@ callsign   =                   ; AX.25-Rufzeichen der Station, getrennt von der 
 data_dir   = data
 dictionary = brocast-core.yaml
 log_level  = INFO
+db_flush_sec = 600            ; Empfangslog, gehörte Stationen, Sendezeitplan nur so oft
+                              ; auf die Platte schreiben (Sekunden); echte Änderungen sofort
 
 ; CR70: jeder Funkwert hat EINEN Besitzer – über AGW direwolf.conf, über KISS der
 ; kisshub. brocastd liest Funkrate und TXDELAY von dort und meldet beim Start die Quelle.
@@ -71,7 +73,8 @@ color     = auto              ; Farben im Konsolenfenster: auto | yes | no
 [logging]
 log_dir   = logs              ; Programm-Log, eine Datei pro Start (leer = nur Konsole)
 txlog_dir = logs              ; Sendeprotokoll (Station): Sendeprotokoll_<JJJJ-MM>.txt,
-                              ; jeder gesendete Frame mit Zeit (UTC); wird nie automatisch gelöscht
+                              ; jeder gesendete Frame mit Zeit (UTC); wird nie automatisch gelöscht;
+                              ; leer = kein Sendeprotokoll
 
 [listener]
 web_host  = 127.0.0.1         ; 0.0.0.0 = aus dem LAN/WLAN erreichbar (nur mit allow_lan = yes)

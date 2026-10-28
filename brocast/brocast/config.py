@@ -92,7 +92,8 @@ class Config:
     color: str = "auto"                  # [console] color: auto | yes | no
     log_file: Path | None = None         # this start's log file (set by setup_logging)
     log_dir: Path | None = None          # program log, one file per start; None = console only
-    txlog_dir: Path | None = None        # Sendeprotokoll (station); None = data_dir/../logs
+    txlog_dir: Path | None = None        # Sendeprotokoll (station); None = aus
+    db_flush_sec: int = 600              # flüchtige DB-Daten so oft schreiben (PLANUNG 11.9)
     direwolf: DirewolfCfg = field(default_factory=DirewolfCfg)
     station: StationCfg = field(default_factory=StationCfg)
     listener: ListenerCfg = field(default_factory=ListenerCfg)
@@ -315,7 +316,11 @@ def load(path: str | Path) -> Config:
         cfg.update_check = cp.getboolean("update", "check", fallback=True)
     except ValueError as exc:
         raise ConfigError(f"[update] check: {exc}") from None
-    cfg.txlog_dir = base / (get("logging", "txlog_dir", "logs") or "logs")
+    txlog_dir = get("logging", "txlog_dir", "logs")     # leer = Sendeprotokoll aus
+    cfg.txlog_dir = (base / txlog_dir) if txlog_dir else None
+    cfg.db_flush_sec = getint("brocastd", "db_flush_sec", cfg.db_flush_sec)
+    if cfg.db_flush_sec < 1:
+        raise ConfigError("[brocastd] db_flush_sec: mindestens 1")
     dw, dwconf = _load_radio(cp, base, cfg.hints, get, getint)
     cfg.direwolf = dw
 

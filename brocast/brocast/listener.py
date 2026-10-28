@@ -289,7 +289,8 @@ class Listener:
                 fields["ti"] = page["ti"]
         if page["t"] > lp["t"]:                      # station confirmed the page: extend validity
             fields["t"] = page["t"]
-        self.store.update_lpage(org, page_id, **fields)
+        # reine Wiederholung: nur last_seen u. ä. -> flüchtig (PLANUNG 11, Punkt 9)
+        self.store.update_lpage(org, page_id, volatile=stored != "new", **fields)
         return "subpage" if stored == "new" else "repeat"
 
     # -- rubric index of a station -------------------------------------------
@@ -381,7 +382,7 @@ class Listener:
                 {"version": dv, "station": org, "first": now, "last": now}))
         elif dv == seen["version"]:
             seen["last"] = now
-            self.store.set_meta("dict_seen", json.dumps(seen))
+            self.store.set_meta("dict_seen", json.dumps(seen), volatile=True)
 
     def _note_announcement(self, page: dict[str, Any], org: str, now: int) -> bool:
         """typ dict page: which version a station uses and where to get it.

@@ -2,6 +2,15 @@
 
 station side:  pages (one row per provider page) + frames (encoded subpages)
 listener side: received (raw pages as heard; M2 adds read/unread etc.)
+
+Schreiben (PLANUNG 11, Punkt 9 – eMMC am NanoPi):
+- WAL-Journal und synchronous=NORMAL: ein Commit kostet kein fsync mehr.
+- Echte Änderungen (Seiten, Einstellungen, Bedienung) werden sofort committet.
+- Flüchtiges, das bei jedem Funk-Frame anfällt (rxlog, gehörte Stationen,
+  Sendezeitplan, last_seen wiederholter Seiten), läuft über _volatile(): es ist
+  sofort lesbar (dieselbe Verbindung), wird aber erst mit flush() – vom Daemon
+  alle flush_sec Sekunden und beim Beenden – oder mit der nächsten echten
+  Änderung geschrieben. Ein Stromausfall kostet höchstens diese Spanne.
 """
 
 from __future__ import annotations
@@ -168,6 +177,9 @@ class Store:
         self.db = sqlite3.connect(self.path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
+        if self.path != ":memory:":
+            self.db.execute("PRAGMA journal_mode = WAL")
+            self.db.execute("PRAGMA synchronous = NORMAL")
         self.lock = threading.Lock()
         with self.db:
             self.db.executescript(SCHEMA)
@@ -191,7 +203,27 @@ class Store:
                                 "INTEGER NOT NULL DEFAULT 0")
 
     def close(self) -> None:
+        self.flush()
         self.db.close()
+
+    # -- deferred writes ------------------------------------------------------
+
+    def _volatile(self, sql: str, params: tuple = ()) -> int:
+        """Run a write without commit (see module doc). Returns the rowcount."""
+        with self.lock:
+            return self.db.execute(sql, params).rowcount
+
+    def pending(self) -> bool:
+        """True if there are writes not yet on disk."""
+        return self.db.in_transaction
+
+    def flush(self) -> bool:
+        """Commit deferred writes. Returns True if there was something to write."""
+        with self.lock:
+            if not self.db.in_transaction:
+                return False
+            self.db.commit()
+            return True
 
     # -- ids ----------------------------------------------------------------
 
@@ -254,12 +286,12 @@ class Store:
             "SELECT data FROM frames WHERE pid=? ORDER BY n", (pid,))]
 
     def mark_sent(self, pid: int, now: int, next_tx: int, withdraw_left: int | None = None) -> None:
-        with self.lock, self.db:
-            self.db.execute("UPDATE pages SET tx_count=tx_count+1, last_tx=?, next_tx=? "
-                            "WHERE pid=?", (now, next_tx, pid))
-            if withdraw_left is not None:
-                self.db.execute("UPDATE pages SET withdraw_left=? WHERE pid=?",
-                                (withdraw_left, pid))
+        """Sendezeitplan: flüchtig, nach einem Stromausfall wird höchstens früher gesendet."""
+        self._volatile("UPDATE pages SET tx_count=tx_count+1, last_tx=?, next_tx=? "
+                       "WHERE pid=?", (now, next_tx, pid))
+        if withdraw_left is not None:
+            self._volatile("UPDATE pages SET withdraw_left=? WHERE pid=?",
+                           (withdraw_left, pid))
 
     def send_now(self, pid: int, now: int) -> None:
         """Due at once, schedule starts again from the beginning."""
@@ -295,17 +327,21 @@ class Store:
 
         Returns "new" (this subpage/revision was not there), "newer" (same
         revision, confirmed with a newer t) or "same" (nothing changed)."""
-        with self.lock, self.db:
-            row = self.db.execute("SELECT rev, t FROM received WHERE org=? AND id=? AND sub=?",
-                                  (org, page_id, sub)).fetchone()
-            if row and (row["rev"], row["t"]) >= (rev, t):
-                self.db.execute("UPDATE received SET received_at=? WHERE org=? AND id=? AND sub=?",
-                                (now, org, page_id, sub))
+        with self.lock:                        # Lesen ohne "with self.db": das würde
+            row = self.db.execute(             # flüchtige Schreibvorgänge mitcommitten
+                "SELECT rev, t FROM received WHERE org=? AND id=? AND sub=?",
+                (org, page_id, sub)).fetchone()
+            same = bool(row) and (row["rev"], row["t"]) >= (rev, t)
+            if same:                           # nur wiederholt: flüchtig, kein Commit
+                self.db.execute(
+                    "UPDATE received SET received_at=? WHERE org=? AND id=? AND sub=?",
+                    (now, org, page_id, sub))
                 return "same"
-            self.db.execute(
-                "INSERT OR REPLACE INTO received VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (org, page_id, sub, sub_total, rev, t, typ, data, heard_from, now))
-            return "newer" if row and row["rev"] == rev else "new"
+            with self.db:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO received VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (org, page_id, sub, sub_total, rev, t, typ, data, heard_from, now))
+        return "newer" if row and row["rev"] == rev else "new"
 
     def received(self) -> list[sqlite3.Row]:
         return self.db.execute("SELECT * FROM received ORDER BY org, id, sub").fetchall()
@@ -333,15 +369,17 @@ class Store:
                 f"VALUES ({', '.join('?' for _ in LPAGE_FIELDS)})",
                 tuple(page.get(f) for f in LPAGE_FIELDS))
 
-    def update_lpage(self, org: str, page_id: int, **fields) -> bool:
+    def update_lpage(self, org: str, page_id: int, volatile: bool = False, **fields) -> bool:
+        """volatile=True: nur Wiederholung einer bekannten Seite (last_seen …), kein Commit."""
         bad = set(fields) - set(LPAGE_FIELDS)
         if bad:
             raise ValueError(f"unbekannte Felder {bad}")
+        sql = f"UPDATE lpages SET {', '.join(f + '=?' for f in fields)} WHERE org=? AND id=?"
+        params = (*fields.values(), org, page_id)
+        if volatile:
+            return self._volatile(sql, params) > 0
         with self.lock, self.db:
-            cur = self.db.execute(
-                f"UPDATE lpages SET {', '.join(f + '=?' for f in fields)} WHERE org=? AND id=?",
-                (*fields.values(), org, page_id))
-            return cur.rowcount > 0
+            return self.db.execute(sql, params).rowcount > 0
 
     def delete_lpage(self, org: str, page_id: int) -> None:
         """Remove a page completely (row and all subpages)."""
@@ -367,10 +405,9 @@ class Store:
     # -- stations heard -----------------------------------------------------
 
     def heard(self, call: str, now: int) -> None:
-        with self.lock, self.db:
-            self.db.execute(
-                "INSERT INTO stations VALUES (?, ?, ?, 1) ON CONFLICT(call) DO UPDATE "
-                "SET last_heard=excluded.last_heard, frames=frames+1", (call, now, now))
+        self._volatile(
+            "INSERT INTO stations VALUES (?, ?, ?, 1) ON CONFLICT(call) DO UPDATE "
+            "SET last_heard=excluded.last_heard, frames=frames+1", (call, now, now))
 
     def stations(self) -> list[dict]:
         return [dict(r) for r in self.db.execute("SELECT * FROM stations ORDER BY call")]
@@ -381,9 +418,13 @@ class Store:
         row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         return row["value"] if row else None
 
-    def set_meta(self, key: str, value: str) -> None:
+    def set_meta(self, key: str, value: str, volatile: bool = False) -> None:
+        sql, params = "INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value)
+        if volatile:
+            self._volatile(sql, params)
+            return
         with self.lock, self.db:
-            self.db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))
+            self.db.execute(sql, params)
 
     # -- receive log --------------------------------------------------------
 
@@ -393,10 +434,9 @@ class Store:
         row.update({k: v for k, v in entry.items() if v is not None})
         fields = ("ts", "heard_from", "dest", "org", "id", "sub", "sub_total", "rev", "ti",
                   "result", "bytes", "own")
-        with self.lock, self.db:
-            self.db.execute(f"INSERT INTO rxlog ({', '.join(fields)}) "
-                            f"VALUES ({', '.join('?' for _ in fields)})",
-                            tuple(row[f] for f in fields))
+        self._volatile(f"INSERT INTO rxlog ({', '.join(fields)}) "
+                       f"VALUES ({', '.join('?' for _ in fields)})",
+                       tuple(row[f] for f in fields))
 
     def rxlog(self, limit: int = 200, org: str | None = None, page_id: int | None = None,
               brocast_only: bool = False) -> list[dict]:
@@ -414,8 +454,7 @@ class Store:
         return [dict(r) for r in self.db.execute(sql, params)]
 
     def prune_rxlog(self, keep: int = RXLOG_KEEP) -> None:
-        with self.lock, self.db:
-            self.db.execute("DELETE FROM rxlog WHERE n <= (SELECT MAX(n) FROM rxlog) - ?", (keep,))
+        self._volatile("DELETE FROM rxlog WHERE n <= (SELECT MAX(n) FROM rxlog) - ?", (keep,))
 
     # -- opt-out and settings -----------------------------------------------
 
@@ -466,8 +505,7 @@ class Store:
                  for pos, r in enumerate(items)])
 
     def touch_station_rubrics(self, station: str, now: int) -> None:
-        with self.lock, self.db:
-            self.db.execute("UPDATE station_rubrics SET seen=? WHERE station=?", (now, station))
+        self._volatile("UPDATE station_rubrics SET seen=? WHERE station=?", (now, station))
 
     def delete_optout(self, cat: str) -> None:
         with self.lock, self.db:

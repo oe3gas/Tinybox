@@ -17,7 +17,9 @@ The NanoPi runs the full station ("PC2" setup):
 Direwolf is not part of the build. Install and configure it separately (`AGWPORT 8000`, `KISSPORT 8001`).
 
 **Included:**
-- the `tinybox/` and `brocast/brocast/` packages, with their `web/` folders
+- the `tinybox/`, `prcore/` and `brocast/brocast/` packages, with their `web/` folders
+- `dxfeed/` and `dxfeed.conf.example` (optional DX digest, enabled once `dxfeed.conf` exists)
+- `LICENSE`
 - `brocast/brocast-core.yaml`
 - `brocast/zdict/` (the preset dictionary for the compressed frames – without it
   brocastd sends uncompressed, see PLANUNG 6e)
@@ -40,7 +42,8 @@ Direwolf is not part of the build. Install and configure it separately (`AGWPORT
 - the client package `tbclient/` apart from version and news, and
   `tbclient.conf.example`
 - old dictionary versions (`brocast-core.v*.yaml`) and `brocast.cddl`
-- all Windows `*.bat` launchers
+- all Windows `*.bat` and Linux `*.sh` launchers (systemd starts everything)
+- `kisshub/` – the KISS mode is not a NanoPi target (PLANUNG 15)
 
 A build is about 1.2 MB, compared with 3.7 MB for the full repository.
 
@@ -158,11 +161,11 @@ The goal is to write to the eMMC only when real data changes. Reads don't wear t
 | systemd journal (all program output) | RAM, max 16 MB (`Storage=volatile`) | `deploy/journald-tinybox.conf` |
 | brocastd program log | journal only (`log_dir` empty) | `brocastd.conf`, first install |
 | TinyBox program log | journal only (`[logging] log_dir` empty). For troubleshooting set it to `/run/tinybox/logs` – one file per day, every line flushed, so **not** on the eMMC. `keep_days` (default 14) deletes older files. | `tinybox.conf` |
-| Sendeprotokoll | `/run/tinybox/sendeprotokoll`, files older than 7 days deleted | `txlog_dir` in `brocastd.conf`, first install |
+| Sendeprotokoll | `/run/tinybox/sendeprotokoll`, files older than 7 days deleted. Leave `txlog_dir` empty to switch it off. | `txlog_dir` in `brocastd.conf`, first install |
 | Inbox (GeoSphere → TinyBox) | `/run/tinybox/eingang`. `erledigt/` is cleaned after 2 days, `fehler/` after 7 days | `[inbox] dir` in `tinybox.conf` (first install) and `--tinybox` in the geosphere units. Both must match. |
 | Python bytecode | precompiled once by `install.sh`, never written at runtime | `PYTHONDONTWRITEBYTECODE=1` in the units |
 | TinyBox mail database | **eMMC**. It holds mail and must survive power cuts. It is written only on logins, messages and chat. | – |
-| brocastd database | **eMMC**, but it currently writes on every radio frame. See **PLANUNG.md, open point 9 / P1 (major fix)**. | – |
+| brocastd database | **eMMC**, WAL journal. Written at once only for real changes (pages, settings, operation). Receive log, stations heard, send schedule and page repeats are kept in RAM and written every `db_flush_sec` (default 600 s) and on stop (PLANUNG 26). | `[brocastd] db_flush_sec` in `brocastd.conf` |
 | GeoSphere warning state | eMMC, a tiny file written only when the warnings change | – |
 
 To switch a device that was installed earlier, set these by hand:

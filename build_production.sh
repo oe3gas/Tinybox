@@ -14,7 +14,8 @@ SHORT=$(git rev-parse --short "$COMMIT")
 OUT="production/$SHORT"
 
 # Runtime files: everything the NanoPi needs, nothing else.
-INCLUDE='tinybox
+INCLUDE='LICENSE
+tinybox
 prcore
 brocast/brocast
 brocast/brocast-core.yaml
@@ -31,12 +32,14 @@ tbclient/news
 tinybox.conf.example
 deploy'
 
-# Known non-runtime files (docs, planning, tests, tools, Windows launchers).
+# Known non-runtime files (docs, planning, tests, tools, Windows/Linux launchers;
+# on the NanoPi systemd starts everything, KISS mode/kisshub is not a NanoPi target).
 # Only used to warn about NEW files that are in neither list.
 EXCLUDE='.gitattributes
 .gitignore
 *.md
 *.bat
+*.sh
 *.odt
 *.txt
 docs
@@ -50,6 +53,8 @@ pi_abholung.py
 pi_sd_vorbereiten.py
 fwdsim
 fwdsim.conf.example
+kisshub
+kisshub.conf.example
 brocast/brocast-core.v*
 brocast/brocast.cddl
 brocast/funktest
