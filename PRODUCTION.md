@@ -15,6 +15,9 @@ The NanoPi runs the full station ("PC2" setup):
 | GeoSphere forecast (`geosphere_prognose.py`) | `geosphere-prognose.timer`, every 3 hours at xx:35 (locator in the unit, default JN88BN) |
 
 Direwolf is not part of the build. Install and configure it separately (`AGWPORT 8000`, `KISSPORT 8001`).
+A stock Direwolf accepts only **3** AGW clients at a time. TinyBox and brocastd use two; a fourth program
+(diagnostic tools, a local client) would hang without any answer. The fork `oe3gas/direwolf-tinybox` allows 10
+and logs when all slots are taken (PLANUNG 11, point 6).
 
 **Included:**
 - the `tinybox/`, `prcore/` and `brocast/brocast/` packages, with their `web/` folders

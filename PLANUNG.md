@@ -493,7 +493,11 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 3. MQTT: Welcher Broker (lokaler Mosquitto oder extern)? Wofür konkret, also woher kommen die Nachrichten und wer liest die Ausgänge?
 4. MQTT-Eingang: Nur Bulletins oder auch Privatnachrichten an einzelne Calls?
 5. Client-Web-GUI im WAN ohne Anmeldung (Abschnitt 12.1): Wer die Adresse kennt, kann unter dem Rufzeichen des Client-Betreibers senden (Chat, Post). Zu klären, wie das abgesichert wird, z. B. nur über VPN/HAMNET erreichbar oder ein einfaches Zugangstoken.
-6. Direwolf: Wie viele Programme gleichzeitig am AGW-Port (`MAX_NET_CLIENTS`)? Relevant für PC2 mit TinyBox, brocastd und ggf. Client.
+6. ✅ Direwolf: Wie viele Programme gleichzeitig am AGW-Port (`MAX_NET_CLIENTS`)? Relevant für PC2 mit TinyBox, brocastd und ggf. Client.
+   Geklärt 28.10.2026: Das Original erlaubt fest **3** AGW-Clients und je `KISSPORT` 3 KISS-TCP-Clients (einkompiliert).
+   Ein vierter Client hängt still: TCP-Connect gelingt, aber Direwolf antwortet nicht. Der Fork `oe3gas/direwolf-tinybox`
+   (Zweig `tinybox`, Commit 28df0cc) erlaubt je **10** und meldet im Log, wenn alle Plätze belegt sind (Details in
+   seiner `TINYBOX.md`). Am NanoPi mit dem Direwolf aus dem Paket bleibt es bei 3: TinyBox + brocastd = 2, ein Platz frei.
 7. Forwarding über Funk ohne Aufsicht ist vermutlich eine Relaisfunkstelle mit Clubrufzeichen: mit Fernmeldebüro oder ÖVSV klären (F0). Bis dahin Forwarding nur über TCP/HAMNET.
 8. Forwarding: OE-Hub-Partner finden, eigene Region für `haddress` mit dem Hub-Sysop abstimmen (F0/F6).
 9. ✅ **MAJOR FIX (vor Dauerbetrieb auf dem NanoPi, eMMC 8 GB)** – umgesetzt 28.10.2026, siehe Abschnitt 26. Befund: brocastd schreibt bei **jedem Funk-Frame** mehrfach in die SQLite-Datenbank, jeweils als eigener Commit ohne PRAGMAs (Rollback-Journal, `synchronous=FULL`, also mehrere fsync pro Commit). Das ist verschwenderisch und verschleißt den eMMC. Gefunden am 07.10.2026 bei der Produktionsversion (`PRODUCTION.md`).
