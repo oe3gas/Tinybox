@@ -31,6 +31,14 @@ class Config:
     axudp_host: str = ""              # "" = off; the TinyBox's [axudp] address
     axudp_port: int = 10093
     axudp_listen: int = 10094         # own UDP port (the TinyBox lists it in its peers)
+    # AX.25 over AXUDP (as [axudp] in tinybox.conf): no airtime by default; a slower way
+    # (the testbed's simulated 1200 Bd channel, PLANUNG 27) needs a small window, long T1
+    axudp_paclen: int = 256
+    axudp_maxframe: int = 32          # window (modulo 128)
+    axudp_t1_sec: float = 3.0         # T1 from this up to 4 times this (at least 10 s)
+    axudp_n2: int = 10
+    axudp_air_baud: int = 0           # > 0: the way has air time (half duplex, PLANUNG 27)
+    axudp_txdelay_ms: int = 0
     agw_host: str = "127.0.0.1"
     agw_port: int = 8000
     radio_port: int = 0
@@ -140,6 +148,28 @@ def load(path: str | Path) -> Config:
                               "(127.0.0.1)")
         if not 1 <= cfg.axudp_listen <= 65535:
             raise ConfigError("[tinybox] axudp_port must be 1 ... 65535")
+        try:
+            cfg.axudp_paclen = int(get("tinybox", "axudp_paclen", str(cfg.axudp_paclen)))
+            cfg.axudp_maxframe = int(get("tinybox", "axudp_maxframe", str(cfg.axudp_maxframe)))
+            cfg.axudp_t1_sec = float(get("tinybox", "axudp_t1_sec", str(cfg.axudp_t1_sec)))
+            cfg.axudp_n2 = int(get("tinybox", "axudp_n2", str(cfg.axudp_n2)))
+            cfg.axudp_air_baud = int(get("tinybox", "axudp_air_baud", "0"))
+            cfg.axudp_txdelay_ms = int(get("tinybox", "axudp_txdelay_ms", "0"))
+        except ValueError:
+            raise ConfigError("[tinybox] axudp_paclen / _maxframe / _t1_sec / _n2 / "
+                              "_air_baud / _txdelay_ms: numbers, please") from None
+        if cfg.axudp_air_baud and not 300 <= cfg.axudp_air_baud <= 1_000_000:
+            raise ConfigError("[tinybox] axudp_air_baud: 0 (no airtime) or 300 ... 1000000")
+        if not 0 <= cfg.axudp_txdelay_ms <= 10000:
+            raise ConfigError("[tinybox] axudp_txdelay_ms: 0 ... 10000")
+        if not 32 <= cfg.axudp_paclen <= 256:
+            raise ConfigError("[tinybox] axudp_paclen: 32 ... 256")
+        if not 1 <= cfg.axudp_maxframe <= 127:
+            raise ConfigError("[tinybox] axudp_maxframe: 1 ... 127")
+        if not 0.2 <= cfg.axudp_t1_sec <= 60:
+            raise ConfigError("[tinybox] axudp_t1_sec: 0.2 ... 60")
+        if not 1 <= cfg.axudp_n2 <= 50:
+            raise ConfigError("[tinybox] axudp_n2: 1 ... 50")
 
     # --- AGW: Direwolf, values from direwolf.conf -----------------------------------
     dw = None

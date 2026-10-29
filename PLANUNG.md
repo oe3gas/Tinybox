@@ -1589,6 +1589,10 @@ nur eine Behauptung.
    Tests `tests/test_tbclient_axudp.py`.
 4. Forwarding: `transport = axudp` in `[partner.*]` (z. B. LinBPQ über HAMNET).
 
+Ergänzung 29.10.2026 (PLANUNG 27.2): `[axudp] air_baud` / `txdelay_ms` (TinyBox) und
+`[tinybox] axudp_*` (Client) für einen AXUDP-Weg mit Sendezeit, z. B. den simulierten
+1200-Bd-Kanal des Testbeds.
+
 **Offen:** UI-Frames an Ziele ohne Gegenstelle (Bake, CQ) über AXUDP – vorerst nicht
 gesendet (gezählt als `no_route`). Gegenstellen per Hostname (DynDNS) und dynamisch gelernte
 Adressen erst mit Schritt 4.
@@ -1674,8 +1678,58 @@ rechtliche Fragen, reproduzierbar.
   der Test-Box. Exit-Code 0/1/2. Stirbt die Box, endet der Lauf sofort.
 - Tests `tests/test_tbtest.py` (inkl. eines kurzen echten Laufs mit freien Ports).
 
-**Nächster Teil (offen):** virtuelle Funkstrecke (Verlust, Verzögerung, 1200/9600 Bd zwischen
-User und Box), mehr als 10 User, Forwarding (zusammen mit fwdsim).
+### 27.2 Teil 2: simulierter Funkkanal, bis 30 User, eigener Client (29.10.2026)
+
+**Entscheidungen (OE3GAS, 29.10.2026):**
+1. Die Simulation von **Kanalbelegung und Übertragungsqualität** sitzt **im AXUDP-Weg**, KISS
+   spielt keine Rolle: ein UDP-Relais in tbtest (`tbtest/channel.py`, Port 10192) zwischen Box
+   und Usern. Die Box hat alle User als Gegenstellen mit der Adresse des Relais.
+2. Qualität: **Profile + Zufall** – good / medium / poor (1 / 8 / 25 % Frame-Verlust für
+   256 Byte, je Richtung, kürzere Frames seltener) und ein Anteil „hidden“, mit dem Seed
+   verteilt; je Rufzeichen in `tbtest.conf` `[quality]` festlegbar.
+3. **Bis 30 User** (fiktive OE/DL-Rufzeichen, die ersten zehn wie bisher). `max_users` der
+   Test-Box 50.
+4. **Gerhards eigener Client** hängt ebenfalls per AXUDP am Kanal:
+   `tbclient-testbed.conf` (von `tbtest init`), Rufzeichen OE3GAS (nicht Sysop),
+   Web-GUI 7745, eigener Datenordner `guest/`. `tbtest run -t 0` läuft bis Strg+C.
+
+**Kanalmodell:** eine gemeinsame Halbduplex-Frequenz, ein TNC pro Station: Sendewarteschlange,
+Carrier Sense + p-Persistence (63 / 100 ms), ein Tastendruck = TXDELAY + bis zu 7 Frames,
+Sendezeit nach Bitrate (+3 % Bitstuffing). Ein Frame geht beim Empfänger verloren bei
+Überlappung mit einem Sender, den er hört, wenn er selbst sendet, oder durch Rauschen
+(Profil). Versteckte User hören die anderen User nicht (und umgekehrt); die Box hört alle,
+alle hören die Box. Jeder, der den Sender hört, bekommt eine Kopie des Frames (Mithören).
+Bericht: Belegung des Kanals in %, je Station Frames, Bytes, Sendezeit, Wiederholungen
+(gleiches I-Frame nochmals), Verluste durch Rauschen / Kollision, Wartezeit in der
+Warteschlange.
+
+**AXUDP mit Sendezeit (TinyBox und Client):** Ohne Wissen um die Sendezeit läuft T1 schon,
+während die Frames noch in der Warteschlange des Kanals stehen – Wiederholungssturm. Deshalb
+neu: `[axudp] air_baud` / `txdelay_ms` in `tinybox.conf` und `[tinybox] axudp_air_baud` /
+`axudp_txdelay_ms` / `axudp_paclen` / `axudp_maxframe` / `axudp_t1_sec` / `axudp_n2` in
+`tbclient.conf` (Client 2026.10.29). Mit `air_baud` > 0 ist der AXUDP-Port halbduplex wie ein
+KISS-Port: T1 startet nach der geschätzten eigenen Sendezeit, gehörte Frames (die Kopien des
+Kanals) halten T1 an, T2 1,5 s. Damit eine Station auch Frames anderer Stationen „hört“,
+nimmt der AXUDP-Endpunkt in diesem Modus Frames von der Adresse einer Gegenstelle an, die
+nicht an ihn gehen (nur für die Kanalbelegung, zählt `heard`); ein Frame an das eigene
+Rufzeichen von einem Fremden wird weiter verworfen. Standard bleibt 0 = ohne Sendezeit, wie
+bisher. Testbed: PACLEN 256, Fenster 4, T1 6–24 s, N2 10, 1200 Bd, TXDELAY 300 ms.
+
+**Befund beim ersten Lauf (10 User, 1200 Bd):** Ein SABME, das wegen belegtem Kanal in der
+Warteschlange des TNC hängt, wird nach Ablauf von T1 ein zweites Mal eingereiht; kommt es
+nach dem UA an, setzt die Box die Verbindung zurück („link re-established – data in flight
+may be lost“), Begrüßung und Prompt sind weg, beide Seiten warten. Abhilfe im Testbed: der
+Terminal-User drückt nach längerer Stille Enter (wie ein Mensch). Für die TinyBox ist offen,
+ob sie nach einem Reset den Prompt von sich aus noch einmal schicken soll.
+
+Weitere Punkte: `--air 0` schaltet den Kanal ab (schneller Funktionstest), Standardwerte je
+nach Kanal (Pausen 30–180 s, Chat 60–180 s, Timeouts 300 s, Nachrichten bis 3 KB); erstes
+Strg+C beendet die Aktionen und macht Schlussrunde + Bericht, zweites bricht ab; ein
+Terminal-User trennt nach einer fehlgeschlagenen Aktion und beginnt neu.
+
+**Offen:** Forwarding (zusammen mit fwdsim). Über AXUDP gehen Chat-Ereignisse als I-Frames an
+jeden Teilnehmer statt als UI-Frame – auf dem simulierten Kanal teurer als auf einer echten
+Frequenz.
 
 ## Quellen
 

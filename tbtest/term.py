@@ -26,18 +26,31 @@ LIST_ROW_RE = re.compile(r"^\s*(\d+) ([PB])([NY])(.) +(\d+) (\S+)\s+(\S*)\s+(\S+
 READ_HEAD_RE = re.compile(r"^Msg# (\d+)  Type/Status:")
 CHAT_LINE_RE = re.compile(r"^([A-Z0-9]{1,6}(?:-\d{1,2})?): (.*)$")
 
-# AX.25 without airtime, as the box's [axudp] defaults
-LINK = LinkCfg(paclen=256, maxframe=7, maxframe_ext=32, n2=10, version="2.2",
-               srt_init_sec=1.5, t1_min_sec=3.0, t1_max_sec=12.0, t2_sec=0.05, t3_sec=300.0,
-               air_baud=10_000_000, txdelay_sec=0.0, max_rx_info=512)
+AX_FAST = {"paclen": 256, "maxframe": 32, "t1_sec": 3.0, "n2": 10,   # no airtime
+           "air_baud": 0, "txdelay_ms": 0}
+
+
+def link_cfg(ax: dict) -> LinkCfg:
+    """AX.25 over AXUDP, the same rule as the box's [axudp] and the client's
+    [tinybox] axudp_*: T1 from t1_sec up to 4 times that (at least 10 s)."""
+    t1, air = ax["t1_sec"], ax.get("air_baud", 0)
+    return LinkCfg(paclen=ax["paclen"], maxframe=min(7, ax["maxframe"]),
+                   maxframe_ext=ax["maxframe"], n2=ax["n2"], version="2.2",
+                   srt_init_sec=t1 / 2, t1_min_sec=t1, t1_max_sec=max(t1 * 4, 10.0),
+                   t2_sec=1.5 if air else 0.05, t3_sec=300.0, air_baud=air or 10_000_000,
+                   txdelay_sec=ax.get("txdelay_ms", 0) / 1000,
+                   max_rx_info=max(512, ax["paclen"]))
 
 
 class _Port(KissPort):
-    def __init__(self, user: "TermUser", listen_port: int, box: str, box_port: int) -> None:
+    def __init__(self, user: "TermUser", listen_port: int, box: str, box_port: int,
+                 ax: dict) -> None:
         peers = {box: axudp.Peer(box, "127.0.0.1", box_port)}
-        super().__init__(user.call, "127.0.0.1", listen_port, LINK, half_duplex=False,
+        super().__init__(user.call, "127.0.0.1", listen_port, link_cfg(ax),
+                         half_duplex=ax.get("air_baud", 0) > 0,
                          transport=lambda on_frame: axudp.AxudpEndpoint(
-                             "127.0.0.1", listen_port, peers, on_frame))
+                             "127.0.0.1", listen_port, peers, on_frame,
+                             hear=user.call if ax.get("air_baud") else None))
         self.user = user
 
     def accept_incoming(self, link: Ax25Link) -> bool:
@@ -51,9 +64,9 @@ class TermUser(User):
     kind = "T"
 
     def __init__(self, call: str, box: str, box_port: int, listen_port: int,
-                 ledger: Ledger, timeout: float = 60.0) -> None:
+                 ledger: Ledger, timeout: float = 60.0, ax: dict | None = None) -> None:
         super().__init__(call, box, ledger, timeout)
-        self.port = _Port(self, listen_port, box, box_port)
+        self.port = _Port(self, listen_port, box, box_port, ax or AX_FAST)
         self.link: Ax25Link | None = None
         self.buf = ""                        # everything received since the connect
         self.pos = 0                         # what expect() has consumed
@@ -62,6 +75,8 @@ class TermUser(User):
         self._state = "offline"
         self._task: asyncio.Task | None = None
         self.board: str | None = None
+        self.nudge_sec = max(10.0, timeout / 4)    # silence before "Enter" (see expect)
+        self.nudges = 0
 
     # --- port and link -----------------------------------------------------------------
 
@@ -119,6 +134,8 @@ class TermUser(User):
         """Wait until pattern appears after what was read; returns (text before, match)."""
         rx = re.compile(pattern) if isinstance(pattern, str) else pattern
         end = time.monotonic() + (timeout or self.timeout)
+        quiet_since = time.monotonic()
+        seen = len(self.buf)
         while True:
             m = rx.search(self.buf, self.pos)
             if m:
@@ -127,13 +144,23 @@ class TermUser(User):
                 return before, m
             if not self.connected and self._state == "offline" and self.link is None:
                 raise ActionError(f"link gone while waiting for {rx.pattern!r}")
-            left = end - time.monotonic()
+            now = time.monotonic()
+            left = end - now
             if left <= 0:
                 tail = self.buf[self.pos:][-120:].replace("\n", " | ")
                 raise ActionError(f"timeout waiting for {rx.pattern!r} - got: {tail!r}")
+            if len(self.buf) != seen:
+                seen, quiet_since = len(self.buf), now
+            elif self.connected and now - quiet_since >= self.nudge_sec:
+                # nothing comes: the answer may have been lost with a link reset
+                # ("data in flight may be lost") - a human presses Enter
+                self.nudges += 1
+                self.line("")
+                quiet_since = now
             self._wake.clear()
             try:
-                await asyncio.wait_for(self._wake.wait(), left)
+                await asyncio.wait_for(self._wake.wait(),
+                                       min(left, max(1.0, self.nudge_sec / 2)))
             except asyncio.TimeoutError:
                 pass
 
@@ -141,8 +168,12 @@ class TermUser(User):
                   keep_empty: bool = False) -> list[str]:
         """A mailbox command; returns the output lines up to the next prompt
         (without the abort hint of long output; empty lines only if keep_empty)."""
+        self.pos = len(self.buf)             # what came before is old (e.g. a prompt after Enter)
         self.line(text)
-        out, _ = await self.expect(PROMPT_RE, timeout)
+        while True:
+            out, _ = await self.expect(PROMPT_RE, timeout)
+            if out.strip():                  # an empty answer: a stray prompt, not ours
+                break
         lines = out.split("\n")
         if lines and lines[-1] == "":
             lines.pop()                      # the line end before the prompt
@@ -160,7 +191,7 @@ class TermUser(User):
         self._state = "connecting"
         link.connect(self.port.now())
         self.port.service(link)
-        end = time.monotonic() + 20
+        end = time.monotonic() + self.timeout
         while self._state == "connecting":
             if time.monotonic() > end:
                 link.disconnect(self.port.now())
@@ -187,6 +218,22 @@ class TermUser(User):
             else:
                 self.line(self.box.split("-")[0])
 
+    async def drop(self) -> None:
+        """After a failed action the session may be anywhere (half a message, a
+        question of the box): take the link down, the next connect starts clean."""
+        link = self.link
+        if link is None or not self.connected:
+            return
+        link.disconnect(self.port.now())
+        self.port.service(link)
+        end = time.monotonic() + 30
+        while self.connected and time.monotonic() < end:
+            self._wake.clear()
+            try:
+                await asyncio.wait_for(self._wake.wait(), 1)
+            except asyncio.TimeoutError:
+                pass
+
     async def disconnect(self) -> None:
         if not self.connected:
             return
@@ -194,7 +241,7 @@ class TermUser(User):
             await self.chat_leave()
         self.line("B")
         await self.expect("73, bye")
-        end = time.monotonic() + 15
+        end = time.monotonic() + self.timeout
         while self.connected and time.monotonic() < end:     # the box takes the link down
             self._wake.clear()
             try:
@@ -321,6 +368,8 @@ class TermUser(User):
             return
         self.ledger.left(self.call)
         self.line("/Q")
-        self.board = None
-        await self.expect(r"Left chat \S+, back in the mailbox\.")
+        try:          # lines sent on before the box got /Q still come and are counted
+            await self.expect(r"Left chat \S+, back in the mailbox\.")
+        finally:
+            self.board = None
         await self.expect(PROMPT_RE)

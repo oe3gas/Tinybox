@@ -10,6 +10,13 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- AXUDP-Werte einstellbar: [tinybox] axudp_paclen, axudp_maxframe,
+  axudp_t1_sec, axudp_n2 (Standard 256 / 32 / 3 / 10, ohne Sendezeit). Fuer
+  einen langsamen Weg wie den simulierten 1200-Bd-Kanal des Testbeds
+  (PLANUNG 27) kleines Fenster und langer T1, z. B. 256 / 4 / 6 / 10, dazu
+  axudp_air_baud = 1200 und axudp_txdelay_ms = 300: dann rechnet das AX.25
+  mit Sendezeit (Halbduplex, T1 erst nach dem eigenen Senden, gehoerte
+  Frames halten T1 an) - wie ueber Funk mit KISS.
 - Chat ueber lokales AXUDP: in der Teilnehmerliste keine Balken fuer die
   eigene Station (die TinyBox misst dort nichts), nur "you - axudp".
 - Heard-Liste und Monitor: Frames mit ungueltigen Rufzeichen (nur A-Z,

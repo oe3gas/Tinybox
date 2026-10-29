@@ -18,6 +18,11 @@ telnet_port  = 6300
 #                              # TinyBox over AXUDP ([axudp] in tinybox.conf), every other
 #                              # station over the radio. Empty = all over the radio.
 # axudp_port = 10094           # own UDP port; the TinyBox lists "OE3GAS 127.0.0.1:10094"
+# axudp_paclen = 256 / axudp_maxframe = 32 / axudp_t1_sec = 3 / axudp_n2 = 10
+#                              # AX.25 over AXUDP (no airtime); for a slow way such as the
+#                              # testbed's simulated 1200 Bd channel e.g. 256 / 4 / 6 / 10
+# axudp_air_baud = 0 / axudp_txdelay_ms = 0   # > 0: the way has air time (half duplex,
+#                              # T1 after the own transmission) - testbed: 1200 / 300
 
 [radio]
 interface    = agw             # agw = radio via Direwolf; kiss = TNC / VARA via kisshub, the

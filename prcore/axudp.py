@@ -227,9 +227,15 @@ class AxudpEndpoint:
     """
 
     def __init__(self, listen: str, port: int, peers: Mapping[str, Peer],
-                 on_frame: FrameHandler, kiss_port: int = 0) -> None:
+                 on_frame: FrameHandler, kiss_port: int = 0, hear: str | None = None) -> None:
         self.listen, self.port = listen, port
         self.table = PeerTable(peers)
+        # hear = own call: a way with air time (PLANUNG 27.2, half duplex). Frames of
+        # other stations from a peer's address that are NOT for us are passed on too,
+        # so the AX.25 sees the channel busy (T1 waits) - like hearing the frequency.
+        # Never a frame for our own call from a stranger: that is still dropped.
+        self.hear = norm_call(hear) if hear else None
+        self.heard = 0
         self.on_frame = on_frame
         self.kiss_port = kiss_port
         self.connected = asyncio.Event()
@@ -296,6 +302,14 @@ class AxudpEndpoint:
         self.tx_bytes += len(ax25)
         return True
 
+    def _heard(self, ip: str, dest: str) -> bool:
+        """A frame between two other stations, from a peer's address (hear mode)."""
+        if self.hear is None or norm_call(dest) == self.hear:
+            return False
+        if base_call(dest) == self.hear:          # our call without SSID: not either
+            return False
+        return any(_same_ip(ip, p.host) for p in self.table.peers.values())
+
     def received(self, datagram: bytes, addr) -> None:
         """One datagram from the socket (also called directly by tests)."""
         try:
@@ -305,14 +319,16 @@ class AxudpEndpoint:
             log.debug("AXUDP from %s dropped: %s", addr, exc)
             return
         try:
-            src = peek(ax25)[1]
+            dest, src = peek(ax25)[:2]
         except AX25Error:
             self.dropped["garbage"] += 1
             return
         if self.table.sender(addr[0], src) is None:
-            self.dropped["stranger"] += 1
-            log.debug("AXUDP from %s (%s) dropped: no such peer", addr, src)
-            return
+            if not self._heard(addr[0], dest):
+                self.dropped["stranger"] += 1
+                log.debug("AXUDP from %s (%s) dropped: no such peer", addr, src)
+                return
+            self.heard += 1
         self.rx_frames += 1
         try:
             result = self.on_frame(self.kiss_port, ax25)
@@ -320,6 +336,15 @@ class AxudpEndpoint:
                 asyncio.ensure_future(result)
         except Exception:                          # one bad frame must not stop the port
             log.exception("error handling an AXUDP frame")
+
+
+def _same_ip(a: str, b: str) -> bool:
+    try:
+        x = ipaddress.ip_address(a.split("%", 1)[0])
+        x = getattr(x, "ipv4_mapped", None) or x
+        return x == ipaddress.ip_address(b)
+    except ValueError:
+        return False
 
 
 class _Protocol(asyncio.DatagramProtocol):

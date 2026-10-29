@@ -102,6 +102,8 @@ def busy_ports(bed: Bed, n_users: int) -> list[str]:
             out.append(f"{name} {port}/tcp")
     if not port_free(bed.box_port, udp=True):
         out.append(f"box_port {bed.box_port}/udp")
+    if not port_free(bed.channel_port, udp=True):
+        out.append(f"channel_port {bed.channel_port}/udp")
     for call in bed.users[:n_users]:
         p = bed.port_of(call)
         if not port_free(p, udp=True):
@@ -114,8 +116,9 @@ class TestBox:
 
     __test__ = False                      # not a unittest class
 
-    def __init__(self, bed: Bed, out_path: Path) -> None:
+    def __init__(self, bed: Bed, out_path: Path, conf: Path | None = None) -> None:
         self.bed = bed
+        self.conf = conf or bed.box_conf
         self.out_path = out_path
         self.proc: asyncio.subprocess.Process | None = None
         self.web_url = ""
@@ -133,12 +136,12 @@ class TestBox:
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",
                    TINYBOX_LAUNCHER="")
         self._out = open(self.out_path, "w", encoding="utf-8")
-        # Windows: own process group, so Ctrl+C in the console reaches only tbtest -
+        # own process group, so Ctrl+C in the console reaches only tbtest -
         # tbtest then writes its report and stops the box itself
         extra = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-                 if sys.platform == "win32" else {})
+                 if sys.platform == "win32" else {"start_new_session": True})
         self.proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "tinybox", "-c", str(self.bed.box_conf),
+            sys.executable, "-m", "tinybox", "-c", str(self.conf),
             cwd=str(REPO), env=env, stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, **extra)
         self._reader = asyncio.create_task(self._read())

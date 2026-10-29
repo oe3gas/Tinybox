@@ -85,6 +85,9 @@ port    = 10093                # UDP
 peers   = OE3GAS 127.0.0.1:10094   # CALL ip:port, several separated by commas;
                                # without SSID = every SSID of that call
 # paclen = 256 / maxframe_ext = 32 / t1_sec = 3 / n2 = 10   # AX.25 without airtime
+# air_baud = 0 / txdelay_ms = 0   # > 0: the way has air time (e.g. the testbed's simulated
+#                                 # 1200 Bd channel, PLANUNG 27): half duplex, T1 after
+#                                 # the own transmission, frames heard pause T1
 
 [web]
 enabled = yes                  # sysop web GUI in the browser

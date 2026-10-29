@@ -1,0 +1,4 @@
+- AXUDP: Fenster, PACLEN, T1, N2 und Sendezeit
+  einstellbar ([tinybox] axudp_maxframe,
+  axudp_air_baud usw.) - fuer langsame Wege wie
+  den Testbed-Funkkanal.

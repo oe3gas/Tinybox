@@ -41,12 +41,15 @@ log = logging.getLogger(__name__)
 
 
 def axudp_link_cfg(cfg: Config) -> LinkCfg:
-    """AX.25 values for a link without airtime."""
+    """AX.25 values for a link without airtime - or, with [axudp] air_baud, for a slow
+    way like a radio channel (PLANUNG 27): own air time estimated, T2 as on the radio."""
     a = cfg.axudp
-    return LinkCfg(paclen=a.paclen, maxframe=7, maxframe_ext=a.maxframe_ext, n2=a.n2,
+    return LinkCfg(paclen=a.paclen, maxframe=min(7, a.maxframe_ext),
+                   maxframe_ext=a.maxframe_ext, n2=a.n2,
                    version="2.2", srt_init_sec=a.t1_sec / 2, t1_min_sec=a.t1_sec,
-                   t1_max_sec=max(a.t1_sec * 4, 10.0), t2_sec=0.05, t3_sec=300.0,
-                   air_baud=10_000_000, txdelay_sec=0.0, srej=cfg.ax25.srej,
+                   t1_max_sec=max(a.t1_sec * 4, 10.0), t2_sec=1.5 if a.air_baud else 0.05,
+                   t3_sec=300.0, air_baud=a.air_baud or 10_000_000,
+                   txdelay_sec=a.txdelay_ms / 1000, srej=cfg.ax25.srej,
                    max_rx_info=max(512, a.paclen))
 
 
@@ -54,9 +57,10 @@ class _UdpPort(KissPort):
     def __init__(self, adapter: "AxudpAdapter") -> None:
         a = adapter.cfg.axudp
         super().__init__(adapter.cfg.station.mailbox_call, a.listen, a.port,
-                         axudp_link_cfg(adapter.cfg), half_duplex=False,
+                         axudp_link_cfg(adapter.cfg), half_duplex=a.air_baud > 0,
                          transport=lambda on_frame: udp.AxudpEndpoint(
-                             a.listen, a.port, a.peers, on_frame))
+                             a.listen, a.port, a.peers, on_frame,
+                             hear=adapter.cfg.station.mailbox_call if a.air_baud else None))
         self.adapter = adapter
 
     def on_transmit(self, f: Frame, raw: bytes) -> None:

@@ -2,6 +2,14 @@
 
 ## Unveröffentlicht
 
+- **Testbed Teil 2** (PLANUNG 27.2): simulierter 1200-Bd-Funkkanal im AXUDP-Weg (gemeinsame
+  Frequenz, CSMA, Kollisionen, versteckte Stationen, Verlust je Profil good/medium/poor),
+  bis 30 User, eigener Client per `tbclient-testbed.conf`, `tbtest run -t 0` bis Strg+C,
+  Kanalstatistik im Bericht.
+- **AXUDP mit Sendezeit**: `[axudp] air_baud` / `txdelay_ms` in `tinybox.conf`; im Client
+  (2026.10.29) `[tinybox] axudp_air_baud`, `axudp_txdelay_ms`, `axudp_paclen`,
+  `axudp_maxframe`, `axudp_t1_sec`, `axudp_n2`. Standard unverändert (ohne Sendezeit).
+
 - **Testbed `tbtest`** (PLANUNG 27): 1–10 simulierte User arbeiten über AXUDP mit einer eigenen
   Test-TinyBox – Terminal-User (tippen Mailbox-Befehle) und Client-User (echter Client-Kern).
   Funktionen `conn`, `send`, `bull`, `read`, `kill`, `info`, `chat`, `img`, wählbar per CLI

@@ -200,6 +200,8 @@ class AxudpCfg:
     maxframe_ext: int = 32       # window (modulo 128); v2.0 peers: 7
     t1_sec: float = 3.0          # no airtime: short T1
     n2: int = 10
+    air_baud: int = 0            # 0 = no airtime; > 0: a slow way (e.g. the testbed's
+    txdelay_ms: int = 0          # simulated 1200 Bd channel): air time, half duplex
 
 
 @dataclass
@@ -861,8 +863,13 @@ def _load_axudp(cp: configparser.ConfigParser) -> AxudpCfg:
                  paclen=_get(cp, "axudp", "paclen", 256, int),
                  maxframe_ext=_get(cp, "axudp", "maxframe_ext", 32, int),
                  t1_sec=_get(cp, "axudp", "t1_sec", 3.0, float),
-                 n2=_get(cp, "axudp", "n2", 10, int))
+                 n2=_get(cp, "axudp", "n2", 10, int),
+                 air_baud=_get(cp, "axudp", "air_baud", 0, int),
+                 txdelay_ms=_get(cp, "axudp", "txdelay_ms", 0, int))
     _check_port("axudp", "port", a.port)
+    if a.air_baud and not 300 <= a.air_baud <= 1_000_000:
+        raise ConfigError("[axudp] air_baud: 0 (no airtime) or 300 ... 1000000")
+    _check_range("axudp", "txdelay_ms", a.txdelay_ms, 0, 10000)
     _check_range("axudp", "paclen", a.paclen, 32, 256)
     _check_range("axudp", "maxframe_ext", a.maxframe_ext, 1, 127)
     _check_range("axudp", "n2", a.n2, 1, 50)

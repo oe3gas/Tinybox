@@ -50,12 +50,18 @@ def link_cfg(cfg: Config) -> LinkCfg:
 
 
 def axudp_link_cfg(cfg: Config) -> LinkCfg:
-    """PLANUNG 25: AX.25 to the home TinyBox over AXUDP - no airtime (as the
-    TinyBox's [axudp] defaults)."""
-    return LinkCfg(paclen=256, maxframe=7, maxframe_ext=32, n2=10, version="2.2",
-                   srt_init_sec=1.5, t1_min_sec=3.0, t1_max_sec=12.0, t2_sec=0.05,
-                   t3_sec=300.0, air_baud=10_000_000, txdelay_sec=0.0, srej=cfg.ax25_srej,
-                   max_rx_info=512)
+    """PLANUNG 25: AX.25 to the home TinyBox over AXUDP - no airtime. Window, PACLEN,
+    T1 and N2 as in tbclient.conf ([tinybox] axudp_*; same rule as the TinyBox's
+    [axudp]: T1 from t1_sec up to 4 times that, at least 10 s)."""
+    t1 = cfg.axudp_t1_sec
+    slow = cfg.axudp_air_baud > 0                 # a way with air time (half duplex)
+    return LinkCfg(paclen=cfg.axudp_paclen, maxframe=min(7, cfg.axudp_maxframe),
+                   maxframe_ext=cfg.axudp_maxframe, n2=cfg.axudp_n2, version="2.2",
+                   srt_init_sec=t1 / 2, t1_min_sec=t1, t1_max_sec=max(t1 * 4, 10.0),
+                   t2_sec=1.5 if slow else 0.05, t3_sec=300.0,
+                   air_baud=cfg.axudp_air_baud or 10_000_000,
+                   txdelay_sec=cfg.axudp_txdelay_ms / 1000,
+                   srej=cfg.ax25_srej, max_rx_info=max(512, cfg.axudp_paclen))
 
 
 class KissPort(SharedKissPort):
@@ -63,10 +69,11 @@ class KissPort(SharedKissPort):
     down_text = "kisshub not reachable"
 
     def __init__(self, cfg: Config, on_frame, on_incoming=None, *,
-                 lcfg: LinkCfg | None = None, transport=None) -> None:
+                 lcfg: LinkCfg | None = None, transport=None,
+                 half_duplex: bool | None = None) -> None:
         super().__init__(cfg.mycall, cfg.kiss_host, cfg.kiss_port, lcfg or link_cfg(cfg),
                          channel=cfg.kiss_channel, reconnect_sec=5, transport=transport,
-                         half_duplex=transport is None)
+                         half_duplex=transport is None if half_duplex is None else half_duplex)
         self.cfg = cfg
         self.on_frame = on_frame                  # monitor: radio.RawFrame
         self.on_incoming = on_incoming            # remote -> KissLink of a free channel, or None
@@ -143,7 +150,9 @@ class AxudpPort(KissPort):
         listen = "::1" if ":" in cfg.axudp_host else "127.0.0.1"
         super().__init__(cfg, lambda rf: None, on_incoming, lcfg=axudp_link_cfg(cfg),
                          transport=lambda on_frame: udp.AxudpEndpoint(
-                             listen, cfg.axudp_listen, peers, on_frame))
+                             listen, cfg.axudp_listen, peers, on_frame,
+                             hear=cfg.mycall if cfg.axudp_air_baud else None),
+                         half_duplex=cfg.axudp_air_baud > 0)
 
     async def run(self) -> None:
         log.info("AXUDP 127.0.0.1:%d -> home TinyBox %s at %s:%d", self.cfg.axudp_listen,

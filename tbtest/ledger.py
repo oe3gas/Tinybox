@@ -110,9 +110,12 @@ class Stay:
 
 
 class Ledger:
-    def __init__(self, run: str, rng: random.Random) -> None:
+    def __init__(self, run: str, rng: random.Random, sizes: tuple = SIZES,
+                 late: float = 10.0) -> None:
         self.run = run
         self.rng = rng
+        self.sizes = sizes
+        self.late = late          # s a chat line may take to the box when nobody got it
         self.msgs: dict[str, Msg] = {}
         self._n: dict[str, int] = {}
         self.lines: dict[str, ChatLine] = {}
@@ -132,7 +135,7 @@ class Ledger:
     def new_msg(self, sender: str, type: str, to: str, via: str) -> Msg:
         n = self._next(sender)
         key = f"{self.run}-{sender}-{n}"
-        size = self.rng.choice(SIZES)
+        size = self.rng.choice(self.sizes)
         body = make_body(self.rng, key, size)
         subject = f"tbt {self.run} {sender}#{n}"
         m = Msg(key, sender, type, to, subject, body, len(body.encode()), via)
@@ -240,11 +243,18 @@ class Ledger:
         # chat: who had to get which line
         expected, missing = 0, []
         for line in self.lines.values():
+            # The box sends a line on when it gets it - not later than the first
+            # station (or the sender's echo) received it. A user must get it if he
+            # was in the board before it was sent and still there after that moment.
+            got = [h[line.key] for h in self.heard.values() if line.key in h]
+            if line.echo_at is not None:
+                got.append(line.echo_at)
+            at_box = min(got) if got else line.sent_at + self.late
             for call, stays in self.stays.items():
                 if call == line.sender:
                     continue
                 inside = any(s.board == line.board and s.joined + MARGIN <= line.sent_at
-                             and line.sent_at + MARGIN <= (s.left or line.sent_at)
+                             and at_box + MARGIN <= (s.left or line.sent_at)
                              for s in stays)
                 if not inside:
                     continue

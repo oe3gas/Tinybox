@@ -25,7 +25,7 @@ Stand: 22.10.2026 (kisshub 2026.10.22, tbclient 2026.10.18.7)
 | **brocastd** | sendet/empfängt brocast-Seiten (UI-Frames); Einzelheiten in `brocast/README.md` | `brocast\brocastd.bat` | `brocast\brocastd.conf` |
 | **dxfeed** | DX-Cluster → tägliches DX-Bulletin in die TinyBox | `dxfeed.bat` | `dxfeed.conf` |
 | **fwdsim** | Testpartner für das Forwarding | `fwdsim.bat` | `fwdsim.conf` |
-| **tbtest** | Testbed: 1–10 simulierte User gegen eine eigene Test-TinyBox (`tbtest/README.md`) | `tbtest.bat` | `tbtest.conf` im Testbed-Verzeichnis |
+| **tbtest** | Testbed: 1–30 simulierte User über einen simulierten 1200-Bd-Funkkanal gegen eine eigene Test-TinyBox (`tbtest/README.md`) | `tbtest.bat` | `tbtest.conf` im Testbed-Verzeichnis |
 
 **PCs im Testaufbau:** PC1 (`E:\Tinybox`, TS-790) – TinyBox. PC2 (`C:\Tinybox`, FT-818) –
 Client. Auf jedem PC, der einen KISS-TNC nutzt, läuft ein eigener kisshub.
@@ -577,6 +577,26 @@ peers   = OE3GAS 127.0.0.1:10094   ; Rufzeichen des Clients und sein UDP-Port
   Client-Modus mit Bildern und Kompression, Mail-Sync ohne Funkpausen, Chat ohne UI-Frames;
   der Kanal-Chip zeigt „AXUDP“, das Logbuch `via axudp`. Mit Digi-Pfad geht auch die
   Heim-TinyBox über Funk. Mit `interface = telnet` ist `axudp` nicht erlaubt.
+- **Langsamer Weg** (z. B. der simulierte 1200-Bd-Kanal des Testbeds, PLANUNG 27.2): die
+  AX.25-Werte über AXUDP lassen sich einstellen, mit `air_baud` rechnet das AX.25 mit
+  Sendezeit (Halbduplex, T1 erst nach dem eigenen Senden, gehörte Frames halten T1 an,
+  T2 1,5 s). Ohne diese Einträge bleibt alles wie oben.
+
+  ```ini
+  [axudp]                          ; tinybox.conf
+  paclen = 256
+  maxframe_ext = 4
+  t1_sec = 6
+  air_baud = 1200
+  txdelay_ms = 300
+
+  [tinybox]                        ; tbclient.conf (ab 2026.10.29)
+  axudp_paclen = 256
+  axudp_maxframe = 4
+  axudp_t1_sec = 6
+  axudp_air_baud = 1200
+  axudp_txdelay_ms = 300
+  ```
 
 ## 4. Verbindungsqualität messen (kisshub, CR67)
 

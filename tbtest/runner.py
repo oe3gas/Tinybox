@@ -6,7 +6,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import random
+import signal
 import string
 import time
 from dataclasses import asdict, dataclass, field
@@ -15,9 +17,10 @@ from pathlib import Path
 from . import VERSION, report
 from .bed import RUBRIC, Bed
 from .box import Air, TestBox, busy_ports
+from .channel import PROFILES, Channel, Station, assign_profiles
 from .client import ClientUser
 from .ledger import Ledger
-from .term import TermUser
+from .term import AX_FAST, TermUser
 from .user import ActionError, User
 
 log = logging.getLogger("tbtest")
@@ -37,19 +40,27 @@ CHAT_BOARDS = [("TREFF", 6), ("RUNDE", 3), ("TECH", 2)]
 IMG_BOARDS = ["TREFF", "TECH"]               # RUNDE is live: no pictures
 
 
+# defaults without channel / with the simulated radio channel
+FAST = {"think": (2.0, 10.0), "chat_stay": (15.0, 45.0), "timeout": 60.0,
+        "sizes": (60, 250, 800, 2000, 4000, 7000), "img": (1500, 3000, 5000, 7500)}
+RADIO = {"think": (30.0, 180.0), "chat_stay": (60.0, 180.0), "timeout": 300.0,
+         "sizes": (60, 150, 400, 800, 1500, 3000), "img": (800, 1200, 2000)}
+
+
 @dataclass
 class Options:
-    users: int = 4
+    users: int = 6
     terminals: int | None = None             # None = half (rounded up)
     funcs: list[str] = field(default_factory=lambda: list(FUNCS))
-    duration: float = 300.0                  # s
+    duration: float = 300.0                  # s, 0 = until Ctrl+C
     rounds: int = 0                          # actions per user, 0 = only the time counts
-    think: tuple[float, float] = (2.0, 10.0)
-    chat_stay: tuple[float, float] = (15.0, 45.0)
+    think: tuple[float, float] | None = None         # None: by the channel (FAST / RADIO)
+    chat_stay: tuple[float, float] | None = None
     seed: int | None = None
-    timeout: float = 60.0
+    timeout: float | None = None
     final: bool = True                       # read everything at the end
     fresh: bool = False
+    air: int | None = None                   # air_baud; None = tbtest.conf [radio]
 
 
 @dataclass
@@ -83,7 +94,17 @@ class Run:
         self.id = run_id()
         self.seed = opt.seed if opt.seed is not None else random.randrange(1 << 30)
         self.rng = random.Random(self.seed)
-        self.ledger = Ledger(self.id, random.Random(self.seed + 1))
+        self.air_baud = opt.air if opt.air is not None else bed.air_baud
+        d = RADIO if self.air_baud else FAST
+        opt.think = opt.think or d["think"]
+        opt.chat_stay = opt.chat_stay or d["chat_stay"]
+        opt.timeout = opt.timeout or d["timeout"]
+        opt.air = self.air_baud
+        self.img_sizes = d["img"]
+        self.ledger = Ledger(self.id, random.Random(self.seed + 1), sizes=d["sizes"],
+                             late=120.0 if self.air_baud else 10.0)
+        self.channel: Channel | None = None
+        self.quality: dict[str, tuple] = {}
         self.recs: list[Rec] = []
         self.users: list[User] = []
         self.t0 = time.monotonic()
@@ -91,6 +112,7 @@ class Run:
         self.stopping = False
         self.aborted = False
         self.air: Air | None = None
+        self.box_dead = False
         self.box: TestBox | None = None
         self.counts: dict[str, int] = {}
 
@@ -129,6 +151,10 @@ class Run:
         if not rec.ok:
             u.last_error = rec.error
             self.say(f"  ! [{self.stamp()}] {u.label} {func}: {rec.error}")
+            if isinstance(u, TermUser) and func != "disc":
+                await u.drop()                 # start the next session clean
+            elif isinstance(u, ClientUser) and func == "conn":
+                await u.drop()
         return rec
 
     def done(self, u: User, actions: int) -> bool:
@@ -194,7 +220,7 @@ class Run:
         try:
             if image:
                 key = self.ledger.chat_key(u.call)
-                size = self.rng.choice((1500, 3000, 5000, 7500))
+                size = self.rng.choice(self.img_sizes)
                 await self.measure(u, "img", u.send_image(key, size),
                                    lambda h: (f"{size} B", False))
                 times = times[:1]
@@ -275,7 +301,17 @@ class Run:
             await asyncio.sleep(0.5)
         self.say(f"  ! [{self.stamp()}] the test box stopped (exit code {self.box.died}) - "
                  "ending the run, see tinybox.out")
-        self.stopping = True
+        self.stopping = self.box_dead = True
+
+    def interrupt(self, main: asyncio.Task) -> None:
+        """Ctrl+C: the first ends the actions (then the final check and the report),
+        the second aborts."""
+        if not self.stopping:
+            self.stopping = True
+            self.say(f"[{self.stamp()}] Ctrl+C - no new actions; the running ones finish, "
+                     "then the final check. Ctrl+C again aborts.")
+        else:
+            main.cancel()
 
     async def ticker(self) -> None:
         while True:
@@ -284,25 +320,53 @@ class Run:
             fails = sum(1 for r in self.recs if not r.ok)
             counts = " ".join(f"{f} {n}" for f, n in sorted(self.counts.items()))
             inboard = sum(1 for u in self.users if u.board)
+            busy = ""
+            if self.channel is not None and self.channel.radio:
+                c = self.channel.summary()
+                guest = next((r for r in c["stations"] if r["call"] == self.bed.guest_call), {})
+                busy = (f" | channel busy {c['busy_pct']:.0f}%"
+                        + (f", guest {guest['frames']} frames" if guest.get("frames") else ""))
             self.say(f"[{self.stamp()}] online {online}/{len(self.users)}, in chat {inboard}"
-                     f" | {counts} | failed {fails}")
+                     f"{busy} | {counts} | failed {fails}")
 
     # --- the run -------------------------------------------------------------------------------
 
     def make_users(self) -> None:
+        b = self.bed
         n = self.opt.users
         t = (n + 1) // 2 if self.opt.terminals is None else self.opt.terminals
-        for i, call in enumerate(self.bed.users[:n]):
-            port = self.bed.port_of(call)
+        ax = ({"paclen": b.ax_paclen, "maxframe": b.ax_maxframe, "t1_sec": b.ax_t1_sec,
+               "n2": b.ax_n2, "air_baud": self.air_baud, "txdelay_ms": b.txdelay_ms}
+              if self.air_baud else AX_FAST)
+        for i, call in enumerate(b.users[:n]):
+            port = b.port_of(call)
             if i < t:
-                u: User = TermUser(call, self.bed.box_call, self.bed.box_port, port,
-                                   self.ledger, self.opt.timeout)
+                u: User = TermUser(call, b.box_call, b.channel_port, port, self.ledger,
+                                   self.opt.timeout, ax=ax)
             else:
-                u = ClientUser(call, self.bed.box_call, self.bed.box_port, port,
-                               self.bed.air_port, self.bed.user_dir(call), self.ledger,
-                               self.opt.timeout)
+                u = ClientUser(call, b.box_call, b.channel_port, port, b.air_port,
+                               b.user_dir(call), self.ledger, self.opt.timeout, ax=ax)
                 self.ledger.client_calls.add(call)
             self.users.append(u)
+
+    def make_channel(self) -> Channel:
+        """The relay between box and users: the box, the users with their quality,
+        the guest (your own client)."""
+        b = self.bed
+        ch = Channel(b.channel_port, self.air_baud, b.txdelay_ms, b.persist, b.slottime_ms,
+                     seed=self.seed + 2)
+        ch.add(Station(b.box_call, ("127.0.0.1", b.box_port), is_box=True))
+        calls = b.users[:self.opt.users]
+        self.quality = assign_profiles(calls, b.mix, b.hidden, b.quality,
+                                       random.Random(self.seed + 3))
+        for call in calls:
+            prof, hid = self.quality[call]
+            ch.add(Station(call, ("127.0.0.1", b.port_of(call)), prof, hid))
+        from .bed import parse_quality
+        gp, gh = parse_quality(b.guest_quality, "guest")
+        ch.add(Station(b.guest_call, ("127.0.0.1", b.guest_port),
+                       PROFILES[gp or "good"], bool(gh)))
+        return ch
 
     async def run(self) -> dict:
         busy = busy_ports(self.bed, self.opt.users)
@@ -311,27 +375,51 @@ class Run:
         self.folder.mkdir(parents=True, exist_ok=True)
         self.air = Air(self.bed.air_port)
         await self.air.start()
-        self.box = TestBox(self.bed, self.folder / "tinybox.out")
+        self.channel = self.make_channel()
+        await self.channel.start()
+        conf = None
+        if self.air_baud != self.bed.air_baud:          # run --air: a conf for this run only
+            conf = self.folder / "tinybox.conf"
+            conf.write_text(self.bed.box_conf_text(self.air_baud, absolute=True),
+                            encoding="utf-8")
+        self.box = TestBox(self.bed, self.folder / "tinybox.out", conf)
         ticker = None
         started = time.time()
+        loop = asyncio.get_running_loop()
+        main = asyncio.current_task()
+        old_sigint = None
+        try:
+            old_sigint = signal.signal(
+                signal.SIGINT, lambda *_: loop.call_soon_threadsafe(self.interrupt, main))
+        except ValueError:                      # not the main thread (tests)
+            pass
         try:
             await self.box.start()
             self.say(f"test box {self.bed.box_call} up - web GUI: {self.box.web_url or '-'}")
             self.make_users()
             for u in self.users:
                 await u.start()
-            kinds = ", ".join(u.label for u in self.users)
-            self.say(f"run {self.id}: {len(self.users)} users ({kinds}), functions "
-                     f"{','.join(self.opt.funcs)}, "
+            kinds = ", ".join(f"{u.label}" + (f" {self.quality[u.call][0].name}"
+                                              + (" hidden" if self.quality[u.call][1] else "")
+                                              if self.air_baud else "")
+                              for u in self.users)
+            chan = (f"simulated channel {self.air_baud} Bd, TXDELAY {self.bed.txdelay_ms} ms"
+                    if self.air_baud else "no channel (frames pass at once)")
+            dur = "until Ctrl+C" if not self.opt.duration else report.human(self.opt.duration)
+            self.say(f"run {self.id}: {chan}")
+            self.say(f"  {len(self.users)} users: {kinds}")
+            self.say(f"  functions {','.join(self.opt.funcs)}, "
                      + (f"{self.opt.rounds} actions each, at most " if self.opt.rounds else "")
-                     + f"{report.human(self.opt.duration)}, seed {self.seed}")
+                     + f"{dur}, seed {self.seed}")
+            self.say(f"  your client: tbclient.bat -c {self.bed.guest_conf}  ->  "
+                     f"http://127.0.0.1:{self.bed.guest_web}/  (call {self.bed.guest_call})")
             self.t0 = time.monotonic()
-            self.deadline = self.t0 + self.opt.duration
+            self.deadline = self.t0 + self.opt.duration if self.opt.duration else math.inf
             ticker = asyncio.create_task(self.ticker())
             watcher = asyncio.create_task(self.watch_box())
             try:
                 await asyncio.gather(*(self.user_loop(u) for u in self.users))
-                if self.opt.final and self.ledger.msgs and not self.stopping:
+                if self.opt.final and self.ledger.msgs and not self.box_dead:
                     self.say(f"[{self.stamp()}] actions done - final check: everybody reads "
                              "what is still unread")
                     await asyncio.gather(*(self.final(u) for u in self.users))
@@ -355,6 +443,9 @@ class Run:
             await asyncio.sleep(0.5)                   # the last frames to the dummy radio
             await self.box.stop()
             self.air.close()
+            self.channel.close()
+            if old_sigint is not None:
+                signal.signal(signal.SIGINT, old_sigint)
         result = self.result(started)
         (self.folder / "result.json").write_text(json.dumps(result, indent=1,
                                                             ensure_ascii=False),
@@ -375,7 +466,12 @@ class Run:
                     "warnings": self.box.n_warnings if self.box else 0,
                     "warning_lines": self.box.warnings if self.box else [],
                     "out": "tinybox.out", "died": self.box.died if self.box else None},
-            "users": [{"call": u.call, "kind": u.kind} for u in self.users],
+            "users": [{"call": u.call, "kind": u.kind,
+                       "profile": self.quality[u.call][0].name if self.air_baud else "",
+                       "hidden": bool(self.quality[u.call][1]) if self.air_baud else False,
+                       "nudges": getattr(u, "nudges", 0)}
+                      for u in self.users],
+            "channel": self.channel.summary() if self.channel else {},
             "records": [asdict(r) for r in self.recs],
             "verify": self.ledger.verify(calls),
             "air": self.air.summary(self.bed.box_call) if self.air else {},

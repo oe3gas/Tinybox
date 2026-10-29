@@ -46,14 +46,38 @@ def functions_table(recs: list[dict]) -> list[str]:
 
 
 def users_table(result: dict) -> list[str]:
-    rows = [f"{'user':<10} {'type':<9} {'actions':>7} {'failed':>6}  last error"]
+    radio = bool((result.get("channel") or {}).get("air_baud"))
+    rows = [f"{'user':<10} {'type':<9} " + (f"{'quality':<14} " if radio else "")
+            + f"{'actions':>7} {'failed':>6}  last error"]
     for u in result["users"]:
         rs = [r for r in result["records"] if r["call"] == u["call"]]
         bad = [r for r in rs if not r["ok"]]
         kind = "terminal" if u["kind"] == "T" else "client"
+        q = (u.get("profile", "") + (" hidden" if u.get("hidden") else "")) if radio else ""
         last = bad[-1]["func"] + ": " + bad[-1]["error"] if bad else ""
-        rows.append(f"{u['call']:<10} {kind:<9} {len(rs):>7} {len(bad):>6}  {last[:70]}")
+        rows.append(f"{u['call']:<10} {kind:<9} " + (f"{q:<14} " if radio else "")
+                    + f"{len(rs):>7} {len(bad):>6}  {last[:60]}")
     return rows
+
+
+def channel_table(ch: dict) -> list[str]:
+    """The simulated channel: per station what it sent and what got lost."""
+    out = [f"{ch['air_baud']} Bd, TXDELAY {ch['txdelay_ms']} ms, persist {ch['persist']}, "
+           f"slottime {ch['slottime_ms']} ms - channel busy {ch['busy_pct']}% of "
+           f"{human(ch['secs'])}",
+           f"{'station':<10} {'quality':<14} {'frames':>6} {'kB':>6} {'air s':>6} "
+           f"{'repeat':>6} {'lost:noise':>10} {'collis.':>7} {'wait avg':>8} {'max':>5}"]
+    for r in ch["stations"]:
+        if not r["frames"] and not r["box"]:
+            continue
+        q = "box" if r["box"] else r["profile"] + (" hidden" if r["hidden"] else "")
+        out.append(f"{r['call']:<10} {q:<14} {r['frames']:>6} {r['bytes'] / 1024:>6.1f} "
+                   f"{r['airtime']:>6.0f} {r['repeats']:>6} {r['lost_noise']:>10} "
+                   f"{r['lost_collision']:>7} {r['wait_avg']:>7.1f}s {r['wait_max']:>4.0f}s")
+    out.append("frames = sent incl. repeats; repeat = the same I-frame again (retry); "
+               "lost = frames of this station that did not reach the other side; "
+               "wait = time in the station's send queue (channel busy)")
+    return out
 
 
 def failures(result: dict) -> list[str]:
@@ -64,9 +88,10 @@ def failures(result: dict) -> list[str]:
         why.append(f"{len(failed)} action(s) failed")
     if v["private"]["corrupt"] or v["bulletins"]["corrupt"]:
         why.append("corrupt message text")
-    if v["private"]["missing"]:
+    final = result["options"].get("final", True)      # without it unread is no loss
+    if v["private"]["missing"] and final:
         why.append(f"{len(v['private']['missing'])} personal message(s) never arrived")
-    if v["bulletins"]["missing"]:
+    if v["bulletins"]["missing"] and final:
         why.append(f"{len(v['bulletins']['missing'])} bulletin read(s) missing")
     if v["not_stored"]:
         why.append(f"{len(v['not_stored'])} message(s) not stored")
@@ -120,6 +145,9 @@ def text(result: dict) -> str:
             out.append(f"  {name}: " + ", ".join(
                 (f"{x[0]}->{x[1]}" if isinstance(x, (list, tuple)) else x) for x in items[:8])
                 + (" ..." if len(items) > 8 else ""))
+    ch = result.get("channel") or {}
+    if ch.get("air_baud"):
+        out += ["", "Simulated channel:"] + ["  " + r for r in channel_table(ch)]
     air = result.get("air") or {}
     out += ["", f"Dummy radio:   {air.get('total', 0)} frame(s), {air.get('box_ui', 0)} UI frame(s)"
             f" of the box, {air.get('not_ui', 0)} connected-mode frame(s) (must be 0)"]

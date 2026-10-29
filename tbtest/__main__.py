@@ -2,20 +2,22 @@
 
     python -m tbtest init [--force]          create the testbed folder (tbtest.conf, tinybox.conf)
     python -m tbtest run [options]           a test run, see below
-    python -m tbtest box                     only the test box (manual tests; Ctrl+C ends it)
+    python -m tbtest box                     only the test box and the channel (manual tests,
+                                             your own client; Ctrl+C ends it)
     python -m tbtest report [RUN]            show the report of the last (or a given) run
     python -m tbtest reset                   delete the test box's database and the client data
     python -m tbtest funcs                   list the functions
 
 run:
-    -u, --users N        1-10 users (default 4)
+    -u, --users N        1-30 users (default 6)
     --terminal N         how many of them are terminal users (default: half, rest clients)
     -f, --funcs LIST     conn,send,bull,read,kill,info,chat,img or all (default all)
-    -t, --time T         duration: 90s, 10m, 1h (default 5m)
+    -t, --time T         duration: 90s, 10m, 1h; 0 = until Ctrl+C (default 15m, --air 0: 5m)
     -r, --rounds N       actions per user (stops earlier than --time if reached)
-    --think A-B          pause between two actions in seconds (default 2-10)
-    --stay A-B           time in a chat board in seconds (default 15-45)
-    --seed N             same seed = same choices (the timing still differs)
+    --air BAUD           simulated channel: 1200 (tbtest.conf [radio]) or 0 = none
+    --think A-B          pause between two actions in seconds (default 30-180, --air 0: 2-10)
+    --stay A-B           time in a chat board in seconds (default 60-180, --air 0: 15-45)
+    --seed N             same seed = same choices and qualities (the timing still differs)
     --fresh              empty test box and client data before the run
     --no-final           no final read of everything still unread
 
@@ -93,8 +95,12 @@ def cmd_init(args) -> int:
           f"web http://127.0.0.1:{bed.web_port}/, telnet {bed.telnet_port}")
     print(f"  users        {', '.join(bed.users)} (UDP {bed.user_port}-"
           f"{bed.user_port + len(bed.users) - 1})")
+    print(f"  channel      127.0.0.1:{bed.channel_port}/udp, "
+          + (f"{bed.air_baud} Bd simulated" if bed.air_baud else "no simulation"))
     print(f"  dummy radio  127.0.0.1:{bed.air_port} (swallows every frame)")
-    print("Next: tbtest run   (or tbtest run -u 10 -t 10m)")
+    print(f"  your client  tbclient.bat -c {bed.guest_conf}  (call {bed.guest_call}, "
+          f"web http://127.0.0.1:{bed.guest_web}/)")
+    print("Next: tbtest run   (or tbtest run -u 20 -t 30m, tbtest run -t 0 = until Ctrl+C)")
     return 0
 
 
@@ -124,13 +130,19 @@ def cmd_run(args) -> int:
     if not 1 <= args.users <= len(bed.users):
         print(f"[tbtest] -u: 1 to {len(bed.users)} (users in tbtest.conf)")
         return 2
+    if args.air is not None and args.air not in (0, 300, 1200, 2400, 4800, 9600):
+        print("[tbtest] --air: 0, 300, 1200, 2400, 4800 or 9600")
+        return 2
     if args.terminal is not None and not 0 <= args.terminal <= args.users:
         print(f"[tbtest] --terminal: 0 to {args.users}")
         return 2
     opt = Options(users=args.users, terminals=args.terminal, funcs=args.funcs,
                   duration=args.time, rounds=args.rounds, think=args.think,
                   chat_stay=args.stay, seed=args.seed, timeout=args.timeout,
-                  final=not args.no_final, fresh=args.fresh)
+                  final=not args.no_final, fresh=args.fresh, air=args.air)
+    if opt.duration is None:
+        air = bed.air_baud if args.air is None else args.air
+        opt.duration = 900.0 if air else 300.0
     if args.fresh:
         busy = busy_ports(bed, args.users)
         if busy:
@@ -175,19 +187,30 @@ def cmd_box(args) -> int:
             raise RuntimeError("ports in use: " + ", ".join(busy))
         air = Air(bed.air_port)
         await air.start()
-        box = TestBox(bed, folder / "tinybox.out")
+        run = Run(bed, Options(users=0, air=args.air), folder, quiet=True)
+        channel = run.make_channel()
+        await channel.start()
+        conf = None
+        if channel.air_baud != bed.air_baud:            # box --air: a conf for this run only
+            conf = folder / "tinybox.conf"
+            conf.write_text(bed.box_conf_text(channel.air_baud, absolute=True),
+                            encoding="utf-8")
+        box = TestBox(bed, folder / "tinybox.out", conf)
         try:
             await box.start()
             print(f"[tbtest] test box {bed.box_call} running - Ctrl+C ends it")
             print(f"  web GUI  {box.web_url}")
             print(f"  telnet   127.0.0.1:{bed.telnet_port}")
-            print(f"  AXUDP    127.0.0.1:{bed.box_port}")
+            print(f"  AXUDP    127.0.0.1:{bed.box_port}, channel 127.0.0.1:{bed.channel_port} ("
+                  + (f"{channel.air_baud} Bd simulated)" if channel.radio else "no simulation)"))
+            print(f"  your client  tbclient.bat -c {bed.guest_conf}")
             print(f"  output   {folder / 'tinybox.out'}")
             while box.running:
                 await asyncio.sleep(1)
         finally:
             await box.stop()
             air.close()
+            channel.close()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
@@ -248,18 +271,20 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("init", help="create the testbed folder")
     p.add_argument("--force", action="store_true", help="write tbtest.conf anew too")
     p = sub.add_parser("run", help="a test run")
-    p.add_argument("-u", "--users", type=int, default=4)
+    p.add_argument("-u", "--users", type=int, default=6)
     p.add_argument("--terminal", type=int, default=None)
     p.add_argument("-f", "--funcs", type=parse_funcs, default=list(FUNCS))
-    p.add_argument("-t", "--time", type=parse_time, default=300.0)
+    p.add_argument("-t", "--time", type=parse_time, default=None)
+    p.add_argument("--air", type=int, default=None)
     p.add_argument("-r", "--rounds", type=int, default=0)
-    p.add_argument("--think", type=parse_range, default=(2.0, 10.0))
-    p.add_argument("--stay", type=parse_range, default=(15.0, 45.0))
+    p.add_argument("--think", type=parse_range, default=None)
+    p.add_argument("--stay", type=parse_range, default=None)
     p.add_argument("--seed", type=int, default=None)
-    p.add_argument("--timeout", type=float, default=60.0, help=argparse.SUPPRESS)
+    p.add_argument("--timeout", type=float, default=None, help=argparse.SUPPRESS)
     p.add_argument("--fresh", action="store_true")
     p.add_argument("--no-final", action="store_true")
-    sub.add_parser("box", help="only the test box, for manual tests")
+    p = sub.add_parser("box", help="only the test box and the channel, for manual tests")
+    p.add_argument("--air", type=int, default=None)
     p = sub.add_parser("report", help="report of the last run")
     p.add_argument("run", nargs="?", help="part of the run folder name, e.g. 20261029-1430")
     sub.add_parser("reset", help="delete the box database and the client data")

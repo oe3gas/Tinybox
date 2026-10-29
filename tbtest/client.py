@@ -46,7 +46,9 @@ class ClientUser(User):
 
     def __init__(self, call: str, box: str, box_port: int, listen_port: int,
                  air_port: int, data_dir: Path, ledger: Ledger, timeout: float = 60.0,
-                 rubric: str = RUBRIC) -> None:
+                 rubric: str = RUBRIC, ax: dict | None = None) -> None:
+        ax = ax or {"paclen": 256, "maxframe": 32, "t1_sec": 3.0, "n2": 10}
+        air, txd = ax.get("air_baud", 0), ax.get("txdelay_ms", 0)
         super().__init__(call, box, ledger, timeout)
         data_dir.mkdir(parents=True, exist_ok=True)
         cfg = dataclasses.replace(
@@ -54,7 +56,9 @@ class ClientUser(User):
             auto_connect=False, data_dir=data_dir, update_check=False,
             kiss_host="127.0.0.1", kiss_port=air_port, kiss_status_port=0,
             axudp_host="127.0.0.1", axudp_port=box_port, axudp_listen=listen_port,
-            sync_on_login=True)
+            axudp_paclen=ax["paclen"], axudp_maxframe=ax["maxframe"],
+            axudp_t1_sec=ax["t1_sec"], axudp_n2=ax["n2"], axudp_air_baud=air,
+            axudp_txdelay_ms=txd, sync_on_login=True)
         self.rubric = rubric
         self.core = ClientCore(cfg)
         self.core.mailbox.subscribe(rubric, True)
@@ -97,16 +101,16 @@ class ClientUser(User):
         if not await self.core.connect(self.box, ch=1):
             raise ActionError("connect not started")
         await until(lambda: self.core.state == "online" or self.core.state == "offline"
-                    and self.core.reason, 20, "link up")
+                    and self.core.reason, self.timeout, "link up")
         if self.core.state != "online":
             raise ActionError(f"connect failed: {self.core.reason}")
         await until(lambda: self.core.caps or self.core.state != "online",
-                    15, "//OK of the box")
+                    self.timeout, "//OK of the box")
         if not self.core.caps:
             raise ActionError("link lost during the handshake")
         if "SYNC" not in self.core.caps:
             raise ActionError(f"box offers no SYNC (caps {sorted(self.core.caps)})")
-        await until(lambda: bool(self.core.boards), 10, "board list")
+        await until(lambda: bool(self.core.boards), self.timeout, "board list")
 
     async def disconnect(self) -> None:
         if self.core.state == "offline":
@@ -115,7 +119,18 @@ class ClientUser(User):
             await self.chat_leave()
         await self._sync_idle()
         self.core.disconnect(1)
-        await until(lambda: self.core.state == "offline", 15, "link down")
+        await until(lambda: self.core.state == "offline", self.timeout, "link down")
+        self.board = None
+
+    async def drop(self) -> None:
+        """A connect that did not finish: take the link down, the next one starts clean."""
+        if self.core.state == "offline":
+            return
+        self.core.disconnect(1)
+        try:
+            await until(lambda: self.core.state == "offline", 60, "link down")
+        except ActionError:
+            pass
         self.board = None
 
     async def _sync_idle(self, timeout: float | None = None) -> None:
@@ -211,17 +226,21 @@ class ClientUser(User):
 
     # --- chat --------------------------------------------------------------------------
 
-    def _board_n(self, name: str) -> int:
+    async def _board_n(self, name: str) -> int:
+        # the board list comes after //OK - after a reconnect of the sync it may still be on its way
+        await until(lambda: bool(self.core.boards) or self.core.state != "online",
+                    self.timeout, "board list")
         for b in self.core.boards:
             if b["name"] == name:
                 return b["n"]
         raise ActionError(f"no board {name}")
 
     async def chat_join(self, board: str) -> None:
-        if not self.core.join(self._board_n(board)):
+        if not self.core.join(await self._board_n(board)):
             raise ActionError(f"join {board} refused")
         await until(lambda: self.core.board is not None
-                    and self.core.board.get("name") == board, 15, f"//IN {board}")
+                    and self.core.board.get("name") == board, self.timeout,
+                    f"//IN {board}")
         self.board = board
         self.ledger.joined(self.call, board)
 
@@ -236,7 +255,7 @@ class ClientUser(User):
         self.ledger.left(self.call)
         self.core.leave()
         await until(lambda: self.core.board is None or self.core.state != "online",
-                    15, "//OUT")
+                    self.timeout, "//OUT")
         self.board = None
 
     async def send_image(self, key: str, size: int) -> str:
