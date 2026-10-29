@@ -1739,6 +1739,14 @@ nach Kanal (Pausen 30–180 s, Chat 60–180 s, Timeouts 300 s, Nachrichten bis 
 Strg+C beendet die Aktionen und macht Schlussrunde + Bericht, zweites bricht ab; ein
 Terminal-User trennt nach einer fehlgeschlagenen Aktion und beginnt neu.
 
+**Werte je Bitrate (OE3GAS, 29.10.2026):** `tbtest.conf` hat je Bitrate einen Abschnitt
+`[air.0]`, `[air.1200]`, `[air.9600]` (weitere möglich); ein Lauf nimmt alle Werte aus dem
+Abschnitt seiner Bitrate (`--air`, sonst `[radio] air_baud`): Kanal (TXDELAY, persist,
+slottime), AX.25 über AXUDP (PACLEN, Fenster, T1, N2) und Verhalten der User (Pausen,
+Chat-Aufenthalt, Timeout, größte Nachricht/Bild, Dauer). 1200: 300 ms, 63/100 ms, Fenster 4,
+T1 6 s, Pausen 30–180 s; 9600: 150 ms, 63/50 ms, Fenster 7, T1 3 s, Pausen 10–60 s. Der eigene
+Client bekommt je Bitrate eine Konfiguration `tbclient-testbed-<baud>.conf`.
+
 **Offen:** Forwarding (zusammen mit fwdsim). Über AXUDP gehen Chat-Ereignisse als I-Frames an
 jeden Teilnehmer statt als UI-Frame – auf dem simulierten Kanal teurer als auf einer echten
 Frequenz.

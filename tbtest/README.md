@@ -32,9 +32,9 @@ verhält sich wie **eine gemeinsame Halbduplex-Frequenz** mit einem TNC pro Stat
 
 | Was | Wie |
 |---|---|
-| Bitrate | `air_baud` (Standard 1200); Sendezeit = (Bytes + FCS) · 8 · 1,03 / Baud |
-| TNC | jede Station hat eine Sendewarteschlange; ein Tastendruck = TXDELAY (300 ms) + alle wartenden Frames (max. 7) hintereinander |
-| Kanalzugriff | Carrier Sense + p-Persistence (`persist` 63, `slottime` 100 ms – KISS-Standard) |
+| Bitrate | 1200 oder 9600 Bd (`--air`, Standard `air_baud` in `tbtest.conf`); Sendezeit = (Bytes + FCS) · 8 · 1,03 / Baud |
+| TNC | jede Station hat eine Sendewarteschlange; ein Tastendruck = TXDELAY + alle wartenden Frames (max. 7) hintereinander |
+| Kanalzugriff | Carrier Sense + p-Persistence (`persist`, `slottime`) |
 | Kollisionen | ein Frame geht verloren, wenn beim Empfänger gleichzeitig ein anderer sendet, den er hört – oder er selbst sendet (Halbduplex) |
 | Versteckte Stationen | ein „hidden“ User hört die anderen User nicht und sie ihn nicht: keine Rücksicht, Kollisionen an der Box. Die Box hört alle, alle hören die Box. |
 | Qualität | Profil je User: **good** 1 %, **medium** 8 %, **poor** 25 % Frame-Verlust (für 256 Byte, je Richtung); kurze Frames gehen seltener verloren (Bitfehlerrate) |
@@ -45,21 +45,50 @@ Verteilung der Profile: `mix` und `hidden` in `tbtest.conf` (Standard 50 % good,
 `[quality]` (z. B. `OE1TBA = poor hidden`). Der Bericht nennt bei jedem User sein Profil.
 
 Damit Box, User und Clients über diesen langsamen Weg vernünftig arbeiten, läuft ihr AX.25
-über AXUDP **mit Sendezeit**: kleines Fenster (4), T1 6–24 s, T1 erst nach dem eigenen Senden,
-gehörte Frames halten T1 an (dafür nimmt der AXUDP-Endpunkt in diesem Modus auch Frames
+über AXUDP **mit Sendezeit** (Fenster und T1 je Bitrate, siehe unten), T1 erst nach dem eigenen
+Senden, gehörte Frames halten T1 an (dafür nimmt der AXUDP-Endpunkt in diesem Modus auch Frames
 anderer Stationen an, die nicht an ihn gehen – nur zum Mithören). Dafür gibt es neu `[axudp] air_baud / txdelay_ms` in
 `tinybox.conf` und `[tinybox] axudp_air_baud / axudp_maxframe …` in `tbclient.conf`;
 `tbtest init` trägt alles ein.
 
-`--air 0` (oder `air_baud = 0`) schaltet den Kanal ab: die Pakete gehen sofort durch – ein
-schneller Funktionstest wie im ersten Testbed.
+`--air 0` schaltet den Kanal ab: die Pakete gehen sofort durch – ein schneller Funktionstest
+wie im ersten Testbed.
+
+## Werte je Bitrate: `[air.<baud>]`
+
+`tbtest.conf` hat für jede Bitrate einen eigenen Abschnitt. Ein Lauf nimmt **alle** Werte aus dem
+Abschnitt seiner Bitrate – `tbtest run --air 9600` also `[air.9600]`, ohne `--air` den Abschnitt
+von `[radio] air_baud` (Standard 1200):
+
+| Wert | `[air.0]` (kein Kanal) | `[air.1200]` | `[air.9600]` | wofür |
+|---|---|---|---|---|
+| `txdelay_ms` | – | 300 | 150 | Kanal: Tastzeit je Sendung |
+| `persist` / `slottime_ms` | – | 63 / 100 | 63 / 50 | Kanal: p-Persistence |
+| `paclen` | 256 | 256 | 256 | AX.25 von Box, Usern, deinem Client |
+| `maxframe` | 32 | 4 | 7 | Fenster |
+| `t1_sec` | 3 | 6 | 3 | T1 von diesem Wert bis zum Vierfachen |
+| `n2` | 10 | 10 | 10 | Wiederholungen |
+| `think` | 2-10 | 30-180 | 10-60 | Pause der User zwischen zwei Aktionen (s) |
+| `stay` | 15-45 | 60-180 | 30-120 | Aufenthalt in einem Chat-Board (s) |
+| `timeout` | 60 | 300 | 120 | ein Schritt einer Aktion höchstens (s) |
+| `msg_max` / `img_max` | 7000 / 7500 | 3000 / 2000 | 7000 / 5000 | größte Nachricht / größtes Bild (Byte) |
+| `minutes` | 5 | 15 | 10 | Dauer ohne `-t` |
+
+Die Werte dürfen geändert werden (danach `tbtest init`), etwa `txdelay_ms` auf den Wert deiner
+echten 9600-Station. Weitere Bitraten (300, 2400, 4800) bekommen einen eigenen Abschnitt
+`[air.2400]` usw. Die Test-Box bekommt für einen Lauf mit anderer Bitrate als dem Standard eine
+eigene `tinybox.conf` im Laufordner. `--think`, `--stay` und `-t` überschreiben die Werte für
+einen Lauf.
 
 ## Dein eigener Client
 
-`tbtest init` erzeugt `tbclient-testbed.conf`. Während ein Lauf (oder `tbtest box`) läuft:
+`tbtest init` erzeugt je Bitrate eine Client-Konfiguration: `tbclient-testbed-1200.conf`,
+`tbclient-testbed-9600.conf`, `tbclient-testbed-0.conf`. Nimm die, die zum laufenden Testbed
+passt – die erste Zeile eines Laufs nennt sie:
 
 ```
-tbclient.bat -c E:\tinybox-testbed\tbclient-testbed.conf
+tbtest.bat run -u 20 -t 0 --air 9600
+tbclient.bat -c E:\tinybox-testbed\tbclient-testbed-9600.conf
 ```
 
 und im Browser http://127.0.0.1:7745/ öffnen. Du bist dort **OE3GAS** (nicht Sysop – Sysop der
@@ -81,7 +110,7 @@ Anders mit `-D <ordner>` vor dem Befehl oder der Umgebungsvariable `TBTEST_DIR`.
 E:\tinybox-testbed\
   tbtest.conf             User, Ports, Kanal, Qualität, Gast – von `tbtest init`, darf geändert werden
   tinybox.conf            die Test-Box – ERZEUGT aus tbtest.conf
-  tbclient-testbed.conf   dein Client im Testbed – ERZEUGT aus tbtest.conf
+  tbclient-testbed-<baud>.conf   dein Client im Testbed, je Bitrate – ERZEUGT aus tbtest.conf
   data\                   Datenbank der Test-Box
   logs\                   Log-Dateien der Test-Box
   users\<CALL>\           Daten der Client-User
@@ -90,7 +119,7 @@ E:\tinybox-testbed\
 ```
 
 Nach einer Änderung an `tbtest.conf` wieder `tbtest init`. Eine `tbtest.conf` der ersten
-Version (10 User, ohne `[radio]`) erneuert `tbtest init` selbst, die Ports bleiben.
+Version (ohne `[radio]` oder ohne `[air.<baud>]`) erneuert `tbtest init` selbst, die Ports bleiben.
 
 ## Bedienung
 
@@ -99,6 +128,7 @@ tbtest init                  Verzeichnis anlegen bzw. erzeugte Dateien erneuern
 tbtest run                   6 User, alle Funktionen, 1200 Bd, 15 Minuten
 tbtest run -u 20 -t 30m      20 User, 30 Minuten
 tbtest run -u 30 -t 0        30 User, bis Strg+C (zum Mitspielen mit deinem Client)
+tbtest run -u 10 --air 9600  10 User auf 9600 Bd (Werte aus [air.9600])
 tbtest run -u 10 --air 0 -t 5m        ohne Funkkanal: schneller Funktionstest
 tbtest run -u 6 --terminal 2 -f conn,send,read
 tbtest report                Bericht des letzten Laufs nochmals anzeigen
@@ -109,16 +139,16 @@ tbtest funcs                 Funktionen auflisten
 
 Unter Windows `tbtest.bat …`, unter Linux `python3 -m tbtest …` (aus dem Repo-Ordner).
 
-| Option | Bedeutung | Standard (1200 Bd / `--air 0`) |
+| Option | Bedeutung | Standard |
 |---|---|---|
 | `-u N` | Anzahl User (1–30) | 6 |
 | `--terminal N` | davon Terminal-User, der Rest Client-User | die Hälfte (aufgerundet) |
 | `-f LISTE` | Funktionen, z. B. `conn,send,read` oder `all` | `all` |
-| `-t ZEIT` | Dauer: `90s`, `10m`, `1h`; `0` = bis Strg+C | 15m / 5m |
+| `-t ZEIT` | Dauer: `90s`, `10m`, `1h`; `0` = bis Strg+C | `minutes` der Bitrate |
 | `-r N` | Aktionen je User (endet früher, wenn erreicht) | – |
-| `--air BAUD` | Kanal: 1200, 9600 …; 0 = keiner | aus `tbtest.conf` |
-| `--think A-B` | Pause zwischen zwei Aktionen in Sekunden | 30-180 / 2-10 |
-| `--stay A-B` | Aufenthalt in einem Chat-Board in Sekunden | 60-180 / 15-45 |
+| `--air BAUD` | Bitrate: 1200, 9600; 0 = kein Kanal | `[radio] air_baud` |
+| `--think A-B` | Pause zwischen zwei Aktionen in Sekunden | `think` der Bitrate |
+| `--stay A-B` | Aufenthalt in einem Chat-Board in Sekunden | `stay` der Bitrate |
 | `--seed N` | gleiche Auswahl und Qualitäten wie ein früherer Lauf (steht im Bericht) | zufällig |
 | `--fresh` | vor dem Lauf Test-Box und Client-Daten leeren | – |
 | `--no-final` | keine Schlussrunde (siehe unten) | – |

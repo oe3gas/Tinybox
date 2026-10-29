@@ -43,6 +43,59 @@ BOARDS = {"TREFF": "7d    General meeting point",     # pictures allowed
           "TECH": "30d   Technical questions",
           "RUNDE": "live  Live round, nothing is stored"}
 PROFILE_NAMES = ("good", "medium", "poor")
+BAUDS = (0, 300, 1200, 2400, 4800, 9600)
+MSG_SIZES = (60, 150, 250, 400, 800, 1500, 2000, 3000, 4000, 7000)   # body bytes to pick from
+IMG_SIZES = (800, 1200, 1500, 2000, 3000, 5000, 7500)
+
+
+@dataclass
+class Air:
+    """Everything that depends on the bit rate: [air.<baud>] in tbtest.conf.
+    0 = no channel (frames pass at once)."""
+    baud: int
+    txdelay_ms: int = 300        # channel: key-up time per transmission
+    persist: int = 63            # channel: p-persistence 0..255
+    slottime_ms: int = 100       # channel: slot time
+    paclen: int = 256            # AX.25 over AXUDP of box, users, guest
+    maxframe: int = 4
+    t1_sec: float = 6.0
+    n2: int = 10
+    think: tuple = (30.0, 180.0)  # run: pause between two actions (s)
+    stay: tuple = (60.0, 180.0)   # run: time in a chat board (s)
+    timeout: float = 300.0        # run: one step of an action at most (s)
+    msg_max: int = 3000           # run: longest message text (bytes)
+    img_max: int = 2000           # run: largest picture (bytes)
+    minutes: float = 15.0         # run: duration without -t
+
+    def ax(self) -> dict:
+        """AX.25 values for users and clients."""
+        return {"paclen": self.paclen, "maxframe": self.maxframe, "t1_sec": self.t1_sec,
+                "n2": self.n2, "air_baud": self.baud,
+                "txdelay_ms": self.txdelay_ms if self.baud else 0}
+
+    def sizes(self) -> tuple:
+        return tuple(x for x in MSG_SIZES if x <= self.msg_max) or (MSG_SIZES[0],)
+
+    def img_sizes(self) -> tuple:
+        return tuple(x for x in IMG_SIZES if x <= self.img_max) or (IMG_SIZES[0],)
+
+
+def default_airs() -> dict[int, Air]:
+    return {
+        0: Air(0, txdelay_ms=0, paclen=256, maxframe=32, t1_sec=3.0, n2=10,
+               think=(2.0, 10.0), stay=(15.0, 45.0), timeout=60.0, msg_max=7000,
+               img_max=7500, minutes=5.0),
+        # 1200 Bd AFSK: TXDELAY 300 ms, PACLEN 256 is 1.8 s on air - small window,
+        # long T1, users that rest a while between two actions
+        1200: Air(1200, txdelay_ms=300, persist=63, slottime_ms=100, paclen=256, maxframe=4,
+                  t1_sec=6.0, n2=10, think=(30.0, 180.0), stay=(60.0, 180.0),
+                  timeout=300.0, msg_max=3000, img_max=2000, minutes=15.0),
+        # 9600 Bd FSK: TXDELAY 150 ms, PACLEN 256 is 0.23 s - full window, short T1,
+        # shorter slots; users can do more in the same time
+        9600: Air(9600, txdelay_ms=150, persist=63, slottime_ms=50, paclen=256, maxframe=7,
+                  t1_sec=3.0, n2=10, think=(10.0, 60.0), stay=(30.0, 120.0),
+                  timeout=120.0, msg_max=7000, img_max=5000, minutes=10.0),
+    }
 
 
 class BedError(Exception):
@@ -62,18 +115,11 @@ class Bed:
     telnet_port: int = 6400              # telnet port of the test box (manual tests)
     users: list[str] = field(default_factory=lambda: list(USERS))
     # [radio] the simulated channel
-    air_baud: int = 1200                 # 0 = no channel, frames pass at once
-    txdelay_ms: int = 300
-    persist: int = 63
-    slottime_ms: int = 100
+    air_baud: int = 1200                 # default bit rate (run / box without --air)
+    airs: dict = field(default_factory=default_airs)    # baud -> Air ([air.<baud>])
     mix: dict = field(default_factory=lambda: {"good": 0.5, "medium": 0.3, "poor": 0.2})
     hidden: float = 0.2
     quality: dict = field(default_factory=dict)    # call -> (profile or "", hidden or None)
-    # AX.25 over AXUDP (box and users) for the slow channel
-    ax_paclen: int = 256
-    ax_maxframe: int = 4
-    ax_t1_sec: float = 6.0
-    ax_n2: int = 10
     # [guest] your own TinyBox client
     guest_call: str = "OE3GAS"
     guest_port: int = 10240
@@ -90,9 +136,17 @@ class Bed:
     def box_conf(self) -> Path:
         return self.dir / "tinybox.conf"
 
-    @property
-    def guest_conf(self) -> Path:
-        return self.dir / "tbclient-testbed.conf"
+    def guest_conf(self, baud: int | None = None) -> Path:
+        """Your client's conf for this bit rate: tbclient-testbed-<baud>.conf"""
+        return self.dir / f"tbclient-testbed-{self.air_baud if baud is None else baud}.conf"
+
+    def air(self, baud: int | None = None) -> Air:
+        """The values for this bit rate (None = the default air_baud)."""
+        baud = self.air_baud if baud is None else baud
+        if baud not in self.airs:
+            raise BedError(f"no [air.{baud}] in tbtest.conf - known: "
+                           + ", ".join(str(b) for b in sorted(self.airs)))
+        return self.airs[baud]
 
     @property
     def runs(self) -> Path:
@@ -108,13 +162,14 @@ class Bed:
 
     def save(self) -> None:
         mix = ", ".join(f"{k} {round(v * 100)}%" for k, v in self.mix.items())
+        airs = "\n".join(_air_text(a) for _, a in sorted(self.airs.items()))
         quality = "\n".join(
             f"{c} = " + " ".join(w for w in (p, "hidden" if h else "visible" if h is False
                                              else "") if w)
             for c, (p, h) in self.quality.items())
         text = f"""# tbtest - testbed for TinyBox. Written by `tbtest init`, may be edited;
-# after a change run `tbtest init` again (it writes tinybox.conf and
-# tbclient-testbed.conf anew). Everything runs on 127.0.0.1 - the calls are
+# after a change run `tbtest init` again (it writes tinybox.conf and the
+# tbclient-testbed-<baud>.conf files anew). Everything runs on 127.0.0.1 - the calls are
 # fictional and never go on the air.
 
 [testbed]
@@ -133,21 +188,20 @@ calls = {", ".join(self.users)}
 
 [radio]
 # The simulated channel in the AXUDP path: one shared half-duplex frequency.
-air_baud    = {self.air_baud}         # 0 = no channel: frames pass at once (`tbtest run --air 0` too)
-txdelay_ms  = {self.txdelay_ms}
-persist     = {self.persist}           # p-persistence 0..255 (KISS default 63)
-slottime_ms = {self.slottime_ms}
+air_baud = {self.air_baud}         # default for `run` / `box`; `--air 9600` takes [air.9600] etc.
 # Quality of the users: frame loss for a 256-byte frame, each direction:
 # good 1 %, medium 8 %, poor 25 %. hidden = does not hear the other users (and they
 # do not hear him): collisions at the box. Shares, shuffled with the seed of the run:
 mix    = {mix}
 hidden = {round(self.hidden * 100)}%
-# AX.25 over AXUDP of box, users and guest - for the slow channel
-paclen   = {self.ax_paclen}
-maxframe = {self.ax_maxframe}
-t1_sec   = {self.ax_t1_sec:g}
-n2       = {self.ax_n2}
 
+# One section per bit rate - the run takes the one of its air_baud.
+#   channel:  txdelay_ms, persist (0..255), slottime_ms
+#   AX.25 over AXUDP of box, users and your client: paclen, maxframe (window), t1_sec
+#             (T1 from this up to 4 times), n2
+#   users:    think / stay (seconds from-to: pause between actions, time in a chat
+#             board), timeout (s per step), msg_max / img_max (bytes), minutes (without -t)
+{airs}
 [quality]
 # Fixed quality for single calls (wins over mix/hidden), e.g.
 #   OE1TBA = poor hidden
@@ -155,7 +209,7 @@ n2       = {self.ax_n2}
 {quality}
 
 [guest]
-# Your own TinyBox client: tbclient.bat -c <testbed>\\tbclient-testbed.conf
+# Your own TinyBox client: tbclient.bat -c <testbed>\\tbclient-testbed-<baud>.conf
 call    = {self.guest_call}       # your call in the testbed (the sysop is {self.sysop_call}, not you)
 port    = {self.guest_port}        # UDP: AXUDP of your client
 web     = {self.guest_web}         # its web GUI: http://127.0.0.1:{self.guest_web}/
@@ -193,13 +247,13 @@ quality = {self.guest_quality}         # good | medium | poor, optional "hidden"
             bed.users = [c.strip().upper() for c in calls.replace(",", " ").split() if c.strip()]
         r = sec("radio")
         bed.air_baud = num(r, "air_baud", bed.air_baud)
-        bed.txdelay_ms = num(r, "txdelay_ms", bed.txdelay_ms)
-        bed.persist = num(r, "persist", bed.persist)
-        bed.slottime_ms = num(r, "slottime_ms", bed.slottime_ms)
-        bed.ax_paclen = num(r, "paclen", bed.ax_paclen)
-        bed.ax_maxframe = num(r, "maxframe", bed.ax_maxframe)
-        bed.ax_t1_sec = num(r, "t1_sec", bed.ax_t1_sec, float)
-        bed.ax_n2 = num(r, "n2", bed.ax_n2)
+        found = {}
+        for name in cp.sections():
+            m = re.fullmatch(r"air\.(\d+)", name)
+            if m:
+                found[int(m.group(1))] = _load_air(int(m.group(1)), cp[name], num)
+        if found:                                  # the sections of the file, nothing else
+            bed.airs = found
         if r.get("mix", "").strip():
             bed.mix = parse_mix(r.get("mix"))
         if r.get("hidden", "").strip():
@@ -236,16 +290,9 @@ quality = {self.guest_quality}         # good | medium | poor, optional "hidden"
             raise BedError("tbtest.conf: ports must be between 1024 and 65535")
         if len(set(udp)) != len(udp) or len(set(tcp)) != len(tcp):
             raise BedError("tbtest.conf: a port is used twice")
-        if self.air_baud not in (0, 300, 1200, 2400, 4800, 9600):
-            raise BedError("tbtest.conf: air_baud 0, 300, 1200, 2400, 4800 or 9600")
-        if not 0 <= self.persist <= 255:
-            raise BedError("tbtest.conf: persist 0 ... 255")
-        if not 0 <= self.txdelay_ms <= 5000 or not 10 <= self.slottime_ms <= 1000:
-            raise BedError("tbtest.conf: txdelay_ms 0 ... 5000, slottime_ms 10 ... 1000")
-        if not 32 <= self.ax_paclen <= 256 or not 1 <= self.ax_maxframe <= 127 \
-                or not 0.2 <= self.ax_t1_sec <= 60 or not 1 <= self.ax_n2 <= 50:
-            raise BedError("tbtest.conf [radio]: paclen 32-256, maxframe 1-127, "
-                           "t1_sec 0.2-60, n2 1-50")
+        for a in self.airs.values():
+            _check_air(a)
+        self.air()                               # the default must have its section
         parse_quality(self.guest_quality, "[guest] quality")
 
     # --- generated files ---------------------------------------------------------------
@@ -255,9 +302,10 @@ quality = {self.guest_quality}         # good | medium | poor, optional "hidden"
         return [f"{c} 127.0.0.1:{self.channel_port}" for c in [*self.users, self.guest_call]]
 
     def box_conf_text(self, air_baud: int | None = None, absolute: bool = False) -> str:
-        """tinybox.conf. air_baud: another channel than tbtest.conf for one run
+        """tinybox.conf. air_baud: another bit rate than the default for one run
         (`run --air`) - then written into the run folder with absolute paths."""
-        air = self.air_baud if air_baud is None else air_baud
+        a = self.air(air_baud)
+        air = a.baud
         data = (self.dir / "data") if absolute else "data"
         logs = (self.dir / "logs") if absolute else "logs"
         boards = "\n".join(f"{name:<5} = {rest}" for name, rest in BOARDS.items())
@@ -300,12 +348,12 @@ enabled = yes
 listen  = 127.0.0.1
 port    = {self.box_port}
 peers   = {", ".join(self.peers())}
-paclen       = {self.ax_paclen}
-maxframe_ext = {self.ax_maxframe}
-t1_sec       = {self.ax_t1_sec:g}
-n2           = {self.ax_n2}
+paclen       = {a.paclen}               # values of [air.{air}] in tbtest.conf
+maxframe_ext = {a.maxframe}
+t1_sec       = {a.t1_sec:g}
+n2           = {a.n2}
 air_baud     = {air}            # the channel's air time: T1 after the own frames,
-txdelay_ms   = {self.txdelay_ms if air else 0}             # frames heard pause T1 (half duplex)
+txdelay_ms   = {a.txdelay_ms if air else 0}             # frames heard pause T1 (half duplex)
 
 [web]
 enabled = yes
@@ -364,10 +412,13 @@ enabled = no
 enabled = no
 """
 
-    def guest_conf_text(self) -> str:
-        return f"""# Your TinyBox client in the testbed - GENERATED by `tbtest init` from tbtest.conf
-# ([guest]). Start it while `tbtest run` (or `tbtest box`) is running:
-#     tbclient.bat -c {self.dir / "tbclient-testbed.conf"}
+    def guest_conf_text(self, baud: int | None = None) -> str:
+        a = self.air(baud)
+        what = f"{a.baud} Bd" if a.baud else "no channel (--air 0)"
+        return f"""# Your TinyBox client in the testbed for {what} - GENERATED by `tbtest init`
+# from tbtest.conf ([guest], [air.{a.baud}]). Start it while `tbtest run` (or `tbtest box`)
+# runs with the same bit rate:
+#     tbclient.bat -c {self.guest_conf(a.baud)}
 # then open http://127.0.0.1:{self.guest_web}/ - it does not touch your own client's data.
 # The home box {self.box_call} is reached over AXUDP through the simulated channel
 # (quality "{self.guest_quality}"). The client always needs a radio port as well: here it is
@@ -383,12 +434,12 @@ ui             = no
 auto_connect   = no
 axudp          = 127.0.0.1:{self.channel_port}
 axudp_port     = {self.guest_port}
-axudp_paclen   = {self.ax_paclen}
-axudp_maxframe = {self.ax_maxframe}
-axudp_t1_sec   = {self.ax_t1_sec:g}
-axudp_n2       = {self.ax_n2}
-axudp_air_baud   = {self.air_baud}
-axudp_txdelay_ms = {self.txdelay_ms if self.air_baud else 0}
+axudp_paclen   = {a.paclen}
+axudp_maxframe = {a.maxframe}
+axudp_t1_sec   = {a.t1_sec:g}
+axudp_n2       = {a.n2}
+axudp_air_baud   = {a.baud}
+axudp_txdelay_ms = {a.txdelay_ms if a.baud else 0}
 
 [radio]
 interface = kiss
@@ -427,7 +478,11 @@ check = no
     def write_generated(self) -> None:
         self.make_dirs()
         self.box_conf.write_text(self.box_conf_text(), encoding="utf-8")
-        self.guest_conf.write_text(self.guest_conf_text(), encoding="utf-8")
+        for baud in self.airs:
+            self.guest_conf(baud).write_text(self.guest_conf_text(baud), encoding="utf-8")
+        old = self.dir / "tbclient-testbed.conf"       # before the profiles: one file
+        if old.is_file():
+            old.unlink()
 
     def check_generated(self) -> None:
         """tinybox.conf must still fit tbtest.conf (peers, ports)."""
@@ -441,6 +496,67 @@ check = no
     # old names
     write_box_conf = write_generated
     check_box_conf = check_generated
+
+
+def _air_text(a: Air) -> str:
+    rng = lambda t: f"{t[0]:g}-{t[1]:g}"                  # noqa: E731
+    note = {0: "# no channel: frames pass at once - fast function test\n",
+            1200: "# 1200 Bd AFSK: 256 bytes are 1.8 s on air - small window, long T1,\n"
+                  "# users rest longer between two actions\n",
+            9600: "# 9600 Bd FSK: 256 bytes are 0.23 s on air - full window, short T1,\n"
+                  "# shorter slots, users can do more in the same time\n"}.get(a.baud, "")
+    head = (note + f"[air.{a.baud}]\n" + (
+        f"txdelay_ms  = {a.txdelay_ms}\npersist     = {a.persist}\nslottime_ms = {a.slottime_ms}\n"
+        if a.baud else ""))
+    return (head + f"paclen      = {a.paclen}\nmaxframe    = {a.maxframe}\n"
+            f"t1_sec      = {a.t1_sec:g}\nn2          = {a.n2}\n"
+            f"think       = {rng(a.think)}\nstay        = {rng(a.stay)}\n"
+            f"timeout     = {a.timeout:g}\nmsg_max     = {a.msg_max}\n"
+            f"img_max     = {a.img_max}\nminutes     = {a.minutes:g}\n")
+
+
+def _load_air(baud: int, sec, num) -> Air:
+    base = default_airs().get(baud) or Air(baud)
+    a = Air(baud)
+    for key in ("txdelay_ms", "persist", "slottime_ms", "paclen", "maxframe", "n2",
+                "msg_max", "img_max"):
+        setattr(a, key, num(sec, key, getattr(base, key)))
+    for key in ("t1_sec", "timeout", "minutes"):
+        setattr(a, key, num(sec, key, getattr(base, key), float))
+    for key in ("think", "stay"):
+        v = sec.get(key, "")
+        setattr(a, key, _range(v, f"[air.{baud}] {key}") if v.strip() else getattr(base, key))
+    if not baud:
+        a.txdelay_ms = 0
+    return a
+
+
+def _range(text: str, what: str) -> tuple[float, float]:
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(?:-\s*(\d+(?:\.\d+)?))?\s*", text)
+    if m is None:
+        raise BedError(f"tbtest.conf: {what}: e.g. 30-180")
+    a = float(m.group(1))
+    b = float(m.group(2)) if m.group(2) else a
+    if b < a:
+        raise BedError(f"tbtest.conf: {what}: the second number is smaller")
+    return a, b
+
+
+def _check_air(a: Air) -> None:
+    w = f"tbtest.conf [air.{a.baud}]"
+    if a.baud not in BAUDS:
+        raise BedError(f"{w}: bit rate {', '.join(map(str, BAUDS))}")
+    if not 0 <= a.persist <= 255:
+        raise BedError(f"{w}: persist 0 ... 255")
+    if not 0 <= a.txdelay_ms <= 5000 or not 10 <= a.slottime_ms <= 1000:
+        raise BedError(f"{w}: txdelay_ms 0 ... 5000, slottime_ms 10 ... 1000")
+    if not 32 <= a.paclen <= 256 or not 1 <= a.maxframe <= 127 \
+            or not 0.2 <= a.t1_sec <= 60 or not 1 <= a.n2 <= 50:
+        raise BedError(f"{w}: paclen 32-256, maxframe 1-127, t1_sec 0.2-60, n2 1-50")
+    if not 5 <= a.timeout <= 3600 or not 0 < a.minutes <= 1440:
+        raise BedError(f"{w}: timeout 5 ... 3600 s, minutes up to 1440")
+    if not 60 <= a.msg_max <= 8000 or not 500 <= a.img_max <= 8000:
+        raise BedError(f"{w}: msg_max 60 ... 8000, img_max 500 ... 8000 (bytes)")
 
 
 def parse_pct(text: str, what: str) -> float:
@@ -489,14 +605,16 @@ def resolve_dir(arg: str | None) -> Path:
 def init(folder: Path, force: bool = False) -> tuple[Bed, bool]:
     """Create the testbed folder. An existing tbtest.conf is kept (it may have been
     edited) unless force; the generated files are always written anew. A tbtest.conf
-    of the first version (10 users, no [radio]) is renewed, keeping its ports.
+    of an older version (no [radio] or no [air.<baud>]) is renewed, keeping its ports.
     Returns (bed, new)."""
     folder.mkdir(parents=True, exist_ok=True)
     bed = Bed(folder)
     new = force or not bed.conf_path.is_file()
-    if not new and "[radio]" not in bed.conf_path.read_text(encoding="utf-8"):
-        old = Bed.load(folder)
-        old.users = list(USERS)
+    text = "" if new else bed.conf_path.read_text(encoding="utf-8")
+    if not new and ("[radio]" not in text or "[air." not in text):
+        old = Bed.load(folder)            # an older tbtest.conf: renewed, ports and calls kept
+        if "[radio]" not in text:
+            old.users = list(USERS)
         old.save()
         new = True
     elif new:

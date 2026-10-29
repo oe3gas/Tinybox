@@ -12,11 +12,13 @@ run:
     -u, --users N        1-30 users (default 6)
     --terminal N         how many of them are terminal users (default: half, rest clients)
     -f, --funcs LIST     conn,send,bull,read,kill,info,chat,img or all (default all)
-    -t, --time T         duration: 90s, 10m, 1h; 0 = until Ctrl+C (default 15m, --air 0: 5m)
+    -t, --time T         duration: 90s, 10m, 1h; 0 = until Ctrl+C (default: minutes of [air.<baud>])
     -r, --rounds N       actions per user (stops earlier than --time if reached)
-    --air BAUD           simulated channel: 1200 (tbtest.conf [radio]) or 0 = none
-    --think A-B          pause between two actions in seconds (default 30-180, --air 0: 2-10)
-    --stay A-B           time in a chat board in seconds (default 60-180, --air 0: 15-45)
+    --air BAUD           bit rate of the channel: a section [air.<baud>] of tbtest.conf
+                         (1200, 9600; 0 = no channel); default [radio] air_baud. All values
+                         that depend on it (TXDELAY, AX.25, pauses, sizes) come from there
+    --think A-B          pause between two actions in seconds (default: [air.<baud>] think)
+    --stay A-B           time in a chat board in seconds (default: [air.<baud>] stay)
     --seed N             same seed = same choices and qualities (the timing still differs)
     --fresh              empty test box and client data before the run
     --no-final           no final read of everything still unread
@@ -98,7 +100,13 @@ def cmd_init(args) -> int:
     print(f"  channel      127.0.0.1:{bed.channel_port}/udp, "
           + (f"{bed.air_baud} Bd simulated" if bed.air_baud else "no simulation"))
     print(f"  dummy radio  127.0.0.1:{bed.air_port} (swallows every frame)")
-    print(f"  your client  tbclient.bat -c {bed.guest_conf}  (call {bed.guest_call}, "
+    for baud, a in sorted(bed.airs.items()):
+        what = (f"{baud} Bd: TXDELAY {a.txdelay_ms} ms, PACLEN {a.paclen}, window {a.maxframe},"
+                f" T1 {a.t1_sec:g} s, pauses {a.think[0]:g}-{a.think[1]:g} s" if baud
+                else "no channel (fast function test)")
+        mark = "  (default)" if baud == bed.air_baud else ""
+        print(f"  --air {baud:<5} {what}{mark}")
+    print(f"  your client  tbclient.bat -c {bed.guest_conf()}  (call {bed.guest_call}, "
           f"web http://127.0.0.1:{bed.guest_web}/)")
     print("Next: tbtest run   (or tbtest run -u 20 -t 30m, tbtest run -t 0 = until Ctrl+C)")
     return 0
@@ -130,8 +138,9 @@ def cmd_run(args) -> int:
     if not 1 <= args.users <= len(bed.users):
         print(f"[tbtest] -u: 1 to {len(bed.users)} (users in tbtest.conf)")
         return 2
-    if args.air is not None and args.air not in (0, 300, 1200, 2400, 4800, 9600):
-        print("[tbtest] --air: 0, 300, 1200, 2400, 4800 or 9600")
+    if args.air is not None and args.air not in bed.airs:
+        print(f"[tbtest] --air {args.air}: no [air.{args.air}] in tbtest.conf - known: "
+              + ", ".join(str(b) for b in sorted(bed.airs)))
         return 2
     if args.terminal is not None and not 0 <= args.terminal <= args.users:
         print(f"[tbtest] --terminal: 0 to {args.users}")
@@ -140,9 +149,6 @@ def cmd_run(args) -> int:
                   duration=args.time, rounds=args.rounds, think=args.think,
                   chat_stay=args.stay, seed=args.seed, timeout=args.timeout,
                   final=not args.no_final, fresh=args.fresh, air=args.air)
-    if opt.duration is None:
-        air = bed.air_baud if args.air is None else args.air
-        opt.duration = 900.0 if air else 300.0
     if args.fresh:
         busy = busy_ports(bed, args.users)
         if busy:
@@ -177,6 +183,10 @@ def cmd_box(args) -> int:
     except bed_mod.BedError as exc:
         print(f"[tbtest] {exc}")
         return 2
+    if args.air is not None and args.air not in bed.airs:
+        print(f"[tbtest] --air {args.air}: no [air.{args.air}] in tbtest.conf - known: "
+              + ", ".join(str(b) for b in sorted(bed.airs)))
+        return 2
     folder = bed.runs / (time.strftime("%Y%m%d-%H%M%S") + "-box")
     folder.mkdir(parents=True, exist_ok=True)
     setup_logging(folder / "tbtest.log", args.verbose)
@@ -203,7 +213,7 @@ def cmd_box(args) -> int:
             print(f"  telnet   127.0.0.1:{bed.telnet_port}")
             print(f"  AXUDP    127.0.0.1:{bed.box_port}, channel 127.0.0.1:{bed.channel_port} ("
                   + (f"{channel.air_baud} Bd simulated)" if channel.radio else "no simulation)"))
-            print(f"  your client  tbclient.bat -c {bed.guest_conf}")
+            print(f"  your client  tbclient.bat -c {bed.guest_conf(channel.air_baud)}")
             print(f"  output   {folder / 'tinybox.out'}")
             while box.running:
                 await asyncio.sleep(1)

@@ -20,7 +20,7 @@ from .box import Air, TestBox, busy_ports
 from .channel import PROFILES, Channel, Station, assign_profiles
 from .client import ClientUser
 from .ledger import Ledger
-from .term import AX_FAST, TermUser
+from .term import TermUser
 from .user import ActionError, User
 
 log = logging.getLogger("tbtest")
@@ -40,21 +40,14 @@ CHAT_BOARDS = [("TREFF", 6), ("RUNDE", 3), ("TECH", 2)]
 IMG_BOARDS = ["TREFF", "TECH"]               # RUNDE is live: no pictures
 
 
-# defaults without channel / with the simulated radio channel
-FAST = {"think": (2.0, 10.0), "chat_stay": (15.0, 45.0), "timeout": 60.0,
-        "sizes": (60, 250, 800, 2000, 4000, 7000), "img": (1500, 3000, 5000, 7500)}
-RADIO = {"think": (30.0, 180.0), "chat_stay": (60.0, 180.0), "timeout": 300.0,
-         "sizes": (60, 150, 400, 800, 1500, 3000), "img": (800, 1200, 2000)}
-
-
 @dataclass
 class Options:
     users: int = 6
     terminals: int | None = None             # None = half (rounded up)
     funcs: list[str] = field(default_factory=lambda: list(FUNCS))
-    duration: float = 300.0                  # s, 0 = until Ctrl+C
+    duration: float | None = None            # s, 0 = until Ctrl+C, None = [air.<baud>] minutes
     rounds: int = 0                          # actions per user, 0 = only the time counts
-    think: tuple[float, float] | None = None         # None: by the channel (FAST / RADIO)
+    think: tuple[float, float] | None = None         # None: [air.<baud>] of tbtest.conf
     chat_stay: tuple[float, float] | None = None
     seed: int | None = None
     timeout: float | None = None
@@ -94,15 +87,18 @@ class Run:
         self.id = run_id()
         self.seed = opt.seed if opt.seed is not None else random.randrange(1 << 30)
         self.rng = random.Random(self.seed)
-        self.air_baud = opt.air if opt.air is not None else bed.air_baud
-        d = RADIO if self.air_baud else FAST
-        opt.think = opt.think or d["think"]
-        opt.chat_stay = opt.chat_stay or d["chat_stay"]
-        opt.timeout = opt.timeout or d["timeout"]
+        # everything that depends on the bit rate: [air.<baud>] of tbtest.conf
+        self.air = bed.air(opt.air)
+        self.air_baud = self.air.baud
+        opt.think = opt.think or self.air.think
+        opt.chat_stay = opt.chat_stay or self.air.stay
+        opt.timeout = opt.timeout or self.air.timeout
+        if opt.duration is None:
+            opt.duration = self.air.minutes * 60
         opt.air = self.air_baud
-        self.img_sizes = d["img"]
-        self.ledger = Ledger(self.id, random.Random(self.seed + 1), sizes=d["sizes"],
-                             late=120.0 if self.air_baud else 10.0)
+        self.img_sizes = self.air.img_sizes()
+        self.ledger = Ledger(self.id, random.Random(self.seed + 1), sizes=self.air.sizes(),
+                             late=min(120.0, self.air.timeout / 2) if self.air_baud else 10.0)
         self.channel: Channel | None = None
         self.quality: dict[str, tuple] = {}
         self.recs: list[Rec] = []
@@ -111,7 +107,7 @@ class Run:
         self.deadline = 0.0
         self.stopping = False
         self.aborted = False
-        self.air: Air | None = None
+        self.sink: Air | None = None             # the dummy radio port
         self.box_dead = False
         self.box: TestBox | None = None
         self.counts: dict[str, int] = {}
@@ -335,9 +331,7 @@ class Run:
         b = self.bed
         n = self.opt.users
         t = (n + 1) // 2 if self.opt.terminals is None else self.opt.terminals
-        ax = ({"paclen": b.ax_paclen, "maxframe": b.ax_maxframe, "t1_sec": b.ax_t1_sec,
-               "n2": b.ax_n2, "air_baud": self.air_baud, "txdelay_ms": b.txdelay_ms}
-              if self.air_baud else AX_FAST)
+        ax = self.air.ax()
         for i, call in enumerate(b.users[:n]):
             port = b.port_of(call)
             if i < t:
@@ -353,7 +347,8 @@ class Run:
         """The relay between box and users: the box, the users with their quality,
         the guest (your own client)."""
         b = self.bed
-        ch = Channel(b.channel_port, self.air_baud, b.txdelay_ms, b.persist, b.slottime_ms,
+        a = self.air
+        ch = Channel(b.channel_port, a.baud, a.txdelay_ms, a.persist, a.slottime_ms,
                      seed=self.seed + 2)
         ch.add(Station(b.box_call, ("127.0.0.1", b.box_port), is_box=True))
         calls = b.users[:self.opt.users]
@@ -373,8 +368,8 @@ class Run:
         if busy:
             raise RuntimeError("ports in use (is a test box still running?): " + ", ".join(busy))
         self.folder.mkdir(parents=True, exist_ok=True)
-        self.air = Air(self.bed.air_port)
-        await self.air.start()
+        self.sink = Air(self.bed.air_port)
+        await self.sink.start()
         self.channel = self.make_channel()
         await self.channel.start()
         conf = None
@@ -403,15 +398,17 @@ class Run:
                                               + (" hidden" if self.quality[u.call][1] else "")
                                               if self.air_baud else "")
                               for u in self.users)
-            chan = (f"simulated channel {self.air_baud} Bd, TXDELAY {self.bed.txdelay_ms} ms"
-                    if self.air_baud else "no channel (frames pass at once)")
+            a = self.air
+            chan = (f"simulated channel {a.baud} Bd, TXDELAY {a.txdelay_ms} ms, AX.25 "
+                    f"PACLEN {a.paclen} / window {a.maxframe} / T1 {a.t1_sec:g} s"
+                    if a.baud else "no channel (frames pass at once)")
             dur = "until Ctrl+C" if not self.opt.duration else report.human(self.opt.duration)
             self.say(f"run {self.id}: {chan}")
             self.say(f"  {len(self.users)} users: {kinds}")
             self.say(f"  functions {','.join(self.opt.funcs)}, "
                      + (f"{self.opt.rounds} actions each, at most " if self.opt.rounds else "")
                      + f"{dur}, seed {self.seed}")
-            self.say(f"  your client: tbclient.bat -c {self.bed.guest_conf}  ->  "
+            self.say(f"  your client: tbclient.bat -c {self.bed.guest_conf(self.air_baud)}  ->  "
                      f"http://127.0.0.1:{self.bed.guest_web}/  (call {self.bed.guest_call})")
             self.t0 = time.monotonic()
             self.deadline = self.t0 + self.opt.duration if self.opt.duration else math.inf
@@ -442,7 +439,7 @@ class Run:
                 await u.close()
             await asyncio.sleep(0.5)                   # the last frames to the dummy radio
             await self.box.stop()
-            self.air.close()
+            self.sink.close()
             self.channel.close()
             if old_sigint is not None:
                 signal.signal(signal.SIGINT, old_sigint)
@@ -474,5 +471,5 @@ class Run:
             "channel": self.channel.summary() if self.channel else {},
             "records": [asdict(r) for r in self.recs],
             "verify": self.ledger.verify(calls),
-            "air": self.air.summary(self.bed.box_call) if self.air else {},
+            "air": self.sink.summary(self.bed.box_call) if self.sink else {},
         }

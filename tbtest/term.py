@@ -129,9 +129,11 @@ class TermUser(User):
     def line(self, text: str) -> None:
         self._send(text + "\r")
 
-    async def expect(self, pattern: re.Pattern | str, timeout: float | None = None
-                     ) -> tuple[str, re.Match]:
-        """Wait until pattern appears after what was read; returns (text before, match)."""
+    async def expect(self, pattern: re.Pattern | str, timeout: float | None = None,
+                     nudge: bool = True) -> tuple[str, re.Match]:
+        """Wait until pattern appears after what was read; returns (text before, match).
+        nudge: after long silence press Enter - never while a message is being written
+        (the empty line would become its subject or a line of its text)."""
         rx = re.compile(pattern) if isinstance(pattern, str) else pattern
         end = time.monotonic() + (timeout or self.timeout)
         quiet_since = time.monotonic()
@@ -151,7 +153,7 @@ class TermUser(User):
                 raise ActionError(f"timeout waiting for {rx.pattern!r} - got: {tail!r}")
             if len(self.buf) != seen:
                 seen, quiet_since = len(self.buf), now
-            elif self.connected and now - quiet_since >= self.nudge_sec:
+            elif nudge and self.connected and now - quiet_since >= self.nudge_sec:
                 # nothing comes: the answer may have been lost with a link reset
                 # ("data in flight may be lost") - a human presses Enter
                 self.nudges += 1
@@ -256,9 +258,9 @@ class TermUser(User):
     async def send_msg(self, type: str, to: str) -> None:
         m = self.ledger.new_msg(self.call, type, to, self.kind)
         self.line(f"SB {to}" if type == "B" else f"SP {to}")
-        await self.expect("Subject: ")
+        await self.expect("Subject: ", nudge=False)
         self.line(m.subject)
-        await self.expect(r"end with /EX")
+        await self.expect(r"end with /EX", nudge=False)
         self._send("\r".join(m.body.split("\n")) + "\r/EX\r")
         out, _ = await self.expect(PROMPT_RE)
         found = re.search(r"Msg (\d+) saved\.", out)

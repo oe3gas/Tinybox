@@ -105,7 +105,7 @@ class BedTests(unittest.TestCase):
             self.assertFalse(cfg.brocast.publish)
             bed.check_box_conf()
             # the guest's client conf is a valid tbclient.conf for the testbed
-            g = ccfg.load(bed.guest_conf)
+            g = ccfg.load(bed.guest_conf(1200))
             self.assertEqual((g.mycall, g.tinybox_call), ("OE3GAS", "OE3TBX-1"))
             self.assertEqual((g.axudp_port, g.axudp_listen), (bed.channel_port, bed.guest_port))
             self.assertEqual((g.axudp_maxframe, g.axudp_t1_sec), (4, 6.0))
@@ -116,6 +116,19 @@ class BedTests(unittest.TestCase):
                              (1200, 0.3, 4, 24.0))
             self.assertEqual((g.link, g.kiss_port, g.web_port), ("kiss", bed.air_port, 7745))
             self.assertEqual(g.data_dir, Path(d).resolve() / "guest")
+            # one client conf per bit rate, each with the values of its [air.<baud>]
+            g96 = ccfg.load(bed.guest_conf(9600))
+            self.assertEqual((g96.axudp_air_baud, g96.axudp_txdelay_ms, g96.axudp_maxframe,
+                              g96.axudp_t1_sec), (9600, 150, 7, 3.0))
+            g0 = ccfg.load(bed.guest_conf(0))
+            self.assertEqual((g0.axudp_air_baud, g0.axudp_maxframe), (0, 32))
+            # the box for a run with --air 9600: its own conf with the 9600 values
+            p96 = Path(d) / "box9600.conf"
+            p96.write_text(bed.box_conf_text(9600, absolute=True), encoding="utf-8")
+            c96 = config.load(p96)
+            self.assertEqual((c96.axudp.air_baud, c96.axudp.txdelay_ms, c96.axudp.maxframe_ext,
+                              c96.axudp.t1_sec), (9600, 150, 7, 3.0))
+            self.assertEqual(c96.storage.data_dir, Path(d).resolve() / "data")
             # tbtest.conf edited: tinybox.conf no longer fits until init again
             text = bed.conf_path.read_text(encoding="utf-8").replace("10193", "10293")
             bed.conf_path.write_text(text, encoding="utf-8")
@@ -142,6 +155,41 @@ class BedTests(unittest.TestCase):
             b, new = bed_mod.init(Path(d))
             self.assertTrue(new)
             self.assertEqual((b.box_port, len(b.users), b.air_baud), (10393, 30, 1200))
+
+    def test_air_profiles(self):
+        """[air.<baud>]: edited values are taken, a missing bit rate is refused."""
+        with tempfile.TemporaryDirectory() as d:
+            bed, _ = bed_mod.init(Path(d))
+            p = bed.conf_path
+            text = p.read_text(encoding="utf-8")
+            text = text.replace("[air.9600]\ntxdelay_ms  = 150", "[air.9600]\ntxdelay_ms  = 120")
+            text = text.replace("think       = 10-60", "think       = 5-20")
+            p.write_text(text, encoding="utf-8")
+            b = bed_mod.Bed.load(Path(d))
+            a = b.air(9600)
+            self.assertEqual((a.txdelay_ms, a.think, a.slottime_ms), (120, (5.0, 20.0), 50))
+            self.assertEqual(b.air().baud, 1200)
+            self.assertEqual(max(b.air(1200).sizes()), 3000)
+            self.assertLessEqual(max(b.air(1200).img_sizes()), 2000)
+            with self.assertRaises(bed_mod.BedError):
+                b.air(4800)
+            opt = Options(users=1, air=9600)
+            run = Run(b, opt, Path(d) / "runs" / "x", quiet=True)
+            self.assertEqual((opt.think, opt.chat_stay, opt.timeout, opt.duration),
+                             ((5.0, 20.0), (30.0, 120.0), 120.0, 600.0))
+            self.assertEqual(run.make_channel().txdelay, 0.12)
+            # default bit rate without its section: refused
+            p.write_text(text.replace("air_baud = 1200", "air_baud = 4800"), encoding="utf-8")
+            with self.assertRaises(bed_mod.BedError):
+                bed_mod.Bed.load(Path(d))
+            # a tbtest.conf of part 2 (no [air.*]) is renewed by init
+            p.write_text("[testbed]\nbox_port = 10393\n[radio]\nair_baud = 1200\n",
+                         encoding="utf-8")
+            b, new = bed_mod.init(Path(d))
+            self.assertTrue(new)
+            self.assertEqual((b.box_port, sorted(b.airs)), (10393, [0, 1200, 9600]))
+            self.assertTrue(b.guest_conf(9600).is_file())
+            self.assertFalse((Path(d) / "tbclient-testbed.conf").exists())
 
     def test_bad_conf(self):
         with tempfile.TemporaryDirectory() as d:

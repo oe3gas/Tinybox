@@ -7,6 +7,9 @@
   Handbuch (TXDELAY 150 ms, P 64, SlotTime 50 ms). **SMACK** (KISS mit CRC-16): `[tnc] smack`,
   Standard `yes` beim TNC7multi; Frames mit falscher Prüfsumme werden verworfen und gezählt.
   `kisshub.bat -p tnc7multi`, Beschreibung MANUAL 3.3a. Funktest steht aus.
+- **Testbed: Werte je Bitrate** (PLANUNG 27.2): `[air.0]`, `[air.1200]`, `[air.9600]` in
+  `tbtest.conf` – Kanal, AX.25 und Verhalten der User; `tbtest run --air 9600` nimmt alle Werte
+  aus `[air.9600]`. Eigener Client: `tbclient-testbed-<baud>.conf` je Bitrate.
 
 - **Testbed Teil 2** (PLANUNG 27.2): simulierter 1200-Bd-Funkkanal im AXUDP-Weg (gemeinsame
   Frequenz, CSMA, Kollisionen, versteckte Stationen, Verlust je Profil good/medium/poor),
