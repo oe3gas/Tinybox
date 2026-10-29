@@ -25,6 +25,7 @@ Stand: 22.10.2026 (kisshub 2026.10.22, tbclient 2026.10.18.7)
 | **brocastd** | sendet/empfängt brocast-Seiten (UI-Frames); Einzelheiten in `brocast/README.md` | `brocast\brocastd.bat` | `brocast\brocastd.conf` |
 | **dxfeed** | DX-Cluster → tägliches DX-Bulletin in die TinyBox | `dxfeed.bat` | `dxfeed.conf` |
 | **fwdsim** | Testpartner für das Forwarding | `fwdsim.bat` | `fwdsim.conf` |
+| **tbtest** | Testbed: 1–10 simulierte User gegen eine eigene Test-TinyBox (`tbtest/README.md`) | `tbtest.bat` | `tbtest.conf` im Testbed-Verzeichnis |
 
 **PCs im Testaufbau:** PC1 (`E:\Tinybox`, TS-790) – TinyBox. PC2 (`C:\Tinybox`, FT-818) –
 Client. Auf jedem PC, der einen KISS-TNC nutzt, läuft ein eigener kisshub.

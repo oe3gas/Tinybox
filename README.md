@@ -60,7 +60,7 @@ brauchen welche. Unter Debian/Ubuntu/Raspberry Pi OS gibt es sie auch als Pakete
   starten, z. B. `./tbclient.sh`. Die Log-Ausgabe (Konsole) erscheint dort genauso
   wie im Windows-Fenster, beendet wird mit Strg+C. Alles andere startet man wie oben
   mit `python3 -m <programm> -c <programm>.conf` (`dxfeed` genauso, fwdsim mit
-  `python3 -m fwdsim`).
+  `python3 -m fwdsim`, das Testbed mit `python3 -m tbtest`).
 - Pfade in den Beispielen wie `C:\Tinybox` oder `data\` sind unter Linux einfach
   `~/Tinybox` bzw. `data/`.
 - Direwolf: `sudo apt install direwolf`, Konfiguration wie unten bei „Mit Direwolf“.

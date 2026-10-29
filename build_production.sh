@@ -53,6 +53,7 @@ pi_abholung.py
 pi_sd_vorbereiten.py
 fwdsim
 fwdsim.conf.example
+tbtest
 kisshub
 kisshub.conf.example
 brocast/brocast-core.v*

@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- **Testbed `tbtest`** (PLANUNG 27): 1–10 simulierte User arbeiten über AXUDP mit einer eigenen
+  Test-TinyBox – Terminal-User (tippen Mailbox-Befehle) und Client-User (echter Client-Kern).
+  Funktionen `conn`, `send`, `bull`, `read`, `kill`, `info`, `chat`, `img`, wählbar per CLI
+  zusammen mit Anzahl User und Dauer. Ende-zu-Ende-Prüfung mit Prüfsummen, Chat-Fan-out,
+  Bildvergleich; Bericht mit Zeiten je Funktion. Nichts geht in die Luft (Funk-Attrappe).
+  `tbtest.bat init`, dann `tbtest.bat run -u 10 -t 10m`; Beschreibung in `tbtest/README.md`.
+
 - **NanoPi-Deployment** (PLANUNG 26): brocastd schreibt nicht mehr bei jedem Funk-Frame in die
   Datenbank (Major Fix P1, offener Punkt 9). WAL-Journal mit `synchronous=NORMAL`; Empfangslog,
   gehörte Stationen, Sendezeitplan und Seiten-Wiederholungen gehen erst alle `db_flush_sec`

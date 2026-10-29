@@ -1634,6 +1634,49 @@ weiterarbeiten kann. Der letzte Build `prod-f16d5a3` war älter als `prcore` (17
 
 ---
 
+## 27. Testbed `tbtest` (entschieden und umgesetzt 29.10.2026)
+
+**Anlass:** Mit AXUDP (Abschnitt 25) erreicht man die TinyBox ohne Funk. Damit lässt sich ein
+Testtool bauen, das mehrere User gleichzeitig mit der Box arbeiten lässt – lokal, ohne
+rechtliche Fragen, reproduzierbar.
+
+**Entscheidungen (OE3GAS, 29.10.2026):**
+1. Client-User laufen als **echter Client-Kern** (`tbclient.core.ClientCore`) im
+   tbtest-Prozess, ohne Web-GUI, je User ein Kern mit eigenem Datenordner und eigenem
+   AXUDP-Port (Variante A; nicht 10 tbclient-Prozesse, kein eigener Mini-Client).
+2. **Fiktive OE- und DL-Rufzeichen** (`OE1TBA`, `DL1TBB` … `DL5TBJ`, Box `OE3TBX-1`, Sysop
+   `OE3TBS` = keiner der User). Nur Loopback, nichts auf Funk.
+3. **Eigenes Testbed-Verzeichnis**, das Gerhard anlegt (`E:\tinybox-testbed`, Standard =
+   `tinybox-testbed` neben dem Repo, sonst `-D` oder `TBTEST_DIR`). Der Code liegt im Repo
+   (`tbtest/`, `tbtest.bat`), Daten, Konfiguration und Berichte nur im Testbed-Verzeichnis.
+4. **Ziel ist nur die eigene Test-Box**, nie die echte TinyBox: tbtest startet
+   `python -m tinybox -c <testbed>/tinybox.conf` als eigenen Prozess mit eigener DB und
+   eigenen Ports (AXUDP 10193, Web 8180, Telnet 6400).
+5. **Voller Funktionsumfang** der TinyBox inkl. Chat über den Client: `conn`, `send`, `bull`,
+   `read`, `kill`, `info` (übrige Terminal-Befehle), `chat`, `img`. Die Funkstrecke (Verlust,
+   1200/9600 Bd) wird jetzt **nicht** untersucht.
+
+**Aufbau:**
+- `tbtest init` schreibt `tbtest.conf` (Rufzeichen, Ports; darf geändert werden) und erzeugt
+  daraus `tinybox.conf`: `interface = kiss` an die **Funk-Attrappe** (KISS-TCP-Server in
+  tbtest, Port 10190, schluckt und zählt jeden Frame), `[axudp]` mit allen Usern als
+  Gegenstellen, `max_users = 20`, Rubrik `TBTEST`, Boards TREFF/TECH/RUNDE, brocast, Inbox,
+  Update-Abfrage und Bake aus. Auch die Clients bekommen die Attrappe als Funk-Port – kein
+  Frame der Testumgebung kann einen echten Sender erreichen.
+- Terminal-User: `prcore.kissport.KissPort` mit `AxudpEndpoint`, liest wie ein Mensch (Prompt,
+  Fragen ohne Zeilenende), beantwortet beim ersten Login die Profilfragen (CR73).
+- Ende-zu-Ende-Prüfung (`tbtest/ledger.py`): jede Nachricht trägt `TBTEST <schlüssel>
+  <prüfsumme>`, Chat-Zeilen `tbt <schlüssel>`, Bilder ihren Hash. Schlussrunde: jeder User liest
+  am Ende alles Ungelesene. Chat: wer beim Senden im Board war (2 s Spielraum), muss die Zeile
+  bekommen; Clients müssen ihre eigene Zeile zurückbekommen.
+- Bericht `runs/<zeit>/report.txt` + `result.json`: Zeiten je Funktion (min/Ø/p95/max), je
+  User, Ende-zu-Ende-Bilanz, Frames auf der Attrappe (Connected-Mode muss 0 sein), Fehlerzeilen
+  der Test-Box. Exit-Code 0/1/2. Stirbt die Box, endet der Lauf sofort.
+- Tests `tests/test_tbtest.py` (inkl. eines kurzen echten Laufs mit freien Ports).
+
+**Nächster Teil (offen):** virtuelle Funkstrecke (Verlust, Verzögerung, 1200/9600 Bd zwischen
+User und Box), mehr als 10 User, Forwarding (zusammen mit fwdsim).
+
 ## Quellen
 
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a
