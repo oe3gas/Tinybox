@@ -363,7 +363,10 @@ const Insp = {
     line.classList.add("inspectable");
     if (item === this.item) line.classList.add("sel");
     line.title = "Inspect this frame";
-    line.addEventListener("click", () => this.show(item, line));
+    line.addEventListener("click", () => {
+      this.show(item, line);
+      if (item.aprs && AprsView.lensOn()) AprsView.select(item);   // HEX + lens: an APRS frame also goes to the lens
+    });
     return line;
   },
   // what every byte is: [{cls, what}] - from the raw frame, or only the payload
