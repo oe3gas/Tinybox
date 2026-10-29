@@ -11,7 +11,8 @@
 ; [log] file names becomes the profile name. kisshub -h (or -?) shows the help.
 
 [tnc]
-profile   = pk232          ; default when started without -p: pk232 | tm-d710 | th-d74 |
+profile   = pk232          ; default when started without -p: pk232 | tm-d710 | tnc7multi |
+                           ; th-d74 |
                            ; th-d75 | tnc2-kiss | generic | vara-fm | vara-hf | direwolf
 ; transport = serial       ; serial | tcp - default: tcp for vara-* / direwolf, else serial
 device    = COM3           ; serial only: Windows COM3, Raspberry Pi /dev/ttyUSB0
@@ -22,6 +23,7 @@ serial_baud = 9600         ; PC <-> TNC (PK-232: its TBAUD; 9600 as pk232py uses
 ; port =                   ; tcp only - default: vara-* 8100, direwolf KISSPORT (else 8001)
 reconnect_sec = 10
 exit_kiss_on_stop = yes    ; on Ctrl+C: leave KISS, so pk232py / a terminal finds cmd:
+; smack = no               ; KISS with CRC-16 (SMACK) - default: yes for tnc7multi, no else
 ; init_lines = AWLEN 8 | PARITY 0 | RESTART | ... | KISS ON | HOST ON
 ;              replaces the profile's init; the last line enters KISS
 ;
@@ -90,6 +92,11 @@ sn_window_ms = 1500        ; an SN line belongs to a frame received this close t
 ;                          ; KISS ON / RESTART, on stop C0 FF C0 + KISS OFF
 ; [kiss.tm-d710]
 ; air_baud = 9600          ; 1200 (default) or 9600 - goes to the TNC as HBAUD
+; [tnc.tnc7multi]          ; TNC7multi: kisshub.bat -p tnc7multi - rotary switch on 1k2
+; device = COM8            ; (9k6 for 9600 Bd); USB = FTDI virtual COM port
+; serial_baud = 115200     ; USB default; RS232 (null modem cable): 38400
+; [kiss.tnc7multi]         ; defaults = the TNC's own: TXDELAY 150, P 64, SlotTime 50
+; air_baud = 9600          ; only with the switch on 9k6 - kisshub cannot set it
 ; [kiss.pk232]
 ; txdelay_ms = 400
 ; [tnc.vara-fm]

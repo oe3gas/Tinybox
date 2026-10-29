@@ -122,6 +122,7 @@ EPILOG = """\
 profiles:
   pk232      AEA PK-232 / PK-232MBX, serial ([tnc] device), 1200 Bd
   tm-d710    Kenwood TM-D710 (TNC key -> packet mode first), serial
+  tnc7multi  TNC7multi (IfD), rotary switch 1k2/9k6, USB 115200, SMACK
   th-d74     Kenwood TH-D74, KISS on in the menu, serial / Bluetooth
   th-d75     Kenwood TH-D75, KISS on in the menu, serial / Bluetooth
   tnc2-kiss  TNC2 with a pure KISS EPROM, serial

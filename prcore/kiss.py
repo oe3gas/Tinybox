@@ -9,6 +9,13 @@ KISS frame:  FEND  type  data(escaped)  FEND
 Commands: 0 data, 1 TXDELAY (10 ms units), 2 P (persistence 0..255),
 3 SlotTime (10 ms units), 4 TXtail (10 ms units, obsolete), 5 FullDuplex,
 6 SetHardware; type 0xFF = leave KISS mode (no port).
+
+SMACK ("Stuttgarter Modifiziertes Amateurfunk-CRC-KISS", TNC7multi handbook 4.1):
+a data frame with bit 7 of the type byte set carries a CRC-16 over type byte and
+data, appended low byte first (CRC-16/ARC: polynomial 0x8005 reflected = 0xA001,
+start value 0). A SMACK TNC switches to SMACK by itself on the first CRC frame
+from the PC and from then on sends CRC frames too; only data frames carry the
+CRC, parameter frames stay plain KISS. Back to plain KISS only by a TNC restart.
 """
 
 from __future__ import annotations
@@ -51,6 +58,46 @@ def encode(data: bytes, port: int = 0, command: int = CMD_DATA) -> bytes:
     if not 0 <= command <= 0x0F:
         raise KissError(f"KISS command {command} out of range")
     return bytes((FEND, (port << 4) | command)) + escape(data) + bytes((FEND,))
+
+
+SMACK_FLAG = 0x80             # bit 7 of the type byte: data frame with CRC
+
+
+def _crc_table() -> tuple[int, ...]:
+    table = []
+    for i in range(256):
+        crc = i
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+        table.append(crc)
+    return tuple(table)
+
+
+_CRC16 = _crc_table()
+
+
+def crc16(data: bytes, crc: int = 0) -> int:
+    """CRC-16/ARC as SMACK uses it (check value of b"123456789" = 0xBB3D)."""
+    for b in data:
+        crc = (crc >> 8) ^ _CRC16[(crc ^ b) & 0xFF]
+    return crc
+
+
+def encode_smack(data: bytes, port: int = 0) -> bytes:
+    """One SMACK data frame: type byte 0x80 | port << 4, data, CRC low byte first."""
+    if not 0 <= port <= 7:
+        raise KissError(f"SMACK port {port} out of range 0..7")
+    raw = bytes((SMACK_FLAG | (port << 4),)) + data
+    return bytes((FEND,)) + escape(raw + crc16(raw).to_bytes(2, "little")) + bytes((FEND,))
+
+
+def smack_check(port: int, data: bytes) -> bytes | None:
+    """A frame the Decoder gave as port 8..15 (bit 7 set): the AX.25 data without
+    the CRC if the CRC is right, else None. port is the Decoder's port (with bit 3)."""
+    if len(data) < 3:
+        return None
+    raw = bytes(((port << 4) | CMD_DATA,)) + data
+    return data[:-2] if crc16(raw) == 0 else None
 
 
 def encode_param(command: int, value: int, port: int = 0) -> bytes:

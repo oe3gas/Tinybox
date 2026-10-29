@@ -938,3 +938,166 @@ class ConsoleTests(HubTestBase):
         self.assertIn("TXDELAY 600 ms", lines[-1])
         con.handle_line("bogus")
         self.assertIn("unknown command", lines[-1])
+
+
+# --- TNC7multi (KISS/SMACK, handbook V1.04) -------------------------------------------
+
+class FakeTNC7:
+    """TNC7multi with the rotary switch on 1k2: in KISS from power-on, no terminal.
+    Handbook 4.1: switches to SMACK on the first CRC frame from the PC and from then
+    on sends CRC frames itself; frames with a bad CRC are not sent."""
+
+    def __init__(self, smack: bool = False) -> None:
+        self.smack = smack                     # True: still in SMACK from an earlier run
+        self.transmitted: list[bytes] = []
+        self.params: list[tuple[int, bytes]] = []
+        self.raw = bytearray()
+        self.bad_crc = 0
+        self.writer = None
+        self._dec = kiss.Decoder()
+
+    async def handle(self, reader, writer) -> None:
+        self.writer = writer
+        try:
+            while data := await reader.read(4096):
+                self.raw += data
+                for port, cmd, frame in self._dec.feed(data):
+                    if cmd == kiss.CMD_DATA and port >= 8:
+                        ok = kiss.smack_check(port, frame)
+                        if ok is None:
+                            self.bad_crc += 1
+                        else:
+                            self.smack = True
+                            self.transmitted.append(ok)
+                    elif cmd == kiss.CMD_DATA:
+                        self.transmitted.append(frame)
+                    elif cmd != kiss.CMD_RETURN:
+                        self.params.append((cmd, frame))
+        except ConnectionError:
+            pass
+        finally:
+            writer.close()
+
+    def receive(self, ax25: bytes, corrupt: bool = False) -> None:
+        f = kiss.encode_smack(ax25) if self.smack else kiss.encode(ax25)
+        if corrupt:
+            f = f[:-3] + bytes((f[-3] ^ 0x01,)) + f[-2:]
+        self.writer.write(f)
+
+
+class SmackTests(unittest.TestCase):
+    def test_crc16_arc(self):
+        self.assertEqual(kiss.crc16(b"123456789"), 0xBB3D)
+
+    def test_roundtrip_with_escapes(self):
+        data = bytes(range(256)) + b"\xc0\xdb\xc0"
+        for port in (0, 3, 7):
+            f = kiss.encode_smack(data, port)
+            self.assertEqual(f[1], 0x80 | port << 4)
+            ((p, cmd, body),) = kiss.Decoder().feed(f)
+            self.assertEqual((p, cmd), (8 + port, 0))
+            self.assertEqual(kiss.smack_check(p, body), data)
+
+    def test_bad_crc(self):
+        ((p, _, body),) = kiss.Decoder().feed(kiss.encode_smack(b"hello"))
+        self.assertIsNone(kiss.smack_check(p, body[:-1] + bytes((body[-1] ^ 0xFF,))))
+        self.assertIsNone(kiss.smack_check(p, b"x"))
+
+
+class Tnc7Tests(HubTestBase):
+    profile = fast(profiles.TNC7MULTI)
+
+    async def test_no_dialog_params_and_smack(self):
+        await self.start_hub(FakeTNC7())
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        await self.wait(lambda: len(self.fake.params) == 2)      # TXDELAY, P - no text sent
+        self.assertNotIn(b"\r", bytes(self.fake.raw))
+        w, got = await self.client()
+        mine = ax.ui_frame("TEST", "OE3GAS", b"via TNC7").encode()
+        w.write(kiss.encode(mine))
+        await self.wait(lambda: self.fake.transmitted == [mine])
+        self.assertTrue(self.fake.smack)                          # TNC followed
+        self.assertEqual(self.fake.bad_crc, 0)
+        heard = ax.ui_frame("CQ", "OE1ABC", b"with crc").encode()
+        self.fake.receive(heard)
+        await self.wait(lambda: got == [heard])
+        st = self.hub.tnc.status()
+        self.assertEqual((st["smack"], st["smack_seen"], st["smack_rx"], st["crc_errors"]),
+                         (True, True, 1, 0))
+        self.assertIn("SMACK on (CRC ok 1, bad 0)", self.hub.status())
+
+    async def test_bad_crc_dropped(self):
+        await self.start_hub(FakeTNC7(smack=True))
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        _, got = await self.client()
+        bad = ax.ui_frame("CQ", "OE1ABC", b"broken").encode()
+        good = ax.ui_frame("CQ", "OE1ABC", b"fine").encode()
+        with self.assertLogs("kisshub.tnc", "WARNING"):
+            self.fake.receive(bad, corrupt=True)
+            self.fake.receive(good)
+            await self.wait(lambda: got == [good])
+        self.assertEqual(self.hub.tnc.crc_errors, 1)
+
+    async def test_smack_off_still_reads_crc_frames(self):
+        """kisshub restarted with smack = no: the TNC stays in SMACK until it
+        restarts - its CRC frames must still come through."""
+        self.profile = dataclasses.replace(self.profile, smack=False)
+        await self.start_hub(FakeTNC7(smack=True))
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        w, got = await self.client()
+        heard = ax.ui_frame("CQ", "OE1ABC", b"old smack").encode()
+        self.fake.receive(heard)
+        await self.wait(lambda: got == [heard])
+        mine = ax.ui_frame("TEST", "OE3GAS", b"plain").encode()
+        w.write(kiss.encode(mine))
+        await self.wait(lambda: self.fake.transmitted == [mine])
+        self.assertNotIn(0x80, bytes(self.fake.raw[:2]))
+
+    async def test_stop_sends_nothing(self):
+        await self.start_hub(FakeTNC7())
+        await asyncio.wait_for(self.hub.tnc.ready.wait(), 5)
+        await self.wait(lambda: len(self.fake.params) == 2)
+        before = bytes(self.fake.raw)
+        await self.hub.tnc.stop()
+        await asyncio.sleep(0.1)
+        self.assertEqual(bytes(self.fake.raw), before)            # no C0 FF C0
+
+
+class Tnc7ConfigTests(unittest.TestCase):
+    def load(self, text: str):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "k.conf"
+            p.write_text("[tnc]\nprofile=tnc7multi\ndevice=COM8\n" + text, encoding="utf-8")
+            return hubconfig.load(p)
+
+    def test_defaults_from_handbook(self):
+        cfg = self.load("")
+        t = cfg.tnc
+        self.assertEqual((t.serial_baud, t.rtscts, t.profile.smack, t.profile.exit_kiss),
+                         (115200, False, True, False))
+        self.assertEqual((t.profile.wake, t.profile.init), ((), ()))
+        self.assertEqual(t.params, {kiss.CMD_TXDELAY: 15, kiss.CMD_P: 64,
+                                    kiss.CMD_SLOTTIME: 5, kiss.CMD_FULLDUPLEX: 0})
+        lines = dict((x[0], x[1]) for x in hubconfig.radio_lines(cfg))
+        self.assertIn("rotary switch on 1k2", lines["TNC7multi"])
+        self.assertIn("SMACK", lines)
+        self.assertEqual(cfg.hints, ())
+
+    def test_9600_and_rs232(self):
+        cfg = self.load("serial_baud = 38400\nsmack = no\n[kiss]\nair_baud = 9600\n")
+        self.assertEqual((cfg.tnc.serial_baud, cfg.tnc.profile.smack), (38400, False))
+        lines = dict((x[0], x[1]) for x in hubconfig.radio_lines(cfg))
+        self.assertIn("9k6", lines["TNC7multi"])
+        self.assertNotIn("SMACK", lines)
+        self.assertEqual(cfg.hub.ax25["maxframe"], 7)
+
+    def test_other_rate_gives_a_hint(self):
+        cfg = self.load("[kiss]\nair_baud = 19200\n")
+        self.assertIn("extra modem", cfg.hints[0])
+
+    def test_smack_not_with_vara(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "k.conf"
+            p.write_text("[tnc]\nprofile=vara-fm\nsmack=yes\n", encoding="utf-8")
+            with self.assertRaises(hubconfig.ConfigError):
+                hubconfig.load(p)

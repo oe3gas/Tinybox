@@ -19,7 +19,7 @@ Stand: 22.10.2026 (kisshub 2026.10.22, tbclient 2026.10.18.7)
 |---|---|---|---|
 | **TinyBox** | die Mailbox (BBS): Post, Bulletins, Chat, Forwarding, Web-GUI für den Sysop | `tinybox.bat` | `tinybox.conf` |
 | **TinyBox-Client** (`tbclient`) | Programm für Benutzer: Chat, Post, Monitor, APRS – im Browser | `tbclient.bat` | `tbclient.conf` |
-| **kisshub** | besitzt den KISS-TNC (PK-232, Kenwood TM-D710, Direwolf-KISS, VARA FM) und teilt ihn per KISS-TCP; misst die Verbindungsqualität | `kisshub.bat -p <profil>` bzw. `python -m kisshub -c <datei> -p <profil>` | `kisshub.conf` (eine Datei für alle TNCs) |
+| **kisshub** | besitzt den KISS-TNC (PK-232, Kenwood TM-D710, TNC7multi, Direwolf-KISS, VARA FM) und teilt ihn per KISS-TCP; misst die Verbindungsqualität | `kisshub.bat -p <profil>` bzw. `python -m kisshub -c <datei> -p <profil>` | `kisshub.conf` (eine Datei für alle TNCs) |
 | **Direwolf** | Soundkarten-Modem (AFSK 1200/9600) mit eigenem AX.25 (AGW) oder als reiner KISS-TNC | `direwolf.exe` | `direwolf.conf` (eigener Ordner, z. B. `E:\direwolf`) |
 | **VARA FM** | Soundkarten-Modem von EA5HVK, hier als KISS-TNC (Port 8100) | `VARAFM.exe` | im Programm (Settings → VARA Setup) |
 | **brocastd** | sendet/empfängt brocast-Seiten (UI-Frames); Einzelheiten in `brocast/README.md` | `brocast\brocastd.bat` | `brocast\brocastd.conf` |
@@ -232,7 +232,7 @@ air_baud    = 9600             ; 1200 (Standard) oder 9600 -> HBAUD
 
 | Abschnitt | Schlüssel | Bedeutung |
 |---|---|---|
-| `[tnc]` | `profile` | Standardprofil ohne `-p`: `pk232`, `tm-d710`, `th-d74`, `th-d75`, `tnc2-kiss`, `generic`, `vara-fm`, `vara-hf`, `direwolf` |
+| `[tnc]` | `profile` | Standardprofil ohne `-p`: `pk232`, `tm-d710`, `tnc7multi`, `th-d74`, `th-d75`, `tnc2-kiss`, `generic`, `vara-fm`, `vara-hf`, `direwolf` |
 | | `transport` | `serial` \| `tcp` – Standard je Profil (tcp bei vara-*/direwolf) |
 | | `device`, `serial_baud` | nur seriell, z. B. `COM6` / `9600`, Raspberry Pi `/dev/ttyUSB0` |
 | | `host`, `port` | nur tcp; Standard 127.0.0.1, vara 8100, direwolf = KISSPORT |
@@ -240,6 +240,7 @@ air_baud    = 9600             ; 1200 (Standard) oder 9600 -> HBAUD
 | | `exit_kiss_on_stop` | beim Beenden KISS verlassen (Standard je Profil) |
 | | `init_lines` | ersetzt den Init-Dialog: `A \| B \| … \| KISS ON`, die letzte Zeile schaltet in KISS |
 | | `direwolf_conf` | nur Profil `direwolf`: Ordner oder Datei |
+| | `smack` | KISS mit CRC-16 (SMACK): Standard `yes` bei `tnc7multi`, sonst `no` (3.3a) |
 | | `vara_tunnel`, `vara_bundle_ms`, `vara_bundle_max` | nur VARA (3.5) |
 | `[kiss]` | `air_baud`, `txdelay_ms`, `max_lead_ms` | Funkwerte – nur zum Überschreiben, Standard aus dem Profil |
 | | `persist`, `slottime_ms`, `send_params` | nur Hardware-TNC (KISS-Parameter); bei VARA/Direwolf muss `send_params` no bleiben |
@@ -254,6 +255,7 @@ air_baud    = 9600             ; 1200 (Standard) oder 9600 -> HBAUD
 |---|---|---|---|---|---|---|
 | `pk232` | seriell, Init-Dialog | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
 | `tm-d710` | seriell, Init-Dialog (`HBAUD <air_baud>`, `KISS ON`, `RESTART`) | 1200 oder 9600 | 300 | yes | 1500 | 1200- bzw. 9600-Bd-Werte |
+| `tnc7multi` | seriell/USB, schon in KISS (Drehschalter), SMACK | 1200 oder 9600 (Schalter 1k2/9k6) | 150 | yes (P 64, SlotTime 50) | 1500 | 1200- bzw. 9600-Bd-Werte |
 | `th-d74`, `th-d75`, `tnc2-kiss`, `generic` | seriell/tcp, schon in KISS (kein Dialog) | 1200 | 300 | yes | 1500 | 1200-Bd-Werte |
 | `direwolf` | tcp, KISSPORT | aus MODEM | aus TXDELAY | no | 1500 | 1200-Bd-Werte |
 | `vara-fm`, `vara-hf` | tcp 8100, Tunnel | 350 | 2700 | **no** | 12000 | 256 B, Fenster 4, T1 18–90 s, T2 0,3 s |
@@ -446,6 +448,43 @@ Gehen trotz RTS/CTS lange Frames verloren, `[ax25.tm-d710] paclen = 128` versuch
 
 Als **KISS-TNC** sendet der D710 nur, was TinyBox oder Client liefern – AX.25 v2.2 geht daher
 durch ihn. Die v2.0-Grenze betrifft den D710 nur als **Digipeater** (3.6).
+
+### 3.3a KISS mit Hardware-TNC: TNC7multi (IfD)
+
+Alle Werte aus dem Handbuch V1.04 (Firmware TOS 1.04).
+
+1. **Drehschalter** auf **1k2** (KISS, 1200 Bd AFSK) oder **9k6** (KISS, 9600 Bd FSK). Mehr ist
+   nicht zu tun: Der TNC ist ab dem Einschalten in KISS, es gibt keinen Init-Dialog. Stellung
+   **1** ist ab Werk Flexnet, **Conf** das Einstellmenü – beides geht mit dem kisshub nicht.
+   Jedes Drehen startet den TNC neu.
+2. **Anschluss:** am besten **USB** (FTDI-Treiber, virtueller COM-Port, Standard **115200 Bd**,
+   Strom kommt über USB). Alternativ RS232 mit **Nullmodemkabel** (Standard **38400 Bd**).
+   `kisshub.conf`: `[tnc.tnc7multi] device = COM8`, bei RS232 `serial_baud = 38400`.
+   Die Datenrate muss zu der im TNC eingestellten passen (Conf-Befehle `u` / `v`).
+3. **Funkrate:** `[kiss.tnc7multi] air_baud = 9600` nur, wenn der Schalter auf 9k6 steht – der
+   kisshub kann die Rate nicht einstellen, nur Sendezeit-Schätzung und AX.25-Empfehlung folgen.
+   Andere Raten (4k8 bis 115k2) nur mit dem Zusatzmodem und einer im Conf-Modus angelegten
+   KISS-Schalterstellung (`f1`, `r`, `s`); der Start zeigt dann einen Hinweis.
+4. `kisshub.bat -p tnc7multi`. Der kisshub schickt nur die KISS-Parameter – Standard sind die
+   Werte des TNC: **TXDELAY 150 ms, Persistence 64, SlotTime 50 ms**, Duplex aus. TXtail und
+   SetHardware braucht der TNC nicht.
+5. **SMACK** (KISS mit CRC-16): Der kisshub sendet Datenframes mit Prüfsumme, der TNC schaltet
+   daraufhin selbst auf SMACK und sendet ebenfalls mit Prüfsumme. Frames mit falscher
+   Prüfsumme verwirft der kisshub (Warnung im Log, Zähler `crc_errors` in Status und
+   Statuszeile: `SMACK on (CRC ok 120, bad 0)`). Zurück zu reinem KISS geht nur mit einem
+   Neustart des TNC (Schalter drehen oder Strom aus) – CRC-Frames liest der kisshub daher
+   immer, auch mit `[tnc.tnc7multi] smack = no`.
+6. Ende mit Strg+C: nichts wird an den TNC geschickt, er bleibt in KISS.
+
+**Nur im Conf-Modus einstellbar** (Schalter auf Conf, Terminal 9600 Bd 8N1, z. B. PuTTY): vor
+allem die **Modulationsspannung** (`n`, 10…220 = 100…2200 mVss, Standard 1000 mVss) – laut
+Handbuch „unbedingt notwendig für einen einwandfreien Betrieb“. Beispiel für die 1k2-Stellung
+mit 400 mVss: `@1200`, `n40`, `!1200`. Dazu RX-Mute-Delay (`m`, bei echten Datentransceivern
+0) und PTT-Watchdog (`g`, Standard 20 s). Das Handbuch empfiehlt, auch für 1200 Bd den
+9k6-Eingang des Funkgeräts zu benutzen.
+
+**Stand:** Profil, SMACK und Konfiguration mit simuliertem TNC getestet (kisshub 2026.10.29),
+Funktest steht aus.
 
 ### 3.4 KISS mit Direwolf als Modem (für Messungen und den Vergleich mit VARA)
 

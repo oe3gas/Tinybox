@@ -8,6 +8,12 @@ Life cycle (repeats on every loss of the port):
                    -> KISS: frames to the hub, frames from the hub
     stop():        -> C0 FF C0 (leave KISS) and the profile's exit lines
 
+SMACK (profile tnc7multi, [tnc] smack): data frames go out with CRC-16
+(kiss.encode_smack), the TNC switches over by itself and answers with CRC.
+Received frames with bit 7 in the type byte are checked whatever the setting
+(the TNC stays in SMACK until it restarts, also when kisshub restarts with
+smack = no); a bad CRC drops the frame.
+
 Everything the TNC answers during wake/init is logged, so a failing init on
 real hardware shows exactly which line got which answer (pk232py lesson:
 "log both the bytes sent and what came back").
@@ -150,6 +156,10 @@ class Tnc:
         self._bundle_timer: asyncio.TimerHandle | None = None
         self.bundles_tx = self.bundles_rx = 0        # type-2 frames with more than 1 frame
         self.bundled_tx = self.bundled_rx = 0        # AX.25 frames that went in a bundle
+        # SMACK (KISS with CRC-16, TNC7multi)
+        self.smack_rx = 0                            # received frames with a good CRC
+        self.crc_errors = 0                          # received frames with a bad CRC (dropped)
+        self.smack_seen = False                      # the TNC answers with CRC
 
     def describe(self) -> str:
         return f"{self.profile.name} on {self.transport.describe()}"
@@ -190,6 +200,7 @@ class Tnc:
                 self._term.clear()
                 self._set_state("kiss")
                 self.inits += 1
+                self.smack_seen = False                  # a new port: wait for its first CRC frame
                 self.last_error = None
                 self._send_params()
                 log.info("TNC in KISS mode - ready", extra=OK)
@@ -235,7 +246,9 @@ class Tnc:
                     if self.trace:
                         log.info("<< TNC frame %s", summary(frame) if cmd == kiss.CMD_DATA
                                  else f"KISS command 0x{cmd:02x}")
-                    if cmd == kiss.CMD_DATA:
+                    if cmd == kiss.CMD_DATA and port >= 8:
+                        self._smack_received(port, frame)
+                    elif cmd == kiss.CMD_DATA:
                         self._received(port, frame)
                     elif cmd == VARA_GENERIC and port == 0 and self.profile.tunnel != "no":
                         if frame.startswith(TUNNEL_MAGIC) and len(frame) >= len(TUNNEL_MAGIC) + 15:
@@ -266,6 +279,20 @@ class Tnc:
             self.on_frame(port, frame)
         except Exception:
             log.exception("error handling a frame from the TNC")
+
+    def _smack_received(self, port: int, frame: bytes) -> None:
+        data = kiss.smack_check(port, frame)
+        if data is None:
+            self.crc_errors += 1
+            log.warning("frame with bad SMACK CRC from the TNC dropped (%d bytes, %d so far)",
+                        len(frame), self.crc_errors)
+            return
+        self.smack_rx += 1
+        if not self.smack_seen:
+            self.smack_seen = True
+            log.info("TNC answers with CRC (SMACK)%s", "" if self.profile.smack else
+                     " - still from an earlier run, it stays so until the TNC restarts")
+        self._received(port & 0x07, data)
 
     def _is_echo(self, frame: bytes) -> bool:
         now = time.monotonic()
@@ -345,6 +372,8 @@ class Tnc:
                 "bundle_ms": self.profile.bundle_ms, "bundles_tx": self.bundles_tx,
                 "bundles_rx": self.bundles_rx, "bundled_tx": self.bundled_tx,
                 "bundled_rx": self.bundled_rx,
+                "smack": self.profile.smack, "smack_seen": self.smack_seen,
+                "smack_rx": self.smack_rx, "crc_errors": self.crc_errors,
                 "init_log": list(self.init_log)[-20:],
                 **(self.transport.flow_status() if hasattr(self.transport, "flow_status")
                    else {"flow": "none"})}
@@ -390,6 +419,8 @@ class Tnc:
                 ok = self.send(kiss.encode(TUNNEL_MAGIC + ax25, 0, VARA_GENERIC), ax25)
             if ok:
                 self.tunnel_tx += 1
+        elif self.profile.smack:
+            ok = self.send(kiss.encode_smack(ax25, port), ax25)
         else:
             ok = self.send(kiss.encode(ax25, port), ax25)
         if ok and t != "no":

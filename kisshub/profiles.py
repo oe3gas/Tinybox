@@ -31,6 +31,26 @@ CTS low while its small TNC buffer is full ([tnc] rtscts = no switches it off). 
 TH-D74 / TH-D75: KISS is switched on in
 the radio's menu - nothing to send. TNC2 with a pure KISS EPROM: nothing to send.
 TH-D74/D75/TNC2 lines are from the manuals and still to be tried (K9/K10).
+
+TNC7multi (IfD Guettner, TOS 1.04 - all from the handbook V1.04, 29.10.2026):
+    - KISS/SMACK is a firmware mode chosen with the ROTARY SWITCH, there is no
+      terminal dialog: position "1k2" = KISS 1200 Bd AFSK, "9k6" = KISS 9600 Bd
+      FSK (handbook 4.1); positions 1-7 can be set up in Conf mode (f1 = KISS),
+      position 1 is Flexnet out of the box. Each turn of the switch restarts the TNC.
+      So: no wake, no init, and no leaving KISS - C0 FF C0 means nothing to it
+      (back to the Conf menu only with the switch on "Conf").
+    - PC side: USB (FTDI virtual COM port, default 115200 Bd, "u" in Conf mode)
+      or RS232 (null modem cable, default 38400 Bd, "v"), 8N1. Config item c=2:
+      USB if USB is active, else RS232. No flow control named for KISS.
+    - SMACK: KISS with CRC-16. The TNC switches to SMACK by itself on the first
+      CRC frame from the PC (kiss.encode_smack); back to plain KISS only by a
+      restart. kisshub sends with CRC ([tnc] smack = yes, default for this
+      profile) and drops received frames with a bad CRC.
+    - KISS parameters the PC may set (handbook 4.1): TXDELAY (default 15 = 150 ms),
+      Persistence (64), SlotTime (5 = 50 ms), Duplex (0); TXtail and SetHardware
+      are not needed. Not settable over KISS (Conf mode only): modulation level
+      (n, default 1000 mVss - "must be right for clean operation"), RX mute delay
+      (m), PTT watchdog (g, 20 s).
 """
 
 from __future__ import annotations
@@ -95,6 +115,12 @@ class Profile:
     hbaud: tuple[int, ...] = ()        # air rates the TNC can be set to with "HBAUD n";
                                        # [kiss] air_baud picks one and replaces the
                                        # HBAUD line of the init. () = rate fixed
+    smack: bool = False                # send data frames with CRC (SMACK, TNC7multi)
+    persist: int = 63                  # [kiss] persist default (KISS P, 0..255)
+    slottime_ms: int = 100             # [kiss] slottime_ms default
+    air_bauds: tuple[int, ...] = ()    # air rates set ON THE DEVICE (switch), not by
+                                       # kisshub; another [kiss] air_baud only gives a hint
+    start_note: str = ""               # one line at start; {air_baud} and {switch} filled in
 
 
 # CR70: AX.25 recommendation for the stations, the same key names as [ax25] in
@@ -187,6 +213,20 @@ TH_D75 = Profile(name="th-d75", display="TH-D75", serial_baud=9600, exit_kiss=Fa
                  notes="Kenwood TH-D75: KISS on in the menu")
 TNC2_KISS = Profile(name="tnc2-kiss", display="TNC2", serial_baud=9600, exit_kiss=False,
                     notes="TNC2 with pure KISS EPROM")
+TNC7MULTI = Profile(
+    name="tnc7multi", display="TNC7multi",
+    serial_baud=115200,                # USB default (u); RS232: 38400 (v) - handbook 5
+    exit_kiss=False,                   # KISS is the switch position, not a command
+    settle_sec=0.3,
+    smack=True,                        # KISS with CRC, the TNC follows by itself
+    txdelay_ms=150, persist=64, slottime_ms=50,     # the TNC's own defaults (4.1)
+    air_bauds=(1200, 9600),            # built-in modem; other rates need the extra modem
+    start_note="rotary switch on {switch} (KISS {air_baud} Bd); PC port USB 115200 / "
+               "RS232 38400 Bd unless changed in Conf mode",
+    notes="TNC7multi (IfD), KISS/SMACK - rotary switch 1k2 or 9k6",
+)
+TNC7_SWITCH = {1200: "1k2", 9600: "9k6"}
+
 GENERIC = Profile(name="generic", display="KISS TNC", exit_kiss=False, notes="already in KISS")
 
 
@@ -221,7 +261,7 @@ DIREWOLF = Profile(name="direwolf", display="Direwolf", exit_kiss=False, kiss_pa
                    settle_sec=0.2, tcp_port=8001, reads_direwolf_conf=True,
                    notes="Direwolf KISS-TCP (KISSPORT), values from direwolf.conf")
 
-PROFILES = {p.name: p for p in (PK232, TM_D710, TH_D74, TH_D75, TNC2_KISS, GENERIC,
+PROFILES = {p.name: p for p in (PK232, TM_D710, TNC7MULTI, TH_D74, TH_D75, TNC2_KISS, GENERIC,
                                 VARA_FM, VARA_HF, DIREWOLF)}
 
 

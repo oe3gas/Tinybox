@@ -1110,6 +1110,18 @@ Vollständiges Konzept: `docs/kiss-mode-konzept.md`.
 Bei 9600 eigene AX.25-Empfehlung (Fenster 7, T1 1,5–15 s, T2 0,5 s) als Startwert.
 `init_lines` hat weiter Vorrang. PK-232 bleibt fest auf 1200. Funktest mit 9600 steht aus.
 
+**TNC7multi (entschieden und umgesetzt 29.10.2026, kisshub 2026.10.29):** Gerhard hat einen
+TNC7multi (IfD Güttner). Neues Profil `tnc7multi`, alle Werte aus dem Handbuch V1.04: KISS ist
+eine Drehschalter-Stellung (1k2/9k6), daher kein Weck- und Init-Dialog und kein Verlassen von
+KISS beim Beenden; seriell 115200 Bd (USB) bzw. 38400 Bd (RS232), keine Flusssteuerung;
+KISS-Parameter mit den TNC-Standardwerten (TXDELAY 150 ms, P 64, SlotTime 50 ms, Duplex 0).
+**SMACK** (KISS mit CRC-16/ARC, low byte zuerst) neu in `prcore/kiss.py`: Bei `[tnc] smack = yes`
+(Standard nur bei `tnc7multi`) gehen Datenframes mit CRC raus, der TNC zieht von selbst nach;
+empfangene CRC-Frames werden immer geprüft (auch bei `smack = no`, der TNC bleibt bis zum
+Neustart in SMACK), falsche CRC → Frame verworfen, Zähler `crc_errors`. `air_baud` ist hier nur
+die Schätzung (Rate kommt vom Schalter); 1200/9600 ohne Hinweis, andere Raten mit Hinweis
+(Zusatzmodem). Funktest steht aus.
+
 **TM-D710 mit RTS/CTS (entschieden und umgesetzt 25.10.2026):** Zwischen kisshub und D710 gilt
 Hardware-Flusssteuerung RTS/CTS (`[tnc] rtscts`, Profil-Standard `yes`, andere Profile `no`).
 Das Funkgerät steuert damit selbst, wann es Daten nimmt; `max_lead_ms` bleibt als

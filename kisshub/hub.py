@@ -397,7 +397,15 @@ class Hub:
         names = ", ".join(f"{c.name} rx {c.rx} tx {c.tx}" for c in self.clients.values())
         return (f"TNC {self.tnc.describe()} {self.tnc.state}: rx {self.tnc.rx_frames} "
                 f"tx {self.tnc.tx_frames}, queued {len(self._queue)}, dropped "
-                f"{self.dropped}, invalid {self.invalid}{self._cts_text()}; clients: {names or 'none'}")
+                f"{self.dropped}, invalid {self.invalid}{self._smack_text()}{self._cts_text()}; "
+                f"clients: {names or 'none'}")
+
+    def _smack_text(self) -> str:
+        t = self.tnc
+        if not getattr(t, "profile", None) or not (t.profile.smack or t.smack_rx or t.crc_errors):
+            return ""
+        return (f", SMACK {'on' if t.smack_seen else 'waiting for the TNC'}"
+                f" (CRC ok {t.smack_rx}, bad {t.crc_errors})")
 
     def _cts_text(self) -> str:
         fs = getattr(self.tnc.transport, "flow_status", None)

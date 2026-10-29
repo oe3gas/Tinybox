@@ -10,7 +10,8 @@ from pathlib import Path
 from prcore import direwolfconf, kiss, release, termcolor
 
 from .hub import HubCfg
-from .profiles import PROFILES, TUNNEL_MODES, Profile, ax25_recommendation, with_hbaud, with_init_lines
+from .profiles import (PROFILES, TNC7_SWITCH, TUNNEL_MODES, Profile, ax25_recommendation,
+                       with_hbaud, with_init_lines)
 
 # CR70: [ax25] in kisshub.conf may override the recommendation of the profile
 AX25_KEYS = {"paclen": (int, 16, 256), "maxframe": (int, 1, 7), "maxframe_ext": (int, 1, 127),
@@ -109,8 +110,11 @@ def load(path: str | Path, profile_name: str | None = None) -> Config:
         raise ConfigError("[tnc] vara_bundle_max: 100 .. 5000 (VARA's limit)")
     if bundle_ms and tunnel == "no":
         raise ConfigError("[tnc] vara_bundle_ms: only with the VARA tunnel (vara_tunnel)")
+    smack = get("tnc", "smack", profile.smack, bool)
+    if smack and profile.tunnel != "no":
+        raise ConfigError("[tnc] smack: not with VARA (it reads the type byte itself)")
     profile = dataclasses.replace(profile, exit_kiss=exit_kiss, tunnel=tunnel,
-                                  bundle_ms=bundle_ms, bundle_max=bundle_max)
+                                  bundle_ms=bundle_ms, bundle_max=bundle_max, smack=smack)
 
     hints: list[str] = []
     dw = None
@@ -162,6 +166,12 @@ def load(path: str | Path, profile_name: str | None = None) -> Config:
             profile = with_hbaud(profile, air_baud)
         except ValueError as exc:
             raise ConfigError(f"[kiss] air_baud = {air_baud}: {exc}") from None
+    if profile.air_bauds and air_baud not in profile.air_bauds:
+        # TNC7multi: the rate is set on the device (switch / Conf mode r, s), kisshub
+        # cannot check it - only the extra modem has other rates
+        hints.append(f"[kiss] air_baud = {air_baud}: the {profile.display} modem has "
+                     f"{' / '.join(map(str, profile.air_bauds))} Bd - other rates only with "
+                     "the extra modem and a KISS switch position set up in Conf mode")
     ax25 = ax25_recommendation(profile, air_baud)
     if dw:                                   # Direwolf's own AX.25 values as the hint
         if dw.paclen:
@@ -185,8 +195,9 @@ def load(path: str | Path, profile_name: str | None = None) -> Config:
     params = {}
     if send_params:
         params = {kiss.CMD_TXDELAY: kiss.ms_to_units(txdelay_ms),
-                  kiss.CMD_P: get("kiss", "persist", 63, int),
-                  kiss.CMD_SLOTTIME: kiss.ms_to_units(get("kiss", "slottime_ms", 100, int)),
+                  kiss.CMD_P: get("kiss", "persist", profile.persist, int),
+                  kiss.CMD_SLOTTIME: kiss.ms_to_units(get("kiss", "slottime_ms",
+                                                          profile.slottime_ms, int)),
                   kiss.CMD_FULLDUPLEX: 0}
         if not 0 <= params[kiss.CMD_P] <= 255:
             raise ConfigError("[kiss] persist: 0..255")
@@ -271,6 +282,14 @@ def radio_lines(cfg: Config) -> list[tuple]:
               f"({src.get('ax25')}; for TinyBox and client)")]
     if cfg.direwolf:
         lines.insert(0, ("direwolf.conf", cfg.direwolf))
+    p = cfg.tnc.profile
+    if p.start_note:
+        lines.insert(0, (p.display or p.name, p.start_note.format(
+            air_baud=h.air_baud,
+            switch=TNC7_SWITCH.get(h.air_baud, "a KISS position (Conf mode)"))))
+    if p.smack:
+        lines.append(("SMACK", "on: data frames with CRC-16, the TNC follows by itself "
+                               "([tnc] smack = no for plain KISS)"))
     return lines
 
 

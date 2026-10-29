@@ -288,6 +288,7 @@ TinyBox müsste zwei völlig verschiedene Wege pflegen.
 | **PK-232 / PK-232MBX** (AEA/Timewave) | RS-232 | Terminal: `KISS ON`, dann `RESTART` | `C0 FF C0` | zwei Funkports (HF/VHF): Port vor dem Umschalten wählen, im Test prüfen; Firmware-Stand prüfen |
 | **TNC2** (bzw. Nachbauten) – nur der Vollständigkeit halber | RS-232 | **reines KISS-EPROM vorausgesetzt**: TNC ist nach dem Einschalten sofort in KISS, keine Init-Zeilen | – | andere EPROMs (TAPR mit `KISS ON`, TheFirmware/Hostmode) werden nicht unterstützt |
 | **Kenwood TM-D710** | COM-Buchse am Bedienteil (PG-5G), 9600 Bd (bei Gerhard COM7) | TNC-Taste bis PACKET (nicht APRS), dann Terminal: `HBAUD 1200` + `KISS ON` + `RESTART` – von Gerhard am Gerät geprüft (22.10.2026) | `C0 FF C0`, dann `KISS OFF` | 1200/9600 Bd; Datenband A/B im Menü; kleiner Puffer → PACLEN/Fenster vorsichtig |
+| **TNC7multi** (IfD Güttner) – ergänzt 29.10.2026 | USB (FTDI, virtueller COM, 115200 Bd) oder RS232 mit Nullmodemkabel (38400 Bd) | Drehschalter **1k2** bzw. **9k6** = KISS/SMACK ab dem Einschalten, keine Init-Zeilen | nur durch Neustart (Schalter) | SMACK (KISS mit CRC-16), kisshub sendet mit CRC; Modulationsspannung nur im Conf-Modus |
 | **Kenwood TH-D74** | USB (virtueller COM) oder Bluetooth-SPP | im Gerätemenü KISS-Mode einschalten (keine Init-Zeilen) | Menü | 1200/9600 Bd; Datenband im Menü; Bluetooth-Abbrüche → Hub muss neu verbinden |
 | **Kenwood TH-D75** | USB oder Bluetooth-SPP | wie TH-D74, Menü | Menü | Firmware-Stand prüfen (KISS-Verhalten über USB) |
 

@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- kisshub 2026.10.29: **TNC7multi** (IfD) als neues Profil `tnc7multi` – Drehschalter 1k2/9k6,
+  kein Init-Dialog, USB 115200 Bd bzw. RS232 38400 Bd, KISS-Parameter mit den Werten aus dem
+  Handbuch (TXDELAY 150 ms, P 64, SlotTime 50 ms). **SMACK** (KISS mit CRC-16): `[tnc] smack`,
+  Standard `yes` beim TNC7multi; Frames mit falscher Prüfsumme werden verworfen und gezählt.
+  `kisshub.bat -p tnc7multi`, Beschreibung MANUAL 3.3a. Funktest steht aus.
+
 - **Testbed Teil 2** (PLANUNG 27.2): simulierter 1200-Bd-Funkkanal im AXUDP-Weg (gemeinsame
   Frequenz, CSMA, Kollisionen, versteckte Stationen, Verlust je Profil good/medium/poor),
   bis 30 User, eigener Client per `tbclient-testbed.conf`, `tbtest run -t 0` bis Strg+C,
