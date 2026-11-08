@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 08.11.2026 (CR86 erfasst)
+Stand: 08.11.2026 (CR79 Stufe 2 umgesetzt)
 
 ## Übersicht
 
@@ -59,7 +59,7 @@ Stand: 08.11.2026 (CR86 erfasst)
 | 50 | Monitor: alter Monitor aus den Settings raus, ohne „fm“, Rufzeichen farbig, Filter nach Text und nach TinyBox-Sonderframes, Clear | ✅ siehe unten |
 | 53 | TinyBox-Web-GUI: Monitor auf schwarzem Hintergrund (wie im Client) | ✅ siehe unten |
 | 73 | Benutzerprofil: Name, Locator, Home-BBS in TinyBox und Client (Terminal-Fragen, Formular im Client, `//PROF`, `//WHOIS`) | ✅ siehe unten (Funktest offen) |
-| 79 | APRS-Statistik: Netzgraph (Bubbles, Knoten, Wege) mit Filter nach Paketart, Geräte-Torte | ✅ Stufe 1 siehe unten (Stufe 2 offen) |
+| 79 | APRS-Statistik: Netzgraph (Bubbles, Knoten, Wege) mit Filter nach Paketart, Geräte-Torte | ✅ Stufe 1 und 2 siehe unten |
 | 82 | TinyBox: Sysop-Befehl `RELOAD` – `tinybox.conf` neu einlesen, ohne die User zu trennen | ✅ siehe unten |
 | 83 | TinyBox-Web-GUI: Frame-Monitor auch im AGW-Mode – gehörte Frames (Stufe 1) und eigene gesendete Frames über den Direwolf-Fork (Stufe 2) | ✅ siehe unten (Funktest offen) |
 | 84 | Kommentar auf eine Nachricht aus der History: Text statt „message #n“ | ✅ siehe unten (Funktest offen) |
@@ -2385,7 +2385,7 @@ Auf Vorschlag Claude, freigegeben von OE3GAS (08.11.2026). Fähigkeit `FUN`
 Eingehende Connects und der Kanal des Mail-Abgleichs zählen mit. Alt+1 … Alt+9 schalten um,
 Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 
-## CR79 – APRS-Statistik: Netzgraph und Geräte-Torte (✅ Stufe 1, 07.11.2026)
+## CR79 – APRS-Statistik: Netzgraph und Geräte-Torte (✅ Stufe 1 07.11.2026, Stufe 2 08.11.2026)
 
 ### Erfassung (OE3GAS, 07.11.2026)
 
@@ -2424,12 +2424,33 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
     Farben, der Rest als „Other“. Klick auf ein Stück oder eine Zeile filtert den Graphen auf die
     Stationen mit diesem Gerät (Chip „Device: … ×“ hebt es auf).
 
-### Stufe 2 (offen, Ideen OE3GAS/Claude)
+### Stufe 2 (✅ 08.11.2026, Ideen OE3GAS/Claude)
 
 - **Zeitachse:** Regler über das Zeitfenster, Kanten blenden auf und ab – man sieht, wann ein
   Digi ausfällt oder ein Mobiler durchs Netz wandert.
 - **Kanten nach Hop-Typ:** kräftig für einen Hop über WIDE1, blass für WIDE2-2-Fluten.
 - **Kanal-Health:** roter Rand an Digis, über die viele „unchanged repeats“ laufen (Sins).
+
+### Umsetzung Stufe 2 (Client 2026.11.08.13)
+
+- **Daten** (`AprsStats.graph`): jeder Weg hat zusätzlich `tb` – Frames je Zeitabschnitt
+  (`GRAPH_BUCKETS` = 24 über das Fenster, `bucket_sec` in der Antwort) – und `hop`, den Hop-Typ
+  (`hop_type()` aus den angeforderten Hops der Aliase): `direct` (kein Pfad), `wide1`
+  (WIDE1-1), `wide2` (WIDE2-1, WIDE1-1,WIDE2-1, WIDE2-2), `flood` (mehr, oder „long path“).
+  Digipeater bekommen `through` (Frames über ihn), `rep` (Anteil), `rep_n` und `rep_calls`:
+  Frames von Stationen, die die Sünden-Liste als „unchanged repeat“ oder „too often“ führt.
+  Test: `test_graph_stage2`.
+- **Zeitachse:** Regler „Time“ unter den Filtern. Ein Sechstel des Fensters gleitet darüber,
+  ganz rechts = ganzes Fenster; ▶ spielt Abschnitt für Abschnitt ab (0,7 s, läuft über die
+  15-s-Aktualisierung weiter). Wege und Bubbles ohne Frames im Ausschnitt blenden auf 6 % aus,
+  die Linienstärke folgt den Frames im Ausschnitt (auf das ganze Fenster skaliert, damit sich
+  Abschnitte vergleichen lassen). Die Knoten bleiben stehen. Daneben die Uhrzeit des
+  Ausschnitts.
+- **Linien nach Hop-Typ:** je Link der Typ mit den meisten Frames – kein Pfad/WIDE1 kräftig,
+  WIDE2 blass, Flood sehr blass und gepunktet; zweite Legendenzeile; im Tooltip der Link die
+  Aufteilung („WIDE2 12, flood 3“).
+- **Kanal-Health:** roter Ring um Digipeater ab 10 % unnötige Wiederholungen (mind. 3 Frames),
+  Ringstärke nach Anteil; Tooltip und Hover-Zeile nennen Anteil und die Stationen.
 
 
 ## CR80 – TBClient-Ansicht in drei Spalten, Aktionen rechts (✅ 08.11.2026)

@@ -1,0 +1,5 @@
+- APRS-Netzgraph: Zeitregler mit Play, Wege blenden
+  im Zeitfenster auf und ab.
+- Linien nach Pfad: WIDE1 kraeftig, WIDE2 blass, Flood
+  gestrichelt.
+- Roter Ring an Digis mit vielen unnoetigen Wiederholungen.

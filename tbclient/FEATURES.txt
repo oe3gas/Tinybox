@@ -238,6 +238,12 @@ Station
   Drei Ansichten: Hop-Radar (Ring = Hops, Winkel = Richtung), Karte (echte
   Richtung, Entfernung), Kraft. Filter nach Paketart und min. Frames je Link;
   Geraete-Torte (Frames oder Stationen), ein Klick filtert den Graphen.
+  Zeitachse: Regler ueber das Zeitfenster (ein Sechstel davon gleitet, ganz
+  rechts = alles) und Play - Wege und Bubbles ohne Frames im Ausschnitt
+  blenden aus, man sieht Digi-Ausfaelle und wandernde Mobile. Linien nach
+  Pfad: kein Pfad/WIDE1 kraeftig, WIDE2 blass, Flood (WIDE3, long path)
+  blass gestrichelt. Roter Ring an Digipeatern, ueber die viele unnoetige
+  Wiederholungen laufen (unveraenderte Pakete, zu oft gebakt).
 - Stationsseite je Rufzeichen (Klick auf ein Rufzeichen im Monitor oder in
   der Statistik): Rolle, Geraet, Entfernung, Art der Frames, Frames/h,
   Aktivitaet nach Wochentag/Stunde, Bakenabstaende, Wege zu dir, Leistung als

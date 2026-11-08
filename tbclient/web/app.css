@@ -670,11 +670,25 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
              paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .gr-label { fill: var(--muted); font: 11px ui-monospace, Consolas, monospace; pointer-events: none;
             paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
-.gr-link { fill: none; stroke: var(--muted); stroke-opacity: .55; stroke-linecap: round; transition: stroke-opacity .15s; }
+.gr-link { fill: none; stroke: var(--muted); stroke-opacity: var(--so, .55); stroke-linecap: round;
+  transition: stroke-opacity .15s, stroke-width .45s, opacity .45s; }
+/* CR79 stage 2: line style by hop type */
+.gr-link.gr-h-wide1 { --so: .75; }
+.gr-link.gr-h-wide2 { --so: .4; }
+.gr-link.gr-h-flood { --so: .22; stroke-dasharray: 2 4; }
+.gr-link.gr-off, .gr-node.gr-off { opacity: .06; }
+.gr-rep { fill: none; stroke: #d03b3b; stroke-opacity: .9; }
+.gr-repdot { border: 2px solid #d03b3b; }
+.gr-lnk { display: inline-block; vertical-align: middle; }
+.gr-time { margin-top: -2px; }
+.gr-tlab { font-size: 12px; color: var(--muted); }
+.gr-play { min-width: 2.4em; padding: 2px 8px; }
+.gr-trange { flex: 1; min-width: 160px; max-width: 520px; }
+.gr-tl { font-size: 12px; color: var(--text); font-family: ui-monospace, Consolas, monospace; min-width: 9em; }
 .gr-link.gr-inet { stroke: #1baf7a; stroke-dasharray: 5 4; }
 .gr-link.gr-hot { stroke-opacity: .95; }
 .gr-link.gr-dim { stroke-opacity: .07; }
-.gr-node { transition: opacity .15s; }
+.gr-node { transition: opacity .45s; }
 .gr-node.gr-dim { opacity: .25; }
 .gr-click { cursor: pointer; }
 .gr-tip { font-size: 13px; color: var(--muted); min-height: 1.5em; margin: 2px 0 8px; }

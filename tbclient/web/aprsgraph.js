@@ -3,7 +3,9 @@
 // (stations, digipeaters, iGates, us) and ways sender [-> iGate] -> digi ... -> us, summed
 // per packet type and device. Everything here is plain SVG, no library (the client runs
 // without internet). Three layouts: hop radar, map, force. Filters: packet type, device
-// (click in the pie), minimum frames per link.
+// (click in the pie), minimum frames per link. Stage 2: time axis (slider + play, links fade
+// in and out), line style by hop type (WIDE1 strong, WIDE2 paler, flood pale dashed), red
+// ring at digipeaters that carry many unneeded repeats.
 "use strict";
 
 const AprsGraph = (() => {
@@ -15,6 +17,11 @@ const AprsGraph = (() => {
   const RAD = Math.PI / 180;
   // state survives the 15 s refresh of the page
   let mode = "radar", cat = "all", dev = null, minF = 1, pieBy = "frames";
+  let tpos = null;                         // stage 2: last bucket of the time slice, null = all
+  let playTimer = 0, playing = false;      // playing survives the 15 s redraw of the page
+  const HOPS = ["direct", "wide1", "wide2", "flood"];
+  const HOP_TXT = { direct: "no path", wide1: "WIDE1", wide2: "WIDE2", flood: "flood" };
+  const REP_MIN = 0.1;                      // red ring from 10 % unneeded repeats on
   try { mode = localStorage.getItem("tbc-aprs-graph") || "radar"; } catch (e) { /* ok */ }
 
   function el(tag, cls, text) {
@@ -197,21 +204,35 @@ const AprsGraph = (() => {
     if (mode === "geo" && !L.home) mode = "radar";
     const pass = (w) => (cat === "all" || w.cat === cat) && (!dev || w.dev === dev);
     const links = new Map();
-    for (const n of nodes.values()) n.f = 0;
+    const B = g.buckets || 0;
+    const zero = () => new Array(B).fill(0);
+    for (const n of nodes.values()) { n.f = 0; n.tb = zero(); }
     let total = 0;
     for (const w of g.ways) {
       if (!pass(w)) continue;
       total += w.n;
-      for (const c of new Set(w.chain)) if (nodes.has(c)) nodes.get(c).f += w.n;
+      const tb = w.tb || zero();
+      for (const c of new Set(w.chain)) {
+        const n = nodes.get(c);
+        if (!n) continue;
+        n.f += w.n;
+        tb.forEach((v, i) => { n.tb[i] += v; });
+      }
       for (let i = 0; i < w.chain.length - 1; i++) {
         const k = w.chain[i] + ">" + w.chain[i + 1];
-        const l = links.get(k) || { a: w.chain[i], b: w.chain[i + 1], n: 0, inet: false, from: new Set() };
+        const l = links.get(k) || { a: w.chain[i], b: w.chain[i + 1], n: 0, inet: false, from: new Set(),
+                                    tb: zero(), hops: {} };
         l.n += w.n;
         l.inet = l.inet || (w.inet && i === 0);
         l.from.add(w.chain[0]);
+        tb.forEach((v, j) => { l.tb[j] += v; });
+        const hp = w.hop || "direct";
+        l.hops[hp] = (l.hops[hp] || 0) + w.n;
         links.set(k, l);
       }
     }
+    // the hop type of a link: the one with the most frames over it
+    for (const l of links.values()) l.hop = HOPS.reduce((b, x) => (l.hops[x] || 0) > (l.hops[b] || 0) ? x : b, "direct");
     const linkMax = Math.max(1, ...[...links.values()].map((l) => l.n));
     const LW = (n) => 1.2 + 6.5 * Math.sqrt(n / linkMax);
     const vis = (l) => l.n >= minF;
@@ -238,6 +259,32 @@ const AprsGraph = (() => {
     mf.append(rng, rv);
     ctl.append(layoutSeg, catSeg, mf);
     box.append(ctl);
+
+    // stage 2: time axis - a slice of the window (a sixth) that slides, or the whole window
+    const SL = Math.max(1, Math.round(B / 6));
+    const tctl = el("div", "gr-ctl gr-time");
+    const play = el("button", "sm gr-play", "▶");
+    play.type = "button";
+    play.title = "Play the window slice by slice";
+    const tr = el("input");
+    tr.type = "range";
+    tr.min = String(SL - 1);
+    tr.max = String(B);                    // B = the whole window
+    tr.className = "gr-trange";
+    tr.setAttribute("aria-label", "Time slice");
+    if (tpos !== null && (tpos < SL - 1 || tpos >= B)) tpos = null;
+    tr.value = String(tpos === null ? B : tpos);
+    const tl = el("span", "gr-tl");
+    const hhmm = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const sliceTxt = () => {
+      if (tpos === null) return "whole window";
+      const t0 = g.since + (tpos - SL + 1) * g.bucket_sec, t1 = g.since + (tpos + 1) * g.bucket_sec;
+      return hhmm(t0) + " – " + hhmm(t1);
+    };
+    tl.textContent = sliceTxt();
+    const tlab = el("span", "gr-tlab", "Time");
+    tctl.append(tlab, play, tr, tl);
+    if (B) box.append(tctl);
     if (dev) {
       const chip = el("button", "sm gr-chip", "Device: " + dev + "  ×");
       chip.type = "button";
@@ -255,6 +302,19 @@ const AprsGraph = (() => {
     }
     lg.append(el("span", "", "bubble and line = frames · green dashed = internet → radio · dotted ring = position guessed"));
     box.append(lg);
+    const lg2 = el("div", "gr-legend");
+    for (const [cls, t] of [["gr-h-wide1", "no path / WIDE1"], ["gr-h-wide2", "WIDE2"], ["gr-h-flood", "flood (WIDE3, long path)"]]) {
+      const s2 = el("span", "");
+      const ln = sv("svg", { width: 26, height: 10, class: "gr-lnk" });
+      ln.append(sv("line", { x1: 1, y1: 5, x2: 25, y2: 5, class: "gr-link " + cls, "stroke-width": 3 }));
+      s2.append(ln, t);
+      lg2.append(s2);
+    }
+    const rs = el("span", "");
+    const rd = el("i", "gr-dot gr-repdot");
+    rs.append(rd, "unneeded repeats through the digipeater");
+    lg2.append(rs);
+    box.append(lg2);
 
     // the drawing
     const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, class: "gr-svg", role: "img", "aria-label": "APRS network graph" });
@@ -289,9 +349,11 @@ const AprsGraph = (() => {
     background();
     const edges = [...links.values()].filter(vis);
     const epaths = edges.map((l) => {
-      const p = sv("path", { class: "gr-link" + (l.inet ? " gr-inet" : ""), "stroke-width": LW(l.n).toFixed(1), "marker-end": "url(#gr-arrow)" });
+      const p = sv("path", { class: "gr-link gr-h-" + (l.hop === "direct" ? "wide1" : l.hop) + (l.inet ? " gr-inet" : ""),
+                             "stroke-width": LW(l.n).toFixed(1), "marker-end": "url(#gr-arrow)" });
       const t = sv("title");
-      t.textContent = `${l.a} → ${l.b}: ${l.n} frames`;
+      const mix = HOPS.filter((x) => l.hops[x]).map((x) => `${HOP_TXT[x]} ${l.hops[x]}`).join(", ");
+      t.textContent = `${l.a} → ${l.b}: ${l.n} frames (${mix})`;
       p.append(t);
       gl.append(p);
       return p;
@@ -308,6 +370,15 @@ const AprsGraph = (() => {
       const t = sv("text", { y: (R(n) + 12).toFixed(1), class: "gr-label", "text-anchor": "middle" });
       t.textContent = n.call;
       gg.append(c, t);
+      if (n.kind !== "me" && n.rep >= REP_MIN && n.rep_n >= 3) {     // stage 2: channel health
+        const ring = sv("circle", { r: (R(n) + 3.5).toFixed(1), class: "gr-rep",
+                                    "stroke-width": (1.5 + 4 * Math.min(1, n.rep)).toFixed(1) });
+        const rt = sv("title");
+        rt.textContent = `${Math.round(100 * n.rep)} % of the frames through ${n.call} are unneeded repeats`
+          + (n.rep_calls && n.rep_calls.length ? ` (${n.rep_calls.join(", ")})` : "");
+        ring.append(rt);
+        gg.insertBefore(ring, c);
+      }
       gn.append(gg);
       return gg;
     });
@@ -327,6 +398,50 @@ const AprsGraph = (() => {
       edges.forEach((l, i) => epaths[i].setAttribute("d", curve(l, P)));
     }
     place(pos);
+
+    // stage 2: the time slice - links and bubbles without frames in it fade out, the width
+    // follows the frames in the slice (scaled to the whole window, so slices compare)
+    const sumT = (tb) => { let k = 0; for (let i = Math.max(0, tpos - SL + 1); i <= tpos; i++) k += tb[i] || 0; return k; };
+    function applyTime() {
+      tl.textContent = sliceTxt();
+      edges.forEach((l, i) => {
+        const k = tpos === null ? l.n : sumT(l.tb);
+        epaths[i].classList.toggle("gr-off", k === 0);
+        epaths[i].setAttribute("stroke-width", (k ? LW(k) : 1).toFixed(1));
+      });
+      shown.forEach((n, i) => {
+        if (n.kind === "me") return;
+        ngs[i].classList.toggle("gr-off", tpos !== null && sumT(n.tb) === 0);
+      });
+    }
+    function stopPlay() {
+      if (playTimer) clearInterval(playTimer);
+      playTimer = 0;
+      playing = false;
+      play.textContent = "▶";
+    }
+    function runPlay() {
+      if (playTimer) clearInterval(playTimer);
+      playing = true;
+      play.textContent = "⏸";
+      playTimer = setInterval(() => {
+        if (!tr.isConnected) { clearInterval(playTimer); return; }   // redrawn: the new card goes on
+        if (tpos === null || tpos >= B - 1) { stopPlay(); tpos = null; tr.value = String(B); applyTime(); return; }
+        tpos += 1;
+        tr.value = String(tpos);
+        applyTime();
+      }, 700);
+    }
+    tr.addEventListener("input", () => { stopPlay(); tpos = +tr.value >= B ? null : +tr.value; applyTime(); });
+    play.addEventListener("click", () => {
+      if (playing) { stopPlay(); return; }
+      tpos = tpos === null || tpos >= B - 1 ? SL - 1 : tpos + 1;
+      tr.value = String(tpos);
+      applyTime();
+      runPlay();
+    });
+    if (tpos !== null) applyTime();
+    if (playing && B) runPlay();
     let anim = 0;
     function switchTo(v) {                 // glide from one layout to the next
       if (v === mode) return;
@@ -370,6 +485,7 @@ const AprsGraph = (() => {
         s += ` · ${n.hop === 1 ? "heard directly" : (n.hop - 1) + " hop" + (n.hop > 2 ? "s" : "")}`;
       }
       if (n.dev) s += " · " + n.dev;
+      if (n.rep >= REP_MIN && n.rep_n >= 3) s += ` · ${Math.round(100 * n.rep)} % unneeded repeats`;
       tip.textContent = s;
     }
     shown.forEach((n, i) => {

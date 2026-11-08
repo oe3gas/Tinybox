@@ -117,6 +117,28 @@ class StatsTests(unittest.TestCase):
         me = next(n for n in g["nodes"] if n["call"] == "OE3GAS-10")
         self.assertIsNotNone(me["lat"])                               # our locator
 
+    def test_graph_stage2(self):                 # CR79 stage 2: time, hop type, channel health
+        for i in range(6):                        # the same status every 2 min: unchanged repeat
+            feed(self.st, T0 + 120 * i, "OE3ABC", ["OE3XWJ-10", "WIDE2-1"], [1, 0],
+                 b">same old status", dest="APRS")
+        feed(self.st, T0 + 30, "OE1XYZ", ["OE3XWJ-10", "WIDE1"], [1, 1],
+             b"!4807.19N/01656.63E-hello", dest="APRS")
+        feed(self.st, T0 + 40, "OE3KLM", ["WIDE1", "WIDE3-3"], [0, 0], b"!/6,fxRISM} st", dest="APOT2A")
+        g = self.st.graph(0, now=T0 + 720, me="OE3GAS-10")
+        self.assertEqual(g["buckets"], 24)
+        hops = {w["chain"][0]: w["hop"] for w in g["ways"]}
+        self.assertEqual(hops["OE3ABC"], "wide2")
+        self.assertEqual(hops["OE1XYZ"], "wide1")
+        self.assertEqual(hops["OE3KLM"], "flood")
+        w = next(w for w in g["ways"] if w["chain"][0] == "OE3ABC")
+        self.assertEqual(sum(w["tb"]), w["n"])
+        self.assertEqual(len([x for x in w["tb"] if x]), 6)          # spread over the time axis
+        digi = next(n for n in g["nodes"] if n["call"] == "OE3XWJ-10")
+        self.assertEqual(digi["through"], 7)
+        self.assertEqual(digi["rep_n"], 6)
+        self.assertEqual(digi["rep_calls"], ["OE3ABC"])
+        self.assertAlmostEqual(digi["rep"], 0.86)
+
     def test_country(self):
         self.assertEqual(country("OE3GAS-1"), "Austria")
         self.assertEqual(country("OK1KZE-1"), "Czechia")

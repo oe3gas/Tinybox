@@ -41,6 +41,19 @@ KEEP_SEC = 7 * 86400          # records older than this are dropped
 MAX_RECORDS = 200_000
 PRUNE_SEC = 3600              # CR64: tidy the file this often while running
 GRAPH_MAX_STATIONS = 80       # CR79: the network graph shows the busiest senders only
+GRAPH_BUCKETS = 24            # CR79 stage 2: time axis of the graph, buckets over the window
+REPEAT_KINDS = ("unchanged repeat", "too often")   # CR79 stage 2: frames the channel did not need
+
+
+def hop_type(req: int, flags: list) -> str:
+    """CR79 stage 2: how far a frame asked to be digipeated (req = sum of the n of its
+    WIDEn-N / xxn-N aliases): 'direct' (no alias), 'wide1' (WIDE1-1, fill-in digis),
+    'wide2' (WIDE2-1, WIDE1-1,WIDE2-1, WIDE2-2), 'flood' (more, or a long path)."""
+    if "longpath" in flags or req >= 4:
+        return "flood"
+    if req >= 2:
+        return "wide2"
+    return "wide1" if req == 1 else "direct"
 BAUD = 1200
 TXDELAY_SEC = 0.3             # assumed key-up time per frame (air time estimate)
 
@@ -335,11 +348,16 @@ class AprsStats:
         """Who reaches us over whom: nodes (stations, digipeaters, iGates, us) and the ways.
 
         A way is sender [-> iGate] -> digipeater ... -> me; equal ways with the same packet
-        type and device are summed, so the GUI can filter by type and device itself."""
+        type, device and hop type are summed, so the GUI can filter by type and device itself.
+        Stage 2: each way has its frames per time bucket ("tb", GRAPH_BUCKETS over the
+        window) and its hop type; a digipeater has the share of frames through it that the
+        channel did not need ("rep", from stations with unchanged repeats / too many beacons)."""
         now = time.time() if now is None else now
         me = (me or "ME").upper()
         start = max(self.since, now - window) if window else self.since
         recs = [r for r in self.recs if r["t"] >= start]
+        bsec = max(1.0, (now - start) / GRAPH_BUCKETS)
+        tbs: dict[tuple, list] = {}
         busiest = {c for c, _ in Counter(r["origin"] for r in recs).most_common(GRAPH_MAX_STATIONS)}
         pos: dict[str, tuple] = {}
         for r in self.recs:                          # last known position, also outside the window
@@ -364,25 +382,48 @@ class AprsStats:
                 chain.append(me)
             if len(chain) < 2:
                 continue                             # our own frame, heard directly
-            ways[(tuple(chain), r["cat"], r["dev"] or "(unknown)", bool(r["gate"]))] += 1
+            key = (tuple(chain), r["cat"], r["dev"] or "(unknown)", bool(r["gate"]),
+                   hop_type(r.get("req", 0), r.get("flags", [])))
+            ways[key] += 1
+            tb = tbs.setdefault(key, [0] * GRAPH_BUCKETS)
+            tb[min(GRAPH_BUCKETS - 1, max(0, int((r["t"] - start) / bsec)))] += 1
             own[r["origin"]] += 1
             if r["dev"]:
                 dev[r["origin"]] = r["dev"]
             if r["lat"] is not None:
                 spots[r["origin"]].append((r["lat"], r["lon"]))
         calls = {c for (ch, *_rest) in ways for c in ch}
+        # channel health: frames through a digipeater from stations that repeat unchanged
+        # packets or beacon too often (the same judgement as the "sins" list)
+        span = max(60.0, now - start)
+        rep_calls = {x["call"] for x in self._sins(recs, len(recs), span) if x["kind"] in REPEAT_KINDS}
+        through, rep, rep_from = Counter(), Counter(), defaultdict(Counter)
+        for r in recs:
+            for d in set(r["digis"]):
+                through[d] += 1
+                if r["origin"] in rep_calls:
+                    rep[d] += 1
+                    rep_from[d][r["origin"]] += 1
         nodes = []
         for c in sorted(calls):
             kind = "me" if c == me else "igate" if c in gates else "digi" if c in digis else "station"
             pts = spots.get(c, [])
             moving = len(pts) >= 2 and max(_dist(pts[0], p) for p in pts) > 1.0
             p = self.home if c == me else pos.get(c)
-            nodes.append({"call": c, "kind": kind, "frames": own.get(c, 0), "dev": dev.get(c, ""),
-                          "moving": moving, "lat": p[0] if p else None, "lon": p[1] if p else None})
+            node = {"call": c, "kind": kind, "frames": own.get(c, 0), "dev": dev.get(c, ""),
+                    "moving": moving, "lat": p[0] if p else None, "lon": p[1] if p else None}
+            if through.get(c):
+                node["through"] = through[c]
+                node["rep"] = round(rep[c] / through[c], 2)
+                node["rep_n"] = rep[c]
+                node["rep_calls"] = [x for x, _ in rep_from[c].most_common(5)]
+            nodes.append(node)
         return {"window": window, "since": start, "now": now, "me": me, "have_home": bool(self.home),
+                "buckets": GRAPH_BUCKETS, "bucket_sec": round(bsec, 1),
                 "nodes": nodes,
-                "ways": [{"chain": list(ch), "cat": cat, "dev": d, "inet": inet, "n": k}
-                         for (ch, cat, d, inet), k in ways.most_common()]}
+                "ways": [{"chain": list(ch), "cat": cat, "dev": d, "inet": inet, "hop": hop, "n": k,
+                          "tb": tbs[(ch, cat, d, inet, hop)]}
+                         for (ch, cat, d, inet, hop), k in ways.most_common()]}
 
     # --- one station (CR65) -----------------------------------------------------------
     def station(self, call: str, window: int = 0, now: float | None = None) -> dict:
