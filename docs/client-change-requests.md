@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 08.11.2026 (CR84 umgesetzt)
+Stand: 08.11.2026 (CR86 erfasst)
 
 ## Übersicht
 
@@ -64,6 +64,7 @@ Stand: 08.11.2026 (CR84 umgesetzt)
 | 83 | TinyBox-Web-GUI: Frame-Monitor auch im AGW-Mode – gehörte Frames (Stufe 1) und eigene gesendete Frames über den Direwolf-Fork (Stufe 2) | ✅ siehe unten (Funktest offen) |
 | 84 | Kommentar auf eine Nachricht aus der History: Text statt „message #n“ | ✅ siehe unten (Funktest offen) |
 | 85 | Erwähnungs-Alarm: Popup des Betriebssystems und „BK“ in CW bei @CALL | ✅ siehe unten (Funktest offen) |
+| 86 | Dateien im Board-Chat (LZHUF), wie Bilder (CR12) und Dateien im TBClient-Chat (CR78 Stufe 7) | offen, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -2729,3 +2730,34 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Geprüft mit TinyBox + Client über den Telnet-Testport und einem zweiten User (Playwright):
   Zeile ohne Erwähnung → nichts; `hallo @oe3gas …` → ein Popup `OE3TEC in TREFF`, ein BK; ist
   das Fenster vorne → nur BK.
+
+## CR86 – Dateien im Board-Chat (offen, 08.11.2026)
+
+### Erfassung (OE3GAS, 08.11.2026)
+
+- Den LZHUF-Dateitransfer gibt es bisher nur von Client zu Client (CR78 Stufe 7,
+  `tbclient/peerfile.py`). Neu: Dateien auch in einem **Board-Chat** teilen.
+
+### Vorschlag (Claude, Details bei der Umsetzung)
+
+- **Wie die Bilder (CR12), nicht wie Stufe 7:** Im Board gibt es viele Empfänger, und der Sender ist
+  oft nicht mehr da. Die Datei liegt deshalb **in der TinyBox**, nicht beim Sender. Upload einmal,
+  jeder holt sie bei Bedarf per I-Frame von der TinyBox.
+- **Über Funk im Chat nur der Verweis**, wie bei Stufe 7: `~%<hash> <bytes> <bytes on air> <name>`.
+  Terminal-Teilnehmer lesen `[File name.txt 12.3 KB - TinyBox client only]`.
+- **Packen im Client:** LZHUF (B0) oder roh, wenn LZHUF nichts bringt (ZIP, JPEG). Die TinyBox
+  speichert den Blob unter seinem Hash, entpackt nicht und prüft nur die Größe.
+  Der Empfänger prüft den Hash nach dem Entpacken.
+- **Upload/Download** wie bei den Bildern: `//FPUT <hash> <z|r> <bytes>` → `//FGO <hash> <have>` →
+  Bytes am Stück → `//FOK`; `//FGET <hash> [<offset>]` → `//F <hash> <z|r> <offset> <total>` + Bytes.
+  Abgebrochen geht es beim Offset weiter. Stückweise an Direwolf mit Pause wie bei den Bildern,
+  damit Chat-Zeilen dazwischen durchkommen. Fortschritt in der Bubble.
+- **Vor dem Hochladen** sieht der User Größe auf Funk und Dauer für Upload und Laden (wie CR12) und
+  entscheidet. Laden nur per Antippen, nie automatisch.
+- **Sysop:** Maximalgröße `[chat] file_max` (Vorschlag 16k), pro Board abschaltbar (`nofile`
+  analog `noimg`), keine Dateien in Live-Boards. Aufbewahrung wie die History: eine Datei wird
+  gelöscht, wenn keine Chat-Zeile sie mehr verwendet (Purge wie bei den Bildern).
+- Neue Fähigkeit `BFILE` (Client ↔ TinyBox); nur über Funk/AXUDP, nicht Telnet. Erlaubnis beim
+  Betreten (`//IN … file`), wie `img`.
+- Offen zu entscheiden: Maximalgröße, ob bestimmte Dateitypen gesperrt werden (z. B. `.exe`), und ob
+  der Sysop hochgeladene Dateien in der Web-GUI sehen und löschen kann.
