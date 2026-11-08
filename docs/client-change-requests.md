@@ -22,7 +22,7 @@ Stand: 08.11.2026 (CR84 umgesetzt)
 | 13 | History wählbar beim Einchecken („last n lines?“, Enter = keine) | ✅ siehe unten |
 | 14 | Zitatfunktion (Nachricht antippen → Zitieren, gekürzt über der Antwort) | ✅ siehe unten |
 | 15 | @CALL hebt Nachricht beim Empfänger farbig hervor | ✅ (c376e16) |
-| 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | offen – über Funk für Mithörer lesbar |
+| 16 | Anstupsen: Klick auf Call in Teilnehmerliste → kurze persönliche Nachricht als Pop-up mit Klingelton | ✅ mit CR85 (Erwähnungs-Alarm bei `@CALL`: Popup und „BK“ in CW), 08.11.2026 |
 | 17 | „Cry out“: max. 32 Zeichen, sehr große Schrift in einer „Bang!“-Blase | ✅ siehe unten |
 | 18 | Versionskontrolle: Client prüft, ob er aktuell ist; User wird informiert und aufgefordert, die neue Version zu holen | ✅ siehe unten |
 | 19 | Rubriken sind Sysop-Sache: feste Rubrikenliste, User schreiben Bulletins nur an ALL und diese Rubriken (Auswahl im Composer), Forwarding nimmt nur diese Rubriken an | ✅ siehe unten |
