@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+- Client 2026.11.09.2: **Web-GUI nur aus dem eigenen Netz (CR100)** – Anfragen von öffentlichen
+  Adressen bekommen 403 (`[web] allow = lan`, auch 10.x; erweiterbar, z. B. HAMNET 44.0.0.0/8),
+  Host-Prüfung gegen DNS-Rebinding (`[web] hosts` für eigene Namen), POST mit fremdem `Origin`
+  wird abgewiesen. Im eigenen Netz weiter ohne Anmeldung (PLANUNG 29.6 AR3).
 - Alle Teile: **Robustheit CR88 (Audit TB-09, TB-20c, TB-23)** – Zahlen werden nur noch aus den
   Ziffern 0–9 gelesen (`prcore.text.isnum`, 84 Stellen; `²` bestand bisher die Prüfung und ließ
   `int()` scheitern), ein Test hält `isdigit()` aus dem Code. Die Forward-Sitzung endet bei einem

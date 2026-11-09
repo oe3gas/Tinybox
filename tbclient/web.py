@@ -71,7 +71,7 @@ from tinybox import connlog                # CSV and ADIF of the connection log 
 
 from prcore.text import isnum
 
-from . import VERSION, peerfile
+from . import VERSION, peerfile, webguard
 from .core import ClientCore
 
 log = logging.getLogger(__name__)
@@ -113,6 +113,9 @@ POLL_SEC = 25
 class WebServer:
     def __init__(self, core: ClientCore) -> None:
         self.core = core
+        self.allow = webguard.parse_allow(core.cfg.web_allow)     # CR100
+        self.hosts = webguard.parse_hosts(core.cfg.web_hosts)
+        self._refused: set[str] = set()                           # log each address once
 
     async def start(self) -> asyncio.base_events.Server:
         cfg = self.core.cfg
@@ -121,6 +124,21 @@ class WebServer:
         return server
 
     async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        peer = writer.get_extra_info("peername")
+        addr = peer[0] if isinstance(peer, tuple) and peer else None
+        if not webguard.peer_allowed(addr, self.allow):              # CR100
+            if addr not in self._refused and len(self._refused) < 1000:
+                self._refused.add(addr)
+                log.warning("web GUI: refused %s (not in [web] allow = %s)", addr,
+                            self.core.cfg.web_allow)
+            try:                       # read the request first, so the browser shows the answer
+                await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 5)
+                await self._send(writer, 403, {"error": "not from the own network"})
+            except (asyncio.TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError,
+                    ConnectionError, OSError):
+                pass
+            writer.close()
+            return
         try:
             while True:
                 keep = await self._request(reader, writer)
@@ -151,6 +169,13 @@ class WebServer:
             return False
         body = await reader.readexactly(length) if length else b""
         url = urlsplit(target)
+        if not webguard.host_allowed(headers.get("host"), self.hosts):   # CR100: DNS rebinding
+            await self._send(writer, 403, {"error": "unknown host name, see [web] hosts"})
+            return False
+        if method == "POST" and not webguard.origin_allowed(headers.get("origin"),
+                                                            headers.get("host")):
+            await self._send(writer, 403, {"error": "foreign origin"})
+            return False
         res = await self._route(method, url.path, parse_qs(url.query), headers, body)
         status, payload, ctype = res[:3]
         await self._send(writer, status, payload, ctype, res[3] if len(res) > 3 else None)

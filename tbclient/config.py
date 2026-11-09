@@ -10,6 +10,8 @@ from pathlib import Path
 from prcore import release, termcolor
 from prcore.ax25.link import parse_calls
 
+from . import webguard
+
 CALL_RE = re.compile(r"^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$")
 
 
@@ -48,6 +50,8 @@ class Config:
     radio_port: int = 0
     web_host: str = "0.0.0.0"
     web_port: int = 7744
+    web_allow: str = "lan"            # CR100: who may call the web GUI (tbclient/webguard.py)
+    web_hosts: str = ""               # CR100: extra names the browser may use for the client
     color: str = "auto"               # [console] color: auto | yes | no
     data_dir: Path = Path("data/tbclient")
     update_check: bool = True         # [update] check: GitHub once a day (PLANUNG 24)
@@ -203,6 +207,12 @@ def load(path: str | Path) -> Config:
 
     cfg.web_host = get("web", "host", cfg.web_host)
     cfg.web_port = int(get("web", "port", str(cfg.web_port)))
+    cfg.web_allow = get("web", "allow", cfg.web_allow)
+    cfg.web_hosts = get("web", "hosts", cfg.web_hosts)
+    try:
+        webguard.parse_allow(cfg.web_allow)
+    except webguard.GuardError as exc:
+        raise ConfigError(str(exc)) from None
     try:
         cfg.color = termcolor.check_mode(get("console", "color", cfg.color))
     except ValueError as exc:

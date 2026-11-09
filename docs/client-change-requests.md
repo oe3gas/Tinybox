@@ -78,7 +78,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | offen, siehe unten |
 | 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | offen, siehe unten |
 | 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | offen, siehe unten |
-| 100 | Client-Web-GUI nicht ohne Zugangsschutz im LAN | offen, siehe unten |
+| 100 | Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding und fremde Origins | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3055,7 +3055,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Sofort: Löschen und Abgleich des lokalen Verlaufs nur nach Rückfrage beim User.
 - Danach mit CR93/CR94: Peer-Nachrichten signiert, Verlauf nur mit verifizierter Gegenstelle abgleichen.
 
-## CR100 – Client-Web-GUI nicht ohne Zugangsschutz im LAN (offen, 09.11.2026)
+## CR100 – Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding (✅ 09.11.2026)
 
 ### Erfassung (Claude, 09.11.2026, beim Audit aufgefallen, PLANUNG 11/5)
 
@@ -3067,3 +3067,21 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Vorgabe `host = 127.0.0.1`; LAN nur bewusst und dann mit Zugangstoken (einmal am PC angezeigt,
   als Cookie gespeichert) oder nur über VPN/HAMNET.
 - Schutz gegen Aufrufe fremder Webseiten auf 127.0.0.1 (Host-Header prüfen, CSRF-Token).
+
+### Entscheidung (OE3GAS, 09.11.2026)
+
+- Im selben Netz soll der Client ohne Anmeldung erreichbar bleiben (Handy/Tablet). Ein Token ist am
+  Handy nicht praktikabel → keine Zugriffskontrolle im eigenen Netz (PLANUNG 29.6 AR3).
+- Der Bereich 10.0.0.0/8 muss dabei sein.
+
+### Umsetzung (Client 2026.11.09.2)
+
+- `tbclient/webguard.py`, `[web] allow` (Vorgabe `lan`): nur 127.x, **10.x**, 172.16–31.x,
+  192.168.x, 169.254.x, IPv6 ::1, fc00::/7, fe80::/10 (auch als `::ffff:`-Adresse). Andere Adressen
+  bekommen 403, jede wird einmal im Log gemeldet. `local` = nur dieser PC, `any` = alle, dazu
+  eigene Netze, z. B. `allow = lan, 44.0.0.0/8` (HAMNET). Ungültige Angabe = Fehler beim Start.
+- Host-Prüfung gegen DNS-Rebinding: angenommen werden IP-Adressen, `localhost`, Namen ohne Punkt
+  (PC1), `.local`, `.lan`, `.home`, `.home.arpa`, `.internal`, `.localdomain`, `.fritz.box` und die
+  Namen in `[web] hosts`. Sonst 403.
+- POST mit `Origin` eines anderen Hosts: 403. (Schon vorher: POST nur mit `X-TBClient: 1` und JSON.)
+- `host = 0.0.0.0` bleibt Vorgabe. Tests `tests/test_cr100.py`.

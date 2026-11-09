@@ -53,8 +53,13 @@ version      = 2.2             # 2.2: SABME/SREJ/XID, falls back to 2.0 by itsel
 # srej       = yes
 
 [web]
-host         = 0.0.0.0         # 0.0.0.0 = reachable in the LAN (no login! see PLANUNG.md 11/5)
+host         = 0.0.0.0         # 0.0.0.0 = reachable in the LAN (no login, PLANUNG.md 29.6 AR3)
 port         = 7744
+allow        = lan             # who may call it (CR100): lan = 127.x, 10.x, 172.16-31.x,
+                               # 192.168.x, link-local, IPv6 fc00::/7 | local = this PC only
+                               # | any; add networks: lan, 44.0.0.0/8 (HAMNET), 100.64.0.0/10
+# hosts      =                 # extra names the browser may use (DNS rebinding guard). Always
+                               # fine: IP addresses, PC1, localhost, *.local, *.lan, *.fritz.box
 
 [console]
 color        = auto            # colours in the console window: auto | yes | no

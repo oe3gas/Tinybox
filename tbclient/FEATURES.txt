@@ -3,7 +3,7 @@ TinyBox-Client - Funktionen
 
 Der TinyBox-Client ist Chat und Mailbox fuer die TinyBox mit einer
 Weboberflaeche: am PC drei Spalten, am Handy eine eigene Ansicht
-(im LAN erreichbar).
+(im eigenen Netz erreichbar, nur private Adressen - [web] allow).
 
 (Uebersicht im Repository, wird nicht gesendet. Was in einer Version
 neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als

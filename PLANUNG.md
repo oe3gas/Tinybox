@@ -19,7 +19,7 @@ Stand: 07.10.2026 (Rev. 4) · OE3GAS
 - Planung an den Code angeglichen (Stand Commit 329e67d).
 - Forwarding ist jetzt im Umfang, als abschaltbares Modul (Abschnitt 13). Der Kern ist auf Schema 5: hierarchische Adressen, BID, R:-Zeilen.
 - Chat-Boards (Befehl `C`) sind fertig und jetzt beschrieben (Abschnitt 2a).
-- Client: Web-GUI im LAN/WAN erreichbar, ohne Anmeldung, mobile Oberfläche (Abschnitt 12.1).
+- Client: Web-GUI im eigenen Netz erreichbar (CR100: nur private Adressen), ohne Anmeldung, mobile Oberfläche (Abschnitt 12.1).
 - Befehlssatz, Ereignisse, Konfiguration, Datenhaltung, Projektstruktur und Meilensteine nachgezogen. Entwickelt wird auf PC2 in `C:\Tinybox`, PC1 (`E:\Tinybox`) holt per `git pull`.
 
 **Änderungen gegenüber Rev. 2**
@@ -492,7 +492,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 2. ~~Bulletins nach X Tagen automatisch löschen~~ → umgesetzt: `bulletin_expire_days = 30` (0 = nie).
 3. MQTT: Welcher Broker (lokaler Mosquitto oder extern)? Wofür konkret, also woher kommen die Nachrichten und wer liest die Ausgänge?
 4. MQTT-Eingang: Nur Bulletins oder auch Privatnachrichten an einzelne Calls?
-5. Client-Web-GUI im WAN ohne Anmeldung (Abschnitt 12.1): Wer die Adresse kennt, kann unter dem Rufzeichen des Client-Betreibers senden (Chat, Post). Zu klären, wie das abgesichert wird, z. B. nur über VPN/HAMNET erreichbar oder ein einfaches Zugangstoken.
+5. Client-Web-GUI im WAN ohne Anmeldung (Abschnitt 12.1): Wer die Adresse kennt, kann unter dem Rufzeichen des Client-Betreibers senden (Chat, Post). Zu klären, wie das abgesichert wird, z. B. nur über VPN/HAMNET erreichbar oder ein einfaches Zugangstoken. → Entschieden 09.11.2026 (CR100, 29.6 AR3): im eigenen Netz ohne Anmeldung; Zugriff nur aus privaten Adressbereichen (`[web] allow`), Schutz gegen DNS-Rebinding und fremde Origins. WAN nur über VPN/HAMNET mit bewusst erweitertem `allow`.
 6. ✅ Direwolf: Wie viele Programme gleichzeitig am AGW-Port (`MAX_NET_CLIENTS`)? Relevant für PC2 mit TinyBox, brocastd und ggf. Client.
    Geklärt 28.10.2026: Das Original erlaubt fest **3** AGW-Clients und je `KISSPORT` 3 KISS-TCP-Clients (einkompiliert).
    Ein vierter Client hängt still: TCP-Connect gelingt, aber Direwolf antwortet nicht. Der Fork `oe3gas/direwolf-tinybox`
@@ -1860,7 +1860,7 @@ I = Integrität, A = Authentizität, V = Verfügbarkeit, C = Vertraulichkeit
 | 5 | Alarme und Warnungen | sehr hoch | sehr hoch | **sehr hoch** (Notfunk angedacht) | – | TB-08, 14 |
 | 6 | Knoten: Prozess, Datenbank, Konfiguration | hoch | – | hoch | normal | TB-01, 09, 13, 17, 19, 20c, 23 |
 | 7 | Aussendungen unter dem eigenen Rufzeichen | hoch | – | hoch (Kanal) | – | TB-03, 04, 13, 14, 18 |
-| 8 | Client-PC und lokale Daten, Client-Web-GUI | hoch | hoch | normal | normal | TB-03, 05, 06, 16, 22; Web-GUI ohne Login (11/5) |
+| 8 | Client-PC und lokale Daten, Client-Web-GUI | hoch | hoch | normal | normal | TB-03, 05, 06, 16, 22; Web-GUI ohne Login → AR3, CR100 |
 | 9 | Persönliche Post zwischen Usern | normal | normal | normal | normal | → AR1 |
 | 10 | Chat und TBCHAT zwischen Usern | normal | normal | normal | normal | TB-07 |
 | 11 | Geheimnisse (Partner-Secrets, private Schlüssel) | hoch | – | normal | sehr hoch | künftig |
@@ -1873,7 +1873,7 @@ I = Integrität, A = Authentizität, V = Verfügbarkeit, C = Vertraulichkeit
 | Funk (AGW/KISS) | wer ein Sendegerät in Reichweite hat (auch ohne Lizenz) | mittel | gering, Rufzeichen frei fälschbar |
 | AXUDP | wer den UDP-Port erreicht | keine | hoch bei Internet-Erreichbarkeit |
 | Telnet, Web-Adapter der Box | wer den TCP-Port erreicht | keine | hoch bei Internet-Erreichbarkeit |
-| Client-Web-GUI (Vorgabe `0.0.0.0`, ohne Login) | jeder im LAN, ggf. WAN | keine | **hoch** |
+| Client-Web-GUI (Vorgabe `0.0.0.0`, ohne Login) | jeder im LAN; seit CR100 nur private Adressen | keine | mittel (AR3) |
 | Internet-Austausch (geplant) | das ganze Internet | keine | hoch; nur mit Authentisierung |
 
 ### 29.5 Rahmenbedingungen
@@ -1892,6 +1892,11 @@ I = Integrität, A = Authentizität, V = Verfügbarkeit, C = Vertraulichkeit
   Nicht akzeptiert: Manipulation lokaler Daten auf dem PC eines Users (TB-06 → CR99).
 - **AR2** Kanalüberlastung durch die Sendeleistung eines Angreifers selbst. Nicht akzeptiert: dass
   die eigene Station diese Last vervielfacht (CR97).
+- **AR3** (Gerhard, 09.11.2026) Client-Web-GUI ohne Anmeldung: Geräte im selben Netz gelten als
+  vertrauenswürdig – am Handy gäbe es keinen praktikablen Weg, einen Token einzugeben. Abgesichert
+  ist, dass das auch wirklich nur das eigene Netz ist (Adressprüfung) und dass fremde Webseiten den
+  Browser nicht als Werkzeug benutzen können (Host- und Origin-Prüfung), CR100. Spätere Option:
+  Kopplung per QR-Code (einmal scannen, Cookie).
 
 ### 29.7 Rollen
 

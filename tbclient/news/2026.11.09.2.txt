@@ -1,0 +1,3 @@
+- Web-GUI nur noch aus dem eigenen Netz (10.x, 172.16-31.x,
+  192.168.x). Andere Netze: [web] allow in tbclient.conf.
+- Schutz gegen fremde Webseiten (Host/Origin-Pruefung).
