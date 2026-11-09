@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from . import fragment
-from .codec import BrocastError, Codec
+from .codec import BrocastError, Codec, valid_exp
 from .config import Config
 from .frame import FORMAT_PAGE, airtime_s, build as build_frame, header
 from .splitter import TooLargeError, split
@@ -101,10 +101,10 @@ class Station:
 
     def _exp_min(self, content: dict[str, Any]) -> int | None:
         if "exp" in content:
-            return content["exp"]
+            return valid_exp(content["exp"])
         typ = self.codec.d.enums["typ"].by_name.get(content["typ"]) \
             if isinstance(content["typ"], str) else self.codec.d.typ_entry(content["typ"])
-        return typ.spec.get("exp") if typ else None
+        return valid_exp(typ.spec.get("exp")) if typ else None   # CR87: dictionary may come over the air
 
     def _pri(self, content: dict[str, Any]) -> int:
         return self.codec.d.enums["pri"].num(content.get("pri", 0))

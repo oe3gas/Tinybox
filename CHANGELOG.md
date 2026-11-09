@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- brocastd: **Sicherheitsfix CR87 (Audit TB-01)** – ein einzelnes UI-Frame mit falsch typisiertem
+  Feld (z. B. `exp` als Text) konnte brocastd dauerhaft lahmlegen, auch nach jedem Neustart.
+  Jetzt: Typprüfung aller Umschlag-Felder beim Empfang (Seite wird verworfen), Gültigkeit auch aus
+  einem über Funk empfangenen Dictionary nur als plausible Zahl, Housekeeping kann den Daemon nicht
+  mehr beenden, und kaputte Einträge einer älteren Datenbank werden beim nächsten Durchgang
+  selbsttätig entfernt (kein Handeingriff nötig).
 - brocast-Web-GUI: **„n neu“ als oranger Chip** neben den Rubriken und Stationen.
 - brocastd (Station): **Rücksicht auf den echten Verkehr** (`[traffic]`) – eine Seite beginnt
   erst, wenn der Kanal `quiet_s` ruhig war (nach Verbindungs-Frames `connected_quiet_s`). Die

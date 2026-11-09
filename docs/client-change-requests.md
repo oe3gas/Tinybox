@@ -65,7 +65,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 84 | Kommentar auf eine Nachricht aus der History: Text statt „message #n“ | ✅ siehe unten (Funktest offen) |
 | 85 | Erwähnungs-Alarm: Popup des Betriebssystems und „BK“ in CW bei @CALL | ✅ siehe unten (Funktest offen) |
 | 86 | Dateien im Board-Chat (LZHUF), wie Bilder (CR12) und Dateien im TBClient-Chat (CR78 Stufe 7) | offen, siehe unten |
-| 87 | brocastd: Absturz durch ungültiges `exp` (TB-01) | offen, siehe unten |
+| 87 | brocastd: Absturz durch ungültiges `exp` (TB-01) | ✅ siehe unten |
 | 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | offen, siehe unten |
 | 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | offen, siehe unten |
 | 90 | Interlink-Authentisierung, Challenge-Response pro Partner (TB-02) | offen, siehe unten |
@@ -2797,7 +2797,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Offen zu entscheiden: Maximalgröße, ob bestimmte Dateitypen gesperrt werden (z. B. `.exe`), und ob
   der Sysop hochgeladene Dateien in der Web-GUI sehen und löschen kann.
 
-## CR87 – brocastd: Absturz durch ungültiges `exp` (TB-01, offen, 09.11.2026)
+## CR87 – brocastd: Absturz durch ungültiges `exp` (TB-01, ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026, aus dem Audit, PLANUNG 29)
 
@@ -2813,6 +2813,21 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - `try`/`except Exception` mit Logging in der Housekeeping-Schleife; ein Fehler darf den Daemon nie beenden.
 - Beim Start ungültige `exp_min`-Einträge aussortieren (R4: Neustart ohne Handeingriff).
 - Regressionstest mit dem Frame aus dem PoC.
+
+### Umsetzung (brocast, 09.11.2026)
+
+- `codec.py`: `_check_wire()` prüft beim Empfang jedes Umschlag-Feld gegen den Typ seines
+  Dictionary-Eintrags (uint/time, int, tstr mit `max`, callsign, enum/enums, bits, subpage,
+  position, pageref/pagerefs, blocks). Zahlen höchstens 2^63-1 (was SQLite speichern kann). Ein
+  falscher Typ ergibt `BrocastError` → Seite verworfen, Eintrag im Empfangslog, `rx_errors`.
+- `valid_exp()`: Gültigkeit nur als ganze Zahl 1 … 10 Jahre in Minuten. Gilt auch für `exp` aus dem
+  `typ`-Eintrag des Dictionary (kann über Funk kommen, TB-04) – im Listener und in der Station.
+- `listener.py`: Housekeeping und Seitenliste erkennen Einträge mit unbrauchbarem `t`/`exp_min`
+  (ältere Datenbank) und entfernen sie mit Warnung statt abzustürzen – Neustart ohne Handeingriff.
+- `daemon.py`: Housekeeping-Schleife mit `try`/`except` und Logging; ein Fehler beendet brocastd nicht.
+- Tests `brocast/tests/test_cr87.py`: PoC-Frame über den ganzen Empfangsweg, zwölf falsche
+  Feldtypen, vergiftete Datenbankzeile, gefälschtes Dictionary-`exp`, Housekeeping läuft nach einem
+  Fehler weiter. Ohne den Fix reproduziert der PoC den `TypeError` im Housekeeping.
 
 ## CR88 – Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23, offen, 09.11.2026)
 

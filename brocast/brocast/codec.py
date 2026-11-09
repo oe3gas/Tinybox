@@ -23,6 +23,7 @@ from .dictionary import Dictionary, DictionaryError, Table
 CALLSIGN = re.compile(r"([A-Z0-9]{1,4}/)?[A-Z0-9]{3,8}(/[A-Z0-9]{1,4})?(-[0-9]{1,2})?")
 POS_FACTOR = 100_000          # degrees * 10^5, about 1 m
 MAX_UINT = 2**64 - 1
+MAX_RX_UINT = 2**63 - 1       # receive side: what SQLite can store (INTEGER is signed 64 bit)
 MAX_PAGE_BYTES = 240          # one page = one AX.25 frame (spec: "Seitengröße")
 
 
@@ -56,6 +57,81 @@ def _time_to_wire(value: Any, what: str) -> int:
             raise BrocastError(f"{what}: Zeit ohne Zeitzone, bitte UTC angeben")
         return int(value.timestamp())
     return _uint(value, what)
+
+
+
+EXP_MAX_MIN = 10 * 366 * 24 * 60      # CR87: validity longer than 10 years is not a real page
+
+
+def valid_exp(exp: Any) -> int | None:
+    """exp in minutes as a plausible int, else None (CR87, TB-01).
+
+    exp comes from the page or from the typ entry of a dictionary - both can
+    arrive over the air, so neither is trusted."""
+    if isinstance(exp, bool) or not isinstance(exp, int) or not 0 < exp <= EXP_MAX_MIN:
+        return None
+    return exp
+
+
+def _rx_uint(value: Any, what: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_RX_UINT:
+        raise BrocastError(f"{what}: nicht-negative Ganzzahl erwartet, nicht {value!r}")
+    return value
+
+
+def _rx_scalar(value: Any) -> bool:
+    """enum entries on the wire: a number, or a free name (cat/src)."""
+    return isinstance(value, str) or (isinstance(value, int) and not isinstance(value, bool))
+
+
+def _check_wire(value: Any, spec: dict[str, Any], what: str) -> None:
+    """Receive side (CR87, TB-01): an envelope value must have the type of its
+    dictionary entry. Whatever comes over the air is checked here, before it is
+    stored and later used in arithmetic (exp, t) - a wrong type must reject the
+    page, never crash brocastd."""
+    kind = spec.get("type", "any")
+    if kind in ("uint", "time"):
+        _rx_uint(value, what)
+    elif kind == "int":
+        if isinstance(value, bool) or not isinstance(value, int) or abs(value) > MAX_RX_UINT:
+            raise BrocastError(f"{what}: Ganzzahl erwartet, nicht {value!r}")
+    elif kind == "tstr":
+        if not isinstance(value, str):
+            raise BrocastError(f"{what}: Text erwartet, nicht {type(value).__name__}")
+        if "max" in spec and len(value) > spec["max"]:
+            raise BrocastError(f"{what}: länger als {spec['max']} Zeichen")
+    elif kind == "callsign":
+        _callsign(value, what)
+    elif kind == "enum":
+        if not _rx_scalar(value):
+            raise BrocastError(f"{what}: Dictionary-Nummer erwartet, nicht {value!r}")
+    elif kind == "enums":
+        if not (_rx_scalar(value) or (isinstance(value, list) and all(map(_rx_scalar, value)))):
+            raise BrocastError(f"{what}: Liste von Dictionary-Nummern erwartet")
+    elif kind == "bits":
+        _rx_uint(value, what)
+    elif kind == "subpage":
+        if (not isinstance(value, list) or len(value) != 2
+                or not all(isinstance(v, int) and not isinstance(v, bool) for v in value)
+                or not 1 <= value[0] <= value[1] <= 999):
+            raise BrocastError(f"{what}: [n, gesamt] mit 1 <= n <= gesamt erwartet")
+    elif kind == "position":
+        if (not isinstance(value, list) or not 2 <= len(value) <= 4
+                or not all(isinstance(v, int) and not isinstance(v, bool) for v in value)):
+            raise BrocastError(f"{what}: [lat, lon, ?Höhe, ?Unschärfe] als Ganzzahlen erwartet")
+    elif kind in ("pageref", "pagerefs"):
+        refs = [value] if kind == "pageref" else value
+        if not isinstance(refs, list):
+            raise BrocastError(f"{what}: Liste von Seitenverweisen erwartet")
+        for ref in refs:
+            if not isinstance(ref, list) or not 2 <= len(ref) <= 3:
+                raise BrocastError(f"{what}: [Rufzeichen, id, ?rev] erwartet")
+            _callsign(ref[0], what)
+            for v in ref[1:]:
+                _rx_uint(v, what)
+    elif kind == "blocks":
+        if not isinstance(value, list):
+            raise BrocastError(f"{what}: Liste erwartet")
 
 
 def _pos_to_wire(value: Any, what: str) -> list[int]:
@@ -367,6 +443,7 @@ class Codec:
             elif entry.name == "blk" and isinstance(value, list):
                 page["blk"] = [self._block_from_wire(b, typ_num) for b in value]
             else:
+                _check_wire(value, entry.spec, entry.name)
                 page[entry.name] = self._value_from_wire(value, entry.spec)
 
         for entry in env.by_num.values():

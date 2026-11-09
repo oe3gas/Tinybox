@@ -272,12 +272,15 @@ class Daemon:
 
     async def _housekeeping(self) -> None:
         while True:
-            self.announce_dictionary()
-            self.broadcast_dictionary()
-            removed = self.listener.housekeeping()
-            self.store.prune_rxlog()
-            if removed:
-                log.info("Listener: %s Seiten entfernt (abgelaufen/Grenzen)", removed)
+            try:
+                self.announce_dictionary()
+                self.broadcast_dictionary()
+                removed = self.listener.housekeeping()
+                self.store.prune_rxlog()
+                if removed:
+                    log.info("Listener: %s Seiten entfernt (abgelaufen/Grenzen)", removed)
+            except Exception:          # CR87: housekeeping must never end brocastd
+                log.exception("Fehler im Housekeeping - läuft beim nächsten Durchgang weiter")
             await asyncio.sleep(HOUSEKEEPING_SEC)
 
     async def _flush_loop(self) -> None:

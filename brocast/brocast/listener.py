@@ -28,13 +28,25 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from . import dictimport, dicttransfer
-from .codec import Codec
+from .codec import Codec, valid_exp
 from .config import is_ax25_call
 from .dictionary import Dictionary
 from .frame import airtime_s
 from .store import Store
 
 log = logging.getLogger(__name__)
+
+def _bad_row(p: Any) -> bool:
+    """A stored page whose t/exp_min cannot be used (written by an older brocastd
+    before CR87, or a damaged database)."""
+    t, exp = p["t"], p["exp_min"]
+    if isinstance(t, bool) or not isinstance(t, int):
+        return True
+    return exp is not None and valid_exp(exp) is None
+
+
+def _expired(p: Any, now: int) -> bool:
+    return p["exp_min"] is not None and p["t"] + p["exp_min"] * 60 < now
 
 RESULT_TEXT = {
     "new": "neu – angezeigt",
@@ -263,6 +275,10 @@ class Listener:
             exp = page.get("exp")
             if exp is None and typ_entry:
                 exp = typ_entry.spec.get("exp")
+            if exp is not None and valid_exp(exp) is None:
+                log.warning("Seite %s/%s: ungültige Gültigkeit %r, gilt ohne Ablauf",
+                            org, page_id, exp)
+                exp = None
             self.store.save_lpage({
                 "org": org, "id": page_id, "rev": rev, "t": page["t"],
                 "typ": page.get("typ"), "ti": page.get("ti", ""),
@@ -568,10 +584,15 @@ class Listener:
                 self.store.delete_lpage(p["org"], p["id"])
                 removed += 1
                 continue
+            if _bad_row(p):                    # CR87: never let one row stop housekeeping
+                log.warning("Seite %s/%s: ungültige Zeit/Gültigkeit in der Datenbank "
+                            "(t=%r, exp_min=%r) - entfernt", p["org"], p["id"], p["t"], p["exp_min"])
+                self.store.delete_lpage(p["org"], p["id"])
+                removed += 1
+                continue
             if p["favorite"]:
                 continue
-            expired = p["exp_min"] is not None and p["t"] + p["exp_min"] * 60 < now
-            if expired or p["last_seen"] < max_age:
+            if _expired(p, now) or p["last_seen"] < max_age:
                 self.store.delete_lpage(p["org"], p["id"])
                 removed += 1
         for p in self.store.lpages_hidden_before(max_age):
@@ -619,7 +640,7 @@ class Listener:
             "pri": self.d.enums["pri"].name(p["pri"]),
             "sub_total": p["sub_total"], "sub_present": present,
             "wire_frames": p["wire_frames"], "wire_bytes": p["wire_bytes"],
-            "expired": p["exp_min"] is not None and p["t"] + p["exp_min"] * 60 < now,
+            "expired": _bad_row(p) or _expired(p, now),
         }
 
     def _filtered(self, cat: str | None = None, station: str | None = None,
