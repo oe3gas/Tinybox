@@ -2,6 +2,15 @@
 
 ## Unveröffentlicht
 
+- Client 2026.11.09.4 und TinyBox: **Datei- und Bildempfang CR96 (Audit TB-05, TB-16)** – der Client
+  nimmt `//I` und `//F` nur für das an, was er gerade angefordert hat (anderes wird verworfen),
+  Empfangenes überschreibt nie einen vorhandenen Eintrag (eigene Bilder schon), das Größenlimit gilt
+  für jede Übertragungsart (auch `r`), und eine Ankündigung über dem Limit trennt die Verbindung.
+  Programme und Skripte werden nicht angenommen – am angebotenen Namen schon vor dem ersten Byte, am
+  Inhalt (`MZ`, ELF, Mach-O, `#!`, Verknüpfung, ZIP mit Programm darin) nach dem Empfang. Die TinyBox
+  ordnet einen Bild-Upload der Station zu, die ihn begonnen hat: eine andere kann ihn weder übernehmen
+  noch ersetzen (`//ERR img busy`), und ein anderes Bild unter demselben kurzen Hash wird abgewiesen
+  (`//ERR img collision`).
 - Alle Teile: **Zeichensatz-Policy CR95 (PLANUNG 29.9, Audit TB-11/TB-12/TB-22)** – Freitext in jeder
   Schrift, aber ohne Steuer-, Bidi- und unsichtbare Zeichen, NFC, höchstens 3 Kombinationszeichen je
   Buchstabe (`prcore.text.clean_text`): beim Speichern von Post, im Chatboard und im Client für

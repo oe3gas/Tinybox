@@ -69,7 +69,7 @@ class PeerImages:
                 or any(c not in chatimg.B83 for c in blurhash):
             return None
         h = chatimg.image_hash(data)
-        self.store.put(h, data)
+        self.store.put(h, data, own=True)
         line = f"~#{h}{chatimg.size_code(len(data))}{blurhash}"
         caption = caption.replace("\r", " ").replace("\n", " ").strip()[:150]
         if caption:
@@ -138,6 +138,15 @@ class PeerImages:
 
     def _incoming(self, h: str, off: int, total: int) -> None:
         n = max(0, total - off)
+        if total > PEER_IMG_MAX:               # CR96 (TB-05): more than a picture may be
+            log.warning("image %s from %s: %d bytes announced - link dropped",
+                        h, self.peer.call, total)
+            self.peer.ch.disconnect()
+            return
+        if h != self._want:                    # CR96 (TB-05): only what we asked for
+            log.warning("image %s from %s not asked for - ignored", h, self.peer.call)
+            self.peer.ch.link.splitter.expect(n, lambda _data: None)
+            return
         ld = self.loading.setdefault(h, {"done": off, "total": total, "error": ""})
         ld["total"] = total
 
@@ -153,7 +162,8 @@ class PeerImages:
             if chatimg.image_hash(whole) != h or chatimg.image_type(whole) is None:
                 self._fail(h, "damaged, tap to try again")
                 return
-            self.store.put(h, whole)
+            if not self.store.put(h, whole):
+                log.info("image %s is here already - kept", h)
             self.loading.pop(h, None)
             log.info("image %s from %s (%d bytes)", h, self.peer.call, len(whole))
             self.core._touch()

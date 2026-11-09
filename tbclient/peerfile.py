@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING
 from prcore import chatimg, lzhuf
 from prcore.text import isnum
 
+from . import filecheck
+
 if TYPE_CHECKING:
     from .peer import Peer
 
@@ -70,9 +72,14 @@ class FileStore:
         except OSError:
             return None
 
-    def put(self, h: str, data: bytes) -> None:
+    def put(self, h: str, data: bytes, *, own: bool = False) -> bool:
+        """Store; what came over the air never replaces what is here already
+        (CR96, TB-05/TB-16) - only own data (own=True) may. False = kept the old."""
+        if not own and self.has(h):
+            return False
         self.folder.mkdir(parents=True, exist_ok=True)
         self.path(h).write_bytes(data)
+        return True
 
 
 class PeerFiles:
@@ -106,14 +113,31 @@ class PeerFiles:
         h = chatimg.image_hash(data)             # 6 hex over the bytes - for any file
         packed = await asyncio.to_thread(lzhuf.compress, data)
         air = min(len(packed), len(data))
-        self.store.put(h, data)
+        self.store.put(h, data, own=True)
         self.peer.ch.send_raw(f"~%{h} {len(data)} {air} {safe_name(name)}")
         return h
 
     # --- fetching one ---------------------------------------------------------------
 
+    def _offer(self, h: str) -> tuple[str, int] | None:
+        """(name, size) of the file this station offered us under h."""
+        pc = self.core.peerchat
+        if pc is None:
+            return None
+        for m in reversed(pc.messages(self.peer.call)):
+            r = parse_ref(m["text"]) if m["dir"] == "rx" else None
+            if r and r[0] == h:
+                return r[3], r[1]
+        return None
+
     def fetch(self, h: str) -> bool:
         if not chatimg.HASH_RE.match(h) or self.store.has(h) or not self.ok:
+            return False
+        offer = self._offer(h)
+        why = filecheck.name_verdict(offer[0]) if offer else None
+        if why or (offer and offer[1] > FILE_MAX):      # CR96: refused before a byte comes
+            self.loading[h] = {"done": 0, "total": 0, "error": why or "too large"}
+            self.core._touch()
             return False
         busy = self._want and time.monotonic() - self._last < IDLE_SEC
         if busy:
@@ -168,6 +192,14 @@ class PeerFiles:
         log.info("file %s to %s (%d bytes, %d on air)", h, self.peer.call, len(data), len(body))
 
     def _incoming(self, h: str, how: str, n: int) -> None:
+        if n > FILE_MAX:                       # CR96 (TB-05): also for 'r', not only 'z'
+            log.warning("file %s from %s: %d bytes announced - link dropped", h, self.peer.call, n)
+            self.peer.ch.disconnect()
+            return
+        if h != self._want:                    # CR96 (TB-05): only what we asked for
+            log.warning("file %s from %s not asked for - ignored", h, self.peer.call)
+            self.peer.ch.link.splitter.expect(n, lambda _body: None)
+            return
         ld = self.loading.setdefault(h, {"done": 0, "total": n, "error": ""})
         ld["total"] = n
 
@@ -186,7 +218,14 @@ class PeerFiles:
             if not data or chatimg.image_hash(data) != h:
                 self._fail(h, "damaged, tap to try again")
                 return
-            self.store.put(h, data)
+            offer = self._offer(h)
+            why = filecheck.verdict(offer[0] if offer else "", data)
+            if why:                            # CR96: a program does not land on the PC
+                log.warning("file %s from %s: %s", h, self.peer.call, why)
+                self._fail(h, why)
+                return
+            if not self.store.put(h, data):
+                log.info("file %s is here already - kept", h)
             self.loading.pop(h, None)
             log.info("file %s from %s (%d bytes)", h, self.peer.call, len(data))
             self.core._touch()

@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from prcore import chatimg               # reference format, hash, type check
+from prcore import chatimg  # reference format, hash, type check
 from prcore.text import isnum
 
 if TYPE_CHECKING:
@@ -68,9 +68,14 @@ class ImageStore:
         except OSError:
             return None
 
-    def put(self, hash: str, data: bytes) -> None:
+    def put(self, hash: str, data: bytes, *, own: bool = False) -> bool:
+        """Store; what came over the air never replaces what is here already
+        (CR96, TB-05/TB-16) - only own data (own=True) may. False = kept the old."""
+        if not own and self.has(hash):
+            return False
         self.folder.mkdir(parents=True, exist_ok=True)
         self.path(hash).write_bytes(data)
+        return True
 
     def purge(self, days: int = KEEP_DAYS) -> int:
         n = 0
@@ -97,6 +102,7 @@ class Images:
         self.loading: dict[str, dict] = {}               # hash -> {done, total, error}
         self._partial: dict[str, bytearray] = {}         # broken downloads, to go on
         self._jobs: list[dict] = []
+        self.current: str | None = None                  # CR96: the image asked for now
 
     @property
     def busy(self) -> bool:
@@ -113,7 +119,7 @@ class Images:
                 or any(c not in chatimg.B83 for c in blurhash):
             return None
         h = chatimg.image_hash(data)
-        self.store.put(h, data)
+        self.store.put(h, data, own=True)
         line = f"{prefix}~#{h}{chatimg.size_code(len(data))}{blurhash}"
         if caption.strip():
             line += " " + caption.strip()
@@ -171,6 +177,14 @@ class Images:
         if p[0] == "//I" and len(p) == 4 and isnum(p[2]) and isnum(p[3]):
             q, h, off, total = self.queue, p[1], int(p[2]), int(p[3])
             n = max(0, total - off)
+            if total > chatimg.MAX_SIZE:            # CR96: no image is that big - not ours
+                log.warning("image %s: %d bytes announced - link dropped", h, total)
+                self.core.link.disconnect()
+                return True
+            if h != self.current:                   # CR96: only what we asked for
+                log.warning("image %s not asked for (%d bytes) - ignored", h, n)
+                self.core.link.splitter.expect(n, lambda _data: None)
+                return True
             prog = self.loading.get(h)
             if prog is not None:
                 prog["total"] = total
@@ -354,6 +368,7 @@ class Images:
             self._fail(job, why)
             return
         have = self._partial.get(h, bytearray())
+        self.current = h
         try:
             self.core._send(f"//IMG {h} {len(have)}" if have else f"//IMG {h}")
             while True:
@@ -377,12 +392,15 @@ class Images:
                 self._partial[h] = have             # go on next time
             self._fail(job, str(exc))
             return
+        finally:
+            self.current = None
         data = bytes(have)
         self._partial.pop(h, None)
         if chatimg.image_hash(data) != h or chatimg.image_type(data) is None:
             self._fail(job, "damaged, try again")
             return
-        self.store.put(h, data)
+        if not self.store.put(h, data):
+            log.info("image %s is here already - kept", h)
         self.loading.pop(h, None)
         log.info("image %s fetched (%d bytes)", h, len(data))
         self.core._touch()
@@ -395,7 +413,10 @@ def _reason(line: str) -> str:
     text = {"no_images": "no images in this board", "too_large": "too large",
             "bad_hash": "damaged on the way, try again", "bad_type": "not a WebP/JPEG",
             "unknown": "the TinyBox does not know the image", "not_started": "not started",
-            "syntax": "refused"}.get(code, code)
+            "syntax": "refused",
+            "busy": "another station is uploading the same picture - try again later",
+            "collision": "the TinyBox has another picture under this short hash - "
+                         "change the picture a little and send it again"}.get(code, code)
     if code == "too_large" and len(p) > 3:
         text += f" (max {p[3]} bytes)"
     return text

@@ -74,7 +74,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | offen (Konzept), siehe unten |
 | 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
 | 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | ✅ siehe unten (Abstufung nach Rolle mit CR92) |
-| 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | offen, siehe unten |
+| 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash: Entscheidung offen) |
 | 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | offen, siehe unten |
 | 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | offen, siehe unten |
 | 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | offen, siehe unten |
@@ -3084,7 +3084,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Offen: Abstufung nach Rolle (strengere Liste für nicht authentifizierte User, Kennzeichnung
   gemischter Schriften) – mit CR92, wenn es die Rollen gibt.
 
-## CR96 – Datei- und Bildempfang absichern (TB-05, TB-16, offen, 09.11.2026)
+## CR96 – Datei- und Bildempfang absichern (TB-05, TB-16, Stufe 1 ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3101,6 +3101,41 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Bilder nach dem Empfang neu kodieren (Pillow) – entschärft Polyglots.
 - Windows: „Mark of the Web“ (`Zone.Identifier`) für empfangene Dateien.
 - Gilt auch für CR86 (Dateien im Board-Chat) – dort von Anfang an so umsetzen.
+
+### Umsetzung Stufe 1 (Client 2026.11.09.4, TinyBox – 09.11.2026)
+
+Ohne Änderung am Funkformat (die Referenz `~#<6 hex>…` bleibt):
+
+- Client, Bilder von Peers (`peerimg.py`), Dateien (`peerfile.py`) und Bilder von der TinyBox
+  (`images.py`): angenommen wird nur, was gerade angefordert ist; Ungefragtes wird vom Datenstrom
+  genommen und verworfen (kein Eintrag in `loading`/`file_loading`). Eine Ankündigung über dem Limit
+  (`PEER_IMG_MAX`, `FILE_MAX` – jetzt auch für unkomprimiert `r` –, `chatimg.MAX_SIZE`) trennt die
+  Verbindung.
+- `ImageStore.put` / `FileStore.put`: Empfangenes überschreibt nie einen vorhandenen Eintrag (das
+  schützt auch die geteilten Board-Bilder); nur eigene Daten (`own=True`) dürfen.
+- `tbclient/filecheck.py`: Programme und Skripte werden nicht angenommen – am angebotenen Namen schon
+  beim Antippen (kein Byte wird geholt), am Inhalt nach dem Empfang (`MZ`, ELF, Mach-O, `#!`,
+  Windows-Verknüpfung, ZIP mit Programm darin, kaputtes ZIP). Die Meldung steht beim Eintrag.
+- TinyBox (`tinybox/chatimg.py`): ein Upload gehört der Station, die ihn begonnen hat. Eine andere
+  bekommt `//ERR img busy` und kann ihn weder übernehmen noch mit anderer Größe ersetzen; fertig
+  machen kann ihn nur der Eigentümer. Liegt unter dem Hash schon ein **anderes** Bild, wird der
+  Upload mit `//ERR img collision` abgewiesen (der Client sagt: Bild leicht ändern, neu senden).
+- Download im Browser: schon bisher `application/octet-stream`, `attachment`, `nosniff`.
+- Tests `tests/test_cr96.py`.
+
+Nicht umgesetzt:
+
+- Bilder neu kodieren: der Client hat kein Pillow; der Browser dekodiert WebP/JPEG in seiner Sandbox.
+- „Mark of the Web“: die Datei kommt über den Browser-Download auf den PC; ob Windows sie markiert,
+  entscheidet der Browser (für 127.0.0.1 meist nicht).
+
+### Stufe 2 (Entscheidung offen): längerer Hash
+
+24 Bit lassen sich in Sekunden gezielt kollidieren. Mit Stufe 1 bringt eine Kollision allein nichts
+mehr (nichts wird überschrieben, nichts Ungefragtes angenommen, ein Upload gehört seinem Beginner).
+Ein längerer Hash (z. B. 16 hex = 64 Bit) wäre zusätzliche Tiefe, ändert aber das Funkformat der
+Referenzen (`~#`, `~%`, `//IMG`, `//I`, `//F`, `//IMGPUT`) und braucht neue Client- und Box-Version
+mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referenz.
 
 ## CR97 – Ratenbegrenzung und Obergrenzen (TB-03, TB-13, TB-17, TB-18, TB-19, offen, 09.11.2026)
 

@@ -1,0 +1,4 @@
+- Bilder/Dateien nur noch, wenn angefordert; nichts wird
+  ueberschrieben; Groessenlimit fuer jede Uebertragung.
+- Programme und Skripte (.exe, .bat, ...) werden nicht
+  angenommen, auch nicht in einem ZIP.

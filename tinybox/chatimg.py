@@ -51,7 +51,9 @@ class ChatImages:
     def __init__(self, store: Store, cfg: Config) -> None:
         self.store = store
         self.cfg = cfg
-        # hash -> [size, bytearray, last activity]: uploads under way
+        # hash -> [size, bytearray, last activity, call]: uploads under way. CR96 (TB-16):
+        # an upload belongs to the station that began it - no other may start,
+        # replace or finish it while it is kept
         self._partial: dict[str, list] = {}
 
     # --- what a board allows -----------------------------------------------
@@ -92,8 +94,12 @@ class ChatImages:
             s.out(f"//IMGOK {h}")
             return
         p = self._partial.get(h)
+        if p is not None and p[3] != s.call:
+            log.warning("%s: upload of %s refused - %s is uploading it", s.call, h, p[3])
+            s.out("//ERR img busy")
+            return
         if p is None or p[0] != size:
-            p = self._partial[h] = [size, bytearray(), time.monotonic()]
+            p = self._partial[h] = [size, bytearray(), time.monotonic(), s.call]
         p[2] = time.monotonic()
         s.out(f"//IMGGO {h} {len(p[1])}")
         # CR30: the others see "OE1ABC uploading picture" with a progress bar
@@ -117,16 +123,22 @@ class ChatImages:
         s.out(f"//ERR img timeout {len(p[1]) if p else 0}")
 
     def _done(self, s: Session, h: str) -> None:
-        p = self._partial.pop(h, None)
-        if p is None:
+        p = self._partial.get(h)
+        if p is None or p[3] != s.call:
             s.out("//ERR img not_started")
             return
+        del self._partial[h]
         data = bytes(p[1])
         if image_hash(data) != h:
             s.out("//ERR img bad_hash")
             return
         if image_type(data) is None:
             s.out("//ERR img bad_type")
+            return
+        old = self.store.image_get(h)
+        if old is not None and old != data:      # CR96 (TB-16): same short hash, other picture
+            log.warning("%s: image %s collides with a stored one - refused", s.call, h)
+            s.out("//ERR img collision")
             return
         self.store.image_put(h, data)
         log.info("%s uploaded image %s (%d bytes, %s)", s.call, h, len(data), image_type(data))
