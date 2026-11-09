@@ -73,7 +73,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | offen, siehe unten |
 | 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | offen (Konzept), siehe unten |
 | 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
-| 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | offen, siehe unten |
+| 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | ✅ siehe unten (Abstufung nach Rolle mit CR92) |
 | 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | offen, siehe unten |
 | 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | offen, siehe unten |
 | 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | offen, siehe unten |
@@ -3047,7 +3047,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Zu entscheiden: Ed25519 oder P-256 (GUST), Herausgeber der Zertifikate, TOTP für Sysops ohne
   tbclient, Widerruf über brocast, Notfall-Schlüssel.
 
-## CR95 – Zeichensatz-Policy und Ausgabe-Maskierung (TB-11, TB-12, TB-22, offen, 09.11.2026)
+## CR95 – Zeichensatz-Policy und Ausgabe-Maskierung (TB-11, TB-12, TB-22, ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3061,6 +3061,28 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   NFC, Steuerzeilen-Erkennung auf NFKC-Kopie, gemischte Schriften kennzeichnen, Grenzen in Byte.
 - Maskierung bei jeder Ausgabe (Konsole, Log, HTML mit `<bdi>`, ADIF, CSV) – für alle Rollen.
 - Abstufung nach Rolle (Emoji erst ab authentifiziertem User).
+
+### Umsetzung (TinyBox, brocast, kisshub, Client 2026.11.09.3 – 09.11.2026)
+
+- `prcore/text.py`: `clean_text()` (Positivliste nach Unicode-Kategorie: L*, M* höchstens 3 je
+  Buchstabe, N*, P*, Sc, Sm, Sk, So; Leerzeichen → U+0020, Zeilenende LF, Tab bleibt; weg: Cc, Cf
+  außer ZWNJ/ZWJ innerhalb eines Wortes oder einer Emoji-Folge, Co, Cs, Cn, Zl, Zp; NFC; Emoji
+  abschaltbar), `defuse_lines()`/`protocol_like()` (Erkennung auf NFKC-Kopie), `visible()` (Konsole
+  und Log), `mixed_script()` (lateinisch mit kyrillisch/griechisch in einem Wort).
+- Angewendet: `MessageService.create` (Betreff und Text jeder Post; `defuse_lines` nur für lokal
+  geschriebene, nicht für weitergeleitete), Chatboard (`ChatHub.say`), Client: empfangene Zeilen im
+  Terminal/Chat (`Channel.term_line`).
+- TB-12: `visible()` in `prcore.termcolor.ConsoleFormatter` (TinyBox, Client, kisshub, brocastd),
+  in der TinyBox-Logdatei (`logsetup.Formatter`), in der brocastd-Logdatei (`colorlog.FileFormatter`,
+  mit eigenem Ersatz, wenn brocast ohne prcore läuft) und in der Sysop-Konsole (`L`, `R n`, Chat).
+- HTML: Box-, Client- und brocast-GUI setzen fremden Text schon bisher nur über `textContent`.
+  Neu im Client: jeder fremde Text in einem eigenen `<bdi>` (Rechts-nach-links-Text kann Rufzeichen
+  und Zeit daneben nicht umdrehen).
+- TB-22: `adifField()` im Client – ADI-Werte nur ASCII (Umlaute werden zu Grundbuchstaben), ohne
+  `<`/`>`; der Locator der QSL-Karte muss ein Maidenhead-Locator sein, sonst fehlt das Feld.
+- Tests `tests/test_cr95.py` (mit `tests/fixtures/adif.js` für die ADIF-Funktionen).
+- Offen: Abstufung nach Rolle (strengere Liste für nicht authentifizierte User, Kennzeichnung
+  gemischter Schriften) – mit CR92, wenn es die Rollen gibt.
 
 ## CR96 – Datei- und Bildempfang absichern (TB-05, TB-16, offen, 09.11.2026)
 

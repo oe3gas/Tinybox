@@ -8,13 +8,21 @@ from __future__ import annotations
 
 import logging
 import uuid
-
 from datetime import datetime, timedelta, timezone
+
+from prcore.text import clean_text, defuse_lines
 
 from . import addressing
 from .addressing import AddressError
 from .chat import ChatHub
-from .config import DEST_RE, NEWS_RUBRIC, Config, base_call, is_valid_call, normalize_call
+from .config import (
+    DEST_RE,
+    NEWS_RUBRIC,
+    Config,
+    base_call,
+    is_valid_call,
+    normalize_call,
+)
 from .events import EventBus
 from .store import Message, Store, utc_now
 
@@ -253,6 +261,11 @@ class MessageService:
             self.check_rubric(to_call)          # scripts and MQTT: only listed rubrics
         at_addr, bid = self.check_address(type, at_addr, bid, origin)
 
+        # CR95 (PLANUNG 29.9): any script, but no control/format characters, and a
+        # local text cannot carry lines a mailbox would read as protocol
+        subject, body = clean_text(subject), clean_text(body)
+        if not forwarded:
+            body = defuse_lines(body)
         if len(body.encode("utf-8")) > self.cfg.mailbox.max_msg_bytes:
             raise ServiceError("too_large")
         max_subject = MAX_SUBJECT_FWD if forwarded else MAX_SUBJECT

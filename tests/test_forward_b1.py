@@ -175,7 +175,7 @@ class B1SessionTests(unittest.IsolatedAsyncioTestCase):
         bull = [m for m in self.xtc.store.list_messages() if m.subject == "bulletin"][0]
         self.assertEqual(bull.body, "Hallo Grüße\nzweite Zeile")
         back = self.gas.store.get_by_bid(self.xtc.store.get(b).bid)
-        self.assertEqual(back.body, "Antwort\n/EX\nEnde")
+        self.assertEqual(back.body, "Antwort\n /EX\nEnde")   # CR95: defused when written
         self.assertEqual(self.xtc.store.get(b).fwd, "F")
 
     async def test_restart_after_abort(self):

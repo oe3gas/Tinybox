@@ -12,6 +12,8 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING
 
+from prcore.text import clean_text
+
 from . import peer as peer_mod
 from .target import label as target_label
 
@@ -105,6 +107,8 @@ class Channel:
         return True
 
     def term_line(self, kind: str, text: str) -> None:
+        if kind == "rx":            # CR95: no control, bidi or invisible characters from the air
+            text = clean_text(text).replace("\n", " ")
         self.term_n += 1
         self.term.append((self.term_n, kind, text))
         if kind == "rx":
@@ -194,7 +198,7 @@ class Channel:
         """No "Welcome to TinyBox" seen: a TinyBox we know gets the handshake
         anyway (the line may have been missed); any other station is not
         bothered with //CLIENT - the channel is a terminal (CR43)."""
-        from . import core as core_mod          # tests change the delay there
+        from . import core as core_mod  # tests change the delay there
         await asyncio.sleep(core_mod.HANDSHAKE_FALLBACK_SEC)
         if self.state != "online" or self.mode:
             return

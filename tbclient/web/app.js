@@ -172,7 +172,11 @@ function addLinks(parent, text) {
   addBold(parent, text.slice(last));
 }
 
-function richText(parent, text) {
+function richText(outer, text) {
+  // CR95: in its own <bdi> - right-to-left text (Arabic, Hebrew) or a bidi trick in
+  // it cannot turn the call, time or other text around it
+  const parent = el("bdi");
+  outer.append(parent);
   const parts = text.split("`");
   // an odd number of backticks: the last one has no partner and stays a character
   const closed = parts.length % 2 === 1 ? parts.length : parts.length - 1;
@@ -1775,7 +1779,9 @@ function showReader() {
                                         : "Delete here only (bulletins belong to everyone)";
 }
 
-function linkify(parent, text) {
+function linkify(outer, text) {
+  const parent = el("bdi");                        // CR95: see richText
+  outer.append(parent);
   let last = 0;
   for (const m of text.matchAll(URL_RE)) {
     let url = m[0];
@@ -2610,6 +2616,20 @@ function peerMap(pr, call) {
   return a;
 }
 
+// ---------------------------------------------------------------- adif
+/* CR95 (TB-22): an ADI field is ASCII (ADIF 3) and contains no '<' or '>' - so its
+ * length counts what every logbook program counts, and a value cannot start a field. */
+function adifAscii(v) {
+  return String(v).normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7e]/g, "").replace(/[<>]/g, "").trim();
+}
+function adifField(k, v) {
+  const a = v && v !== "-" ? adifAscii(v) : "";
+  return a ? `<${k}:${a.length}>${a} ` : "";
+}
+function isLocator(s) { return /^[A-R]{2}[0-9]{2}([A-X]{2}([0-9]{2})?)?$/i.test(String(s)); }
+// ---------------------------------------------------------------- qsl
+
 /* QSL: a chat line "~Q f=<MHz> t=<UTC yyyymmddhhmm> loc=<locator> q=<bars>" */
 function sendQsl(c) {
   const d = new Date(), z = (n) => String(n).padStart(2, "0");
@@ -2629,12 +2649,13 @@ function qslCard(m, kind, c) {
     el("div", "qsl-73", "tnx fer QSO · 73!"));
   const a = el("a", "sm qsl-adif", "ADIF");
   a.title = "This QSO for your logbook program";
-  const rec = (k, v) => (v && v !== "-" ? `<${k}:${String(v).length}>${v} ` : "");
+  const rec = adifField;
+  const grid = isLocator(loc) ? loc : "";          // a locator or nothing (CR95, TB-22)
   const freq = parseFloat(f);
   const adif = "TBClient QSL\n<ADIF_VER:5>3.1.4 <PROGRAMID:8>TBClient <EOH>\n" + rec("CALL", c.target)
     + rec("STATION_CALLSIGN", S.mycall) + rec("QSO_DATE", t.slice(0, 8)) + rec("TIME_ON", t.slice(8))
     + rec("FREQ", isNaN(freq) ? "" : String(freq)) + rec("MODE", "PKT")
-    + (kind === "rx" ? rec("GRIDSQUARE", loc) + rec("QSL_RCVD", "Y") : rec("MY_GRIDSQUARE", loc) + rec("QSL_SENT", "Y"))
+    + (kind === "rx" ? rec("GRIDSQUARE", grid) + rec("QSL_RCVD", "Y") : rec("MY_GRIDSQUARE", grid) + rec("QSL_SENT", "Y"))
     + "<EOR>\n";
   a.href = "#";
   a.onclick = (ev) => {                          // the file only when asked for

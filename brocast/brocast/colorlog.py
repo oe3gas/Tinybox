@@ -17,7 +17,19 @@ if (_root / "prcore" / "termcolor.py").is_file() and str(_root) not in sys.path:
 try:
     from prcore.termcolor import (HEAD, OK, ConsoleFormatter, check_mode, console_handler, kv,
                                   kv_block)
+    from prcore.text import visible
 except ImportError:                                   # brocast without the TinyBox repo
+    import unicodedata as _ud
+
+    def visible(text: str, keep: str = "\n\t") -> str:     # type: ignore[no-redef]
+        """Same as prcore.text.visible (CR95, TB-12): escapes terminal controls."""
+        def bad(ch: str) -> bool:
+            n = ord(ch)
+            return (n < 0x20 or 0x7F <= n <= 0x9F or
+                    (n > 0x9F and _ud.category(ch) in ("Cf", "Zl", "Zp", "Co", "Cs", "Cn")))
+        return "".join((f"\\x{ord(c):02x}" if ord(c) < 0x100 else f"\\u{ord(c):04x}")
+                       if c not in keep and bad(c) else c for c in text)
+
     OK: dict = {}
     HEAD: dict = {}
 
@@ -30,7 +42,8 @@ except ImportError:                                   # brocast without the Tiny
         def format(self, record: logging.LogRecord) -> str:
             level = ("[ERROR] " if record.levelno >= logging.ERROR else
                      "[WARN] " if record.levelno >= logging.WARNING else "")
-            text = f"{self.tag} {self.formatTime(record, self.datefmt)} {level}{record.getMessage()}"
+            text = (f"{self.tag} {self.formatTime(record, self.datefmt)} {level}"
+                    f"{visible(record.getMessage())}")
             if record.exc_info:
                 text += "\n" + self.formatException(record.exc_info)
             return text
@@ -58,4 +71,14 @@ except ImportError:                                   # brocast without the Tiny
             else:
                 kv(log, *item)
 
-__all__ = ["HEAD", "OK", "ConsoleFormatter", "check_mode", "console_handler", "kv", "kv_block"]
+
+
+class FileFormatter(logging.Formatter):
+    """Log file lines with received text made harmless (CR95, TB-12)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return visible(super().format(record))
+
+
+__all__ = ["HEAD", "OK", "ConsoleFormatter", "FileFormatter", "check_mode", "console_handler",
+           "kv", "kv_block", "visible"]

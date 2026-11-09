@@ -2,6 +2,15 @@
 
 ## Unveröffentlicht
 
+- Alle Teile: **Zeichensatz-Policy CR95 (PLANUNG 29.9, Audit TB-11/TB-12/TB-22)** – Freitext in jeder
+  Schrift, aber ohne Steuer-, Bidi- und unsichtbare Zeichen, NFC, höchstens 3 Kombinationszeichen je
+  Buchstabe (`prcore.text.clean_text`): beim Speichern von Post, im Chatboard und im Client für
+  empfangene Zeilen. Zeilen eines lokal geschriebenen Textes, die eine Mailbox oder der Client als
+  Protokoll lesen würde (`/EX`, `***`, `R:`, `F>`, `FB …`, `;`, `//` – auch in voller Breite), bekommen
+  ein führendes Leerzeichen. Konsole, Sysop-Konsole und Logdateien (TinyBox, brocastd, kisshub,
+  Client) zeigen Steuerzeichen als `\x1b` usw., statt sie auszuführen (Bildschirm löschen, Zeilen
+  fälschen, Fenstertitel, Zwischenablage per OSC 52). Client 2026.11.09.3: Text in `<bdi>`,
+  ADIF-Felder der QSL-Karte nur ASCII ohne `<`/`>`, Locator wird geprüft.
 - Forwarding: **zwei Stationen unter einem Rufzeichen erkennen (CR90 Stufe 1, Audit TB-02)** – sendet
   das Rufzeichen des Partners während einer Funk-Sitzung DM, FRMR oder ein überzähliges UA (die echte
   Station antwortet so, wenn jemand anderer ihr Rufzeichen benutzt), wird gesendete Post erneut

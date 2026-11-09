@@ -15,7 +15,7 @@ import threading
 import time
 from typing import Callable
 
-from prcore.text import isnum
+from prcore.text import isnum, visible
 
 from .. import VERSION, commands, config, logsetup, texts
 from ..app import App
@@ -37,7 +37,9 @@ class MonitorFilter(logging.Filter):
 
 
 def _stdout_write(text: str) -> None:
-    sys.stdout.write(text)
+    # CR95 (TB-12): what users and partners wrote (L, R n, chat) reaches the
+    # console - control and bidi characters are shown escaped, never executed
+    sys.stdout.write(visible(text, keep="\r\n\t\x07"))
     sys.stdout.flush()
 
 

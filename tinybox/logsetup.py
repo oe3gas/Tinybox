@@ -28,6 +28,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from prcore import termcolor
+from prcore.text import visible
 
 PREFIX = "tinybox-"             # tinybox-2026-10-13.log
 SUFFIX = ".log"
@@ -248,9 +249,9 @@ class Formatter(logging.Formatter):
             annotate(record)
         stamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
         line = (f"{stamp}.{int(record.msecs):03d} {record.lvl} "
-                f"{record.comp:<8} {record.ctx:<12} {record.getMessage()}")
-        if record.exc_info:
-            line += "\n" + self.formatException(record.exc_info)
+                f"{record.comp:<8} {record.ctx:<12} {visible(record.getMessage())}")
+        if record.exc_info:                     # CR95 (TB-12): visible() - see prcore/text.py
+            line += "\n" + visible(self.formatException(record.exc_info))
         return line
 
 

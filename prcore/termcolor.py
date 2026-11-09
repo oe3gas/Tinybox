@@ -25,6 +25,8 @@ import logging
 import os
 import sys
 
+from prcore.text import visible
+
 RESET = "\033[0m"
 GREY = "\033[90m"
 CYAN = "\033[96m"
@@ -203,14 +205,14 @@ class ConsoleFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         head = f"{self.tag} {self.formatTime(record, self.datefmt)}"
-        msg = record.getMessage()
-        if record.exc_info and not record.exc_text:
+        msg = visible(record.getMessage())        # CR95 (TB-12): received text cannot
+        if record.exc_info and not record.exc_text:    # steer the terminal
             record.exc_text = self.formatException(record.exc_info)
         extra_text = ""
         if record.exc_text:
-            extra_text += "\n" + record.exc_text
+            extra_text += "\n" + visible(record.exc_text)
         if record.stack_info:
-            extra_text += "\n" + self.formatStack(record.stack_info)
+            extra_text += "\n" + visible(self.formatStack(record.stack_info))
         ctx = getattr(record, self.context, "") if self.context else ""
 
         if record.levelno >= logging.ERROR:
@@ -228,7 +230,7 @@ class ConsoleFormatter(logging.Formatter):
             return msg
         kvt = getattr(record, "tb_kv", None)
         if kvt:
-            label, value, note = kvt
+            label, value, note = (visible(str(x)) for x in kvt)
             val = self._c(BLUE_UL if getattr(record, "tb_url", False) else WHITE + BOLD, value)
             text = f"{self._c(CYAN, f'{label:<{LABEL_WIDTH}}')} {val}"
             return text + (f"  {self._c(GREY, note)}" if note else "")

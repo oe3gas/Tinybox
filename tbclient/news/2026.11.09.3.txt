@@ -1,0 +1,3 @@
+- Empfangener Text ohne Steuer-, Bidi- und unsichtbare
+  Zeichen; arabisch/hebraeisch stoert die Anzeige nicht mehr.
+- ADIF der QSL-Karte: nur ASCII, Locator wird geprueft.

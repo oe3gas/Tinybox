@@ -471,8 +471,8 @@ def setup_logging(cfg: config.Config) -> None:
         cfg.log_dir.mkdir(parents=True, exist_ok=True)
         name = f"brocastd_log_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log"
         fh = logging.FileHandler(cfg.log_dir / name, encoding="utf-8")
-        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-                                          "%Y-%m-%d %H:%M:%S"))
+        fh.setFormatter(colorlog.FileFormatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+                                               "%Y-%m-%d %H:%M:%S"))
         root.addHandler(fh)
         cfg.log_file = cfg.log_dir / name               # shown in the start block
 

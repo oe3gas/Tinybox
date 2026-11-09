@@ -42,7 +42,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable
 
 from prcore.chatimg import terminal_text
-from prcore.text import isnum
+from prcore.text import clean_text, isnum
 
 from . import chatimg, linkq, texts
 from .config import ChatBoard, Config
@@ -248,6 +248,9 @@ class ChatHub:
     def say(self, session: Session, text: str) -> None:
         board = self.cfg.chat.board(session.chat_board or "")
         if board is None:
+            return
+        text = clean_text(text).replace("\n", " ").strip()   # CR95: no bidi/invisible tricks
+        if not text:
             return
         now = utc_now()
         # terminals read "[Image ...]" and the quoted line instead of the bare
