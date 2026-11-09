@@ -146,6 +146,35 @@ class Sessions(unittest.TestCase):                               # TB-17
         self.assertTrue(reg.add(mk("OE3GAS")))
         self.assertTrue(reg.add(mk("OE1ABC-8", sysop=True)))      # the sysop always
 
+    def test_full_mailbox_makes_room_only_when_somebody_wants_in(self):
+        import time
+
+        class S:
+            def __init__(self, call, chat, idle):
+                self.call, self.sysop, self.idle_exempt = call, False, chat
+                self.last_input = time.monotonic() - idle
+                self.closed, self.said = False, []
+
+            def out(self, text):
+                self.said.append(text)
+
+            def close(self):
+                self.closed = True
+
+        reg = SessionRegistry(max_users=3, idle_sec=600)
+        reader = S("OE1AAA", True, 3 * 3600)                     # parked in a board for 3 h
+        newer = S("OE1BBB", True, 20 * 60)                       # parked 20 min
+        busy = S("OE1CCC", False, 5 * 3600)                      # not in a board: own timeout
+        for x in (reader, newer, busy):
+            self.assertTrue(reg.add(x))
+        self.assertFalse(reader.closed)                          # nobody waiting: all stay
+        with self.assertLogs("tinybox.monitor", "INFO"):
+            self.assertTrue(reg.add(S("OE3GAS", False, 0)))      # somebody wants in
+        self.assertEqual((reader.closed, newer.closed, busy.closed), (True, False, False))
+        self.assertTrue(reader.said)
+        newer.last_input = time.monotonic() - 60                 # just typed
+        self.assertFalse(reg.add(S("OE3XYZ", False, 0)))         # nobody silent long enough
+
 
 class HubStats(unittest.TestCase):                               # TB-19
     def test_bounded(self):

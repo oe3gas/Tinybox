@@ -10,8 +10,9 @@
   Client): höchstens 32 AX.25-Links, Verbindungen von Nicht-Rufzeichen (`ABCDEF`, `QST`) werden
   abgewiesen, und bei voller Tabelle macht ein Link Platz, der noch nie Daten brachte. AX.25: ein
   REJ/SREJ sendet frühestens nach einer halben Laufzeit wieder, nach N2 Wiederholungen eines Frames
-  endet der Link. BBS: höchstens 2 Sitzungen je Rufzeichen (alle SSIDs), Mitlesen im Chat
-  `[chat] idle_min` (Vorgabe 120 min) und bei voller Box das normale Idle-Timeout. kisshub
+  endet der Link. BBS: höchstens 2 Sitzungen je Rufzeichen (alle SSIDs); Mitlesen im Chat ohne
+  Zeitgrenze (`[chat] idle_min = 0`), aber ist die Box voll und will jemand herein, macht der am
+  längsten stille Chat-Leser Platz. kisshub
   2026.11.09.2: höchstens 500 gehörte Stationen (ein Tag), 200 verfolgte Links, 50 Links im Status.
 - Client 2026.11.09.4 und TinyBox: **Datei- und Bildempfang CR96 (Audit TB-05, TB-16)** – der Client
   nimmt `//I` und `//F` nur für das an, was er gerade angefordert hat (anderes wird verworfen),

@@ -340,7 +340,7 @@ class ChatCfg:
     history_lines: int = 20     # max lines per history request (/H n, //HIST)
     max_line: int = 200         # max characters per chat line
     image_max: int = 8192       # max bytes of a chat image (CR12), 0 = no images at all
-    idle_min: int = 120         # CR97 (TB-17): reading along in a board, then idle timeout
+    idle_min: int = 0           # CR97 (TB-17): reading along in a board (0 = no limit)
     boards: list[ChatBoard] = field(default_factory=list)
 
     def image_limit(self, board: ChatBoard) -> int:
@@ -1027,7 +1027,7 @@ def _load_chat(cp: configparser.ConfigParser) -> ChatCfg:
                    history_lines=_get(cp, "chat", "history_lines", 20, int),
                    max_line=_get(cp, "chat", "max_line", 200, int),
                    image_max=parse_size("chat", "image_max", _get(cp, "chat", "image_max", "8k")),
-                   idle_min=_get(cp, "chat", "idle_min", 120, int))
+                   idle_min=_get(cp, "chat", "idle_min", 0, int))
     _check_range("chat", "history_lines", chat.history_lines, 0, 200)
     _check_range("chat", "idle_min", chat.idle_min, 0, 1440)
     _check_range("chat", "max_line", chat.max_line, 40, 1000)

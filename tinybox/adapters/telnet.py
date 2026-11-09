@@ -111,8 +111,7 @@ class TelnetConnection:
     async def _timed_line(self, idle_timeout: bool = True) -> str:
         timeout = self.app.cfg.mailbox.idle_timeout_min * 60
         if not idle_timeout:                 # reading along in a chat board (CR97, TB-17)
-            chat = self.app.cfg.chat.idle_min * 60
-            timeout = timeout if self.app.registry.full else (chat or None)
+            timeout = self.app.cfg.chat.idle_min * 60 or None    # 0 = no limit
         line = await asyncio.wait_for(self.read_line(), timeout)
         await self.writer.drain()
         return line

@@ -58,6 +58,7 @@ class Session:
         self.transport = transport
         self.origin = origin
         self.sysop = sysop
+        self.last_input = time.monotonic()
         self.monitor = monitor  # log traffic to logger "tinybox.monitor"
         # Every log line of this connection carries "#7 OE3TEC" (CR32), also the
         # lines written by store, chat and sync: grep "#7" gives the whole session.
@@ -299,6 +300,7 @@ class Session:
         if self.closed:
             return
         line = line[:MAX_LINE]
+        self.last_input = time.monotonic()      # CR97: who is silent longest (registry)
         with logsetup.session_context(self.log_ctx):
             self._handle_line(line)
 
@@ -502,24 +504,42 @@ MAX_PER_CALL = 2          # CR97 (TB-17): sessions of one call (all SSIDs) at on
 class SessionRegistry:
     """Keeps track of active sessions across all adapters (max_users)."""
 
-    def __init__(self, max_users: int) -> None:
+    def __init__(self, max_users: int, idle_sec: float = 600) -> None:
         self.max_users = max_users
+        self.idle_sec = idle_sec            # [mailbox] idle_timeout_min: who may make room
         self._sessions: list[Session] = []
 
+    def _active(self) -> list:
+        return [s for s in self._sessions if not getattr(s, "closed", False)]
+
     def add(self, session: Session) -> bool:
-        if len(self._sessions) >= self.max_users:
-            return False
+        active = self._active()
         # CR97 (TB-17): one call with several SSIDs must not take every slot
         base = profiles.base_call(session.call)
-        same = sum(1 for s in self._sessions if profiles.base_call(s.call) == base)
+        same = sum(1 for s in active if profiles.base_call(s.call) == base)
         if same >= MAX_PER_CALL and not session.sysop:
+            return False
+        if len(active) >= self.max_users and not self._make_room(session.call):
             return False
         self._sessions.append(session)
         return True
 
-    @property
-    def full(self) -> bool:
-        return len(self._sessions) >= self.max_users
+    def _make_room(self, newcomer: str) -> bool:
+        """CR97 (TB-17): the mailbox is full and somebody wants in. Reading along in
+        a chat board has no time limit - but now the one who has been silent the
+        longest (and longer than idle_timeout_min) makes room. No one else is
+        touched, and nobody at all while no one is waiting."""
+        now = time.monotonic()
+        parked = [s for s in self._active() if getattr(s, "idle_exempt", False)
+                  and now - getattr(s, "last_input", now) > self.idle_sec]
+        if not parked:
+            return False
+        victim = max(parked, key=lambda s: now - s.last_input)
+        log.info("%s: silent in a chat board for %d min - makes room for %s",
+                 victim.call, (now - victim.last_input) // 60, newcomer)
+        victim.out(texts.IDLE_TIMEOUT)
+        victim.close()
+        return True
 
     def remove(self, session: Session) -> None:
         if session in self._sessions:

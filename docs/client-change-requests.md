@@ -3182,9 +3182,11 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
   Laufzeit (`srt/2`, mind. 0,5 s) wieder (die Bestätigung darin zählt trotzdem; Zähler
   `rej_ignored`); wurde ein Frame öfter als N2-mal gesendet, endet der Link wie bei Retry-out.
 - TB-17, BBS: höchstens `MAX_PER_CALL = 2` Sitzungen je Rufzeichen (alle SSIDs, der Sysop
-  ausgenommen); Mitlesen im Chat ist nicht mehr unbegrenzt: `[chat] idle_min` (Vorgabe 120, 0 = ohne
-  Grenze), und wenn alle Plätze belegt sind, gilt auch im Chat das normale `idle_timeout_min` (AGW,
-  KISS und Telnet). Client: eine eingehende Verbindung lässt den letzten Kanal frei (für Mailbox-Sync
+  ausgenommen). Mitlesen im Chat bleibt ohne Zeitgrenze (`[chat] idle_min`, Vorgabe 0 = ohne Grenze;
+  AX.25 selbst kennt kein Idle-Limit, T3 prüft nur, ob die Gegenstelle noch da ist). Nachgeschärft
+  (OE3GAS, 09.11.2026, statt erst 120 min): ist die Box voll und **will jemand herein**, macht der
+  Chat-Leser Platz, der am längsten still ist (länger als `idle_timeout_min`) – nur dieser eine und
+  nur dann (`SessionRegistry._make_room`); der Neue kommt sofort herein. Client: eine eingehende Verbindung lässt den letzten Kanal frei (für Mailbox-Sync
   und eigene Verbindungen) und wird nach 30 min ohne Zeile getrennt.
 - TB-19, kisshub (`linkstats.py`): höchstens 500 gehörte Stationen (wer einen Tag nicht gehört
   wurde, fällt weg), 200 verfolgte Links (der am längsten stille macht Platz), Status-JSON mit den 50

@@ -165,9 +165,10 @@ history_lines = 20             # max lines per history request (/H n, client)
 max_line      = 200            # max characters per chat line
 image_max     = 8k             # small pictures in the chat (TinyBox client, CR12):
                                # max bytes per picture (1k ... 15k), 0 = no pictures
-idle_min      = 120            # reading along in a board without typing: this long
-                               # (0 = no limit). When all slots are taken, the
-                               # normal idle_timeout_min applies there too.
+idle_min      = 0              # reading along in a board without typing: this long
+                               # (0 = no limit). When the mailbox is full and
+                               # somebody wants in, the one silent longest (over
+                               # idle_timeout_min) makes room - only then.
 
 [chat_boards]
 # Fixed boards, set by the sysop. One line per board:

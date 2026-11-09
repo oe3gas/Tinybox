@@ -41,7 +41,8 @@ class App:
         bus = EventBus()
         service = MessageService(store, bus, cfg)
         service.assign_missing_bids()          # schema 4 -> 5, no-op afterwards
-        app = cls(cfg, store, bus, service, SessionRegistry(cfg.mailbox.max_users))
+        app = cls(cfg, store, bus, service, SessionRegistry(cfg.mailbox.max_users,
+                                                             cfg.mailbox.idle_timeout_min * 60))
         from .shutdown import ShutdownTimer
         app.shutdown = ShutdownTimer(app)
         return app
