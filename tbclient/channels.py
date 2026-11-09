@@ -20,6 +20,8 @@ from .target import label as target_label
 if TYPE_CHECKING:
     from .core import ClientCore
 
+PROBE_ANSWER_SEC = 90      # CR98: //TB BOX or //TB CLIENT only this long after our //TB?
+
 log = logging.getLogger(__name__)
 
 TERM_MAX = 500            # CR43: lines kept per channel for the terminal view
@@ -58,6 +60,7 @@ class Channel:
         self._disc_timer: asyncio.TimerHandle | None = None
         self._detect_task: asyncio.Task | None = None
         self.probed = False                       # CR76: //TB? sent on this connection
+        self._probe_until = 0.0                   # CR98: its answer only comes this soon
         self.peer: peer_mod.Peer | None = None    # CR78: the other side is a TBClient
         self._t0 = 0.0
         self._start = ""
@@ -216,6 +219,7 @@ class Channel:
     def _probe(self) -> None:
         line = peer_mod.probe_line()
         self.probed = True
+        self._probe_until = time.monotonic() + PROBE_ANSWER_SEC
         self.term_line("tx", line)
         self.core.console.append(f"[{self.n}]> {line}")
         self.link.send_line(line)
@@ -235,8 +239,14 @@ class Channel:
                 self.peer.start()
             return True
         if word == "TB" and self.probed and not self.incoming:
+            # CR98: only the answer to our //TB? - a "//TB BOX" in a mail read later on
+            # another mailbox must not switch the channel into client or peer mode
+            if time.monotonic() > self._probe_until:
+                return False
             kind, _, args = rest.partition(" ")
             kind = kind.upper()
+            if kind in ("BOX", "CLIENT"):
+                self._probe_until = 0.0
             if kind == "BOX" and self.mode in ("", "terminal"):
                 self._found_box()
                 return True

@@ -1,3 +1,2 @@
-- APRS-Netzgraph: keine Linien mehr zur eigenen Station,
-  Auswahl Digi/iGate/Station/mobil/direkt gehoert,
-  direkt gehoerte Calls voll, andere blass, km an der Karte.
+- Text in einer Mail (//..., #...) wirkt nie mehr als Befehl.
+- //TB-Antwort nur kurz nach der eigenen Abfrage.

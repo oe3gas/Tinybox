@@ -144,3 +144,15 @@ def mixed_script(word: str) -> bool:
     """True for one word with letters from two look-alike scripts (UTS #39)."""
     seen = {s for s in map(_script, word) if s and s != "OTHER"}
     return len(seen) > 1
+
+
+# --- text lines to a TinyBox client ----------------------------------------------
+
+_CLIENT_PROTO = ("//", "#", "%Q ")
+
+
+def client_safe(line: str) -> str:
+    """A text line (mail, bulletin) as it goes to a client: one that starts like
+    the client protocol (//OK, //SYS, a chat event #..., %Q) gets a leading
+    space, so the client shows it instead of acting on it (CR98)."""
+    return " " + line if line.startswith(_CLIENT_PROTO) else line

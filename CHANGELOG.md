@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- **Client-Audit CR98** (`docs/audit-client-cr98.md`): bestätigt, dass Peers nur auf selbst
+  angebotene Dateien und gesendete Bilder zugreifen können. Behoben: eine mit `R n` gelesene Nachricht
+  (auch weitergeleitete) konnte mit Zeilen wie `//SYS`, `//OK`, `#…`, `%Q` im Client als Befehl wirken
+  – die TinyBox schickt solche Zeilen an Clients jetzt mit führendem Leerzeichen. Client
+  2026.11.09.6: `//TB BOX`/`//TB CLIENT` gilt nur 90 s nach dem eigenen `//TB?` (eine Zeile in einer
+  fremden Mail schaltet den Kanal nicht mehr um), `//IN` wird geprüft. Neuer Fuzz-Lauf über alle
+  Zeilenparser (`tests/test_cr98_fuzz.py`).
 - Alle Teile: **Ratenbegrenzung und Obergrenzen CR97 (Audit TB-03, TB-13, TB-17, TB-18, TB-19)** –
   Client 2026.11.09.5: was andere Stationen anfordern, kommt aus einem Sendebudget je Rufzeichen
   (96 KB) und für alle zusammen (256 KB) je halbe Stunde; dieselbe Datei höchstens zweimal, dasselbe

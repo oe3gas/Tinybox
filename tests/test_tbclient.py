@@ -692,6 +692,7 @@ class FreeConnectTests(unittest.TestCase):
             a.state, a.mode = "online", "tinybox"
             core.chan = a                         # chat channel busy: b stays a terminal
             b.state, b.target, b.probed = "online", "OE3XYZ-1", True
+            b._probe_until = time.monotonic() + 60         # CR98: the answer to our //TB?
             b._on_line("TinyBox (A,B,?) > //TB BOX v=1.0.0 call=OE3XYZ-1")
             self.assertEqual(b.mode, "terminal")
             rx = [x for _, k, x in b.term if k == "rx"]

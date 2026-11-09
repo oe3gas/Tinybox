@@ -66,7 +66,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 85 | Erwähnungs-Alarm: Popup des Betriebssystems und „BK“ in CW bei @CALL | ✅ siehe unten (Funktest offen) |
 | 86 | Dateien im Board-Chat (LZHUF), wie Bilder (CR12) und Dateien im TBClient-Chat (CR78 Stufe 7) | offen, siehe unten |
 | 87 | brocastd: Absturz durch ungültiges `exp` (TB-01) | ✅ siehe unten |
-| 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | ✅ siehe unten (breiter Fuzz-Lauf mit CR98) |
+| 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | ✅ siehe unten (Fuzz-Lauf mit CR98 ✅) |
 | 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | ✅ siehe unten |
 | 90 | Interlink-Authentisierung (TB-02): Stufe 1 Doppel-Rufzeichen erkennen ✅, Stufe 2 HMAC offen | Stufe 1 ✅, siehe unten |
 | 91 | Dictionary-Integrität: voller Vergleich, keine automatische Weiterverbreitung (TB-04) | ✅ siehe unten (Signatur mit CR94) |
@@ -76,7 +76,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | ✅ siehe unten (Abstufung nach Rolle mit CR92) |
 | 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash mit CR86) |
 | 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | ✅ siehe unten |
-| 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | offen, siehe unten |
+| 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | ✅ siehe unten, Bericht `docs/audit-client-cr98.md` |
 | 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | offen, siehe unten |
 | 100 | Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding und fremde Origins | ✅ siehe unten |
 | 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
@@ -3194,7 +3194,7 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
   zuletzt aktiven Links plus `links_total`; Schließen eines Links per Schlüssel statt Suche.
 - Tests `tests/test_cr97.py`.
 
-## CR98 – Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle (offen, 09.11.2026)
+## CR98 – Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle (✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3207,6 +3207,21 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
   liest angebotene Dateien ohne Rückfrage, die Prüfung „wem angeboten“ hängt am fälschbaren Rufzeichen.
 - Prüfen, ob Zeilen mit `//` aus Post oder Bulletins beim Lesen/Sync als Befehl ankommen können.
 - Ergebnis als Bericht in `docs/`, Befunde als eigene CRs.
+
+### Ergebnis (Claude, 09.11.2026) – Bericht `docs/audit-client-cr98.md`
+
+- Aussage bestätigt: über das Netz liest der Client nur eigene Bilder und selbst angebotene Dateien
+  (Hash-Name im eigenen Datenordner, kein Pfad), schreibt nur in den Datenordner, startet nichts.
+  Präzisierung: eine angebotene Datei kann (auch ein Fremder unter dem Rufzeichen) ohne neue
+  Rückfrage wieder abrufen – seit CR97 begrenzt.
+- F1 ✅ (Medium): mit `R n` gelesene Post (auch weitergeleitete) wirkte mit `//…`, `#…`, `%Q`-Zeilen
+  im Client als Befehl → Box schickt solche Zeilen an Clients mit Leerzeichen (`client_safe`).
+- F2 ✅ (Medium): `//TB BOX`/`//TB CLIENT` in einem Text auf einer fremden Mailbox schaltete den Kanal
+  um → nur 90 s nach dem eigenen `//TB?` und nur einmal.
+- F3 ✅ (Low, Fuzz-Lauf): `//IN` mit Nicht-Zahl → wird geprüft. Der breite Fuzz-Lauf aus CR88 ist
+  damit erledigt (`tests/test_cr98_fuzz.py`).
+- Die Befunde waren klein genug, um sie gleich zu beheben – keine eigenen CRs. Peer-Verlauf (TB-06)
+  bleibt bei CR99.
 
 ## CR99 – Chatverlauf und Peer-Identität (TB-06, TB-07, offen, 09.11.2026)
 

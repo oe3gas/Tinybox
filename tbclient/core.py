@@ -937,7 +937,9 @@ class ClientCore:
                 self.join(last)                  # back into the last board
         elif cmd == "IN":
             parts = rest.split()
-            if len(parts) >= 4:
+            # CR98: "//IN <n> <name> <keep> <last hex|->" - anything else is not a join
+            if len(parts) >= 4 and isnum(parts[0]) and \
+                    (parts[3] == "-" or re.fullmatch(r"[0-9A-Fa-f]{1,4}", parts[3])):
                 self._clear_board()
                 self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2],
                               "img": self._img_limit(rest)}

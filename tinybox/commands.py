@@ -7,7 +7,7 @@ import re
 from typing import TYPE_CHECKING, Callable
 
 from prcore.profile import CALL_RE as BASE_CALL_RE, ProfileError
-from prcore.text import isnum
+from prcore.text import client_safe, isnum
 
 from . import addressing, chatcmd, dictfile, linkq, profiles, texts
 from .service import ServiceError
@@ -55,7 +55,10 @@ def _show(s: Session, m: Message) -> None:
     if m.fwd == "H" and m.note:
         head.insert(-1, texts.HELD_NOTE.format(note=m.note))
     rl = m.rline_list
-    s.out(*head, *rl, *([""] if rl else []), *m.body.split("\n"),
+    body = m.body.replace("\r", "").split("\n")
+    if s.client is not None:              # CR98: a text line must not act as a client command
+        body = [client_safe(x) for x in body]
+    s.out(*head, *rl, *([""] if rl else []), *body,
           texts.READ_END.format(id=m.id))
 
 
