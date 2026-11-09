@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+- Forwarding: **zwei Stationen unter einem Rufzeichen erkennen (CR90 Stufe 1, Audit TB-02)** – sendet
+  das Rufzeichen des Partners während einer Funk-Sitzung DM, FRMR oder ein überzähliges UA (die echte
+  Station antwortet so, wenn jemand anderer ihr Rufzeichen benutzt), wird gesendete Post erneut
+  angeboten, empfangene für den Sysop gehalten (`REL n`), und der Sysop bekommt eine Nachricht.
 - Forwarding: **Robustheit CR89 (Audit TB-10, TB-11, TB-20a/b)** – eine Nachricht bekommt immer eine
   BID: ist `<n>_<CALL>` schon bekannt (Zähler übergelaufen, Datenbank neu, oder vorab von einem
   falschen Partner belegt), eine zufällige wie `K7Q2X_OE3XTC`; ältere Nachrichten ohne BID bekommen

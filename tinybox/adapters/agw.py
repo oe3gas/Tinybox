@@ -31,7 +31,7 @@ from collections import deque
 from prcore.agw import PID_NO_L3, AgwProtocolError, Frame, read_frame, via_data
 from prcore.termcolor import OK
 
-from .. import chatimg, framemon, linkq, logsetup, texts
+from .. import chatimg, framemon, linkguard, linkq, logsetup, texts
 from ..app import App
 from ..config import is_valid_call, normalize_call
 from ..session import MAX_LINE, Session
@@ -379,6 +379,8 @@ class AgwAdapter:
         # data: one byte port/TNC (channel << 4), then the frame without FCS
         if len(f.data) < 16 or f.port != self.radio_port:
             return
+        if f.kind == "K":
+            linkguard.guard.heard(f.data[1:])        # CR90: two stations under one call
         framemon.emit(f.data[1:], tx=f.kind == "O", mycall=self.mycall)
 
     def _on_connect(self, remote: str) -> None:

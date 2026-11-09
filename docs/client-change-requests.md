@@ -68,7 +68,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 87 | brocastd: Absturz durch ungültiges `exp` (TB-01) | ✅ siehe unten |
 | 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | ✅ siehe unten (breiter Fuzz-Lauf mit CR98) |
 | 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | ✅ siehe unten |
-| 90 | Interlink-Authentisierung, Challenge-Response pro Partner (TB-02) | offen, siehe unten |
+| 90 | Interlink-Authentisierung (TB-02): Stufe 1 Doppel-Rufzeichen erkennen ✅, Stufe 2 HMAC offen | Stufe 1 ✅, siehe unten |
 | 91 | Dictionary-Integrität: voller Vergleich, keine automatische Weiterverbreitung (TB-04) | ✅ siehe unten (Signatur mit CR94) |
 | 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | offen, siehe unten |
 | 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | offen (Konzept), siehe unten |
@@ -2913,7 +2913,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   `max_session_min` (Vorgabe 60, 1 … 1440): danach endet jede Sitzung, auch während der Daten.
 - Tests `tests/test_cr89.py`.
 
-## CR90 – Interlink-Authentisierung (TB-02, offen, 09.11.2026)
+## CR90 – Interlink-Authentisierung (TB-02, Stufe 1 ✅ 09.11.2026, Stufe 2 offen)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -2929,6 +2929,36 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Pro Partner konfigurierbar (`auth = hmac | none`), `none` nur bewusst (R3); Werkzeug zum Erzeugen
   und Widerrufen nach dem Vorbild `gust_keygen.py`.
 - Später: Signatur statt Geheimnis (CR94).
+
+### Diskussion und Entscheidung (OE3GAS/Claude, 09.11.2026)
+
+- Vorschlag „Forward-Post nie an eingehende Funk-Anrufer“ verworfen. Einwand OE3GAS: ist die echte
+  Station auf der Frequenz, hat sie keine Verbindung mit uns und antwortet auf unsere Polls mit
+  **DM** (AX.25 2.2, Zustand disconnected) – das stört den Fälscher. Der Unterschied zwischen
+  eingehendem und eigenem Anruf ist damit klein; die Sperre hätte vor allem den Partnern das
+  Abholen genommen. Der Angriff gelingt im Wesentlichen nur, wenn die echte Station aus ist, nicht
+  hört (Hidden Terminal) oder die Übertragung vor dem ersten Poll fertig ist.
+- Stattdessen **Stufe 1: erkennen statt sperren**, dann **Stufe 2: HMAC-Challenge-Response** für
+  Partner, die es können. FBB/BPQ-Partner: Rufzeichen als akzeptiertes Restrisiko.
+
+### Umsetzung Stufe 1 (TinyBox, 09.11.2026)
+
+- `tinybox/linkguard.py`: während einer Forward-Sitzung über Funk (AGW und KISS/AXUDP) wird jedes
+  gehörte Frame vom Rufzeichen des Partners an uns geprüft. **DM**, **FRMR** oder ein **UA** mehr
+  als der Verbindungsaufbau erklärt (eigener Anruf: 1, eingehend: 0) = Verdacht. Frames nach unserem
+  eigenen DISC zählen nicht. AGW: aus Direwolfs Roh-Monitor (`K`), KISS: aus dem eigenen AX.25-Stack.
+- Bei Verdacht (`ForwardModule._suspect`): gesendete Post dieser Sitzung wieder „offen“ (wird erneut
+  angeboten, der Empfänger erkennt Doppelte an der BID), empfangene Post wird **gehalten** (`H`, Notiz
+  „CR90: received while a second station used the partner's call“, Freigabe mit `REL n`), die
+  Sitzung gilt als fehlgeschlagen, Warnung im Log und **persönliche Nachricht an den Sysop**.
+- Fehlalarm möglich, wenn der echte Partner die Verbindung verliert (Neustart, DM): dann wird nur
+  noch einmal gesendet und der Sysop gibt die gehaltene Post frei.
+- Tests `tests/test_cr90.py`.
+
+### Stufe 2 (offen)
+
+- HMAC-SHA256-Challenge-Response pro Partner im Handshake als `;`-Zeilen (Vorbild Winlink
+  `;PQ:`/`;PR:`, GUST-S), `auth = hmac | none` je Partner, Schlüsselwerkzeug nach `gust_keygen.py`.
 
 ## CR91 – Dictionary-Integrität (TB-04, ✅ 09.11.2026)
 

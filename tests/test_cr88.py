@@ -94,6 +94,7 @@ class ForwardSessionEndsCleanly(unittest.IsolatedAsyncioTestCase):
         s.p = SimpleNamespace(call="OE3XYZ", timeout=10, max_session_min=60)
         s.master = True
         s.in_message = False
+        s.on_end = None
         s.link = Link()
         s.r = SessionResult("OE3XYZ", True, "agw")
 

@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import Callable
 from dataclasses import dataclass, field
 
 from .. import logsetup
@@ -99,6 +100,7 @@ class ForwardSession:
         self.tx = Sender(service, partner.call)
         self.store = service.store
         self.in_message = False
+        self.on_end: Callable[[], None] | None = None
         self._deadline = time.monotonic() + partner.max_session_min * 60   # run() sets it again
         self.compressed = False         # B0 or B1
         self.b1 = False
@@ -194,6 +196,8 @@ class ForwardSession:
             log.exception("%s: internal error in the forward session", self.p.call)
             self.r.error = f"internal error: {type(exc).__name__}"   # end the session cleanly
         finally:
+            if self.on_end is not None:     # CR90: before our DISC goes out
+                self.on_end()
             await self.link.drain()
             await self.link.close()
         (log.info if self.r.ok else log.warning)("%s: %s %s", self.p.call,

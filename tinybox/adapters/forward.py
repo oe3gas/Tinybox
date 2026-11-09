@@ -30,8 +30,11 @@ from prcore import termcolor
 from ..app import App
 from ..config import LOOPBACK_HOSTS, PartnerCfg, normalize_call
 from ..fwd.link import AgwLink, TcpLink
+from ..linkguard import guard
 from ..fwd.router import Router
 from ..fwd.session import ForwardSession, SessionResult
+
+SPOOF_NOTE = "CR90: received while a second station used the partner's call"
 
 log = logging.getLogger("tinybox.forward")
 
@@ -165,7 +168,13 @@ class ForwardModule:
         try:
             s = ForwardSession(self.app.cfg.station.bbs_call, partner, link, master=master,
                                transport=transport, service=self.app.service)
+            if transport == "agw":
+                s.on_end = lambda: guard.stop(partner.radio_call)
             result = await s.run()
+            if transport == "agw":
+                seen = guard.result(partner.radio_call)
+                if seen:
+                    self._suspect(partner, result, seen)
         finally:
             self.busy.discard(partner.call)
             self.radio_busy.discard(partner.call)
@@ -176,6 +185,44 @@ class ForwardModule:
         else:
             self.failed_at[partner.call] = time.monotonic()
         return result
+
+    def _suspect(self, partner: PartnerCfg, result: SessionResult, seen: str) -> None:
+        """CR90 (TB-02): during the session the partner's call also sent DM/FRMR/UA -
+        most likely a second station under its call (or the link broke). What this
+        session did is not trusted: sent mail is offered again, received mail is
+        held for the sysop, and the sysop gets a message."""
+        store, svc = self.app.store, self.app.service
+        reopened, held = [], []
+        for bid, state in result.sent.items():
+            m = store.get_by_bid(bid)
+            if m is None or state != "done":
+                continue
+            store.fwd_set(m.id, partner.call, "open")
+            if m.fwd == "F":
+                svc.set_fwd_state(m.id, "$")
+            reopened.append(m.id)
+        for bid in result.received:
+            m = store.get_by_bid(bid)
+            if m is not None and m.fwd != "H":
+                svc.set_fwd_state(m.id, "H", note=f"{SPOOF_NOTE} {partner.radio_call} ({seen})")
+                held.append(m.id)
+        result.error = (result.error + "; " if result.error else "") + \
+            f"two stations under {partner.radio_call}? ({seen})"
+        log.warning("%s: %s - %d sent message(s) offered again, %d received held for the sysop",
+                    partner.call, result.error, len(reopened), len(held))
+        st = self.app.cfg.station
+        try:
+            svc.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
+                       subject=f"Forward {partner.call}: two stations under one call?",
+                       body=(f"During the forward session with {partner.radio_call} the call also "
+                             f"sent: {seen}.\nThe real partner probably answered while another "
+                             f"station used its call - or the link broke.\n\n"
+                             f"Sent again later: {', '.join(map(str, reopened)) or '-'}\n"
+                             f"Held for you (read them, then REL <n> or delete): "
+                             f"{', '.join(map(str, held)) or '-'}\n"),
+                       origin="sysop", sysop=True)
+        except Exception:                               # the warning in the log stays
+            log.exception("%s: sysop message about the double call failed", partner.call)
 
     # --- incoming ------------------------------------------------------------------
 
@@ -189,6 +236,7 @@ class ForwardModule:
             return
         link = AgwLink(conn, f"ax25:{remote}")
         conn.session = link
+        guard.watch(partner.radio_call, self.app.cfg.station.mailbox_call, we_called=False)
         self._spawn(self._run(partner, link, master=False, transport="agw"))
 
     async def _tcp_in(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -239,7 +287,12 @@ class ForwardModule:
         def attach(conn) -> None:
             holder["link"] = conn.session = AgwLink(conn, f"ax25:{partner.radio_call}")
 
-        await agw.connect(partner.radio_call, attach, partner.via, timeout=partner.timeout)
+        guard.watch(partner.radio_call, self.app.cfg.station.mailbox_call, we_called=True)
+        try:
+            await agw.connect(partner.radio_call, attach, partner.via, timeout=partner.timeout)
+        except BaseException:
+            guard.result(partner.radio_call)
+            raise
         return await self._run(partner, holder["link"], master=True, transport="agw")
 
     # --- lifecycle -----------------------------------------------------------------

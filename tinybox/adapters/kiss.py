@@ -45,7 +45,7 @@ from prcore.ax25.frame import AX25Error, Frame
 from prcore.ax25.link import Ax25Link, LinkCfg
 from prcore.kissport import KissPort, describe_changes, norm_call, poll_hub
 
-from .. import chanmon, framemon, logsetup
+from .. import chanmon, framemon, linkguard, logsetup
 from ..app import App
 from ..config import Config
 from .agw import DRAIN_TIMEOUT, AgwAdapter, AgwConnection
@@ -125,6 +125,7 @@ class _BoxPort(KissPort):
                          path=[c + ("*" if h else "") for c, h in zip(path, repeated)])
         # CR52: every frame heard goes to the web monitor; a known link knows its modulo
         known = target or (self.links.get(dest) if src == self.mycall else None)
+        linkguard.guard.heard(data)                  # CR90: two stations under one call
         framemon.emit(data, tx=False, mycall=self.mycall,
                       mod128=(known.modulo == 128) if known else None)
 
