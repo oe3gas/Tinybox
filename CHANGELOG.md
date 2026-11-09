@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- TinyBox-Web-GUI: **Live-Monitor im Dashboard schlanker (CR101)** – nur Filter und Auswahl, Knopf
+  „Switch to monitor screen“; APRS Lense, HEX und Clear gibt es nur noch auf dem Monitor-Bildschirm.
 - Client 2026.11.09.2: **Web-GUI nur aus dem eigenen Netz (CR100)** – Anfragen von öffentlichen
   Adressen bekommen 403 (`[web] allow = lan`, auch 10.x; erweiterbar, z. B. HAMNET 44.0.0.0/8),
   Host-Prüfung gegen DNS-Rebinding (`[web] hosts` für eigene Namen), POST mit fremdem `Origin`

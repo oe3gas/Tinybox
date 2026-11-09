@@ -79,6 +79,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | offen, siehe unten |
 | 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | offen, siehe unten |
 | 100 | Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding und fremde Origins | ✅ siehe unten |
+| 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3085,3 +3086,23 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Namen in `[web] hosts`. Sonst 403.
 - POST mit `Origin` eines anderen Hosts: 403. (Schon vorher: POST nur mit `X-TBClient: 1` und JSON.)
 - `host = 0.0.0.0` bleibt Vorgabe. Tests `tests/test_cr100.py`.
+
+## CR101 – TinyBox-Web-GUI: Live-Monitor im Dashboard schlanker (✅ 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- Im Live-Monitor des Dashboards die Knöpfe „APRS Lense“, „HEX“ und „Clear“ entfernen, das
+  Suchfeld bleibt. Stattdessen ein Knopf „Switch to monitor screen“, der den eigentlichen
+  Monitor-Bildschirm öffnet.
+
+### Umsetzung (nur TinyBox-Web-GUI, `tinybox/web/app.js`)
+
+- Dashboard-Karte: Filterfeld und Auswahl („Everything“ …) bleiben, dazu „Switch to monitor
+  screen“ (`#/monitor`, wie „Monitor“ in der Seitenleiste). Filter und Auswahl gelten auf beiden
+  Seiten gemeinsam.
+- Die Karte zeigt immer Text: kein HEX, keine APRS-Karte, kein Frame-Inspektor – auch wenn HEX
+  oder APRS Lense auf dem Monitor-Bildschirm eingeschaltet sind (bisher lief dann die Hex-Anzeige
+  im Dashboard mit, ohne Knopf zum Abschalten).
+- Der Monitor-Bildschirm bleibt unverändert (APRS Lense, HEX, Clear, Inspektor).
+- Geprüft im Browser (Playwright): Dashboard mit HEX eingeschaltet → Text, Knopf führt auf
+  `#/monitor` mit APRS Lense, HEX, Clear; keine JS-Fehler. `tests/test_web.py` grün.

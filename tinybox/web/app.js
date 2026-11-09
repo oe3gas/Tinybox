@@ -300,15 +300,16 @@ function hexText(hex) {
   return b.map((x, i) => (i && i % 8 === 0 ? " " : "") + x).join(" ");
 }
 
-function monText(it) {
+function monText(it, plain) {
+  const hx = S.monHex && !plain;
   if (it.type === "frame")
     return `${it.t} ${it.tx ? "tx " : ""}${it.src} ${it.dst} ${(it.via || []).join(",")} <${it.typ}>` +
-      `${it.len != null ? ` [${it.len}]` : ""} ${it.kind} ${S.monHex && it.hex ? hexText(it.hex) : it.text}` +
+      `${it.len != null ? ` [${it.len}]` : ""} ${it.kind} ${hx && it.hex ? hexText(it.hex) : it.text}` +
       (it.aprs ? " aprs" + AprsView.searchText(it) : "");
   if (it.type === "mon") return `${it.t} ${it.call} ${myCall()} ${it.text}`;
-  return `${it.t} ${it.text}${S.monHex && it.hex ? " " + hexText(it.hex) : ""}`;
+  return `${it.t} ${it.text}${hx && it.hex ? " " + hexText(it.hex) : ""}`;
 }
-function monMatch(it) {
+function monMatch(it, plain) {
   const k = S.monKind;
   if (k === "frame" || k === "mon" || k === "log") { if (it.type !== k) return false; }
   else if (k === "tx") { if (it.type !== "frame" || !it.tx) return false; }
@@ -316,12 +317,14 @@ function monMatch(it) {
   else if (k === "tb") { if (it.type !== "frame" || !it.kind) return false; }
   else if (k) { if (it.type !== "frame" || it.kind !== k) return false; }
   const q = S.monQ.trim().toLowerCase();
-  return !q || monText(it).toLowerCase().includes(q);
+  return !q || monText(it, plain).toLowerCase().includes(q);
 }
 
-function feedLine(item) {
+// plain (CR101, dashboard card): always text - no HEX, no APRS card, no inspector
+function feedLine(item, plain) {
+  const hx = S.monHex && !plain;
   if (item.type === "frame") {
-    const ap = !S.monHex && AprsView.active(item);     // HEX view: raw bytes, no APRS card
+    const ap = !hx && !plain && AprsView.active(item);     // HEX view: raw bytes, no APRS card
     const head = h(ap ? "span" : "div", { class: ap ? "" : "line frame" + (item.tx ? " tx" : "") },
       h("span", { class: "t", text: item.t }), " ",
       h("span", { class: "rt", text: item.tx ? "TX" : "RX" }), " ",
@@ -334,9 +337,9 @@ function feedLine(item) {
     if (item.len != null) head.append(" ", h("span", { class: "plen", text: `[${item.len}]` }));  // PacLen
     if (item.kind) head.append(" ", h("span", { class: "kind " + item.kind, text: item.kind }));
     if (ap) return AprsView.card(item, head, "line frame" + (item.tx ? " tx" : ""));   // CR62
-    if (S.monHex && item.hex) head.append(": ", h("span", { class: "hex", text: hexText(item.hex) }));
+    if (hx && item.hex) head.append(": ", h("span", { class: "hex", text: hexText(item.hex) }));
     else if (item.text) head.append(": " + item.text);
-    return Insp.clickable(head, item);
+    return plain ? head : Insp.clickable(head, item);
   }
   if (item.type === "mon") {                     // ">" TinyBox to the station, "<" back
     const [a, b] = item.dir === "<" ? [item.call, myCall()] : [myCall(), item.call];
@@ -346,7 +349,7 @@ function feedLine(item) {
       callSpan(a), " → ", callSpan(b), ": ", item.text);
   }
   const cls = item.level === "WARNING" || item.level === "ERROR" ? "warn" : "sys";
-  if (S.monHex && item.hex != null)               // a UI frame TinyBox sent (also AGW mode)
+  if (hx && item.hex != null)                     // a UI frame TinyBox sent (also AGW mode)
     return Insp.clickable(h("div", { class: "line log" },
       h("span", { class: "t", text: item.t }), " ", h("span", { class: cls, text: `UI ${item.dst} > ` }),
       h("span", { class: "hex", text: hexText(item.hex) })), item);
@@ -454,9 +457,10 @@ const Insp = {
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Insp.item) Insp.hide(); });
 
 function appendLine(box, item) {
-  if (!monMatch(item)) return;
+  const plain = box.classList.contains("plain");     // CR101: dashboard card
+  if (!monMatch(item, plain)) return;
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  box.append(feedLine(item));
+  box.append(feedLine(item, plain));
   while (box.childElementCount > 500) box.firstChild.remove();
   if (atBottom) box.scrollTop = box.scrollHeight;
 }
@@ -787,11 +791,14 @@ function channelCard() {
   return { card, update };
 }
 
-function monitorCard(withLens) {
-  const body = h("div", { class: "monitor" });
-  const lens = withLens ? h("aside", { class: "ar-lens", "aria-label": "APRS Lense" }) : null;   // CR55
+// full = the monitor screen (APRS Lense, HEX, inspector, Clear); otherwise the dashboard
+// card (CR101): filter, selection and a button to the monitor screen, always plain text
+function monitorCard(full) {
+  const body = h("div", { class: "monitor" + (full ? "" : " plain") });
+  const plain = !full;
+  const lens = full ? h("aside", { class: "ar-lens", "aria-label": "APRS Lense" }) : null;   // CR55
   function redraw() {
-    body.replaceChildren(...S.feed.filter(monMatch).map(feedLine));
+    body.replaceChildren(...S.feed.filter((it) => monMatch(it, plain)).map((it) => feedLine(it, plain)));
     body.scrollTop = body.scrollHeight;
   }
   const q = h("input", { type: "search", placeholder: "Filter: call, text, I, REJ ...", value: S.monQ,
@@ -799,6 +806,21 @@ function monitorCard(withLens) {
   const kind = h("select", { title: "Show only", onchange: (e) => { S.monKind = e.target.value; redraw(); } },
     MON_KINDS.map(([v, t]) => h("option", { value: v, text: t })));
   kind.value = S.monKind;
+  const filters = [
+    h("label", { class: "search mon-q" }, h("span", { class: "sr-only", text: "Filter" }), q),
+    h("label", {}, h("span", { class: "sr-only", text: "Show only" }), kind)];
+  if (!full) {                                     // CR101: dashboard card
+    const card = h("section", { class: "card", style: "flex-grow: 1" },
+      h("div", { class: "card-head" },
+        h("h2", { class: "grow", text: "Live monitor" }),
+        ...filters,
+        h("button", { class: "btn sm", type: "button", title: "Monitor with APRS Lense, HEX and Clear",
+                      onclick: () => { location.hash = "#/monitor"; } }, "Switch to monitor screen")),
+      body);
+    redraw();
+    requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+    return { card, body };
+  }
   const hex = h("button", { class: "btn sm hex-btn" + (S.monHex ? " on" : ""), type: "button",
                              "aria-pressed": S.monHex ? "true" : "false",
                              title: "Payload of I and UI frames as hex bytes - click a frame to inspect all its bytes" }, "HEX");
@@ -822,8 +844,7 @@ function monitorCard(withLens) {
   const card = h("section", { class: "card", style: "flex-grow: 1" },
     h("div", { class: "card-head" },
       h("h2", { class: "grow", text: "Live monitor" }),
-      h("label", { class: "search mon-q" }, h("span", { class: "sr-only", text: "Filter" }), q),
-      h("label", {}, h("span", { class: "sr-only", text: "Show only" }), kind),
+      ...filters,
       AprsView.toggleButton("btn sm aprs-btn"),
       hex,
       h("button", { class: "btn sm", type: "button", onclick: clear }, "Clear")),
