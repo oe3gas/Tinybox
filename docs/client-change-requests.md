@@ -69,7 +69,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | ✅ siehe unten (breiter Fuzz-Lauf mit CR98) |
 | 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | offen, siehe unten |
 | 90 | Interlink-Authentisierung, Challenge-Response pro Partner (TB-02) | offen, siehe unten |
-| 91 | Dictionary-Integrität: voller Vergleich, keine Auto-Installation/Weiterverbreitung (TB-04) | offen, siehe unten |
+| 91 | Dictionary-Integrität: voller Vergleich, keine automatische Weiterverbreitung (TB-04) | ✅ siehe unten (Signatur mit CR94) |
 | 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | offen, siehe unten |
 | 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | offen (Konzept), siehe unten |
 | 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
@@ -2911,7 +2911,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   und Widerrufen nach dem Vorbild `gust_keygen.py`.
 - Später: Signatur statt Geheimnis (CR94).
 
-## CR91 – Dictionary-Integrität (TB-04, offen, 09.11.2026)
+## CR91 – Dictionary-Integrität (TB-04, ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -2925,6 +2925,24 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Kein automatisches Installieren aus der Luft ohne Sysop-Freigabe (Vorgabe aus), keine
   Weiterverbreitung fremder Dictionaries ohne Freigabe.
 - Später: signierte Dictionaries (Ed25519, CR94).
+
+### Umsetzung (brocast, 09.11.2026)
+
+- `dictimport._compare`: jeder bestehende Eintrag wird vollständig verglichen, ohne die
+  Anzeigetexte `de`/`en`. Erlaubt sind sonst nur: `del: true` neu bei einem DXCC-Gebiet (nicht
+  zurück), neue Spalten hinten bei `rows` (bestehende Spalten auch inhaltlich unverändert), und ein
+  Feld vom Typ `any` darf seinen Typ bekommen (`type`, `enum`, `free_text`, `max`, `unit`) – das war
+  der einzige Fall in der bisherigen Geschichte v1 → v5 (`src`). Jede andere Änderung → abgewiesen
+  mit Nennung der Schlüssel, z. B. „wx: temp (Nummer 0) würde umgedeutet (scale)“.
+- Automatische Installation: war schon nur für Stationen in `dict_trusted` (Vorgabe leer), sonst
+  wartet das Dictionary auf Freigabe. Neu: ein automatisch übernommenes Dictionary sendet die eigene
+  Station **nicht weiter** (Meta `dict_norelay`, Status `relay_held`, Hinweis in der GUI). Freigabe
+  durch den Sysop: Knopf „Dictionary jetzt über Funk senden“, Import einer Datei oder Installation
+  über die Freigabe. Der Hinweis bei `dict_trusted` warnt, dass Rufzeichen fälschbar sind.
+- Tests `brocast/tests/test_cr91.py`: sechs Arten der Umdeutung abgewiesen, Textänderungen und die
+  bisherige Geschichte v1 → v5 erlaubt, DXCC-Löschung nur in eine Richtung, automatisch übernommenes
+  Dictionary wird nicht weitergesendet, Freigabe per Knopf und per Hand.
+- Offen: signierte Dictionaries – mit CR94.
 
 ## CR92 – Rollen und Rechte (TB-08, TB-14, TB-15, TB-21, offen, 09.11.2026)
 

@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- brocastd: **Dictionary-Integrität CR91 (Audit TB-04)** – ein neues Dictionary wird gegen jeden
+  bestehenden Eintrag vollständig verglichen (bisher nur der Name): `scale`, `unit`, `exp`, `type`,
+  `max` … dürfen sich nicht mehr ändern, nur die Anzeigetexte. Ein von einer Station aus
+  `dict_trusted` automatisch übernommenes Dictionary sendet die eigene Station nicht weiter, bis der
+  Sysop es freigibt (Knopf „Dictionary jetzt über Funk senden“, Import oder Freigabe von Hand); der
+  Status zeigt „Dictionary weitersenden: angehalten“. Damit kann sich ein gefälschtes Dictionary
+  nicht mehr von selbst durchs Netz verbreiten.
 - TinyBox-Web-GUI: **Live-Monitor im Dashboard schlanker (CR101)** – nur Filter und Auswahl, Knopf
   „Switch to monitor screen“; APRS Lense, HEX und Clear gibt es nur noch auf dem Monitor-Bildschirm.
 - Client 2026.11.09.2: **Web-GUI nur aus dem eigenen Netz (CR100)** – Anfragen von öffentlichen

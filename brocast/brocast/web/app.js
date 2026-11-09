@@ -2058,8 +2058,10 @@ async function renderSettings() {
   const tl = el("label", null, "Dictionary über Funk automatisch übernehmen von"); tl.htmlFor = trust.id;
   f.append(tl, trust);
   s.append(f, el("p", "hint", "Rufzeichen mit Komma trennen. Von anderen Stationen wird ein über Funk " +
-    "empfangenes Dictionary erst nach deiner Bestätigung installiert. Geprüft wird immer: vollständig, " +
-    "Prüfsumme, neuere Version, nur Ergänzungen."));
+    "empfangenes Dictionary erst nach deiner Bestätigung installiert. Automatisch übernommene sendet die " +
+    "Station nicht weiter, bis du es freigibst. Geprüft wird immer: vollständig, " +
+    "Prüfsumme, neuere Version, nur Ergänzungen (bestehende Einträge unverändert). Achtung: ein " +
+    "Rufzeichen lässt sich über Funk fälschen – bis Dictionaries signiert sind, besser leer lassen."));
 
   const save = el("button", "btn primary", "Speichern");
   save.type = "button";
@@ -2137,6 +2139,9 @@ async function renderStatus() {
                                        "vollständig – wartet auf Freigabe"]);
   if (st.dictionary && st.dictionary.hash_mismatch)
     rows.push(["Achtung", "Station sendet gleiche Version mit anderer Prüfsumme"]);
+  if (st.dictionary && st.dictionary.relay_held)                 // CR91
+    rows.push(["Dictionary weitersenden", "angehalten – automatisch übernommen, " +
+                                          "„Dictionary jetzt über Funk senden“ gibt es frei"]);
   for (const [k, v] of rows) f.append(el("span", null, k), el("b", "mono", v === undefined ? "" : v));
   const imp = el("button", "btn", "Dictionary importieren …");
   imp.type = "button";

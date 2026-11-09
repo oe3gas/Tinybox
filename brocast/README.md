@@ -419,7 +419,11 @@ dazukommen. Installiert wird
   automatisch übernehmen von“ eingetragen ist (z. B. `OE3GAS-5`),
 - sonst nach Klick auf „Installieren“ im gelben Hinweis.
 
-Die alte Datei bleibt als `brocast-core.v<alt>.bak.yaml` erhalten.
+Die alte Datei bleibt als `brocast-core.v<alt>.bak.yaml` erhalten. Ein automatisch übernommenes
+Dictionary sendet eine Station nicht weiter, bis der Sysop es freigibt („Dictionary jetzt über
+Funk senden“) – ein gefälschtes kann sich so nicht von selbst verbreiten (CR91). Rufzeichen lassen
+sich über Funk fälschen; bis Dictionaries signiert sind (CR94), die automatische Übernahme besser
+nicht verwenden.
 
 ## Dictionary aktualisieren (über TinyBox)
 
@@ -447,6 +451,9 @@ print("\n".join(codec.describe(page)))
 
 ## Regeln fürs Dictionary
 
-- Eine vergebene Nummer wird nie umgedeutet.
+- Eine vergebene Nummer wird nie umgedeutet. Beim Import (Datei oder über Funk) wird jeder bestehende
+  Eintrag vollständig verglichen (CR91): ändern dürfen sich nur die Anzeigetexte `de`/`en`; dazu darf
+  ein DXCC-Gebiet `del: true` bekommen, `rows` dürfen hinten Spalten anhängen, und ein Feld vom Typ
+  `any` darf seinen Typ bekommen. Alles andere (`type`, `scale`, `unit`, `exp`, `max` …) wird abgewiesen.
 - Neue Einträge nur mit neuer `version`; Versionen sind additiv.
 - Keys 0–23 und −1…−24 (1 Byte) nur für die Kern-Spezifikation.

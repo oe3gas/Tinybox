@@ -148,7 +148,7 @@ class Listener:
         self.d = codec.d
         self.baud, self.txdelay_ms = baud, txdelay_ms
         # set by the daemon: install a dictionary received over the air
-        self.install_dictionary: Callable[[Dictionary, str], None] | None = None
+        self.install_dictionary: Callable[..., None] | None = None   # (new, station, relay=)
 
     # -- settings and subscriptions -----------------------------------------
 
@@ -486,8 +486,8 @@ class Listener:
             log.warning("Dictionary v%s über Funk von %s verworfen: %s", col["version"], org, exc)
             return "dict_bad"
         if org in self.settings["dict_trusted"] and self.install_dictionary:
-            try:
-                self.install_dictionary(new, org)
+            try:                # CR91: no person looked at it - install, but do not pass it on
+                self.install_dictionary(new, org, relay=False)
             except (OSError, ValueError) as exc:
                 log.warning("Dictionary v%s über Funk: Installation fehlgeschlagen: %s",
                             new.version, exc)
@@ -556,6 +556,9 @@ class Listener:
             "ready": {"version": ready["version"], "station": ready["station"],
                       "received": iso(ready["time"])} if ready else None,
             "local": self.d.version, "hash": self.d.hash4.hex(), "outdated": newer,
+            # CR91: installed automatically from a trusted station, not sent on yet
+            "relay_held": self.store.get_meta("dict_norelay")
+            == f"{self.d.version}-{self.d.hash4.hex()}",
             "newest_heard": seen["version"] if newer else self.d.version,
             "heard_from": seen["station"] if newer else None,
             "first_heard": iso(seen["first"]) if newer else None,

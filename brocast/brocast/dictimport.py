@@ -11,8 +11,12 @@ Checks before anything is installed:
   1. markers found, line count and SHA-256 match (transfer intact)
   2. the YAML is a valid dictionary
   3. it is newer than the installed one
-  4. it only adds entries: every number keeps its name (spec rule
-     "eine vergebene Nummer wird nie umgedeutet")
+  4. it only adds entries: every number keeps its name and its meaning (spec
+     rule "eine vergebene Nummer wird nie umgedeutet") - CR91 (audit TB-04):
+     the whole entry is compared, not only the name. Only the display texts
+     (de, en) may change, a DXCC entity may be marked deleted (del: true),
+     rows may get new columns at the end, and a field of type "any" (not yet
+     specified) may get its type (v1 -> v2: src).
 """
 
 from __future__ import annotations
@@ -93,6 +97,24 @@ def extract(text: str) -> tuple[int, list[str]]:
     return version, payload
 
 
+TEXT_KEYS = frozenset({"de", "en"})       # display only - may be corrected in a new version
+REFINE_KEYS = ("type", "enum", "free_text", "max", "unit")   # what "any" may be refined with
+
+
+def _meaning(spec: Any) -> Any:
+    """What a spec means, without its display texts (recursively for cols)."""
+    if isinstance(spec, dict):
+        return {k: _meaning(v) for k, v in spec.items() if k not in TEXT_KEYS}
+    if isinstance(spec, list):
+        return [_meaning(v) for v in spec]
+    return spec
+
+
+def _changed_keys(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
+    a, b = _meaning(old), _meaning(new)
+    return sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+
+
 def _compare(old: Table, new: Table | None, where: str, added: dict[str, int]) -> None:
     if new is None:
         raise ImportError_(f"{where} fehlt im neuen Dictionary")
@@ -101,12 +123,26 @@ def _compare(old: Table, new: Table | None, where: str, added: dict[str, int]) -
         if other is None or other.name != entry.name:
             raise ImportError_(f"{where}: Nummer {num} ({entry.name}) würde umgedeutet oder "
                                "entfernt – das ist nicht erlaubt")
-        old_cols = entry.spec.get("cols")
+        old_spec, new_spec = dict(entry.spec), dict(other.spec)
+        old_cols = old_spec.pop("cols", None)
+        new_cols = new_spec.pop("cols", None)
         if isinstance(old_cols, list):          # rows (ab v4): Spalten nur hinten anhängen
-            new_cols = other.spec.get("cols") or []
-            if [c.get("name") for c in new_cols[:len(old_cols)]] != [c.get("name") for c in old_cols]:
-                raise ImportError_(f"{where}: Spalten von {entry.name} würden umgestellt – "
-                                   "neue Spalten nur am Ende")
+            if not isinstance(new_cols, list) or \
+                    _meaning(new_cols[:len(old_cols)]) != _meaning(old_cols):
+                raise ImportError_(f"{where}: Spalten von {entry.name} würden umgestellt oder "
+                                   "umgedeutet – neue Spalten nur am Ende")
+        elif new_cols is not None:
+            raise ImportError_(f"{where}: {entry.name} bekäme Spalten – das ist eine Umdeutung")
+        if not old_spec.get("del") and new_spec.get("del") is True:
+            new_spec.pop("del")                 # a DXCC entity that was deleted since
+        if old_spec.get("type") == "any":       # not yet specified: may get its type
+            for key in REFINE_KEYS:
+                old_spec.pop(key, None)
+                new_spec.pop(key, None)
+        changed = _changed_keys(old_spec, new_spec)
+        if changed:                             # CR91 (TB-04): scale, unit, exp, type ...
+            raise ImportError_(f"{where}: {entry.name} (Nummer {num}) würde umgedeutet "
+                               f"({', '.join(changed)}) – nur neue Einträge sind erlaubt")
     extra = len(new.by_num) - len(old.by_num)
     if extra:
         added[where] = extra

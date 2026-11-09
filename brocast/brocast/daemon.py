@@ -203,7 +203,7 @@ class Daemon:
         if not self.station:
             return
         provider, key = DICT_DATA
-        if self.cfg.station.dict_broadcast_hours <= 0:
+        if self.cfg.station.dict_broadcast_hours <= 0 or self._norelay():
             row = self.store.get_page(provider, key)
             if row and row.state == "active":
                 self.station.delete(provider, key)
@@ -230,6 +230,9 @@ class Daemon:
             return {"ok": False, "message": "Nur im Modus station möglich."}
         if self.cfg.station.dict_broadcast_hours <= 0:
             return {"ok": False, "message": "Aussendung ist aus (dict_broadcast_hours = 0)."}
+        if self._norelay():                         # the sysop's button = the release (CR91)
+            self._set_relay(self.codec.d, True)
+            log.info("Dictionary v%s: Weitergabe vom Sysop freigegeben", self.codec.d.version)
         self.broadcast_dictionary()
         row = self.store.get_page(*DICT_DATA)
         if row is None or row.state != "active":
@@ -249,14 +252,26 @@ class Daemon:
             new = Dictionary.load(self.cfg.dictionary)
             self.codec.d = new
             self.listener.d = new
+            self._set_relay(new, True)              # the sysop imported it
             log.info("Dictionary Version %s installiert und geladen", new.version)
             self.announce_dictionary()
             self.broadcast_dictionary()
         return result.as_dict()
 
-    def install_received(self, new: Dictionary, station: str) -> None:
+    def _norelay(self) -> bool:
+        """CR91 (TB-04): the dictionary in use came over the air from a trusted
+        station and was installed without a person - it is not sent on until
+        the sysop says so (import, release button, "send now")."""
+        d = self.codec.d
+        return self.store.get_meta("dict_norelay") == f"{d.version}-{d.hash4.hex()}"
+
+    def _set_relay(self, new: Dictionary, relay: bool) -> None:
+        self.store.set_meta("dict_norelay", "" if relay else f"{new.version}-{new.hash4.hex()}")
+
+    def install_received(self, new: Dictionary, station: str, relay: bool = True) -> None:
         """A dictionary received over the air (already checked: complete, hash,
-        newer, only additions). Written as YAML; the old file stays as backup."""
+        newer, only additions). Written as YAML; the old file stays as backup.
+        relay=False: installed automatically (dict_trusted) - not sent on (CR91)."""
         text = (f"# brocast Dictionary v{new.version}, über Funk empfangen von {station}\n"
                 + yaml.safe_dump(new.raw, allow_unicode=True, sort_keys=False))
         if Dictionary(yaml.safe_load(text)).hash4 != new.hash4:      # never write a changed one
@@ -265,8 +280,10 @@ class Daemon:
         loaded = Dictionary.load(self.cfg.dictionary)
         self.codec.d = loaded
         self.listener.d = loaded
-        log.info("Dictionary Version %s (über Funk von %s) installiert und geladen",
-                 loaded.version, station)
+        self._set_relay(loaded, relay)
+        log.info("Dictionary Version %s (über Funk von %s) installiert und geladen%s",
+                 loaded.version, station,
+                 "" if relay else " - wird erst nach Freigabe weitergesendet")
         self.announce_dictionary()
         self.broadcast_dictionary()
 
