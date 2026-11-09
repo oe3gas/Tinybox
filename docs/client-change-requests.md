@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 08.11.2026 (CR79 Stufe 2 umgesetzt)
+Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 
 ## Übersicht
 
@@ -65,6 +65,20 @@ Stand: 08.11.2026 (CR79 Stufe 2 umgesetzt)
 | 84 | Kommentar auf eine Nachricht aus der History: Text statt „message #n“ | ✅ siehe unten (Funktest offen) |
 | 85 | Erwähnungs-Alarm: Popup des Betriebssystems und „BK“ in CW bei @CALL | ✅ siehe unten (Funktest offen) |
 | 86 | Dateien im Board-Chat (LZHUF), wie Bilder (CR12) und Dateien im TBClient-Chat (CR78 Stufe 7) | offen, siehe unten |
+| 87 | brocastd: Absturz durch ungültiges `exp` (TB-01) | offen, siehe unten |
+| 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | offen, siehe unten |
+| 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | offen, siehe unten |
+| 90 | Interlink-Authentisierung, Challenge-Response pro Partner (TB-02) | offen, siehe unten |
+| 91 | Dictionary-Integrität: voller Vergleich, keine Auto-Installation/Weiterverbreitung (TB-04) | offen, siehe unten |
+| 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | offen, siehe unten |
+| 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | offen (Konzept), siehe unten |
+| 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
+| 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | offen, siehe unten |
+| 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | offen, siehe unten |
+| 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | offen, siehe unten |
+| 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | offen, siehe unten |
+| 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | offen, siehe unten |
+| 100 | Client-Web-GUI nicht ohne Zugangsschutz im LAN | offen, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -2782,3 +2796,239 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Betreten (`//IN … file`), wie `img`.
 - Offen zu entscheiden: Maximalgröße, ob bestimmte Dateitypen gesperrt werden (z. B. `.exe`), und ob
   der Sysop hochgeladene Dateien in der Web-GUI sehen und löschen kann.
+
+## CR87 – brocastd: Absturz durch ungültiges `exp` (TB-01, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026, aus dem Audit, PLANUNG 29)
+
+- Ein einziges UI-Frame an BROCST mit `exp` als Text statt Zahl legt brocastd dauerhaft lahm:
+  `listener.py` speichert `exp` ungeprüft als `exp_min`, `housekeeping()` rechnet
+  `t + exp_min * 60` → `TypeError`; `Daemon._housekeeping` hat kein `try`, `asyncio.gather` beendet
+  den Daemon. Der Eintrag bleibt in der DB, jeder Neustart stürzt wieder ab. PoC ist öffentlich.
+
+### Vorschlag (Claude)
+
+- Typ- und Bereichsprüfung beim Empfang (`exp` nur `int`, z. B. 1 … 525600, sonst Seite verwerfen),
+  ebenso für alle anderen Envelope-Felder mit festem Typ.
+- `try`/`except Exception` mit Logging in der Housekeeping-Schleife; ein Fehler darf den Daemon nie beenden.
+- Beim Start ungültige `exp_min`-Einträge aussortieren (R4: Neustart ohne Handeingriff).
+- Regressionstest mit dem Frame aus dem PoC.
+
+## CR88 – Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- Jede Möglichkeit, eine Fehlfunktion zu erzeugen, wird behoben.
+- TB-23 (geprüft 09.11.2026): 84 Stellen mit `isdigit()`. `¹²³` (auch in Latin-1!) bestehen
+  `isdigit()`, `int()` scheitert; arabische/Devanagari-Ziffern werden still als Zahl gelesen.
+  Wirkung: BBS-Sitzungen und APRS-Dekoder fangen den Fehler ab (nur Log). **Problem:**
+  `fwd/protocol.py:68` (Task der Forward-Sitzung stirbt, TB-20c) und die Telnet-Leseschleife im
+  Client (`tbclient/links.py` `_read`, fängt nur Verbindungsfehler → Verbindung hängt stumm).
+  AGW/KISS im Client: Fehler wird pro Frame abgefangen, der Rest des Frames geht verloren.
+- TB-09: einzelne Frames brechen die brocast-Seitenliste oder blockieren den Daemon.
+
+### Vorschlag (Claude)
+
+- Zentrale Funktion in `prcore` (`isnum(s) = s.isascii() and s.isdigit()`), alle 84 Stellen umstellen.
+- `except Exception` mit Logging in `ForwardSession.run` (Status setzen, Sitzung sauber beenden) und
+  in der Telnet-Leseschleife; LineSplitter so, dass ein Fehler in einer Zeile die übrigen Zeilen
+  des Frames nicht verwirft.
+- TB-09 nachstellen und beheben; Schleifen mit Obergrenze.
+- Fuzz-Tests für alle Zeilenparser (Box, Client, brocast) mit Unicode-Ziffern, Überlängen, leeren Feldern.
+
+## CR89 – Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- TB-10: Ist die eigene BID schon bekannt, speichert `service.py` die Nachricht **ohne BID**, `send.py`
+  sendet dann ein `FB` mit leerem Feld, die Gegenstelle bricht ab, die Warteschlange zum Partner steht
+  still. Auslösbar durch einen Angreifer (vorab belegte BIDs) **und ohne Angreifer** (Zählerüberlauf,
+  DB-Neuaufbau).
+- TB-20a: Teildaten einer abgebrochenen Übertragung werden einem späteren echten Angebot vorangestellt.
+- TB-20b: `;`-Zeilen setzen den Zeilen-Timeout zurück, eine Sitzung lässt sich beliebig offen halten
+  (Partner „busy“, Scheduler und `FWD` überspringen ihn).
+- TB-11: Ctrl-Z in komprimierter Post schleust Protokollzeilen weiter.
+
+### Vorschlag (Claude)
+
+- Nie ohne BID speichern: Ausweich-BID erzeugen; nie ein leeres Feld senden; eine einzelne
+  fehlerhafte Nachricht wird zurückgestellt und dem Sysop gemeldet, die Warteschlange läuft weiter.
+- Restart-Daten nur innerhalb derselben, authentisierten Sitzung bzw. desselben Partners mit
+  Prüfsumme verwenden, sonst verwerfen.
+- Gesamtzeitgrenze pro Sitzung, Obergrenze für `;`-Zeilen.
+- Ctrl-Z und Steuerzeilen im Inhalt entschärfen (mit CR95).
+
+## CR90 – Interlink-Authentisierung (TB-02, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- Ein eingehender Anruf mit dem Rufzeichen eines `transport = agw`-Partners bekommt dessen Rechte
+  ohne Prüfung: Post einschleusen (auch als Sysop), für den Partner gespeicherte Post abholen,
+  BIDs vergiften. Interlinks haben sehr hohen Schutzbedarf (PLANUNG 29.3).
+
+### Vorschlag (Claude)
+
+- Sofort: Forwarding-Post nie an eingehende Funk-Anrufer ausgeben, nur an selbst angerufene Partner.
+- Challenge-Response mit Geheimnis pro Partner (HMAC-SHA256 wie GUST-S), im Handshake als `;`-Zeilen
+  nach dem Vorbild Winlink `;PQ:`/`;PR:` – FBB/BPQ ignorieren `;`-Zeilen, bleibt kompatibel.
+- Pro Partner konfigurierbar (`auth = hmac | none`), `none` nur bewusst (R3); Werkzeug zum Erzeugen
+  und Widerrufen nach dem Vorbild `gust_keygen.py`.
+- Später: Signatur statt Geheimnis (CR94).
+
+## CR91 – Dictionary-Integrität (TB-04, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- `dictimport._compare` prüft nur Nummer ↔ Name und Spaltennamen; Skalierung, Einheit, Ablauf lassen
+  sich still umdeuten. brocastd sendet das neue Dictionary danach selbst weiter → verbreitet sich
+  von selbst. Schutzbedarf sehr hoch (PLANUNG 29.3, Objekt 4).
+
+### Vorschlag (Claude)
+
+- Vollständiger Vergleich der Spezifikation jedes bestehenden Eintrags; nur Anhängen erlaubt.
+- Kein automatisches Installieren aus der Luft ohne Sysop-Freigabe (Vorgabe aus), keine
+  Weiterverbreitung fremder Dictionaries ohne Freigabe.
+- Später: signierte Dictionaries (Ed25519, CR94).
+
+## CR92 – Rollen und Rechte (TB-08, TB-14, TB-15, TB-21, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- Rollen: Sysop, Forward-Partner, an der Heimat-BBS authentifizierter User, nicht authentifizierter
+  User (Rechtematrix PLANUNG 29.7).
+- brocast-Seiten und Alarme erstellen und verbreiten nur Sysops (TB-08, TB-14, TB-21).
+- Rufzeichen gleich Rubrikname darf keine Rechte an der Rubrik geben (TB-15); Plausibilitätsprüfung
+  von Rufzeichen.
+- Nicht authentifizierte User: kein TBClient; Post nur als Text nach PLANUNG 29.9, nur lokal oder an
+  den Sysop, Weiterleitung ins Netz erst nach Freigabe.
+
+### Vorschlag (Claude)
+
+- Rechte zentral an einer Stelle prüfen (eine Funktion je Recht), nicht verstreut in den Befehlen.
+- Alarmseiten und Seiten mit Priorität nur aus Sysop-Quellen (Ingest-API mit Token, Sysop-Konsole).
+- Rufzeichen-Plausibilität: Präfix-Struktur (ITU-Präfix + Ziffer + Suffix, SSID 0–15), Abgleich mit
+  Rubriknamen; bei Kollision Rechte nur über die Rolle, nie über den Namen.
+- Grenzen für die Zahl der brocast-Seiten je Quelle (TB-21).
+
+## CR93 – User-Authentisierung tbclient ↔ Heimat-BBS (offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- TBClient darf nur ein an der Heimat-BBS authentifizierter User verwenden (PLANUNG 29.7).
+
+### Vorschlag (Claude, Konzept zuerst)
+
+- tbclient erzeugt bei der Registrierung ein Schlüsselpaar; die Heimat-BBS speichert den öffentlichen
+  Schlüssel (Freigabe durch den Sysop). Beim Verbinden Challenge-Response, über Funk zusätzlich
+  Signatur für kritische Aktionen.
+- Vertrauenskette: die Heimat-BBS unterschreibt den User-Schlüssel (Mini-Zertifikat: Rufzeichen,
+  Rolle, Schlüssel, Gültigkeit, Unterschrift); fremde BBS, die der Heimat-BBS vertrauen, erkennen den
+  User damit auch.
+- Abhängig von CR94 (Verfahren, Schlüsselformat).
+
+## CR94 – Admin-Protokoll mit Signatur (Konzept, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- Sysop-Zugang grundsätzlich über das Internet, bei abgesetzten Standorten auch nur über Funk.
+  Eigenes Admin-Protokoll mit Zertifikat und Signatur; bestehende Protokolle/Techniken nutzen,
+  auch aus GUST (`oe3gas/gust`). Notfunk ist angedacht und wird mitgedacht.
+
+### Vorschlag (Claude) – Details PLANUNG 29.8
+
+- Internet: SSH/WireGuard/TLS, kein Eigenbau.
+- Funk: jeder Befehl einzeln signiert (`Befehl | Ziel-Box | Challenge | Zähler | Signatur`), Challenge
+  statt Uhrzeit, Ed25519.
+- Gemeinsames Modul `prcore/auth.py` (Signatur, HMAC, Schlüsselverwaltung), auch für CR90, CR91,
+  CR93 und signierte Alarmseiten.
+- Zu entscheiden: Ed25519 oder P-256 (GUST), Herausgeber der Zertifikate, TOTP für Sysops ohne
+  tbclient, Widerruf über brocast, Notfall-Schlüssel.
+
+## CR95 – Zeichensatz-Policy und Ausgabe-Maskierung (TB-11, TB-12, TB-22, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- Auch internationale User sollen ihre Schrift verwenden können, ohne dass sich damit tricksen lässt.
+- TB-12 (Escape-Sequenzen in Konsole und Logs), TB-22 (ADIF-Feldinjektion über QSL-Karte):
+  Plausibilitätsprüfung.
+
+### Vorschlag (Claude) – Details PLANUNG 29.9
+
+- `prcore/text.py`: Protokollfelder streng ASCII, Freitext nach Unicode-Positivliste, striktes UTF-8,
+  NFC, Steuerzeilen-Erkennung auf NFKC-Kopie, gemischte Schriften kennzeichnen, Grenzen in Byte.
+- Maskierung bei jeder Ausgabe (Konsole, Log, HTML mit `<bdi>`, ADIF, CSV) – für alle Rollen.
+- Abstufung nach Rolle (Emoji erst ab authentifiziertem User).
+
+## CR96 – Datei- und Bildempfang absichern (TB-05, TB-16, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- 24-Bit-Hash: Ersatz einer Datei/eines Bildes durch eine gezielt erzeugte Kollision (offline in
+  Sekunden). Sorge: Schadcode und Binaries landen auf dem Rechner.
+- Grundsätzliche Prüfung der übertragenen Daten; bei Verdacht bricht der Client den Download ab.
+
+### Vorschlag (Claude)
+
+- Hash mindestens 64 Bit (besser SHA-256 voll im Protokoll), Prüfung nach dem Entpacken.
+- Keine ungefragten Pushes; Laden nur auf Antippen.
+- Früher Abbruch: Größe, angekündigter Typ, Dateisignatur der ersten Bytes (z. B. `MZ`/ELF bei
+  „Bild“), Positivliste der Typen, Packbomben (LZHUF-Verhältnis, Bildgröße in Pixeln).
+- Bilder nach dem Empfang neu kodieren (Pillow) – entschärft Polyglots.
+- Windows: „Mark of the Web“ (`Zone.Identifier`) für empfangene Dateien.
+- Gilt auch für CR86 (Dateien im Board-Chat) – dort von Anfang an so umsetzen.
+
+## CR97 – Ratenbegrenzung und Obergrenzen (TB-03, TB-13, TB-17, TB-18, TB-19, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- Die eigene Station darf nicht auf fremden Anstoß hin den Kanal belasten (Lizenzinhaber,
+  PLANUNG 29.3 Objekt 7).
+- TB-13: Linktabelle begrenzen, Fantasie-Rufzeichen abweisen. TB-19: Statistik darf nicht
+  unbegrenzt wachsen.
+
+### Vorschlag (Claude)
+
+- Token-Bucket pro Peer für `//FGET`, `//ST` und alle Antworten, die Daten senden (TB-03).
+- Obergrenze der AX.25-Linktabelle, SABM von unplausiblen Rufzeichen abweisen (TB-13).
+- Leerlauf-Freigabe für Session-Slots und Client-Kanäle (TB-17).
+- Grenze für Wiederholungen nach REJ/SREJ pro Zeitfenster (TB-18).
+- kisshub-Statistik: feste Obergrenze, älteste Einträge verwerfen, Status-JSON begrenzen (TB-19).
+
+## CR98 – Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle (offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- Aussage: Der Chat hat keine Möglichkeit, ohne Rückfrage auf Daten des Users am PC zuzugreifen.
+  Durch ein Audit zu validieren (Claude).
+
+### Vorschlag (Claude)
+
+- Jeden Weg erfassen, über den eingehende Daten Dateien lesen oder schreiben; bekannt: `//FGET`
+  liest angebotene Dateien ohne Rückfrage, die Prüfung „wem angeboten“ hängt am fälschbaren Rufzeichen.
+- Prüfen, ob Zeilen mit `//` aus Post oder Bulletins beim Lesen/Sync als Befehl ankommen können.
+- Ergebnis als Bericht in `docs/`, Befunde als eigene CRs.
+
+## CR99 – Chatverlauf und Peer-Identität (TB-06, TB-07, offen, 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- TB-06 (Chatverlauf lesen/löschen/fälschen durch gefälschten Peer) lässt sich nur durch Zertifikat
+  bzw. zusätzliche Authentisierung schließen. TB-07: gefälschte TBCHAT-Zeilen.
+
+### Vorschlag (Claude)
+
+- Sofort: Löschen und Abgleich des lokalen Verlaufs nur nach Rückfrage beim User.
+- Danach mit CR93/CR94: Peer-Nachrichten signiert, Verlauf nur mit verifizierter Gegenstelle abgleichen.
+
+## CR100 – Client-Web-GUI nicht ohne Zugangsschutz im LAN (offen, 09.11.2026)
+
+### Erfassung (Claude, 09.11.2026, beim Audit aufgefallen, PLANUNG 11/5)
+
+- `tbclient.conf.example`: `host = 0.0.0.0` ohne Anmeldung. Wer im LAN (ggf. WAN) die Adresse kennt,
+  sendet unter dem Rufzeichen des Client-Betreibers und bedient den Client. Nicht im Audit enthalten.
+
+### Vorschlag (Claude)
+
+- Vorgabe `host = 127.0.0.1`; LAN nur bewusst und dann mit Zugangstoken (einmal am PC angezeigt,
+  als Cookie gespeichert) oder nur über VPN/HAMNET.
+- Schutz gegen Aufrufe fremder Webseiten auf 127.0.0.1 (Host-Header prüfen, CSRF-Token).

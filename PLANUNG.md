@@ -1815,8 +1815,139 @@ Stufe 2 und belegter Kanal halten an. Eine angefangene Seite wird zu Ende gesend
 **Notfall-Seiten (Priorität 3) gehen immer.** Die **Bake hat die niedrigste Priorität**: kein
 gesicherter Intervall, sie kommt nur, wenn nichts wartet und es ruhig ist.
 
+## 29. Sicherheit nach dem externen Audit (Entwurf, diskutiert 09.11.2026)
+
+Anlass: externer Security-Advisory von Jeremy 9V1NE vom 09.11.2026 (Commit `7773317`,
+23 Findings TB-01 … TB-23), öffentlich als Gist, ohne vorherige Abstimmung:
+https://gist.github.com/nnamon/3d93af6dd520d5f4b392c3fb57407d63
+Abarbeitung über **CR87 – CR100** (`docs/client-change-requests.md`).
+
+### 29.1 Haltung (Gerhard)
+
+- TB-01 ist ein echter Fehler und wird sofort behoben. Jede Möglichkeit, eine Fehlfunktion zu
+  erzeugen, wird behoben (Robustheit ist ein eigenes Ziel, unabhängig von Böswilligkeit).
+- Wer sich bösartig oder illegal verhalten will, tut es. Der Schutzbedarf wird deshalb bewusst
+  abgestuft, nicht pauschal maximiert.
+- **Hoher Schutzbedarf:** Interlinks zwischen BBS (Links, Austausch, Steuerlogik), Sysop-Zugriff,
+  Einschleusen von Schadcode über die Payload, Ausfall eines Knotens samt Datenverlust.
+- **Geringerer Schutzbedarf:** Rufzeichen-Missbrauch zwischen Usern (Post unter „falscher Flagge“).
+- Bulletins, brocast-Seiten und Alarme sind vor Manipulation durch Normaluser zu schützen;
+  brocast-Seiten und Alarme erstellen und verbreiten nur Sysops.
+- Identitätsnachweis per Zertifikat/Signatur ist eine Herausforderung, die angenommen wird – das
+  wäre neu im Packet Radio.
+
+### 29.2 Schutzbedarfsstufen
+
+- **normal:** Ärgernis, lokal, ohne Aufwand behebbar.
+- **hoch:** Ausfall oder Datenverlust eines Knotens, Handeingriff nötig, oder Wirkung über einen
+  Knoten hinaus.
+- **sehr hoch:** netzweite Ausbreitung, Gefährdung von Personen (Warnungen), rechtliche Folgen für
+  den Lizenzinhaber.
+
+Der Schutzbedarf beschreibt die Schwere des Schadens und ist **unabhängig vom Zugangsweg**. Der
+Zugangsweg bestimmt die Eintrittswahrscheinlichkeit (29.4).
+
+### 29.3 Schutzbedarf je Schutzobjekt
+
+I = Integrität, A = Authentizität, V = Verfügbarkeit, C = Vertraulichkeit
+
+| # | Schutzobjekt | I | A | V | C | Findings |
+|---|---|---|---|---|---|---|
+| 1 | Interlink: Forwarding, Austausch, Steuerlogik | sehr hoch | sehr hoch | hoch | normal | TB-02, 10, 11, 20 |
+| 2 | Sysop-Zugang (Funk, AXUDP, Telnet, Web) | sehr hoch | sehr hoch | hoch | normal | TB-12; Auth-Konzept fehlt |
+| 3 | Bulletins: Inhalt, Rubriken, Löschrechte | hoch | hoch | normal | – | TB-15, über TB-02 |
+| 4 | Dictionary und brocast-Seiten | sehr hoch | sehr hoch | hoch | – | TB-01, 04, 08, 09, 21 |
+| 5 | Alarme und Warnungen | sehr hoch | sehr hoch | **sehr hoch** (Notfunk angedacht) | – | TB-08, 14 |
+| 6 | Knoten: Prozess, Datenbank, Konfiguration | hoch | – | hoch | normal | TB-01, 09, 13, 17, 19, 20c, 23 |
+| 7 | Aussendungen unter dem eigenen Rufzeichen | hoch | – | hoch (Kanal) | – | TB-03, 04, 13, 14, 18 |
+| 8 | Client-PC und lokale Daten, Client-Web-GUI | hoch | hoch | normal | normal | TB-03, 05, 06, 16, 22; Web-GUI ohne Login (11/5) |
+| 9 | Persönliche Post zwischen Usern | normal | normal | normal | normal | → AR1 |
+| 10 | Chat und TBCHAT zwischen Usern | normal | normal | normal | normal | TB-07 |
+| 11 | Geheimnisse (Partner-Secrets, private Schlüssel) | hoch | – | normal | sehr hoch | künftig |
+| 12 | Logs und Statistiken | hoch | – | normal | normal | TB-12, 19 |
+
+### 29.4 Zugangswege
+
+| Zugangsweg | Angreiferkreis | Abschreckung | Eintritt |
+|---|---|---|---|
+| Funk (AGW/KISS) | wer ein Sendegerät in Reichweite hat (auch ohne Lizenz) | mittel | gering, Rufzeichen frei fälschbar |
+| AXUDP | wer den UDP-Port erreicht | keine | hoch bei Internet-Erreichbarkeit |
+| Telnet, Web-Adapter der Box | wer den TCP-Port erreicht | keine | hoch bei Internet-Erreichbarkeit |
+| Client-Web-GUI (Vorgabe `0.0.0.0`, ohne Login) | jeder im LAN, ggf. WAN | keine | **hoch** |
+| Internet-Austausch (geplant) | das ganze Internet | keine | hoch; nur mit Authentisierung |
+
+### 29.5 Rahmenbedingungen
+
+- **R1** Verschlüsselung über Funk ist verboten; Authentisierung, Signaturen, Prüfsummen sind
+  erlaubt (Inhalt bleibt lesbar). Über das Internet ist Verschlüsselung erlaubt → dort Standards
+  (SSH, WireGuard, TLS) statt Eigenbau.
+- **R2** Jede Maßnahme kostet Bytes auf dem Funkkanal: Signatur/Challenge statt laufender Zusatzdaten.
+- **R3** FBB/BPQ kennen keine neue Authentisierung: pro Partner bewusst abschaltbar, nie automatisch.
+- **R4** Neben Prävention Wiederherstellung: Neustart ohne Handeingriff, kaputte Einträge werden
+  beim Start aussortiert, Backups mit festem Intervall.
+
+### 29.6 Akzeptierte Risiken
+
+- **AR1** Rufzeichen-Missbrauch zwischen Usern in Post und Chat: PR-typisch, kein bleibender Schaden.
+  Nicht akzeptiert: Manipulation lokaler Daten auf dem PC eines Users (TB-06 → CR99).
+- **AR2** Kanalüberlastung durch die Sendeleistung eines Angreifers selbst. Nicht akzeptiert: dass
+  die eigene Station diese Last vervielfacht (CR97).
+
+### 29.7 Rollen
+
+| Recht | Sysop | Forward-Partner | User, an der Heimat-BBS authentifiziert | nicht authentifiziert |
+|---|---|---|---|---|
+| Lesen (Post, Bulletins) | ✓ | – | ✓ | ✓ |
+| Post schreiben | ✓ | ✓ (Forwarding) | ✓ | nur Text nach 29.9, nur lokal / an den Sysop, Weiterleitung erst nach Sysop-Freigabe |
+| Bulletins schreiben | ✓ | ✓ (Forwarding) | ✓ | ✗ |
+| Fremde Bulletins löschen | ✓ | ✗ | ✗ | ✗ |
+| brocast-Seiten, Alarme | ✓ | ✗ | ✗ | ✗ |
+| TBClient verwenden | ✓ | – | ✓ | **✗** |
+| Forwarding-Post abholen | – | ✓ | ✗ | ✗ |
+| Admin-Befehle | ✓ | ✗ | ✗ | ✗ |
+
+Vertrauenskette (Idee): Sysop-Schlüssel → Box-Schlüssel → User-Schlüssel. Die Heimat-BBS
+bestätigt den Schlüssel des Users mit ihrer Unterschrift; eine fremde BBS, die der Heimat-BBS
+vertraut, erkennt den User damit ebenfalls (CR93).
+
+### 29.8 Admin-Protokoll (Richtung, CR94)
+
+- Sysop-Zugang grundsätzlich **über das Internet** (Standards, R1). Für abgesetzte Standorte auch
+  **über Funk** – dafür ein eigenes Protokoll mit Signatur.
+- Über Funk genügt kein Login pro Sitzung: AX.25 zählt nur bis 7 und prüft keine Absender, Frames
+  lassen sich in eine bestehende Verbindung einschleusen → **jeder Befehl einzeln signiert**:
+  `Befehl | Ziel-Box | Challenge | Zähler | Signatur`. Challenge statt Uhrzeit (abgesetzte Standorte
+  ohne NTP/GPS). Ed25519: 64 Byte Signatur, Base64 88 Zeichen, passt in einen Frame.
+- Wiederverwendbar: GUST (HMAC-SHA256 auf 14 Byte gekürzt, ECDSA P-256, Timestamp-Fenster,
+  `compare_digest`, `gust_keygen.py` mit add/revoke/list), Winlink Secure Login (`;PQ:`/`;PR:`),
+  FBB/BPQ-Passwortabfrage (nur Altgegenstellen), HOTP/TOTP für Sysops ohne tbclient, LoTW-Zertifikat
+  als Anker für die Bindung Schlüssel ↔ Rufzeichen, brocast als Verteilweg für öffentliche
+  Schlüssel und Widerrufe. Notfall-Schlüssel offline.
+- Offen: Ed25519 oder P-256 (Abgleich mit GUST, gemeinsames `prcore/auth.py`?), wer Zertifikate
+  ausstellt (Sysop je Box / gemeinsamer Herausgeber / LoTW-Anker), TOTP-Variante ja/nein.
+
+### 29.9 Zeichensatz-Policy (CR95)
+
+- **Protokollfelder** (Rufzeichen, BID, `@`-Route, Rubrik, Befehle): streng `A-Z 0-9 / -`.
+- **Freitext** (Betreff, Text): Unicode nach Positivliste – Kategorien L*, M* (max. 3 je Zeichen),
+  N* (nur Anzeige, geparst wird nur ASCII), P*, Sc, Sm; Leerzeichen nur U+0020, Zeilenende LF.
+  Verboten: Cc, Cf (Bidi-Overrides, unsichtbare Zeichen; ZWNJ/ZWJ nur zwischen Buchstaben), Co, Cs,
+  Cn, Zl, Zp, Tag-Zeichen. Emoji (So) erst ab authentifiziertem User.
+- Striktes UTF-8 (Altgeräte: bewusste Umwandlung pro User), NFC vor dem Speichern, Steuerzeilen
+  (`/EX`, `***`, `R:`, `F>`, `FB`/`FS`, `;`, `//`, `#`) auf einer NFKC-Kopie erkennen und
+  entschärfen, gemischte Schriften pro Wort kennzeichnen, Grenzen in Byte.
+- Anzeige: immer maskieren (HTML, ADIF, CSV) – für alle Rollen; User-Text in der Web-GUI in `<bdi>`.
+- Gemeinsames Modul `prcore/text.py` für Box und Client.
+
+### 29.10 Reihenfolge
+
+1. CR87 (TB-01, PoC öffentlich) · 2. CR88 (Parser-Robustheit) · 3. CR100 (Client-Web-GUI-Zugang) ·
+4. CR91 (Dictionary) · 5. CR89, CR90 (Forwarding) · 6. CR95, CR96 · 7. CR97 · 8. CR92 ·
+9. CR98 (Audit) · 10. CR93, CR94, CR99 (Authentisierung, Konzept zuerst).
+
 ## Quellen
 
+- Security-Advisory TinyBox (9V1NE, 09.11.2026): https://gist.github.com/nnamon/3d93af6dd520d5f4b392c3fb57407d63
 - Forwarding-Konzept (Claude-Doc): https://claude.ai/code/artifact/ed861fd0-7519-4796-8f4b-8de6ab3fbd2a
 - W0RLI-BBS-Spezifikation vom 12.10.1998: `docs/w0rli/w0rli-bbs-spec-12oct1998.pdf`
 - AEA PK-232MBX Operating Manual, Kap. 5 (nur Orientierung): https://www.dl0bn.de/dc7xj/Anleitungen/AEA%20PK-232MBX_Manual.pdf
