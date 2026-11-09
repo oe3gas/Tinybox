@@ -5,7 +5,9 @@
 // without internet). Three layouts: hop radar, map, force. Filters: packet type, device
 // (click in the pie), minimum frames per link. Stage 2: time axis (slider + play, links fade
 // in and out), line style by hop type (WIDE1 strong, WIDE2 paler, flood pale dashed), red
-// ring at digipeaters that carry many unneeded repeats.
+// ring at digipeaters that carry many unneeded repeats. CR102: no lines to us (we only
+// listen), selection by role (digipeater, iGate, station, moving, heard directly), directly
+// heard stations full colour, the others paler, km labels of the map above the drawing.
 "use strict";
 
 const AprsGraph = (() => {
@@ -16,12 +18,17 @@ const AprsGraph = (() => {
   const OTHER = "#a3a19a";
   const RAD = Math.PI / 180;
   // state survives the 15 s refresh of the page
-  let mode = "radar", cat = "all", dev = null, minF = 1, pieBy = "frames";
+  let mode = "radar", cat = "all", dev = null, minF = 1, pieBy = "frames", role = "all";
   let tpos = null;                         // stage 2: last bucket of the time slice, null = all
   let playTimer = 0, playing = false;      // playing survives the 15 s redraw of the page
   const HOPS = ["direct", "wide1", "wide2", "flood"];
   const HOP_TXT = { direct: "no path", wide1: "WIDE1", wide2: "WIDE2", flood: "flood" };
   const REP_MIN = 0.1;                      // red ring from 10 % unneeded repeats on
+  const ME_R = 6;                           // CR102: we are only a small mark in the middle
+  // CR102: selection by role
+  const ROLES = [["all", "All"], ["digi", "Digipeaters"], ["igate", "iGates"], ["station", "Stations"],
+                 ["moving", "Moving"], ["direct", "Heard directly"]];
+  const isRole = (n, r) => r === "all" || (r === "moving" ? !!n.moving : r === "direct" ? !!n.direct : n.kind === r);
   try { mode = localStorage.getItem("tbc-aprs-graph") || "radar"; } catch (e) { /* ok */ }
 
   function el(tag, cls, text) {
@@ -199,10 +206,18 @@ const AprsGraph = (() => {
     for (const n of nodes.values()) n.all = g.ways.reduce((s, w) => s + (w.chain.includes(n.call) ? w.n : 0), 0);
     const allMax = Math.max(1, ...[...nodes.values()].filter((n) => n.kind !== "me").map((n) => n.all));
     const size = (f) => 5 + 15 * Math.sqrt(f / allMax);
-    const R = (n) => n.kind === "me" ? 14 : size(n.f);
-    const L = layouts(g, nodes, all, (n) => n.kind === "me" ? 14 : size(n.all));
+    const R = (n) => n.kind === "me" ? ME_R : size(n.f);
+    const L = layouts(g, nodes, all, (n) => n.kind === "me" ? ME_R : size(n.all));
     if (mode === "geo" && !L.home) mode = "radar";
-    const pass = (w) => (cat === "all" || w.cat === cat) && (!dev || w.dev === dev);
+    // CR102: heard directly = the last one before us on a way (sender, iGate or digipeater)
+    for (const w of g.ways) {
+      const n = w.chain.length >= 2 && w.chain[w.chain.length - 1] === g.me ? nodes.get(w.chain[w.chain.length - 2]) : null;
+      if (n) n.direct = true;
+    }
+    if (!ROLES.some(([v]) => v === role)) role = "all";
+    const pick1 = (n) => n && n.kind !== "me" && isRole(n, role);
+    const pass = (w) => (cat === "all" || w.cat === cat) && (!dev || w.dev === dev)
+      && (role === "all" || w.chain.some((c) => pick1(nodes.get(c))));
     const links = new Map();
     const B = g.buckets || 0;
     const zero = () => new Array(B).fill(0);
@@ -259,6 +274,9 @@ const AprsGraph = (() => {
     mf.append(rng, rv);
     ctl.append(layoutSeg, catSeg, mf);
     box.append(ctl);
+    const ctl2 = el("div", "gr-ctl");
+    ctl2.append(el("span", "gr-tlab", "Show"), seg(ROLES, () => role, (v) => { role = v; redraw(); }));
+    box.append(ctl2);
 
     // stage 2: time axis - a slice of the window (a sixth) that slides, or the whole window
     const SL = Math.max(1, Math.round(B / 6));
@@ -300,7 +318,7 @@ const AprsGraph = (() => {
       s.append(d, t);
       lg.append(s);
     }
-    lg.append(el("span", "", "bubble and line = frames · green dashed = internet → radio · dotted ring = position guessed"));
+    lg.append(el("span", "", "bubble and line = frames · full colour = heard directly, pale = only via others · green dashed = internet → radio · dotted ring = position guessed"));
     box.append(lg);
     const lg2 = el("div", "gr-legend");
     for (const [cls, t] of [["gr-h-wide1", "no path / WIDE1"], ["gr-h-wide2", "WIDE2"], ["gr-h-flood", "flood (WIDE3, long path)"]]) {
@@ -323,15 +341,17 @@ const AprsGraph = (() => {
     mk.append(sv("path", { d: "M0,0L10,5L0,10z", fill: "var(--muted)" }));
     defs.append(mk);
     svg.append(defs);
-    const bg = sv("g"), gl = sv("g"), gn = sv("g");
-    svg.append(bg, gl, gn);
+    const bg = sv("g"), gl = sv("g"), gn = sv("g"), gt = sv("g");   // gt: ring labels on top (CR102)
+    svg.append(bg, gl, gn, gt);
     const txt = (x, y, s, anchor) => { const t = sv("text", { x, y, class: "gr-bgtext", "text-anchor": anchor || "start" }); t.textContent = s; return t; };
     function background() {
       bg.replaceChildren();
+      gt.replaceChildren();
       const ring = (r) => sv("circle", { cx: CX, cy: CY, r, class: "gr-ring" });
       if (mode === "radar") {
         for (let hh = 1; hh <= L.maxHop; hh++) {
-          bg.append(ring(L.ringR(hh)), txt(CX, CY + L.ringR(hh) - 4, hh === 1 ? "heard directly" : (hh - 1) + " hop" + (hh > 2 ? "s" : ""), "middle"));
+          bg.append(ring(L.ringR(hh)));
+          gt.append(txt(CX, CY + L.ringR(hh) - 4, hh === 1 ? "heard directly" : (hh - 1) + " hop" + (hh > 2 ? "s" : ""), "middle"));
         }
       }
       if (mode === "geo") {
@@ -341,13 +361,14 @@ const AprsGraph = (() => {
           const r = L.gr(km);
           if (r < 22 || r - last < 28) continue;
           last = r;
-          bg.append(ring(r), txt(CX + r * 0.71 + 3, CY - r * 0.71, km + " km"));
+          bg.append(ring(r));
+          gt.append(txt(CX, CY + r - 4, km + " km", "middle"));
         }
       }
-      if (mode !== "force" && L.home) bg.append(txt(CX, 14, "N", "middle"));
+      if (mode !== "force" && L.home) gt.append(txt(CX, 14, "N", "middle"));
     }
     background();
-    const edges = [...links.values()].filter(vis);
+    const edges = [...links.values()].filter((l) => vis(l) && l.b !== g.me);   // CR102: none to us
     const epaths = edges.map((l) => {
       const p = sv("path", { class: "gr-link gr-h-" + (l.hop === "direct" ? "wide1" : l.hop) + (l.inet ? " gr-inet" : ""),
                              "stroke-width": LW(l.n).toFixed(1), "marker-end": "url(#gr-arrow)" });
@@ -360,7 +381,9 @@ const AprsGraph = (() => {
     });
     const shown = [...nodes.values()].filter((n) => keep.has(n.call));
     const ngs = shown.map((n) => {
-      const gg = sv("g", { class: "gr-node" + (n.kind === "me" ? "" : " gr-click") });
+      const gg = sv("g", { class: "gr-node" + (n.kind === "me" ? "" : " gr-click")
+                             + (n.kind === "me" || n.direct ? "" : " gr-pale")
+                             + (role !== "all" && n.kind !== "me" && !isRole(n, role) ? " gr-unsel" : "") });
       const moving = n.kind === "station" && n.moving;
       const c = sv("circle", { r: R(n).toFixed(1), fill: moving ? "transparent" : ROLE[n.kind],
                                stroke: moving ? ROLE.station : n.est && n.kind !== "me" ? "var(--text)" : "var(--surface)",

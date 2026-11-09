@@ -690,6 +690,9 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .gr-link.gr-dim { stroke-opacity: .07; }
 .gr-node { transition: opacity .45s; }
 .gr-node.gr-dim { opacity: .25; }
+/* CR102: heard directly = full colour, only via others = paler; not selected = faint */
+.gr-node.gr-pale circle:not(.gr-rep) { fill-opacity: .4; stroke-opacity: .55; }
+.gr-node.gr-unsel { opacity: .3; }
 .gr-click { cursor: pointer; }
 .gr-tip { font-size: 13px; color: var(--muted); min-height: 1.5em; margin: 2px 0 8px; }
 .gr-pie { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; border-top: 1px solid var(--line); padding-top: 12px; }

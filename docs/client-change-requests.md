@@ -80,6 +80,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | offen, siehe unten |
 | 100 | Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding und fremde Origins | ✅ siehe unten |
 | 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
+| 102 | APRS-Netzgraph: keine Linien zur eigenen Station, Auswahl nach Rolle, direkt gehört voll gefärbt, km an der Karte | ✅ siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3269,3 +3270,28 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 - Der Monitor-Bildschirm bleibt unverändert (APRS Lense, HEX, Clear, Inspektor).
 - Geprüft im Browser (Playwright): Dashboard mit HEX eingeschaltet → Text, Knopf führt auf
   `#/monitor` mit APRS Lense, HEX, Clear; keine JS-Fehler. `tests/test_web.py` grün.
+
+## CR102 – APRS-Netzgraph: eigene Station, Auswahl, Färbung, km-Ringe (✅ 09.11.2026)
+
+### Erfassung (OE3GAS, 09.11.2026)
+
+- OE3GAS-10 hat in der Darstellung keinen Wert, er ist nur Zuhörer. Die Linien dorthin erwecken
+  einen falschen Eindruck → weglassen.
+- Zusätzliche Selektionsmöglichkeiten: Digipeater, iGates, Stations, Moving, Directly heard.
+- Ansicht „Map“: die km-Beschriftungen der Ringe fehlen.
+- Direkt gehörte Calls voller gefärbt, die anderen blasser.
+
+### Umsetzung (Client 2026.11.09.6, `tbclient/web/aprsgraph.js`, `app.css`)
+
+- Keine Linien mehr zur eigenen Station. Sie bleibt nur als kleiner grauer Punkt in der Mitte
+  (Bezugspunkt für Hop-Radar und Karte). Die Anordnung rechnet weiter mit allen Wegen, es
+  verschiebt sich also nichts.
+- Neue Zeile „Show“: All / Digipeaters / iGates / Stations / Moving / Heard directly. Gezeigt
+  werden die Wege, auf denen eine passende Station liegt; die übrigen Bubbles dieser Wege bleiben
+  schwach sichtbar. Wirkt zusammen mit Paketart, Gerät und min. Frames.
+- „Heard directly“ = die letzte Station vor uns auf einem Weg (Sender ohne Pfad, iGate oder
+  Digipeater). Diese Bubbles in voller Farbe, alle anderen blass (Füllung 40 %).
+- km- und Hop-Beschriftungen der Ringe liegen jetzt über der Zeichnung (vorher von Bubbles und
+  Linien verdeckt), unten am Ring, mittig.
+- Geprüft im Browser (Playwright) mit Testdaten: Hop-Radar, Map mit 10/50/100/200 km, Auswahl
+  „Heard directly“; keine JS-Fehler.

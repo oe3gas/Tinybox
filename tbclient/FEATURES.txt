@@ -244,6 +244,9 @@ Station
   Pfad: kein Pfad/WIDE1 kraeftig, WIDE2 blass, Flood (WIDE3, long path)
   blass gestrichelt. Roter Ring an Digipeatern, ueber die viele unnoetige
   Wiederholungen laufen (unveraenderte Pakete, zu oft gebakt).
+  Keine Linien zur eigenen Station (sie hoert nur zu, kleiner Punkt in der
+  Mitte). Auswahl: Digipeater, iGates, Stationen, mobil, direkt gehoert.
+  Direkt gehoerte Calls in voller Farbe, die anderen blass.
 - Stationsseite je Rufzeichen (Klick auf ein Rufzeichen im Monitor oder in
   der Statistik): Rolle, Geraet, Entfernung, Art der Frames, Frames/h,
   Aktivitaet nach Wochentag/Stunde, Bakenabstaende, Wege zu dir, Leistung als
