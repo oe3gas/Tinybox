@@ -7,11 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 10  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 11  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
                      # 9: profiles (name, locator, home BBS of a station, CR73)
                      # 10: chat_lines.seq (event number, so a quote finds its history line)
+                     # 11: fwd_partial.size (restart only for the same proposal, CR89)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS fwd_partial (              -- B1 restart: half receiv
     data    BLOB NOT NULL,                            -- compressed payload received so far
     tries   INTEGER NOT NULL DEFAULT 0,               -- restarts asked for
     created TEXT NOT NULL,
+    size    INTEGER NOT NULL DEFAULT 0,               -- size in the proposal (CR89)
     PRIMARY KEY (partner, bid)
 );
 CREATE TABLE IF NOT EXISTS jlog (
@@ -221,6 +223,9 @@ class Store:
             if col not in cols:
                 self._db.execute(f"ALTER TABLE messages ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         self._db.execute("CREATE UNIQUE INDEX IF NOT EXISTS messages_bid ON messages (bid)")
+        # 10 -> 11: size of the proposal with the B1 restart data (CR89, TB-20a)
+        if "size" not in {r["name"] for r in self._db.execute("PRAGMA table_info(fwd_partial)")}:
+            self._db.execute("ALTER TABLE fwd_partial ADD COLUMN size INTEGER NOT NULL DEFAULT 0")
         # 9 -> 10: event number of a chat line (a quote "~^5" finds it in the history)
         if "seq" not in {r["name"] for r in self._db.execute("PRAGMA table_info(chat_lines)")}:
             self._db.execute("ALTER TABLE chat_lines ADD COLUMN seq INTEGER")
@@ -309,17 +314,20 @@ class Store:
 
     # --- B1 restart data (forward module only) -----------------------------
 
-    def partial_get(self, partner: str, bid: str) -> tuple[bytes, int] | None:
-        row = self._db.execute("SELECT data, tries FROM fwd_partial WHERE partner = ? AND bid = ?",
-                               (partner, bid)).fetchone()
-        return (bytes(row["data"]), row["tries"]) if row else None
+    def partial_get(self, partner: str, bid: str) -> tuple[bytes, int, int] | None:
+        """(data, tries, size of the proposal it belongs to)."""
+        row = self._db.execute("SELECT data, tries, size FROM fwd_partial WHERE partner = ? "
+                               "AND bid = ?", (partner, bid)).fetchone()
+        return (bytes(row["data"]), row["tries"], row["size"]) if row else None
 
-    def partial_put(self, partner: str, bid: str, data: bytes) -> None:
+    def partial_put(self, partner: str, bid: str, data: bytes, size: int = 0) -> None:
         with self._db:
             self._db.execute(
-                "INSERT INTO fwd_partial (partner, bid, data, tries, created) VALUES (?, ?, ?, 0, ?)"
-                " ON CONFLICT (partner, bid) DO UPDATE SET data = excluded.data",
-                (partner, bid, data, utc_now()))
+                "INSERT INTO fwd_partial (partner, bid, data, tries, created, size)"
+                " VALUES (?, ?, ?, 0, ?, ?)"
+                " ON CONFLICT (partner, bid) DO UPDATE SET data = excluded.data,"
+                " size = excluded.size",
+                (partner, bid, data, utc_now(), size))
 
     def partial_tried(self, partner: str, bid: str) -> None:
         with self._db:

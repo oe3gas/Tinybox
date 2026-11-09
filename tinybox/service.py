@@ -315,10 +315,7 @@ class MessageService:
             else:
                 bid_kind = "B" if type == "B" else "M"
         if bid is None:
-            bid = addressing.make_bid(msg_id, st.mailbox_call)
-            if self.store.bid_known(bid):          # only after 100000 messages
-                log.warning("msg %d: BID %s already used, message has no BID", msg_id, bid)
-                bid = None
+            bid = self.new_bid(msg_id)
         if bid:
             self.store.bid_add(bid, origin)
         forwarded = origin == "forward"
@@ -357,13 +354,27 @@ class MessageService:
         self.store.set_forward_fields(msg_id, fwd=fwd, note=note)
         self.bus.publish("message.edited", message=self.store.get(msg_id), by="forward")
 
+    def new_bid(self, msg_id: int) -> str:
+        """The BID of a new message: '<n>_<CALL>' as usual; if that is known already
+        (the counter wrapped, a rebuilt database, or a partner announced it in
+        advance - audit TB-10) a random one. Never None: a message without BID
+        would block the forward queue (an FB line with an empty field)."""
+        call = self.cfg.station.mailbox_call
+        bid = addressing.make_bid(msg_id, call)
+        if not self.store.bid_known(bid):
+            return bid
+        for _ in range(100):
+            other = addressing.random_bid(call)
+            if not self.store.bid_known(other):
+                log.warning("msg %d: BID %s is known already - using %s", msg_id, bid, other)
+                return other
+        raise ServiceError("no free BID")       # 36^5 tries: does not happen
+
     def assign_missing_bids(self) -> int:
         """Schema 4 -> 5: give existing messages a BID (they stay local)."""
         n = 0
         for msg_id in self.store.ids_without_bid():
-            bid = addressing.make_bid(msg_id, self.cfg.station.mailbox_call)
-            if self.store.bid_known(bid):
-                continue
+            bid = self.new_bid(msg_id)
             self.store.set_forward_fields(msg_id, bid=bid)
             self.store.bid_add(bid, "migration")
             n += 1

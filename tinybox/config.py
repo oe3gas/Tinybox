@@ -81,6 +81,7 @@ class PartnerCfg:
     areas: list[str] = field(default_factory=list)   # bulletins: flood areas, * = all
     protocol: str = "fbb"           # b1 | fbb | ascii - the most we offer this partner
     timeout: int = 120              # seconds without data
+    max_session_min: int = 60       # CR89 (TB-20b): one session never takes longer
     auto: bool = True               # call by itself when mail waits (default: tcp yes, agw no)
     interval_min: int = 0           # also call every n minutes to fetch mail (0 = only to send)
     window: tuple[int, int] | None = None   # (from, to) minutes of the day, local time
@@ -949,7 +950,9 @@ def _load_partner(cp: configparser.ConfigParser, sec: str) -> PartnerCfg:
     p.auto = _get(cp, sec, "auto", transport_default_auto, bool)
     p.interval_min = _get(cp, sec, "interval_min", 0, int)
     p.retry_min = _get(cp, sec, "retry_min", 10, int)
+    p.max_session_min = _get(cp, sec, "max_session_min", 60, int)
     _check_range(sec, "interval_min", p.interval_min, 0, 10080)
+    _check_range(sec, "max_session_min", p.max_session_min, 1, 1440)
     _check_range(sec, "retry_min", p.retry_min, 1, 1440)
     window = _get(cp, sec, "window", "").strip()
     if window:

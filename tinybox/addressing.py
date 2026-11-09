@@ -12,6 +12,7 @@ R: line:  R:yymmdd/hhmmZ @:<address> [qth] #:<local nr> $:<bid>
 from __future__ import annotations
 
 import re
+import secrets
 from datetime import datetime, timezone
 
 MAX_BID = 12
@@ -80,6 +81,28 @@ def is_local(addr: str, mailbox_call: str) -> bool:
 def make_bid(number: int, mailbox_call: str) -> str:
     """FBB style. The number wraps at 100000 so the BID stays within 12 characters."""
     return f"{number % 100000}_{base_call(mailbox_call)}"[:MAX_BID]
+
+
+_BID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+
+def random_bid(mailbox_call: str) -> str:
+    """CR89 (TB-10): a BID nobody can claim in advance, when the numbered one is
+    taken - e.g. 'K7Q2X_OE3GAS' (letters first, so it never looks like a number)."""
+    call = base_call(mailbox_call)
+    n = max(4, MAX_BID - 1 - len(call))
+    head = secrets.choice(_BID_CHARS[:26]) + "".join(secrets.choice(_BID_CHARS)
+                                                     for _ in range(n - 1))
+    return f"{head}_{call}"[:MAX_BID]
+
+
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def strip_controls(text: str) -> str:
+    """CR89 (TB-11): control characters out of mail text, above all Ctrl-Z
+    (end of message in the forward protocol). Tab and line ends stay."""
+    return _CTRL_RE.sub("", text)
 
 
 def check_bid(bid: str) -> str:

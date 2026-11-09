@@ -2,6 +2,14 @@
 
 ## Unveröffentlicht
 
+- Forwarding: **Robustheit CR89 (Audit TB-10, TB-11, TB-20a/b)** – eine Nachricht bekommt immer eine
+  BID: ist `<n>_<CALL>` schon bekannt (Zähler übergelaufen, Datenbank neu, oder vorab von einem
+  falschen Partner belegt), eine zufällige wie `K7Q2X_OE3XTC`; ältere Nachrichten ohne BID bekommen
+  sie beim Senden, und eine unbrauchbare Nachricht wird übersprungen statt die Warteschlange zu
+  blockieren. Steuerzeichen (vor allem Ctrl-Z) werden beim Empfang und beim Senden entfernt.
+  B1-Restart-Daten gelten nur für denselben Vorschlag (gleiche Größe, Schema 11) und werden nach
+  einem gescheiterten Restart verworfen. `;`-Zeilen verlängern den Timeout nicht mehr, höchstens 20
+  in Folge, und jede Sitzung endet nach `max_session_min` (Vorgabe 60 min) je Partner.
 - brocastd: **Dictionary-Integrität CR91 (Audit TB-04)** – ein neues Dictionary wird gegen jeden
   bestehenden Eintrag vollständig verglichen (bisher nur der Name): `scale`, `unit`, `exp`, `type`,
   `max` … dürfen sich nicht mehr ändern, nur die Anzeigetexte. Ein von einer Station aus

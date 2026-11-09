@@ -136,6 +136,9 @@ class Receiver:
     # --- storing ------------------------------------------------------------------
 
     def store(self, p: Proposal, subject: str, text: str) -> int | None:
+        # CR89 (TB-11): no control characters (Ctrl-Z!) into the store - they would
+        # end the message early when it goes on to the next mailbox
+        subject, text = addressing.strip_controls(subject), addressing.strip_controls(text)
         rlines, body = addressing.split_rlines(text)
         # W0RLI: a text line "/EX" travels as '/EX'
         lines = ["/EX" if x.strip().upper() == "'/EX'" else x for x in body.split("\n")]

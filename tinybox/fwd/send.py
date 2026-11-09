@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 
 from .. import logsetup
+from ..addressing import BID_RE, strip_controls
 from ..service import MessageService
 from ..store import Message
 from prcore import lzhuf
@@ -28,12 +29,15 @@ BLOCK_BYTES = 10_000          # one FBB block (sum of the proposed sizes)
 
 
 def wire_lines(m: Message) -> list[str]:
-    """Title and text lines as they go out (without Ctrl-Z)."""
-    text = list(m.rline_list)
+    """Title and text lines as they go out (without Ctrl-Z). Control characters
+    never go out - a Ctrl-Z in the text would end the message early at the next
+    mailbox and the rest would count as protocol lines (CR89, TB-11)."""
+    text = [strip_controls(x) for x in m.rline_list]
     if text:
         text.append("")
-    text += ["'/EX'" if x.strip().upper() == "/EX" else x for x in m.body.split("\n")]
-    return [m.subject[:MAX_SUBJECT_SEND]] + text
+    text += ["'/EX'" if x.strip().upper() == "/EX" else x
+             for x in strip_controls(m.body).split("\n")]
+    return [strip_controls(m.subject)[:MAX_SUBJECT_SEND]] + text
 
 
 def wire_size(m: Message) -> int:
@@ -49,7 +53,32 @@ class Sender:
         self.offered: set[int] = set()        # message ids offered in this session
 
     def pending(self) -> list[Message]:
-        return [m for m in self.store.fwd_pending(self.partner) if m.id not in self.offered]
+        out = []
+        for m in self.store.fwd_pending(self.partner):
+            if m.id in self.offered:
+                continue
+            if not self._sendable(m):
+                self.mark(m, "rejected")           # one bad message never blocks the queue
+                continue
+            out.append(m)
+        return out
+
+    def _sendable(self, m: Message) -> bool:
+        """CR89 (TB-10): every field of the FB line must be there and be one word -
+        otherwise the partner hangs up at this message, every session again."""
+        if not m.bid:                              # stored before CR89 without a BID
+            m.bid = self.service.new_bid(m.id)
+            self.store.set_forward_fields(m.id, bid=m.bid)
+            self.store.bid_add(m.bid, "forward")
+            log.warning("%s: message %d had no BID, now %s", self.partner, m.id, m.bid)
+        p = self.proposal(m)
+        fields = (p.type, p.from_call, p.at_addr, p.to_call, p.bid)
+        bad = [f for f in fields if not f or any(c.isspace() for c in f)]
+        if bad or not BID_RE.match(p.bid):
+            log.error("%s: message %d not forwarded - unusable field(s) %r in %r",
+                      self.partner, m.id, bad or [p.bid], self.fb_line(p))
+            return False
+        return True
 
     def block(self, max_n: int) -> list[Message]:
         """Up to max_n messages not yet offered, at most BLOCK_BYTES together."""
@@ -80,7 +109,7 @@ class Sender:
     def payload(m: Message, crc: bool) -> bytes:
         """Compressed message (B1 with CRC, else B0). Deterministic, so a restart
         continues exactly where the first try stopped."""
-        data = b1.text_to_bytes(m.rline_list, m.body)
+        data = b1.text_to_bytes([strip_controls(x) for x in m.rline_list], strip_controls(m.body))
         return lzhuf.compress_b1(data) if crc else lzhuf.compress(data)
 
     @staticmethod

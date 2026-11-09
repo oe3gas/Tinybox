@@ -91,7 +91,7 @@ class ForwardSessionEndsCleanly(unittest.IsolatedAsyncioTestCase):
                 closed.append(True)
 
         s = ForwardSession.__new__(ForwardSession)
-        s.p = SimpleNamespace(call="OE3XYZ", timeout=10)
+        s.p = SimpleNamespace(call="OE3XYZ", timeout=10, max_session_min=60)
         s.master = True
         s.in_message = False
         s.link = Link()

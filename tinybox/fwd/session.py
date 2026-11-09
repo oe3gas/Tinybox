@@ -47,6 +47,7 @@ from .send import Sender
 log = logging.getLogger("tinybox.forward")
 
 MAX_MESSAGES = 500        # per session; protects against a partner that never stops
+MAX_NULL_LINES = 20       # CR89 (TB-20b): empty or ";" lines in a row before we hang up
 
 
 class Gone(Exception):
@@ -98,23 +99,51 @@ class ForwardSession:
         self.tx = Sender(service, partner.call)
         self.store = service.store
         self.in_message = False
+        self._deadline = time.monotonic() + partner.max_session_min * 60   # run() sets it again
         self.compressed = False         # B0 or B1
         self.b1 = False
 
     # --- helpers ----------------------------------------------------------------
 
-    async def _line(self) -> str:
-        line = await self.link.readline(self.p.timeout)
+    async def _line(self, timeout: float | None = None) -> str:
+        left = self._deadline - time.monotonic()
+        if left <= 0:                       # CR89 (TB-20b): a session cannot be held open
+            raise ProtocolError(f"session longer than {self.p.max_session_min} min")
+        wait = min(self.p.timeout if timeout is None else timeout, left)
+        try:
+            line = await self.link.readline(wait)
+        except asyncio.TimeoutError:
+            if wait >= left:
+                raise ProtocolError(f"session longer than {self.p.max_session_min} min") from None
+            raise
         if line is None:
             raise Gone("connection closed by partner")
         return line
 
+    def _wait(self) -> float:
+        """Timeout for one read: p.timeout, but never past the end of the session."""
+        left = self._deadline - time.monotonic()
+        if left <= 0:
+            raise ProtocolError(f"session longer than {self.p.max_session_min} min")
+        return min(self.p.timeout, left)
+
     async def _command(self) -> str:
-        """Next non-empty line; ';' lines are null commands (W0RLI feature I)."""
+        """Next non-empty line; ';' lines are null commands (W0RLI feature I).
+
+        CR89 (TB-20b): null commands and empty lines do not restart the timeout -
+        the partner has p.timeout seconds for the next real command - and at most
+        MAX_NULL_LINES of them in a row are taken."""
+        started, skipped = time.monotonic(), 0
         while True:
-            line = (await self._line()).strip()
+            left = self.p.timeout - (time.monotonic() - started)
+            if left <= 0:
+                raise asyncio.TimeoutError
+            line = (await self._line(left)).strip()
             if line and not line.startswith(";"):
                 return line
+            skipped += 1
+            if skipped > MAX_NULL_LINES:
+                raise ProtocolError(f"more than {MAX_NULL_LINES} empty or ';' lines in a row")
 
     async def _wait_prompt(self) -> None:
         while not (await self._command()).endswith(">"):
@@ -150,6 +179,7 @@ class ForwardSession:
         log.info("%s: forward session %s %s", self.p.call,
                  "to" if self.master else "from", self.r.transport)
         started = time.monotonic()
+        self._deadline = started + self.p.max_session_min * 60
         try:
             await (self._master() if self.master else self._slave())
         except asyncio.TimeoutError:
@@ -255,12 +285,23 @@ class ForwardSession:
                 raise ProtocolError(f"restart data for {prop.bid} is missing")
         self.in_message = True
         try:
-            await b1.read_frame(self.link, self.p.timeout, limit, got)
+            await b1.read_frame(self.link, self._wait(), limit, got)
+        except ProtocolError:
+            if prop.bid:                    # bad framing: what we have is no good either
+                self.store.partial_drop(self.p.call, prop.bid)
+            raise
         except (Gone, asyncio.TimeoutError):
             if self.b1 and prop.bid:
-                so_far = stored + bytes(got.data[6:] if offset else got.data)
-                if len(so_far) > 6:
-                    self.store.partial_put(self.p.call, prop.bid, so_far)
+                new = bytes(got.data[6:] if offset else got.data)
+                so_far = stored + new
+                if offset and not new:
+                    # CR89 (TB-20a): the restart itself failed (the sender did not
+                    # take the offset, or the data were not its own) - start afresh
+                    self.store.partial_drop(self.p.call, prop.bid)
+                    log.info("%s: restart of %s failed - next time from the start",
+                             self.p.call, prop.bid)
+                elif len(so_far) > 6:
+                    self.store.partial_put(self.p.call, prop.bid, so_far, prop.size)
                     log.info("%s: %s broke off after %d bytes - kept for a restart",
                              self.p.call, prop.bid, len(so_far))
             raise
@@ -269,7 +310,7 @@ class ForwardSession:
             raise ProtocolError(f"asked for offset {offset}, got {got.offset}")
         payload = stored + bytes(got.data[6:]) if offset else bytes(got.data)
         if prop.bid:
-            self.store.partial_drop(self.p.call, prop.bid)
+            self.store.partial_drop(self.p.call, prop.bid)    # also when the CRC fails below
         try:
             data = (lzhuf.decompress_b1 if self.b1 else lzhuf.decompress)(payload, limit)
         except lzhuf.LzhufError as exc:
@@ -335,7 +376,7 @@ class ForwardSession:
             a = self.rx.answer(p, seen)
             seen.add(p.bid)
             if a == ACCEPT and self.b1 and p.bid:
-                a = self._restart_answer(p.bid)
+                a = self._restart_answer(p)
             answers.append(a)
         self._w("FS " + "".join(answers))
         await self.link.drain()
@@ -348,12 +389,18 @@ class ForwardSession:
                 self.r.rejected.append(p.bid)
         self._count()
 
-    def _restart_answer(self, bid: str) -> str:
+    def _restart_answer(self, p: Proposal) -> str:
         """'!offset' if part of this message arrived before (B1), else '+'."""
+        bid = p.bid
         part = self.store.partial_get(self.p.call, bid)
         if part is None:
             return ACCEPT
-        data, tries = part
+        data, tries, size = part
+        if size != p.size:          # CR89 (TB-20a): the rest of another proposal - not ours
+            self.store.partial_drop(self.p.call, bid)
+            log.info("%s: restart data of %s belong to another proposal (%d, now %d bytes) - "
+                     "dropped", self.p.call, bid, size, p.size)
+            return ACCEPT
         if tries >= 10 or len(data) <= 6:            # LinBPQ gives up after 10 restarts too
             self.store.partial_drop(self.p.call, bid)
             return ACCEPT

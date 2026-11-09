@@ -67,7 +67,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 86 | Dateien im Board-Chat (LZHUF), wie Bilder (CR12) und Dateien im TBClient-Chat (CR78 Stufe 7) | offen, siehe unten |
 | 87 | brocastd: Absturz durch ungültiges `exp` (TB-01) | ✅ siehe unten |
 | 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | ✅ siehe unten (breiter Fuzz-Lauf mit CR98) |
-| 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | offen, siehe unten |
+| 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | ✅ siehe unten |
 | 90 | Interlink-Authentisierung, Challenge-Response pro Partner (TB-02) | offen, siehe unten |
 | 91 | Dictionary-Integrität: voller Vergleich, keine automatische Weiterverbreitung (TB-04) | ✅ siehe unten (Signatur mit CR94) |
 | 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | offen, siehe unten |
@@ -2872,7 +2872,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   (absurde Zeiten, Zukunft, riesige Unterseitenzahl, kaputte Zeile in der Liste, `iso`).
 - Offen: ein breiter Fuzz-Lauf über alle Zeilenparser – mit dem Client-Audit (CR98).
 
-## CR89 – Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b, offen, 09.11.2026)
+## CR89 – Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b, ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -2893,6 +2893,25 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Prüfsumme verwenden, sonst verwerfen.
 - Gesamtzeitgrenze pro Sitzung, Obergrenze für `;`-Zeilen.
 - Ctrl-Z und Steuerzeilen im Inhalt entschärfen (mit CR95).
+
+### Umsetzung (TinyBox, 09.11.2026)
+
+- TB-10: `MessageService.new_bid()` – `<n>_<CALL>` wie bisher; ist die BID schon bekannt, eine
+  zufällige (`addressing.random_bid`, z. B. `K7Q2X_OE3XTC`, nicht vorhersagbar). Eine neue Nachricht
+  ist nie mehr ohne BID. `Sender.pending()`: eine ältere Nachricht ohne BID bekommt sie beim Senden;
+  eine Nachricht mit leerem oder mehrteiligem Feld in der FB-Zeile wird für diesen Partner auf
+  `rejected` gesetzt und geloggt (ERROR) – die Warteschlange läuft weiter.
+- TB-11: `addressing.strip_controls()` entfernt Steuerzeichen außer Tab und Zeilenende. Beim Empfang
+  (`Receiver.store`, Betreff und Text) und beim Senden (`wire_lines`, B0/B1-Payload). Die weitere
+  Entschärfung von Steuerzeilen im Text (`R:`, `/EX` …) folgt mit CR95.
+- TB-20a: Restart-Daten merken sich die Größe aus dem Vorschlag (Tabelle `fwd_partial.size`,
+  Schema 11). Ein Restart (`!offset`) nur bei gleicher Größe, sonst werden sie verworfen und die
+  Nachricht kommt ganz. Scheitert ein Restart ohne neue Daten oder mit Framing-Fehler, werden sie
+  verworfen (keine zehn Fehlversuche mehr). Alte Zeilen ohne Größe werden nicht verwendet.
+- TB-20b: `;`- und Leerzeilen starten den Timeout nicht neu (die Gegenstelle hat `timeout` Sekunden
+  für den nächsten echten Befehl), höchstens 20 in Folge, dann wird aufgelegt. Neu je Partner
+  `max_session_min` (Vorgabe 60, 1 … 1440): danach endet jede Sitzung, auch während der Daten.
+- Tests `tests/test_cr89.py`.
 
 ## CR90 – Interlink-Authentisierung (TB-02, offen, 09.11.2026)
 
