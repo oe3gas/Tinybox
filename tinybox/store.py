@@ -7,12 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 11  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 12  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
                      # 9: profiles (name, locator, home BBS of a station, CR73)
                      # 10: chat_lines.seq (event number, so a quote finds its history line)
                      # 11: fwd_partial.size (restart only for the same proposal, CR89)
+                     # 12: user_keys (client login with a signature, CR93)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -50,6 +51,14 @@ CREATE TABLE IF NOT EXISTS fwd_queue (                -- filled by the forward m
     state   TEXT NOT NULL,                            -- open, later, done, rejected
     changed TEXT NOT NULL,
     PRIMARY KEY (msg_id, partner)
+);
+CREATE TABLE IF NOT EXISTS user_keys (                -- CR93: the key of a client user
+    call     TEXT PRIMARY KEY,                         -- base call (all SSIDs)
+    pub      TEXT NOT NULL,                            -- Ed25519 public key, base64url
+    status   TEXT NOT NULL,                            -- pending | active | revoked
+    created  TEXT NOT NULL,
+    changed  TEXT NOT NULL,
+    note     TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS fwd_partial (              -- B1 restart: half received messages
     partner TEXT NOT NULL,
@@ -556,6 +565,35 @@ class Store:
         return n
 
     # --- chat images (CR12) ---------------------------------------------
+
+    # --- CR93: keys of client users -------------------------------------------
+
+    def key_get(self, call: str) -> dict | None:
+        row = self._db.execute("SELECT * FROM user_keys WHERE call = ?", (call,)).fetchone()
+        return dict(row) if row else None
+
+    def key_list(self) -> list[dict]:
+        return [dict(r) for r in self._db.execute(
+            "SELECT * FROM user_keys ORDER BY status = 'pending' DESC, call")]
+
+    def key_put(self, call: str, pub: str, status: str, note: str = "") -> None:
+        now = utc_now()
+        with self._db:
+            self._db.execute(
+                "INSERT INTO user_keys (call, pub, status, created, changed, note)"
+                " VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (call) DO UPDATE SET pub = excluded.pub,"
+                " status = excluded.status, changed = excluded.changed, note = excluded.note",
+                (call, pub, status, now, now, note))
+
+    def key_status(self, call: str, status: str) -> bool:
+        with self._db:
+            cur = self._db.execute("UPDATE user_keys SET status = ?, changed = ? WHERE call = ?",
+                                   (status, utc_now(), call))
+        return cur.rowcount > 0
+
+    def key_delete(self, call: str) -> bool:
+        with self._db:
+            return self._db.execute("DELETE FROM user_keys WHERE call = ?", (call,)).rowcount > 0
 
     def image_put(self, hash: str, data: bytes) -> None:
         with self._db:

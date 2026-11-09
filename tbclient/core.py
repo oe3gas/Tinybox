@@ -16,6 +16,7 @@ from prcore import chatimg               # the image reference in a chat line (C
 from prcore.agw import PID_NO_L3, via_data
 from prcore.ax25.frame import AX25Error, split_call
 from prcore.ax25.frame import ui_frame as ax25_ui_frame
+from prcore import auth
 from prcore.text import isnum
 
 from . import VERSION, proto
@@ -132,6 +133,9 @@ class ClientCore:
         self.heard_at: dict[str, float] = {}      # call -> last frame heard (any kind)
         self.mail: dict | None = None             # {"count": n, "at": unix} - C1 notice
         self.sysmsg: dict | None = None           # system message (shutdown) from the TinyBox
+        # CR93: the key of the user - one per call, the same file on every PC
+        self.identity = auth.Identity(cfg.data_dir / "identity.key")
+        self.auth: dict = {"state": "", "fp": self.identity.fp, "reason": "", "box": ""}
         # CR75: a station connected to us - the GUI switches to its terminal
         self.focus = {"n": 0, "seq": 0}
         self.direct_at: dict[str, float] = {}     # call -> last frame heard directly
@@ -354,6 +358,7 @@ class ClientCore:
         ch.mode, ch.view = "tinybox", "chat"
         self.handshake_done = False
         self.caps = set()
+        self.auth.update(state="", reason="")
         if self.target != self.settings.get("target"):
             self.settings["target"] = self.target
             self._save_settings()
@@ -748,6 +753,7 @@ class ClientCore:
     def _clear_chat(self) -> None:
         self.handshake_done = False
         self.caps = set()
+        self.auth.update(state="", reason="")
         self._clear_board()
         self.pending.clear()
         self.sync.link_lost()
@@ -898,7 +904,29 @@ class ClientCore:
 
     def _control(self, line: str) -> None:
         cmd, _, rest = line[2:].partition(" ")
+        if cmd == "AUTH?":                       # CR93: log in with the user's key
+            a = dict(x.split("=", 1) for x in rest.split() if "=" in x)
+            nonce, box = a.get("n", ""), a.get("box", "") or self.target
+            if not nonce or len(nonce) > 64:
+                return
+            self.auth.update(state="asking", box=box, reason="")
+            self._send(f"//AUTH sig={self.identity.sign_login(box, self.cfg.mycall, nonce)} "
+                       f"pub={self.identity.pub}")
+            return
+        if cmd == "AUTHWAIT":
+            self.auth.update(state="wait", reason="")
+            self.console.append(f"*** your key ({self.identity.fp}) waits for the sysop of "
+                                f"{self.auth['box'] or self.target} - tell him the fingerprint")
+            self._touch()
+            return
+        if cmd == "ERR" and rest.startswith("auth"):
+            why = rest[4:].strip() or "refused"
+            self.auth.update(state="refused", reason=why)
+            self.console.append(f"*** login with your key refused: {why}")
+            self._touch()
+            return
         if cmd == "OK":
+            self.auth.update(state="ok", reason="")
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
             self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
@@ -1234,6 +1262,7 @@ class ClientCore:
             "linkq": self.linkq, "qcfg": self.qcfg,      # CR33: detail view per station
             "mail": self.mail,
             "sysmsg": self.sysmsg,
+            "auth": self.auth,
             "heard": [{"call": c, "symbol": self.heard.get(c, ""), "ago": int(now - t)}
                       for c, t in sorted(self.heard_at.items(), key=lambda kv: -kv[1])[:30]
                       if c not in self.members and c != self.target],

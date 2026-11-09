@@ -130,6 +130,22 @@ class MessageService:
                 if m.type == "B" and m.fwd == "H" and m.note.startswith(NEW_RUBRIC_NOTE)
                 and (name is None or m.to_call == name)]
 
+    def key_waiting(self, call: str, fp: str, seen_as: str) -> None:
+        """CR93: a new client key waits for the sysop - he gets a personal mail."""
+        st = self.cfg.station
+        try:
+            self.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
+                        subject=f"Client key of {call} waits for release",
+                        body=(f"{seen_as} logged in with the TinyBox client and a new key.\n"
+                              f"Fingerprint: {fp}\n\n"
+                              f"Compare it with {call} (by voice, on paper - not over this link),\n"
+                              f"then on the sysop console:\n"
+                              f"  USER OK {call}       release it\n"
+                              f"  USER DEL {call}      throw it away\n"),
+                        origin="sysop", sysop=True)
+        except Exception:                       # the log line is there anyway
+            log.exception("sysop mail about the key of %s failed", call)
+
     def new_rubric_mail(self, name: str, partner: str, msg_id: int) -> int:
         """Personal mail to the sysop: a partner offers a rubric that is not in
         [rubrics]. The first bulletin is kept here, held."""

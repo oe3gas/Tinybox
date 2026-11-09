@@ -440,6 +440,45 @@ class SysopConsole:
 
         asyncio.get_running_loop().create_task(ask())
 
+    def cmd_user(self, arg: str) -> None:
+        """CR93: client keys. USER [LIST] | USER OK|REVOKE|DEL|SHOW <call>"""
+        from prcore import auth
+        store = self.app.store
+        word, _, rest = arg.strip().upper().partition(" ")
+        call = auth.base(rest) if rest.strip() else ""
+        if word in ("", "LIST"):
+            rows = store.key_list()
+            if not rows:
+                self.out("No client keys yet.")
+                return
+            for r in rows:
+                fp = auth.fingerprint(auth.b64d(r["pub"], 32))
+                self.out(f"{r['call']:<8} {r['status']:<8} {fp}  {r['changed'][:16]}  {r['note']}")
+            return
+        if not call or word not in ("OK", "REVOKE", "DEL", "SHOW"):
+            self.out(texts.USAGE_USER)
+            return
+        row = store.key_get(call)
+        if row is None:
+            self.out(f"{call}: no client key.")
+            return
+        fp = auth.fingerprint(auth.b64d(row["pub"], 32))
+        if word == "SHOW":
+            self.out(f"{call}: {row['status']}, fingerprint {fp}, since {row['changed'][:16]}",
+                     f"  {row['note']}")
+        elif word == "OK":
+            store.key_status(call, "active")
+            log.info("sysop: client key of %s released (%s)", call, fp)
+            self.out(f"{call}: key {fp} released - the next login is in client mode.")
+        elif word == "REVOKE":
+            store.key_status(call, "revoked")
+            log.info("sysop: client key of %s revoked (%s)", call, fp)
+            self.out(f"{call}: key {fp} revoked. A new key needs USER OK again.")
+        else:
+            store.key_delete(call)
+            log.info("sysop: client key of %s deleted (%s)", call, fp)
+            self.out(f"{call}: key {fp} deleted.")
+
     COMMANDS: dict[str, Callable[["SysopConsole", str], None]] = {
         "H": cmd_help, "?": cmd_help, "HELP": cmd_help,
         "B": cmd_bye, "BYE": cmd_bye,
@@ -459,4 +498,5 @@ class SysopConsole:
         "SHUTDOWN": cmd_shutdown,
         "RESTART": cmd_restart,
         "RELOAD": cmd_reload,
+        "USER": cmd_user,
     }

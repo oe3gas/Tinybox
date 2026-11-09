@@ -14,6 +14,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from prcore.auth import Identity
+
 from . import VERSION, report
 from .bed import RUBRIC, Bed
 from .box import Air, TestBox, busy_ports
@@ -392,6 +394,10 @@ class Run:
             await self.box.start()
             self.say(f"test box {self.bed.box_call} up - web GUI: {self.box.web_url or '-'}")
             self.make_users()
+            keys = {u.call: u.core.identity.pub for u in self.users if isinstance(u, ClientUser)}
+            # your own client (guest) too: its key file is made now, it uses it later
+            keys[self.bed.guest_call] = Identity(self.bed.dir / "guest" / "identity.key").pub
+            self.box.release_keys(keys)                                 # CR93
             for u in self.users:
                 await u.start()
             kinds = ", ".join(f"{u.label}" + (f" {self.quality[u.call][0].name}"

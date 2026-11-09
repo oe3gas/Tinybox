@@ -72,6 +72,9 @@ class Session:
         self.state = State.COMMAND
         self.chat_board: str | None = None  # set by ChatHub while in a board
         self.client = None  # clientproto.ClientInfo after //CLIENT (TinyBox client)
+        self.auth = False   # CR93: logged in with the user's key (client mode)
+        self._client_wait = None   # //CLIENT seen, //AUTH not yet
+        self._auth_nonce: str | None = None
         self.ui_rx = None   # linkq.RxWindow while a UI client is in a chat board
         # message being composed
         self._to = ""

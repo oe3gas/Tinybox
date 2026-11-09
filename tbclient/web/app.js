@@ -402,10 +402,30 @@ function renderUpdate() {
 
 // System message of the TinyBox (sysop shuts down): red banner with countdown.
 let sysDismissed = 0;
+let authDismissed = "";
+function authText(a) {                             // CR93: login with the user's key
+  if (!a || !a.state) return "";
+  if (a.state === "wait")
+    return `Your key waits for the sysop of ${a.box || S.tinybox}: tell him the fingerprint ` +
+      `${a.fp} (by voice or on paper). Until then: no client mode there.`;
+  if (a.state === "refused")
+    return `${a.box || S.tinybox} refused the login with your key (${a.reason}). ` +
+      `Fingerprint of your key: ${a.fp}.`;
+  return "";
+}
 function renderSys() {
   const m = S.sysmsg;
   const show = !!m && m.at !== sysDismissed &&
     !(m.left < 0 && Date.now() / 1000 - m.at > 60);        // "called off" for one minute
+  const at = authText(S.auth), akey = S.auth ? S.auth.state + S.auth.reason : "";
+  if (!show && at && akey !== authDismissed) {
+    $("sys-banner").classList.remove("hidden");
+    $("sys-banner").classList.add("info");
+    $("sys-text").textContent = at;
+    $("sys-text").title = "";
+    $("sys-disc").classList.add("hidden");
+    return;
+  }
   $("sys-banner").classList.toggle("hidden", !show);
   if (!show) return;
   const cancelled = m.left < 0;
@@ -3259,7 +3279,11 @@ async function start() {
     newsWanted = { id, seen: false };
     await api("mail/news");              // subscribe TBNEWS and fetch the bulletins
   };
-  $("sys-close").onclick = () => { sysDismissed = S && S.sysmsg ? S.sysmsg.at : 0; renderSys(); };
+  $("sys-close").onclick = () => {
+    if (S && S.sysmsg && S.sysmsg.at !== sysDismissed) sysDismissed = S.sysmsg.at;
+    else if (S && S.auth) authDismissed = S.auth.state + S.auth.reason;
+    renderSys();
+  };
   $("btn-connect").onclick = $("btn-connect2").onclick = connectTinybox;
   $("btn-disconnect").onclick = () => api("disconnect");
   $("btn-disc").onclick = () => api("disconnect", { ch: activeCh });

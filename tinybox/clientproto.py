@@ -4,7 +4,14 @@ A TinyBox client announces itself right after login with one line:
 
     //CLIENT TB1 v=2026.10.11 caps=CHAT,UI sym=/-
 
-and the mailbox answers with the features both sides know:
+CR93: first the client logs in with the key of its user (Ed25519, prcore/auth.py):
+
+    //AUTH? n=<challenge> box=<mailbox call>           mailbox
+    //AUTH sig=<signature> pub=<public key>            client
+    //AUTHWAIT fp=7F3A-91C2-44E0                       new key: the sysop releases it
+    //ERR auth bad_signature|other_key|revoked|...     refused
+
+and only with a released key the mailbox answers with the features both sides know:
 
     //OK TB1 caps=CHAT,UI
 
@@ -85,11 +92,13 @@ compares it with its own and only sends or fetches when they differ:
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from prcore import auth
 from prcore import profile as pf
 from prcore.release import RELEASE
 from prcore.text import isnum
@@ -99,6 +108,13 @@ from .addressing import base_call
 
 if TYPE_CHECKING:
     from .session import Session
+
+log = logging.getLogger(__name__)
+
+# CR93 (OE3GAS, 09.11.2026: "sofort"): client mode only after the login with the
+# user's key. No setting - only the test suite switches it off (tests/__init__.py)
+# for the tests that are about something else.
+REQUIRE_AUTH = True
 
 PROTO = "TB1"
 KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
@@ -139,6 +155,8 @@ def handle(s: Session, line: str) -> None:
         tb_probe(s)
     elif cmd == "CLIENT":
         _client(s, parts[1:])
+    elif cmd == "AUTH":
+        _auth(s, parts[1:])
     elif s.client is None:
         s.out("//ERR not a client session")
     elif cmd == "BOARDS":
@@ -192,8 +210,67 @@ def _client(s: Session, parts: list[str]) -> None:
     if s.cfg.chat.image_max <= 0:
         caps.discard("IMG")       # the sysop switched images off
     symbol = args.get("sym", "")
-    s.client = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "",
-                          args.get("v", "")[:20])
+    info = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "",
+                      args.get("v", "")[:20])
+    if s.auth or not REQUIRE_AUTH:    # restarted on a link that stayed up / tests
+        _client_ok(s, info)
+        return
+    # CR93: client mode only after the login with the user's key
+    s.client = None
+    s._client_wait = info
+    s._auth_nonce = auth.new_nonce()
+    s.out("", f"//AUTH? n={s._auth_nonce} box={s.cfg.station.mailbox_call}")
+
+
+def _auth(s: Session, parts: list[str]) -> None:
+    """//AUTH sig=<86> pub=<43>: the answer to //AUTH? (CR93, PLANUNG 29.7).
+
+    Known and released key: client mode. New key: proves it holds it (the
+    signature), waits for the sysop (//AUTHWAIT). Another key than the released
+    one, or a revoked one: refused."""
+    info, nonce = getattr(s, "_client_wait", None), getattr(s, "_auth_nonce", None)
+    args = _parse_args(parts)
+    if info is None or nonce is None:
+        s.out("//ERR auth not_asked")
+        return
+    s._auth_nonce = None                         # one answer per challenge
+    try:
+        pub = auth.b64d(args.get("pub", ""), 32)
+        sig = auth.b64d(args.get("sig", ""), 64)
+    except auth.AuthError:
+        s.out("//ERR auth syntax")
+        return
+    box, call = s.cfg.station.mailbox_call, auth.base(s.call)
+    if not auth.verify(pub, auth.login_message(box, call, nonce), sig):
+        log.warning("%s: client login with a wrong signature", s.call)
+        s.out("//ERR auth bad_signature")
+        return
+    store, pub64, fp = s.service.store, auth.b64e(pub), auth.fingerprint(pub)
+    row = store.key_get(call)
+    if row is not None and row["status"] == "revoked" and row["pub"] == pub64:
+        s.out("//ERR auth revoked")
+        return
+    if row is not None and row["status"] == "active":
+        if row["pub"] != pub64:
+            log.warning("%s: client login with another key (%s) than the released one",
+                        s.call, fp)
+            s.out("//ERR auth other_key")
+            return
+        s.auth = True
+        s._client_wait = None
+        log.info("%s: client login, key %s", s.call, fp)
+        _client_ok(s, info)
+        return
+    if row is None or row["pub"] != pub64:       # new, or a new key while waiting/revoked
+        store.key_put(call, pub64, "pending", note=f"from {s.call} via {s.origin}")
+        log.warning("%s: new client key %s - waits for the sysop (USER OK %s)", s.call, fp, call)
+        s.service.key_waiting(call, fp, s.call)
+    s.out(f"//AUTHWAIT fp={fp}")
+
+
+def _client_ok(s: Session, info: ClientInfo) -> None:
+    s.client = info
+    caps = info.caps
     # newer client available (CR18): tell the version and the feature bulletin
     extra = ""
     cur = clientnews.client_version()

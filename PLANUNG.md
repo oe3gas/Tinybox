@@ -1928,8 +1928,9 @@ vertraut, erkennt den User damit ebenfalls (CR93).
   FBB/BPQ-Passwortabfrage (nur Altgegenstellen), HOTP/TOTP für Sysops ohne tbclient, LoTW-Zertifikat
   als Anker für die Bindung Schlüssel ↔ Rufzeichen, brocast als Verteilweg für öffentliche
   Schlüssel und Widerrufe. Notfall-Schlüssel offline.
-- Offen: Ed25519 oder P-256 (Abgleich mit GUST, gemeinsames `prcore/auth.py`?), wer Zertifikate
-  ausstellt (Sysop je Box / gemeinsamer Herausgeber / LoTW-Anker), TOTP-Variante ja/nein.
+- Entschieden (OE3GAS, 09.11.2026, CR93): **Ed25519**, gemeinsames `prcore/auth.py` (umgesetzt mit
+  CR93 Stufe 1). Offen: wer Zertifikate ausstellt (Sysop je Box / gemeinsamer Herausgeber /
+  LoTW-Anker), TOTP-Variante ja/nein.
 
 ### 29.9 Zeichensatz-Policy (CR95)
 

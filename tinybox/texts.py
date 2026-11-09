@@ -231,6 +231,10 @@ HELP_CONSOLE = [
     "                 seconds (default 60), users are warned; NOW, CANCEL as above",
     "  RELOAD         Read tinybox.conf again WITHOUT disconnecting anybody: takes",
     "                 over what may change at runtime, lists what needs a RESTART",
+    "  USER           Client keys: who waits for release, who is released",
+    "  USER OK call   Release the key of call (compare the fingerprint first!)",
+    "  USER REVOKE call  Revoke it (a lost or copied key) / USER DEL call: forget it",
+    "  USER SHOW call    Status and fingerprint",
 ]
 UPDATE_ASKING = "Asking GitHub for the newest release ..."
 UPDATE_UNKNOWN = "Update: no answer from GitHub (offline?)."
@@ -296,6 +300,7 @@ FWQ_EMPTY = "Forward queue is empty."
 FWQ_HEADER = "Partner  Msg#  State  Since (UTC)"
 FWQ_ROW = "{partner:<8} {id:>4}  {state:<6} {changed}"
 USAGE_HOLD = "Usage: HOLD n  /  REL n"
+USAGE_USER = "Usage: USER [LIST]  /  USER OK|REVOKE|DEL|SHOW call"
 HELD = "Msg {id} held."
 RELEASED = {"$": "Msg {id} released, queued for forwarding.",
             "": "Msg {id} released, local message.",

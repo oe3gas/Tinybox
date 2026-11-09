@@ -8,7 +8,7 @@ import logging
 import socket
 import sys
 
-from prcore import release, termcolor
+from prcore import auth, release, termcolor
 
 from . import VERSION, config
 from .console import Console
@@ -67,6 +67,16 @@ def main() -> int:
     return 0
 
 
+def _key_fp(cfg: config.Config) -> str:
+    data_dir = getattr(cfg, "data_dir", None)
+    if data_dir is None:
+        return "(none)"
+    try:
+        return auth.Identity(data_dir / "identity.key").fp
+    except (OSError, auth.AuthError) as exc:
+        return f"(no key: {exc})"
+
+
 def start_block(log: logging.Logger, cfg: config.Config, details: bool = False,
                 head: str = "start") -> None:
     """What the user wants to see at start: who am I, where to, over what.
@@ -76,6 +86,7 @@ def start_block(log: logging.Logger, cfg: config.Config, details: bool = False,
     termcolor.kv_block(log, termcolor.wrap_items(TAG, [
         ("Your call", cfg.mycall),
         ("Your locator", cfg.locator or "(not set)"),
+        ("Your key", _key_fp(cfg), "fingerprint - the sysop compares it (CR93)"),
         None,
         ("Your preferred TinyBox", cfg.tinybox_call),
         ("Autoconnect to", cfg.tinybox_call if cfg.auto_connect else "off"),

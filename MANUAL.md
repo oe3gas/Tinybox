@@ -732,6 +732,35 @@ Alle Benutzer sehen diese Angaben.
   Änderung im Terminal kommt beim nächsten Connect in den Client (die neuere gilt).
 - **Sysop-Web-GUI:** Stationen (JLOG) zeigen Name, Locator und Home-BBS.
 
+### 3.7a Client-Login mit Schlüssel (CR93)
+
+Den Client-Modus an der Heimat-BBS gibt es nur nach einem Login mit dem **Schlüssel des
+Benutzers** (Ed25519, Signatur – nichts wird verschlüsselt, der Inhalt bleibt lesbar).
+Terminal-Benutzer ohne Client sind nicht betroffen.
+
+- **Der Schlüssel** entsteht beim ersten Start des Clients: `data/tbclient/identity.key`. Er gehört
+  zum Rufzeichen, nicht zum PC – für einen zweiten PC die Datei dorthin kopieren. Geht er verloren:
+  Datei löschen, der Client erzeugt einen neuen, den der Sysop wieder freigibt. Den
+  **Fingerabdruck** (z. B. `7F3A-91C2-44E0`) zeigt der Client im Startblock („Your key“).
+- **Erster Login:** die TinyBox schickt eine Zufallszahl, der Client antwortet mit Signatur und
+  öffentlichem Schlüssel. Ein neuer Schlüssel wartet auf den Sysop; der Client zeigt
+  „Your key waits for the sysop … fingerprint …“, der Sysop bekommt eine persönliche Nachricht.
+- **Freigabe (Sysop-Konsole):** den Fingerabdruck mit dem Benutzer vergleichen – am Telefon, im
+  QSO, auf Papier, **nicht** über dieselbe Verbindung –, dann:
+
+  | Befehl | |
+  |---|---|
+  | `USER` | alle Schlüssel: wartend zuerst, mit Fingerabdruck |
+  | `USER OK call` | freigeben – der nächste Login ist im Client-Modus |
+  | `USER REVOKE call` | widerrufen (verloren, kopiert); ein neuer Schlüssel braucht wieder `USER OK` |
+  | `USER DEL call` | vergessen |
+  | `USER SHOW call` | Status und Fingerabdruck |
+
+- **Abgewiesen** wird ein Login mit falscher Signatur, mit einem anderen als dem freigegebenen
+  Schlüssel (`other_key`) und mit einem widerrufenen (`revoked`). Eine abgehörte Antwort nützt
+  nichts: sie gilt nur für diese Zufallszahl, diese Box und dieses Rufzeichen.
+- An einer **fremden** TinyBox gibt es den Client-Modus erst mit Stufe 3 (Zertifikat der Heimat-BBS).
+
 ### 3.8 AXUDP: Client und TinyBox am selben PC (PLANUNG 25)
 
 Ein Funkgerät, TinyBox und Client am selben PC: Die TinyBox bekommt neben dem Funk einen

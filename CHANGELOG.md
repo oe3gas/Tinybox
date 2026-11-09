@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- **Client-Login mit Schlüssel CR93 Stufe 1** (MANUAL 3.7a): Client-Modus nur nach Login mit dem
+  Ed25519-Schlüssel des Benutzers (Challenge-Response, `//AUTH?`/`//AUTH`); ein neuer Schlüssel
+  wartet auf die Freigabe durch den Sysop (`USER OK call` nach Vergleich des Fingerabdrucks).
+  Ohne Zusatzpaket (`cryptography` wird genutzt, wenn vorhanden). Box: Schema 12 (`user_keys`).
+  Client 2026.11.09.7: Schlüssel `data/tbclient/identity.key` (für einen zweiten PC kopieren),
+  Fingerabdruck im Startblock, Hinweisbalken in der Web-GUI. **Ältere Clients bekommen keinen
+  Client-Modus mehr** – alle Clients aktualisieren.
 - **Client-Audit CR98** (`docs/audit-client-cr98.md`): bestätigt, dass Peers nur auf selbst
   angebotene Dateien und gesendete Bilder zugreifen können. Behoben: eine mit `R n` gelesene Nachricht
   (auch weitergeleitete) konnte mit Zeilen wie `//SYS`, `//OK`, `#…`, `%Q` im Client als Befehl wirken

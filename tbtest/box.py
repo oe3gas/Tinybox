@@ -19,6 +19,7 @@ import re
 import socket
 import subprocess
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -131,6 +132,22 @@ class TestBox:
         self._stopping = False
         self._reader: asyncio.Task | None = None
         self._out = None
+
+    def release_keys(self, keys: dict[str, str]) -> None:
+        """CR93: the client users log in with their keys - the test box releases
+        them right away (what the sysop does with USER OK)."""
+        import sqlite3
+
+        from prcore.auth import base
+        from tinybox import config as tcfg
+        db = tcfg.load(self.conf).storage.data_dir / "tinybox.db"
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with sqlite3.connect(str(db)) as con:
+            for call, pub in keys.items():
+                con.execute("INSERT INTO user_keys (call, pub, status, created, changed, note)"
+                            " VALUES (?, ?, 'active', ?, ?, 'tbtest') ON CONFLICT (call) DO"
+                            " UPDATE SET pub = excluded.pub, status = 'active'",
+                            (base(call), pub, now, now))
 
     async def start(self) -> None:
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",

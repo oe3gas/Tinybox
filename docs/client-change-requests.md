@@ -71,7 +71,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 90 | Interlink-Authentisierung (TB-02): Stufe 1 Doppel-Rufzeichen erkennen ✅, Stufe 2 HMAC offen | Stufe 1 ✅, siehe unten |
 | 91 | Dictionary-Integrität: voller Vergleich, keine automatische Weiterverbreitung (TB-04) | ✅ siehe unten (Signatur mit CR94) |
 | 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | offen, siehe unten |
-| 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | offen (Konzept), siehe unten |
+| 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | Stufe 1 ✅, Stufe 2/3 offen, siehe unten |
 | 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
 | 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | ✅ siehe unten (Abstufung nach Rolle mit CR92) |
 | 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash mit CR86) |
@@ -3020,7 +3020,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Rubriknamen; bei Kollision Rechte nur über die Rolle, nie über den Namen.
 - Grenzen für die Zahl der brocast-Seiten je Quelle (TB-21).
 
-## CR93 – User-Authentisierung tbclient ↔ Heimat-BBS (offen, 09.11.2026)
+## CR93 – User-Authentisierung tbclient ↔ Heimat-BBS (Stufe 1 ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3035,6 +3035,44 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Rolle, Schlüssel, Gültigkeit, Unterschrift); fremde BBS, die der Heimat-BBS vertrauen, erkennen den
   User damit auch.
 - Abhängig von CR94 (Verfahren, Schlüsselformat).
+
+### Entscheidungen (OE3GAS, 09.11.2026)
+
+1. **Ed25519** (nicht P-256: kein Zufallswert je Signatur, einfacher; P-256 bleibt für GUST/Hardware
+   später möglich).
+2. **Freigabe durch den Sysop** mit Vergleich des Fingerabdrucks (kein TOFU).
+3. Schutz nach dem Login: **Variante b** – kritische Befehle einzeln signiert (Stufe 2).
+4. Ein Schlüssel **je Rufzeichen, geräteunabhängig** (Datei auf einen zweiten PC kopieren).
+5. **Kein Passwort** auf der Schlüsseldatei.
+6. **Sofort Pflicht** – keine Übergangsphase, keine Einstellung zum Abschalten.
+
+### Umsetzung Stufe 1 (TinyBox, Client 2026.11.09.7 – 09.11.2026)
+
+- `prcore/auth.py`: Ed25519 über `cryptography`, wenn installiert, sonst reine Python-Umsetzung
+  nach RFC 8032 Abschnitt 6 (keine Zusatzpakete nötig; beide gegen die RFC-Testvektoren getestet,
+  ~10 ms je Signatur). Schlüssel/Signatur base64url (43/86 Zeichen), Fingerabdruck 48 Bit
+  (`7F3A-91C2-44E0`). `Identity`: `identity.key` (eine Zeile, Rechte 0600), eine beschädigte Datei
+  wird nie stillschweigend ersetzt.
+- Protokoll: auf `//CLIENT` antwortet die Box `//AUTH? n=<16 Byte zufällig> box=<Mailbox-Ruf>`, der
+  Client `//AUTH sig=<…> pub=<…>`; signiert wird `TINYBOX-AUTH1|<Box>|<Rufzeichen>|<n>` (je ohne SSID).
+  Freigegebener Schlüssel → `//OK` wie bisher. Neuer Schlüssel (Signatur beweist den Besitz) →
+  `//AUTHWAIT fp=…`, Eintrag „pending“, persönliche Nachricht an den Sysop. Anderer als der
+  freigegebene → `//ERR auth other_key`, widerrufen → `revoked`, falsche Signatur → `bad_signature`.
+  Eine Challenge gilt für genau eine Antwort. Vor dem Login: `//ERR not a client session`.
+- Box: Tabelle `user_keys` (Schema 12, je Basis-Rufzeichen), Sysop-Konsole `USER`, `USER OK|REVOKE|
+  DEL|SHOW call`.
+- Client: Schlüssel beim ersten Start, „Your key“ mit Fingerabdruck im Startblock, Hinweisbalken
+  in der Web-GUI bei „wartet“ oder „abgewiesen“.
+- Tests `tests/test_cr93.py`. Die übrigen Tests reden mit der Box ohne Login
+  (`tests/__init__.py` schaltet `clientproto.REQUIRE_AUTH` nur dort ab).
+- Doku: MANUAL 3.7a.
+
+### Offen
+
+- **Stufe 2:** kritische Befehle signiert (Bulletin senden, löschen, Profil ändern, später Sysop).
+- **Stufe 3:** Zertifikat der Heimat-BBS für fremde Boxen (mit CR94). Bis dahin gibt es an einer
+  fremden TinyBox keinen Client-Modus.
+- Sysop-Web-GUI: Schlüssel anzeigen und freigeben (bisher nur Konsole).
 
 ## CR94 – Admin-Protokoll mit Signatur (Konzept, offen, 09.11.2026)
 
