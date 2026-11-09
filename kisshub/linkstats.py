@@ -105,6 +105,7 @@ class Link:
     """One AX.25 connection between two stations, as heard by the hub."""
 
     def __init__(self, a: str, b: str, t: float, wall: float, modulo: int = 8) -> None:
+        self.key: frozenset | None = None          # its key in LinkStats.links (CR97)
         self.a, self.b = a, b          # a = the station that started it (or was seen first)
         self.modulo = modulo
         self.version = "2.2" if modulo == 128 else "2.0"
@@ -154,6 +155,12 @@ class Heard:
     sn: deque = field(default_factory=lambda: deque(maxlen=SAMPLES))
 
 
+MAX_HEARD = 500             # CR97 (TB-19): stations kept; the least recently heard go
+HEARD_KEEP_SEC = 86400      # and nobody heard for a day is forgotten
+MAX_LINKS = 200             # links followed at once; the longest silent one goes
+STATUS_LINKS = 50           # links in the status JSON (most recently active)
+
+
 class LinkStats:
     def __init__(self, airtime: Callable[[int], float] | None = None,
                  on_closed: Callable[[dict], None] | None = None,
@@ -187,7 +194,11 @@ class LinkStats:
             self.undecodable += 1
             return
         if not tx:
-            h = self.heard.setdefault(f.src, Heard(first=wall))
+            h = self.heard.get(f.src)
+            if h is None:
+                if len(self.heard) >= MAX_HEARD:
+                    self._prune_heard(wall)
+                h = self.heard[f.src] = Heard(first=wall)
             h.frames += 1
             h.bytes += len(raw)
             h.last = wall
@@ -200,18 +211,17 @@ class LinkStats:
             if link is None or link.state != "connecting":
                 if link is not None:
                     self._close(link, "new connect")
-                link = Link(f.src, f.dest, t, wall, 128 if f.kind == "SABME" else 8)
-                self.links[key] = link
+                link = self._new_link(key, Link(f.src, f.dest, t, wall,
+                                                128 if f.kind == "SABME" else 8))
             link.connect_tries += 1
             if f.kind == "SABM":
                 link.modulo, link.version = 8, "2.0"   # (fell back to) v2.0
         elif link is None:
             if f.kind in ("UA", "DM", "DISC", "FRMR"):
                 return                                  # end of something we never saw
-            link = Link(f.src, f.dest, t, wall, modulo)
+            link = self._new_link(key, Link(f.src, f.dest, t, wall, modulo))
             link.state = "connected"                    # joined in the middle
             link.t_connected = t
-            self.links[key] = link
         if tx:
             link.local.add(f.src)
         self._on_link_frame(link, f, raw, t)
@@ -288,6 +298,23 @@ class LinkStats:
             if sends == 1:                              # Karn: only frames sent once
                 link.dir[other].acks.append(t - t_first)
 
+    def _new_link(self, key: frozenset, link: Link) -> Link:
+        """CR97 (TB-19): at most MAX_LINKS followed - the longest silent one makes room."""
+        if len(self.links) >= MAX_LINKS:
+            self._close(min(self.links.values(), key=lambda l: l.t_last), "too many links")
+        link.key = key
+        self.links[key] = link
+        return link
+
+    def _prune_heard(self, wall: float) -> None:
+        """Forget stations not heard for a day, and the least recently heard
+        down to 90 % of MAX_HEARD (so pruning is rare)."""
+        for c in [c for c, h in self.heard.items() if wall - h.last > HEARD_KEEP_SEC]:
+            del self.heard[c]
+        if len(self.heard) >= MAX_HEARD:
+            keep = sorted(self.heard.items(), key=lambda x: -x[1].last)[:MAX_HEARD * 9 // 10]
+            self.heard = dict(keep)
+
     def _close(self, link: Link, reason: str) -> None:
         if link.state == "closed":
             return
@@ -295,9 +322,8 @@ class LinkStats:
         link.end_reason = link.end_reason or reason
         rec = link.summary(link.t_last)
         self.closed.append(rec)
-        for key, l in list(self.links.items()):
-            if l is link:
-                del self.links[key]
+        if link.key is not None and self.links.get(link.key) is link:   # CR97: lookup,
+            del self.links[link.key]                                     # not a search
         self.on_closed(rec)
 
     def tick(self, t: float) -> None:
@@ -305,6 +331,8 @@ class LinkStats:
         for link in list(self.links.values()):
             if link.state != "closed" and t - link.t_last > IDLE_CLOSE_SEC:
                 self._close(link, "idle")
+        if len(self.heard) > MAX_HEARD // 2:
+            self._prune_heard(time.time())
 
     def close_all(self, reason: str = "kisshub stopped") -> None:
         for link in list(self.links.values()):
@@ -360,7 +388,9 @@ class LinkStats:
     def status(self, now: float) -> dict:
         last = list(self.minutes)[-10:]
         return {
-            "links": [l.summary(now) for l in self.links.values()],
+            "links": [l.summary(now) for l in sorted(self.links.values(), key=lambda l: -l.t_last)
+                      [:STATUS_LINKS]],                 # CR97 (TB-19): bounded
+            "links_total": len(self.links),
             "closed": list(self.closed)[-5:],
             "stations": {c: {"frames": h.frames, "bytes": h.bytes, "last": h.last,
                              "sn_db": _stats(h.sn),

@@ -496,6 +496,9 @@ class Session:
             self.out(texts.SAVED.format(id=", ".join(map(str, ids))))
 
 
+MAX_PER_CALL = 2          # CR97 (TB-17): sessions of one call (all SSIDs) at once
+
+
 class SessionRegistry:
     """Keeps track of active sessions across all adapters (max_users)."""
 
@@ -506,8 +509,17 @@ class SessionRegistry:
     def add(self, session: Session) -> bool:
         if len(self._sessions) >= self.max_users:
             return False
+        # CR97 (TB-17): one call with several SSIDs must not take every slot
+        base = profiles.base_call(session.call)
+        same = sum(1 for s in self._sessions if profiles.base_call(s.call) == base)
+        if same >= MAX_PER_CALL and not session.sysop:
+            return False
         self._sessions.append(session)
         return True
+
+    @property
+    def full(self) -> bool:
+        return len(self._sessions) >= self.max_users
 
     def remove(self, session: Session) -> None:
         if session in self._sessions:

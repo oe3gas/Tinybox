@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING
 from prcore import chatimg
 from prcore.text import isnum
 
+from . import budget
+
 if TYPE_CHECKING:
     from .peer import Peer
 
@@ -129,6 +131,11 @@ class PeerImages:
     def _serve(self, h: str, off: int) -> None:
         data = self.store.get(h) if chatimg.HASH_RE.match(h) else None
         if data is None or not self._sent_to_them(h) or off > len(data):
+            self.peer._send(f"//NOIMG {h}")
+            return
+        b = budget.of(self.core)             # CR97 (TB-03): a few times an hour, from the budget
+        if b.often(self.peer.call, "I" + h, 3, 3600) or \
+                not b.allow(self.peer.call, len(data) - off, f"image {h}"):
             self.peer._send(f"//NOIMG {h}")
             return
         # the line and the bytes in one go - nothing can come in between

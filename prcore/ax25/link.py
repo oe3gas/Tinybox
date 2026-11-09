@@ -156,6 +156,8 @@ class Ax25Link:
         self.own_busy = False
         self._reestablish = False              # SABM after an error, session stays
         self._rx_accepted = 0                  # in-sequence I frames, for dup detection
+        self._rej_at: dict[int, float] = {}    # CR97 (TB-18): when N(R) was last sent again
+        self.rej_ignored = 0                   # REJ/SREJ that came too soon after the last
         self._out: list[Frame] = []
         self._now = now
         self.tx_end = now                      # estimated end of our own transmission
@@ -527,6 +529,9 @@ class Ax25Link:
             self._nr_error(now)
             return
         if self.state == State.CONNECTED:
+            if kind == "REJ" and not self._repeat_ok(f.nr, now):
+                self._set_va(f.nr)                   # the ack in it still counts
+                return
             if kind == "REJ":
                 self._set_va(f.nr)
                 self._stop_t1()
@@ -554,8 +559,26 @@ class Ax25Link:
                 self._start_t1(now)
         else:
             self._set_va(f.nr)
-            if kind == "REJ":
+            if kind == "REJ" and self._repeat_ok(f.nr, now):
                 self._invoke_retransmission(f.nr)
+
+    def _repeat_ok(self, nr: int, now: float) -> bool:
+        """CR97 (TB-18): send N(R) again on a REJ/SREJ - but not again before half a
+        round trip has passed (a real peer cannot have seen the repeat yet), and
+        not more than N2 times: a flood of REJ/SREJ would otherwise make us send
+        the window over and over. Too many: the link goes, as on a retry-out."""
+        last = self._rej_at.get(nr)
+        if last is not None and now - last < max(0.5, self.srt / 2):
+            self.rej_ignored += 1
+            return False
+        entry = self.sent.get(nr)
+        if entry is not None and entry.sends > self.cfg.n2:
+            self._tx_u("DM", command=False, pf=False)
+            self._stop_timers()
+            self._to_disconnected("retryout")
+            return False
+        self._rej_at[nr] = now
+        return True
 
     def _rx_srej(self, f: Frame, now: float) -> None:
         """The peer misses exactly frame N(R): send that one again.
@@ -588,6 +611,8 @@ class Ax25Link:
                 else:
                     self._start_t1(now)
             return                                    # already acked or never sent
+        if not self._repeat_ok(f.nr, now):
+            return
         self._emit(i_frame(self.remote, self.mycall, f.nr, self.vr, entry.info,
                            modulo=self.modulo, path=self.path))
         entry.sends += 1
@@ -744,6 +769,7 @@ class Ax25Link:
         self._rx_accepted = 0
         self.rx_buf: dict[int, bytes] = {}    # SREJ: frames received after a gap
         self.srej_sent: set[int] = set()
+        self._rej_at = {}                     # CR97: numbers start again
 
     def _establish(self, now: float, reestablish: bool = False,
                    v22: bool | None = None) -> None:

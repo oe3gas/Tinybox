@@ -1,0 +1,4 @@
+- Antworten auf Anfragen anderer Stationen (Datei, Bild,
+  Speedtest, HEARD?, PING) begrenzt.
+- Wer uns anruft und 30 min schweigt, wird getrennt; ein
+  Kanal bleibt fuer eigene Verbindungen frei.

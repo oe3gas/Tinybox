@@ -539,6 +539,20 @@ class AgwAdapter:
                 log.exception("link quality: chat update failed")
             self.app.bus.publish("link.quality")      # web GUI: refresh the bars
 
+    def _idle_limit(self, session, limit: float) -> float:
+        """Seconds a session may be silent. Reading along in a chat board is allowed
+        for [chat] idle_min (0 = no limit) - but when every slot is taken, the
+        normal limit applies there too, so parked sessions do not lock others out
+        (CR97, TB-17)."""
+        if not session.idle_exempt:
+            return limit
+        if not isinstance(session, Session):        # a forward session: its own timeout
+            return float("inf")
+        if self.app.registry.full:
+            return limit
+        chat = self.cfg.chat.idle_min * 60
+        return chat if chat else float("inf")
+
     async def _idle_watchdog(self) -> None:
         limit = self.cfg.mailbox.idle_timeout_min * 60
         while True:
@@ -549,8 +563,7 @@ class AgwAdapter:
                 if conn.session is not None and hasattr(conn.session, "raw_timeout"):
                     conn.session.raw_timeout(chatimg.RAW_TIMEOUT, now)
                 if (conn.session and not conn.session.closed
-                        and not conn.session.idle_exempt  # reading along in a chat
-                        and now - conn.last_activity > limit):
+                        and now - conn.last_activity > self._idle_limit(conn.session, limit)):
                     log.info("%s: idle timeout", conn.remote)
                     conn.write(texts.IDLE_TIMEOUT + "\r")
                     conn.session.close()

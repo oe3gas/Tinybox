@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 from prcore import chatimg, lzhuf
 from prcore.text import isnum
 
-from . import filecheck
+from . import budget, filecheck
 
 if TYPE_CHECKING:
     from .peer import Peer
@@ -186,6 +186,11 @@ class PeerFiles:
         packed = await asyncio.to_thread(lzhuf.compress, data)
         how, body = ("z", packed) if len(packed) < len(data) else ("r", data)
         if self.peer.ch.state != "online":
+            return
+        b = budget.of(self.core)             # CR97 (TB-03): twice an hour, and out of the budget
+        if b.often(self.peer.call, "F" + h, 2, 3600) or \
+                not b.allow(self.peer.call, len(body), f"file {h}"):
+            self.peer._send(f"//NOFILE {h}")
             return
         self.peer._send(f"//F {h} {how} {len(body)}")      # line and bytes together
         self.peer.ch.link.send_bytes(body)

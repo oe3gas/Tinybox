@@ -52,6 +52,7 @@ class Channel:
         self.act_n = 0                            # activity: the GUI blinks the chip on change
         self.auto = False                         # opened by the mail sync: gone when offline
         self.incoming = False                     # the other station connected to us (CR46)
+        self.last_io = time.time()                # CR97: last line in or out (idle check)
         self.outstanding: int | None = None       # frames waiting in Direwolf (AGW 'Y')
         self._user_disc = False
         self._disc_timer: asyncio.TimerHandle | None = None
@@ -95,6 +96,7 @@ class Channel:
         if self.state != "online":
             return False
         text = text.replace("\r", " ").replace("\n", " ")[:250]
+        self.last_io = time.time()
         self.term_line("tx", text)
         if self.peer is not None and not text.startswith("//"):
             self.peer.text("tx", text)                  # CR78: the chat history
@@ -129,6 +131,7 @@ class Channel:
             self.probed, self.peer = False, None
             self._mark()
         if state == "online" and prev != "online":
+            self.last_io = time.time()
             self._mark()                           # the connection counts from here
             if self.link.kind == "telnet":         # the test port is always the own TinyBox
                 self.core.attach(self)
@@ -169,6 +172,7 @@ class Channel:
         self.core._touch()
 
     def _on_line(self, line: str) -> None:
+        self.last_io = time.time()
         if self.core.chan is self and self.mode == "tinybox":
             self.core._on_line(line)               # the chat engine
             return

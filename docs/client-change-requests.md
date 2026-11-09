@@ -74,8 +74,8 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | offen (Konzept), siehe unten |
 | 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
 | 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | ✅ siehe unten (Abstufung nach Rolle mit CR92) |
-| 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash: Entscheidung offen) |
-| 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | offen, siehe unten |
+| 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash mit CR86) |
+| 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | ✅ siehe unten |
 | 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | offen, siehe unten |
 | 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | offen, siehe unten |
 | 100 | Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding und fremde Origins | ✅ siehe unten |
@@ -2798,6 +2798,12 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Offen zu entscheiden: Maximalgröße, ob bestimmte Dateitypen gesperrt werden (z. B. `.exe`), und ob
   der Sysop hochgeladene Dateien in der Web-GUI sehen und löschen kann.
 
+
+### Ergänzung aus CR96 (OE3GAS, 09.11.2026)
+
+- Mit CR86 kommt der **längere Hash** für alle Referenzen und Transfers (Bilder und Dateien, z. B.
+  16 hex = 64 Bit statt 6 hex): neues Funkformat, neue Client- und Box-Version, **keine
+  Übergangsregel** für ältere Clients. Die Absicherungen aus CR96 Stufe 1 gelten von Anfang an.
 ## CR87 – brocastd: Absturz durch ungültiges `exp` (TB-01, ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026, aus dem Audit, PLANUNG 29)
@@ -3129,7 +3135,12 @@ Nicht umgesetzt:
 - „Mark of the Web“: die Datei kommt über den Browser-Download auf den PC; ob Windows sie markiert,
   entscheidet der Browser (für 127.0.0.1 meist nicht).
 
-### Stufe 2 (Entscheidung offen): längerer Hash
+### Stufe 2: längerer Hash – entschieden (OE3GAS, 09.11.2026)
+
+- Kommt **mit CR86** (Dateien im Board-Chat) zusammen mit dem Client, als neue Version **ohne
+  Übergangsregel**: der Client ist noch nicht so verbreitet, dass sich Rückwärtskompatibilität lohnt.
+
+Hintergrund:
 
 24 Bit lassen sich in Sekunden gezielt kollidieren. Mit Stufe 1 bringt eine Kollision allein nichts
 mehr (nichts wird überschrieben, nichts Ungefragtes angenommen, ein Upload gehört seinem Beginner).
@@ -3137,7 +3148,7 @@ Ein längerer Hash (z. B. 16 hex = 64 Bit) wäre zusätzliche Tiefe, ändert abe
 Referenzen (`~#`, `~%`, `//IMG`, `//I`, `//F`, `//IMGPUT`) und braucht neue Client- und Box-Version
 mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referenz.
 
-## CR97 – Ratenbegrenzung und Obergrenzen (TB-03, TB-13, TB-17, TB-18, TB-19, offen, 09.11.2026)
+## CR97 – Ratenbegrenzung und Obergrenzen (TB-03, TB-13, TB-17, TB-18, TB-19, ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3153,6 +3164,32 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 - Leerlauf-Freigabe für Session-Slots und Client-Kanäle (TB-17).
 - Grenze für Wiederholungen nach REJ/SREJ pro Zeitfenster (TB-18).
 - kisshub-Statistik: feste Obergrenze, älteste Einträge verwerfen, Status-JSON begrenzen (TB-19).
+
+### Umsetzung (Client 2026.11.09.5, TinyBox, prcore, kisshub 2026.11.09.2 – 09.11.2026)
+
+- TB-03, Client (`tbclient/budget.py`): jede Antwort, die eine andere Station anstößt, kommt aus zwei
+  Token-Buckets – je Basis-Rufzeichen 96 KB, alle zusammen 256 KB, je halbe Stunde nachgefüllt (auch
+  viele erfundene Rufzeichen kommen nicht weiter). Dazu je Rufzeichen und Sache: dieselbe Datei
+  (`//FGET`) höchstens 2×/h, dasselbe Bild (`//IMG`) 3×/h, Speedtest-Antwort 1× je 10 min,
+  `//HEARD?` 2×/min, `//PING` 6×/min. Abgelehnt: `//NOFILE`/`//NOIMG` bzw. keine Antwort, Warnung im
+  Log. Was der User selbst startet, zählt nicht.
+- TB-13, `prcore/kissport.py` (TinyBox im KISS-Betrieb und Client): höchstens `MAX_LINKS = 32` Links;
+  ein SABM von einem Rufzeichen ohne Buchstaben und Ziffer (`plausible_call`) wird mit DM abgewiesen;
+  ist die Tabelle voll, macht der älteste Link Platz, der seit über 30 s besteht und noch nie ein
+  I-Frame brachte (DM, „evicted“), sonst wird der neue abgewiesen. Nicht geändert: Antwortweg über die
+  Digipeater des Anrufers, XID-Antwort an Fremde.
+- TB-18, `prcore/ax25/link.py`: ein REJ/SREJ sendet dasselbe N(R) frühestens nach einer halben
+  Laufzeit (`srt/2`, mind. 0,5 s) wieder (die Bestätigung darin zählt trotzdem; Zähler
+  `rej_ignored`); wurde ein Frame öfter als N2-mal gesendet, endet der Link wie bei Retry-out.
+- TB-17, BBS: höchstens `MAX_PER_CALL = 2` Sitzungen je Rufzeichen (alle SSIDs, der Sysop
+  ausgenommen); Mitlesen im Chat ist nicht mehr unbegrenzt: `[chat] idle_min` (Vorgabe 120, 0 = ohne
+  Grenze), und wenn alle Plätze belegt sind, gilt auch im Chat das normale `idle_timeout_min` (AGW,
+  KISS und Telnet). Client: eine eingehende Verbindung lässt den letzten Kanal frei (für Mailbox-Sync
+  und eigene Verbindungen) und wird nach 30 min ohne Zeile getrennt.
+- TB-19, kisshub (`linkstats.py`): höchstens 500 gehörte Stationen (wer einen Tag nicht gehört
+  wurde, fällt weg), 200 verfolgte Links (der am längsten stille macht Platz), Status-JSON mit den 50
+  zuletzt aktiven Links plus `links_total`; Schließen eines Links per Schlüssel statt Suche.
+- Tests `tests/test_cr97.py`.
 
 ## CR98 – Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle (offen, 09.11.2026)
 

@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING
 
 from prcore.text import isnum
 
+from . import budget
+
 if TYPE_CHECKING:
     from .peer import Peer
 
@@ -89,7 +91,11 @@ class PeerFun:
             ms = max(1, int((time.monotonic() - t0) * 1000))
             if how == "go":                   # their test: tell them, send ours back
                 self.peer._send(f"//STR {n} {ms}")
-                self._send_block(n, "back")
+                # CR97 (TB-03): a speed test every ten minutes, and out of the budget
+                b = budget.of(self.core)
+                if not b.often(self.peer.call, "ST", 1, 600) and \
+                        b.allow(self.peer.call, n, "speed test"):
+                    self._send_block(n, "back")
             elif self.st:                     # the way back of our own test
                 self.st["in"] = round(n * 1000 / ms)
                 self._finish()
@@ -197,7 +203,8 @@ class PeerFun:
     def take(self, word: str, rest: str) -> bool:
         p = rest.split()
         if word == "PING" and p:
-            self.peer._send(f"//PONG {p[0][:12]}")
+            if not budget.of(self.core).often(self.peer.call, "PING", 6, 60):   # CR97 (TB-03)
+                self.peer._send(f"//PONG {p[0][:12]}")
         elif word == "PONG" and p:
             self._pong(p[0])
         elif word == "ST" and len(p) == 2 and isnum(p[0]) and p[1] in ("go", "back") \

@@ -61,7 +61,7 @@ from .peerfile import PeerFiles
 from .peerfun import PeerFun
 from .peerimg import PeerImages
 
-from . import VERSION
+from . import VERSION, budget
 
 if TYPE_CHECKING:
     from .channels import Channel
@@ -265,7 +265,8 @@ class Peer:
         if word == "PROF":
             self._on_prof(rest)
         elif word == "HEARD?":
-            self._send(self._heard_line())
+            if not budget.of(self.ch.core).often(self.call, "HEARD?", 2, 60):   # CR97 (TB-03)
+                self._send(self._heard_line())
         elif word == "HEARD":
             self._on_heard(rest)
         elif word == "HIST":

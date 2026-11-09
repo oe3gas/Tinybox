@@ -46,6 +46,7 @@ RECENT_MAX = 10           # CR42: targets remembered for the "Connect to" field
 MONITOR_MAX = 500         # CR45: frames kept for the monitor (channel 0)
 OUTSTANDING_SEC = 3       # CR45: how often the send queues of the channels are asked
 PEER_Q_SEC = 30           # CR78: how often the link counters of a TBClient channel are read
+INCOMING_IDLE_SEC = 30 * 60   # CR97 (TB-17): a station that called us and says nothing - gone
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 UI_MAX_BYTES = 1024       # CR66: info field of a UI frame from the monitor
 UI_MAX_VIA = 8            # AX.25 allows 8 digipeaters
@@ -293,6 +294,11 @@ class ClientCore:
         n = self.free_channel()
         if n is None:
             return None
+        busy = [c for c in self.channels.values() if c.state != "offline"]
+        if self.cfg.max_channels > 1 and len(busy) >= self.cfg.max_channels - 1:
+            # CR97 (TB-17): the last channel stays free for us (mailbox sync, own calls)
+            self.console.append(f"*** {remote} refused - last channel kept free")
+            return None
         ch = self.open_channel(n)
         if ch.state != "offline":
             return None
@@ -466,6 +472,13 @@ class ClientCore:
             await asyncio.sleep(PEER_Q_SEC)
             changed = False
             for c in list(self.channels.values()):
+                if c.incoming and c.state == "online" and \
+                        time.time() - c.last_io > INCOMING_IDLE_SEC:      # CR97 (TB-17)
+                    self.console.append(f"[{c.n}] *** {c.target} silent for "
+                                        f"{INCOMING_IDLE_SEC // 60} min - disconnected")
+                    c.disconnect()
+                    changed = True
+                    continue
                 if c.peer is not None and c.state == "online":
                     try:
                         c.peer.add_counters(await c.link.counters(), time.monotonic())

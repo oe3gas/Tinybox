@@ -32,6 +32,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import re
 import time
 from typing import Awaitable, Callable
 
@@ -39,6 +40,16 @@ from .ax25 import frame as ax
 from .ax25.frame import AX25Error, Frame
 from .ax25.link import Ax25Link, LinkCfg
 from .kiss import KissTcpClient
+
+MAX_LINKS = 32              # CR97 (TB-13): AX.25 links at once on one port
+EVICT_AFTER_SEC = 30        # a link without any I frame this old may make room
+_CALL_RE = re.compile(r"^(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{3,6}(-([0-9]|1[0-5]))?$")
+
+
+def plausible_call(call: str) -> bool:
+    """A station that connects: 3-6 letters and digits with at least one of each
+    (OE3GAS, DL1ABC-7, 4X1AB) - not 'ABCDEF', 'QST' or '123456'."""
+    return bool(_CALL_RE.match(call.upper()))
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +72,7 @@ class KissPort:
         self.mycall = norm_call(mycall)
         self.link_cfg = link_cfg
         self.half_duplex = half_duplex
+        self.max_links = MAX_LINKS                # CR97 (TB-13)
         if transport is None:
             self.kiss = KissTcpClient(host, port, self._on_kiss, reconnect_sec=reconnect_sec,
                                       kiss_port=channel)
@@ -218,6 +230,30 @@ class KissPort:
             return
         self.received(f, target, now)
 
+    def _room_for(self, link: Ax25Link, now: float) -> bool:
+        """CR97 (TB-13): no link for a call that cannot be a station, and at most
+        MAX_LINKS at once. When full, a link that never brought one I frame and
+        is older than EVICT_AFTER_SEC makes room (a flood of SABMs from made-up
+        calls holds nothing for long); otherwise the new one is refused (DM)."""
+        if not plausible_call(link.remote):
+            log.info("%s: connect refused - not a callsign", link.remote)
+            return False
+        if len(self.links) < self.max_links:
+            return True
+        quiet = [l for l in self.links.values()
+                 if l.c["i_rx"] == 0 and now - l.created > EVICT_AFTER_SEC]
+        if not quiet:
+            log.warning("%s: connect refused - %d links open", link.remote, len(self.links))
+            return False
+        old = min(quiet, key=lambda l: l.created)
+        log.warning("%s: link without data dropped for %s (%d links open)",
+                    old.remote, link.remote, len(self.links))
+        self.transmit(ax.u_frame("DM", old.remote, self.mycall, command=False, pf=False,
+                                 path=old.path), None)
+        old._to_disconnected("evicted")
+        self.service(old)
+        return True
+
     def route(self, f: Frame, link: Ax25Link | None, now: float) -> None:
         if f.kind == "UI":
             return                                 # nothing for our call itself
@@ -225,7 +261,7 @@ class KissPort:
             link = Ax25Link(self.mycall, f.src, path=f.reply_path(), cfg=self.link_cfg,
                             now=now)
             if f.kind in ("SABM", "SABME") and f.command:
-                if self.accept_incoming(link):
+                if self._room_for(link, now) and self.accept_incoming(link):
                     self.links[link.remote] = link
                 else:                              # refused (e.g. no free channel): DM
                     self.transmit(ax.u_frame("DM", link.remote, self.mycall, command=False,
