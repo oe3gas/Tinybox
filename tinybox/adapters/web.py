@@ -28,6 +28,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from prcore import aprs, termcolor
+from prcore.text import isnum
 
 from .. import VERSION, config, connlog, framemon, linkq, logsetup
 from ..app import App
@@ -479,7 +480,7 @@ class WebServer:
 
     @staticmethod
     def _int(value: str) -> int:
-        if not value.isdigit():
+        if not isnum(value):
             raise HttpError(400, "number expected")
         return int(value)
 

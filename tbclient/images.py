@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from prcore import chatimg               # reference format, hash, type check
+from prcore.text import isnum
 
 if TYPE_CHECKING:
     from .core import ClientCore
@@ -167,7 +168,7 @@ class Images:
         p = line.split()
         if not p:
             return False
-        if p[0] == "//I" and len(p) == 4 and p[2].isdigit() and p[3].isdigit():
+        if p[0] == "//I" and len(p) == 4 and isnum(p[2]) and isnum(p[3]):
             q, h, off, total = self.queue, p[1], int(p[2]), int(p[3])
             n = max(0, total - off)
             prog = self.loading.get(h)
@@ -292,7 +293,7 @@ class Images:
                         if up:
                             up["known"] = True
                     break
-                if p[0] == "//IMGGO" and p[1:2] == [h] and len(p) == 3 and p[2].isdigit():
+                if p[0] == "//IMGGO" and p[1:2] == [h] and len(p) == 3 and isnum(p[2]):
                     progress = await self._send_all(data, int(p[2]), job["line"], up)
                     continue
                 if p[0] == "//ERR":

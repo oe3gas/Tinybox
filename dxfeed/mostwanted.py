@@ -34,6 +34,12 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+
+def _isnum(s: str) -> bool:
+    """ASCII digits only - isdigit() also accepts '²', int() then fails (CR88)."""
+    return s.isascii() and s.isdigit()
+
+
 DEFAULT_URL = "https://clublog.org/mostwanted.php?api=1"
 ENTITIES = 340
 UNKNOWN_RANK = 170
@@ -49,7 +55,7 @@ def _num(v) -> int | None:
         return None
     if isinstance(v, int):
         return v
-    if isinstance(v, str) and v.strip().isdigit():
+    if isinstance(v, str) and _isnum(v.strip()):
         return int(v)
     return None
 
@@ -76,9 +82,9 @@ def parse(text: str) -> dict[str | int, int]:
     elif isinstance(data, dict):
         items = []
         for k, v in data.items():
-            if str(k).strip().isdigit() and isinstance(v, str):
+            if _isnum(str(k).strip()) and isinstance(v, str):
                 items.append((int(k), v))                    # rank -> prefix
-            elif isinstance(v, int) or (isinstance(v, str) and v.strip().isdigit()):
+            elif isinstance(v, int) or (isinstance(v, str) and _isnum(v.strip())):
                 items.append((int(v), str(k)))               # prefix -> rank
     else:
         items = []

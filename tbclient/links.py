@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
-from typing import Callable
+from typing import Any, Callable
 
 from prcore.termcolor import OK
 
@@ -61,6 +61,15 @@ class LineSplitter:
             return
         self.need, self.bin, self.on_bin, self.on_progress = n, bytearray(), on_bin, on_progress
 
+    @staticmethod
+    def _call(fn: Callable[..., Any], arg: Any) -> None:
+        """CR88: an error handling one line must not lose the rest of the frame
+        (nor end a reader task) - log it and go on with the next line."""
+        try:
+            fn(arg)
+        except Exception:
+            log.exception("error handling a received line")
+
     def feed(self, data: bytes) -> None:
         i = 0
         while i < len(data):
@@ -74,7 +83,7 @@ class LineSplitter:
                 if not self.need:
                     self.last_cr = False
                     cb, self.on_bin, self.on_progress = self.on_bin, None, None
-                    cb(bytes(self.bin))
+                    self._call(cb, bytes(self.bin))
                 continue
             b = data[i]
             i += 1
@@ -89,7 +98,7 @@ class LineSplitter:
                     line = raw.decode("utf-8")
                 except UnicodeDecodeError:
                     line = raw.decode("latin-1")
-                self.on_line(line)
+                self._call(self.on_line, line)
                 continue
             self.last_cr = False
             if len(self.buf) < 4096:
@@ -396,6 +405,8 @@ class TelnetLink(BaseLink):
                 self.splitter.feed(_strip_iac(data))
         except (ConnectionError, OSError):
             pass
+        except Exception:                      # CR88: never hang silently
+            log.exception("telnet: reader stopped")
         self._writer = None
         self._set("offline", "disconnected")
 

@@ -6,6 +6,8 @@ import configparser
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from prcore.text import isnum
+
 
 @dataclass
 class BbsCfg:
@@ -151,7 +153,7 @@ def _from_tinybox(cfg: Config, cp: configparser.ConfigParser, path: Path) -> Non
             if had:
                 t.haddress, cfg.sources["haddress"] = had, src
             tp = tb.get("telnet", "port", fallback="").strip()
-            if tp.isdigit():
+            if isnum(tp):
                 t.telnet_port, cfg.sources["telnet_port"] = int(tp), src
             data = Path(tb.get("storage", "data_dir", fallback="data").strip() or "data")
             data = data if data.is_absolute() else p.parent / data

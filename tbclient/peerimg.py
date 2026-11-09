@@ -26,6 +26,7 @@ import time
 from typing import TYPE_CHECKING
 
 from prcore import chatimg
+from prcore.text import isnum
 
 if TYPE_CHECKING:
     from .peer import Peer
@@ -108,9 +109,9 @@ class PeerImages:
     def take(self, word: str, rest: str) -> bool:
         p = rest.split()
         if word == "IMG" and p:
-            self._serve(p[0], int(p[1]) if len(p) > 1 and p[1].isdigit() else 0)
+            self._serve(p[0], int(p[1]) if len(p) > 1 and isnum(p[1]) else 0)
             return True
-        if word == "I" and len(p) == 3 and p[1].isdigit() and p[2].isdigit():
+        if word == "I" and len(p) == 3 and isnum(p[1]) and isnum(p[2]):
             self._incoming(p[0], int(p[1]), int(p[2]))
             return True
         if word == "NOIMG" and p:

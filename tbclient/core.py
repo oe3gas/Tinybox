@@ -16,6 +16,7 @@ from prcore import chatimg               # the image reference in a chat line (C
 from prcore.agw import PID_NO_L3, via_data
 from prcore.ax25.frame import AX25Error, split_call
 from prcore.ax25.frame import ui_frame as ax25_ui_frame
+from prcore.text import isnum
 
 from . import VERSION, proto
 from . import target as tgt
@@ -908,11 +909,11 @@ class ClientCore:
                 asyncio.get_event_loop().call_later(LOGIN_SYNC_SEC, self._login_sync)
         elif cmd == "B":
             parts = rest.split(" ", 4)
-            if len(parts) >= 4 and parts[0].isdigit():
+            if len(parts) >= 4 and isnum(parts[0]):
                 if self._boards_tmp is None:
                     self._boards_tmp = []
                 self._boards_tmp.append({"n": int(parts[0]), "name": parts[1], "keep": parts[2],
-                                         "users": int(parts[3]) if parts[3].isdigit() else 0,
+                                         "users": int(parts[3]) if isnum(parts[3]) else 0,
                                          "desc": parts[4] if len(parts) > 4 else ""})
         elif cmd == "BEND":
             self.boards = self._boards_tmp or []
@@ -950,7 +951,7 @@ class ClientCore:
                     self._add_history([line], older=False)   # older TinyBox: right away
         elif cmd == "HEND":
             p = rest.split()
-            if self.board and len(p) == 2 and p[1].isdigit():
+            if self.board and len(p) == 2 and isnum(p[1]):
                 self._add_history(self._hist_buf or [], older=self._hist_older)
                 self._hist_buf = None
                 self.board["older"] = int(p[1])
@@ -969,7 +970,7 @@ class ClientCore:
         elif cmd == "WHO":                 # 'n call[=sym] ...' (NUM) or 'call[=sym] ...'
             num = 0
             for item in rest.split():
-                if item.isdigit():
+                if isnum(item):
                     num = int(item)
                     continue
                 call, _, sym = item.partition("=")

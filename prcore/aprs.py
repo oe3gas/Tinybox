@@ -33,6 +33,8 @@ import re
 import time
 from pathlib import Path
 
+from prcore.text import isnum
+
 _DATA_FILE = Path(__file__).with_name("aprs_data.json")
 _data: dict | None = None
 
@@ -91,7 +93,7 @@ def _tocall_match(pattern: str, call: str) -> bool:
         if p == "?":
             continue
         if p == "n":
-            if not c.isdigit():
+            if not isnum(c):
                 return False
         elif p != c:
             return False
@@ -111,7 +113,7 @@ def symbol_name(table: str, code: str) -> str:
     syms = data()["symbols"]
     if table in "/\\":
         return syms.get(table + code, "")
-    if table.isdigit() or "A" <= table <= "Z" or "a" <= table <= "j":
+    if isnum(table) or "A" <= table <= "Z" or "a" <= table <= "j":
         over = str("abcdefghij".index(table)) if "a" <= table <= "j" else table
         base = syms.get("\\" + code, "")
         return f"{base} (overlay {over})" if base else ""
@@ -464,7 +466,7 @@ def _weather(text: str, out: _Out, first: str = "") -> int:
         letter = text[i]
         digits, label, conv = _WX["s#" if letter == "s" and "s" not in first else letter]
         value = text[i + 1:i + 1 + digits]
-        longer = text[i + 1 + digits:i + 2 + digits].isdigit() and value.isdigit()   # CR61: h074
+        longer = isnum(text[i + 1 + digits:i + 2 + digits]) and isnum(value)   # CR61: h074
         if longer or not (re.fullmatch(r"-?\d+", value) or (value and set(value) <= set(". "))) \
                 or len(value) != digits:
             run = re.match(r"-?\d*", text[i + 1:]).group(0)
@@ -516,14 +518,14 @@ def _extension(text: str, out: _Out, weather: bool) -> int:
     if m:
         a, b = m.groups()
         if weather:
-            d, v = (int(a) if a.isdigit() else None), (int(b) if b.isdigit() else None)
+            d, v = (int(a) if isnum(a) else None), (int(b) if isnum(b) else None)
             out.seg(m.group(0), "wx", "wind", "Wind", (f"from {d}°, " if d is not None else "") +
                     (f"{v * 1.609:.0f} km/h ({v} mph)" if v is not None else "speed unknown"),
                     "direction°/speed mph")
             out.chip("wind calm" if v == 0 else f"wind {d}° {v * 1.609:.0f} km/h" if v is not None else "wind ?",
                      "wx", "wind")
         else:
-            c, sp = int(a) if a.isdigit() else 0, int(b) if b.isdigit() else 0
+            c, sp = int(a) if isnum(a) else 0, int(b) if isnum(b) else 0
             out.seg(m.group(0), "move", "move", "Course and speed",
                     f"course {c}°, {sp * 1.852:.0f} km/h ({sp} kn)", "ddd/sss: course°/speed knots")
             out.chip(f"{sp * 1.852:.0f} km/h → {c}°" if sp else f"standing (course {c}°)", "move", "move")
@@ -549,7 +551,7 @@ def _extension(text: str, out: _Out, weather: bool) -> int:
 # ---------------------------------------------------------------- the types
 
 def _timestamp(ts: str, out: _Out, now: float) -> None:
-    if ts.endswith("z") and ts[:6].isdigit():
+    if ts.endswith("z") and isnum(ts[:6]):
         day, hh, mm = int(ts[:2]), int(ts[2:4]), int(ts[4:6])
         g = time.gmtime(now)
         year, mon = g.tm_year, g.tm_mon
@@ -571,10 +573,10 @@ def _timestamp(ts: str, out: _Out, now: float) -> None:
         out.seg(ts, "time", "time", "Timestamp", f"day {day}, {hh:02d}:{mm:02d} UTC = {local} local{note}",
                 "DDHHMM + z (UTC)")
         out.chip(f"sent {local} local" + (" ⚠ clock off" if off else ""), "warn" if off else "time", "time")
-    elif ts.endswith("h") and ts[:6].isdigit():
+    elif ts.endswith("h") and isnum(ts[:6]):
         out.seg(ts, "time", "time", "Timestamp", f"{ts[:2]}:{ts[2:4]}:{ts[4:6]} UTC", "HHMMSS + h (UTC)")
         out.chip(f"sent {ts[:2]}:{ts[2:4]} UTC", "time", "time")
-    elif ts.endswith("/") and ts[:6].isdigit():
+    elif ts.endswith("/") and isnum(ts[:6]):
         out.seg(ts, "time", "time", "Timestamp", f"day {ts[:2]}, {ts[2:4]}:{ts[4:6]} sender's local time", "DDHHMM + / (local)")
         out.chip(f"sent {ts[2:4]}:{ts[4:6]} (their time)", "time", "time")
     else:
@@ -617,7 +619,7 @@ def _mice(dest: str, text: str, out: _Out, home) -> bool:
         return False
     digits, bits, cells = [], [], []
     for i, ch in enumerate(call):
-        if ch.isdigit():
+        if isnum(ch):
             d, b = int(ch), 0
         elif "A" <= ch <= "J":
             d, b = ord(ch) - 65, 2          # custom bit
@@ -936,7 +938,7 @@ def _object(text: str, out: _Out, home, now: float) -> bool:
 
 
 def _weather_only(text: str, out: _Out) -> bool:
-    if len(text) < 9 or not text[1:9].isdigit():
+    if len(text) < 9 or not isnum(text[1:9]):
         return False
     out.title = "Weather report without position"
     out.seg("_", "type", "type", "Data type", "_ = " + TYPES["_"])

@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from prcore.text import isnum
+
 from .. import VERSION
 
 # "[" AUTHOR_ID ["-" AUTHOR_DATA] "-" FEATURE_LIST "]"  (AUTHOR_DATA may contain '-')
@@ -65,7 +67,7 @@ def parse_proposal(line: str) -> Proposal:
     if len(parts) < 7 or parts[0].upper() not in ("FA", "FB"):
         raise ProtocolError(f"bad proposal {line!r}")
     kind, typ, frm, at, to, bid, size = parts[:7]
-    if not size.isdigit():
+    if not isnum(size):
         raise ProtocolError(f"bad size in {line!r}")
     return Proposal(kind.upper(), typ.upper(), frm.upper(), at.upper(), to.upper(),
                     bid.upper(), int(size))

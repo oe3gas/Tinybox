@@ -18,6 +18,8 @@ from __future__ import annotations
 import re
 import zlib
 
+from prcore.text import isnum
+
 FIELDS = ("name", "loc", "home")
 MAX_NAME = 12
 MAX_HOME = 40
@@ -106,7 +108,7 @@ def decode(text: str) -> dict:
         if not eq:
             continue
         if key == "t":
-            out["t"] = int(value) if value.isdigit() else 0
+            out["t"] = int(value) if isnum(value) else 0
         elif key in ("loc", "home"):
             out[key] = value
     return out

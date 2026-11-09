@@ -14,4 +14,4 @@ one bulletin that goes into the TinyBox inbox folder (local only, no @).
 Only the Python standard library is used.
 """
 
-VERSION = "2026.10.15"
+VERSION = "2026.11.09"

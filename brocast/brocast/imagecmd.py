@@ -35,6 +35,12 @@ from typing import Any
 
 from . import config, mosaic
 
+
+def _isnum(s: str) -> bool:
+    """ASCII digits only - isdigit() also accepts '²', int() then fails (CR88)."""
+    return s.isascii() and s.isdigit()
+
+
 MAX_SPALTEN = mosaic.SPALTEN_MAX
 ZEILEN_JE_BLOCK = 3
 
@@ -44,7 +50,7 @@ def gueltig_minuten(text: str) -> int:
     text = text.strip().lower()
     faktor = {"m": 1, "h": 60, "d": 1440}.get(text[-1:])
     zahl = text[:-1] if faktor else text
-    if not zahl.isdigit():
+    if not _isnum(zahl):
         raise ValueError(f"Gueltigkeit {text!r}: z. B. 90m, 6h, 7d")
     return max(1, int(zahl) * (faktor or 1))
 

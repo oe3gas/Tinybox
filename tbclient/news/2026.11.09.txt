@@ -1,0 +1,4 @@
+- Robuster gegen kaputte Eingaben (Audit): Zahlen nur
+  aus Ziffern 0-9, ein Fehler in einer Zeile kostet
+  nicht mehr den Rest des Frames.
+- Telnet haengt bei einem Fehler nicht mehr still.

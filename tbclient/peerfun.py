@@ -23,6 +23,8 @@ import re
 import time
 from typing import TYPE_CHECKING
 
+from prcore.text import isnum
+
 if TYPE_CHECKING:
     from .peer import Peer
 
@@ -198,10 +200,10 @@ class PeerFun:
             self.peer._send(f"//PONG {p[0][:12]}")
         elif word == "PONG" and p:
             self._pong(p[0])
-        elif word == "ST" and len(p) == 2 and p[0].isdigit() and p[1] in ("go", "back") \
+        elif word == "ST" and len(p) == 2 and isnum(p[0]) and p[1] in ("go", "back") \
                 and 0 < int(p[0]) <= ST_MAX:
             self._block(int(p[0]), p[1])
-        elif word == "STR" and len(p) == 2 and p[0].isdigit() and p[1].isdigit():
+        elif word == "STR" and len(p) == 2 and isnum(p[0]) and isnum(p[1]):
             self._result(int(p[0]), int(p[1]))
         elif word == "CHESS":
             self._on_chess(rest)

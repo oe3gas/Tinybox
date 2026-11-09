@@ -33,6 +33,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from prcore.chatimg import HASH_RE, image_hash, image_type, parse_ref, size_code
+from prcore.text import isnum
 
 if TYPE_CHECKING:
     from .config import Config
@@ -76,7 +77,7 @@ class ChatImages:
 
     def put(self, s: Session, parts: list[str]) -> None:
         """//IMGPUT <hash> <bytes> -> //IMGGO <hash> <have>, then the bytes come."""
-        if len(parts) != 2 or not HASH_RE.match(parts[0]) or not parts[1].isdigit():
+        if len(parts) != 2 or not HASH_RE.match(parts[0]) or not isnum(parts[1]):
             s.out("//ERR img syntax")
             return
         h, size = parts[0], int(parts[1])
@@ -136,7 +137,7 @@ class ChatImages:
     def get(self, s: Session, parts: list[str]) -> None:
         """//IMG <hash> [<offset>] -> //I <hash> <offset> <total> + bytes, or //NOIMG."""
         if (not 1 <= len(parts) <= 2 or not HASH_RE.match(parts[0])
-                or (len(parts) == 2 and not parts[1].isdigit())):
+                or (len(parts) == 2 and not isnum(parts[1]))):
             s.out("//ERR img syntax")
             return
         h = parts[0]

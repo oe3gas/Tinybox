@@ -29,6 +29,8 @@ import socket
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
+from prcore.text import isnum
+
 from .ax25.frame import AX25Error, peek
 from .kiss import FrameHandler
 from .termcolor import OK
@@ -154,7 +156,7 @@ def _valid_call(call: str) -> bool:
     base, _, ssid = call.partition("-")
     if not (1 <= len(base) <= 6 and base.isalnum()):
         return False
-    return not ssid or (ssid.isdigit() and 0 <= int(ssid) <= 15)
+    return not ssid or (isnum(ssid) and 0 <= int(ssid) <= 15)
 
 
 def parse_peers(peers: Mapping[str, str] | Iterable[str]) -> dict[str, Peer]:

@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 
 from prcore import release, termcolor
 from prcore.ax25.link import parse_calls
+from prcore.text import isnum
 
 # Amateur radio callsign as used in AX.25: 3-6 chars, letters and digits,
 # at least one digit and one letter, optional SSID 0-15.
@@ -998,7 +999,7 @@ def _load_rubrics(cp: configparser.ConfigParser) -> list[Rubric]:
         if "|" in value:                         # "NAME = description | 7" (CR40)
             value, _, tail = value.rpartition("|")
             value, tail = value.strip(), tail.strip().lower().removesuffix("d").strip()
-            if tail.isdigit() and int(tail) <= 3650:
+            if isnum(tail) and int(tail) <= 3650:
                 days = int(tail)
             else:
                 logging.getLogger(__name__).warning(

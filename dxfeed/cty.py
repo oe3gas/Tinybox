@@ -25,6 +25,12 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+
+def _isnum(s: str) -> bool:
+    """ASCII digits only - isdigit() also accepts '²', int() then fails (CR88)."""
+    return s.isascii() and s.isdigit()
+
+
 DEFAULT_URL = "https://www.country-files.com/cty/cty.dat"
 _OVERRIDE_RE = re.compile(r"\(\d+\)|\[\d+\]|<[^>]*>|\{[A-Z]{2}\}|~[^~]*~")
 _CONT_RE = re.compile(r"\{([A-Z]{2})\}")
@@ -125,7 +131,7 @@ class Cty:
         if any(p in ("MM", "AM") for p in parts[1:]):
             return None                          # maritime / aeronautical mobile
         parts = [p for i, p in enumerate(parts)
-                 if i == 0 or (p not in _SUFFIXES and not p.isdigit())]
+                 if i == 0 or (p not in _SUFFIXES and not _isnum(p))]
         if len(parts) == 1:
             return parts[0]
         # two remaining parts: the shorter one is the prefix (VP8/G3ABC, G3ABC/VP8)

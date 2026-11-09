@@ -88,6 +88,8 @@ import zlib
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from prcore.text import isnum
+
 from . import logsetup
 from .config import base_call
 from .service import ServiceError
@@ -126,7 +128,7 @@ def header(m: Message) -> str:
 
 def _ids(parts: list[str]) -> list[int] | None:
     parts = ",".join(parts).replace(",", " ").split()
-    if not parts or len(parts) > MAX_IDS or not all(p.isdigit() for p in parts):
+    if not parts or len(parts) > MAX_IDS or not all(isnum(p) for p in parts):
         return None
     return [int(p) for p in parts]
 
@@ -153,7 +155,7 @@ def _paging(parts: list[str]) -> tuple[list[str], int, int | None] | None:
     for p in parts:
         key, sep, value = p.partition("=")
         if sep and key in ("after", "max"):     # lower case: a rubric may be called MAX
-            if not value.isdigit():
+            if not isnum(value):
                 return None
             if key == "after":
                 after = int(value)
@@ -246,7 +248,7 @@ def payload(body: str, z: bool) -> tuple[str, bytes]:
 
 def _part(s: Session, parts: list[str]) -> None:
     if ("Z" not in s.client.caps or not hasattr(s.transport, "write_bytes")
-            or len(parts) != 3 or not all(p.isdigit() for p in parts)):
+            or len(parts) != 3 or not all(isnum(p) for p in parts)):
         s.out("//ERR part")
         return
     msg_id, offset, size = (int(p) for p in parts)
@@ -293,7 +295,7 @@ def _get(s: Session, parts: list[str]) -> None:
 def _send(s: Session, parts: list[str]) -> None:
     from .commands import SEND_RE
     args = {k.lower(): v for k, _, v in (p.partition("=") for p in parts[3:]) if v}
-    n = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else -1
+    n = int(parts[2]) if len(parts) >= 3 and isnum(parts[2]) else -1
     if len(parts) < 3 or parts[0].upper() not in ("P", "B") or not 0 <= n <= MAX_SEND_LINES:
         s.out("//ERR send usage")      # without a valid count we cannot skip the text
         return
@@ -389,7 +391,7 @@ def _sync_args(parts: list[str]) -> tuple[dict[str, str], list[str]] | None:
     for p in parts:
         key, sep, value = p.partition("=")
         if sep and key in ("seq", "max", "want", "short", "h", "k", "r"):
-            if key in ("seq", "max", "want", "short") and not value.isdigit():
+            if key in ("seq", "max", "want", "short") and not isnum(value):
                 return None
             args[key] = value
         else:

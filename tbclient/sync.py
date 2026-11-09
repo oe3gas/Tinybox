@@ -44,6 +44,8 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from prcore.text import isnum
+
 from .mailstore import MailStore
 
 if TYPE_CHECKING:
@@ -109,7 +111,7 @@ def parse_rubrics(lines: list[str]) -> tuple[list[dict], list[str]]:
     rubrics, writable, desc = [], [], {}
     for line in lines:
         p = line.split()
-        if len(p) == 4 and p[0] == "//RU" and p[2].isdigit():
+        if len(p) == 4 and p[0] == "//RU" and isnum(p[2]):
             rubrics.append({"name": p[1], "count": int(p[2]), "max": int(p[3])})
         elif len(p) >= 3 and p[0] == "//RU" and p[1] == "+":
             writable = p[2:]
@@ -123,7 +125,7 @@ def parse_rubrics(lines: list[str]) -> tuple[list[dict], list[str]]:
 def parse_header(rest: str) -> dict | None:
     """'<id> <P|B> <N|Y> <fwd> <size> <from> <to> <at> <bid> <unix> <subject>'"""
     p = rest.split(" ", 10)
-    if len(p) < 10 or not p[0].isdigit() or p[1] not in ("P", "B"):
+    if len(p) < 10 or not isnum(p[0]) or p[1] not in ("P", "B"):
         return None
     try:
         return {"id": int(p[0]), "type": p[1], "status": p[2], "fwd": "" if p[3] == "-" else p[3],
@@ -200,7 +202,7 @@ class Syncer:
             return False
         if line.startswith("//MSG "):
             p = line.split()
-            if len(p) == 3 and p[1].isdigit() and p[2].isdigit():
+            if len(p) == 3 and isnum(p[1]) and isnum(p[2]):
                 if int(p[2]) == 0:
                     self.queue.put_nowait(("text", int(p[1]), ""))
                 else:
@@ -208,7 +210,7 @@ class Syncer:
             return True
         if line.startswith("//P "):
             p = line.split()
-            if len(p) == 6 and p[1].isdigit() and all(x.isdigit() for x in p[3:]):
+            if len(p) == 6 and isnum(p[1]) and all(isnum(x) for x in p[3:]):
                 msg_id, kind, off, total = int(p[1]), p[2], int(p[3]), int(p[4])
                 self._rx += int(p[5])
                 q = self.queue
@@ -217,13 +219,13 @@ class Syncer:
             return True
         if line.startswith("//ZSYNC "):
             p = line.split()
-            if len(p) == 2 and p[1].isdigit():
+            if len(p) == 2 and isnum(p[1]):
                 self._rx += int(p[1])
                 self.core.link.splitter.expect(int(p[1]), self._zsync)
             return True
         if line.startswith("//ZMSG "):
             p = line.split()
-            if len(p) == 3 and p[1].isdigit() and p[2].isdigit():
+            if len(p) == 3 and isnum(p[1]) and isnum(p[2]):
                 msg_id, n = int(p[1]), int(p[2])
                 self._rx += n
                 q = self.queue
@@ -634,7 +636,7 @@ class Syncer:
                     raise SyncError(text[2:])
                 if text.startswith("//MEND"):
                     p = text.split()
-                    more = int(p[2]) if len(p) > 2 and p[2].isdigit() else 0
+                    more = int(p[2]) if len(p) > 2 and isnum(p[2]) else 0
                     break
                 if text.startswith("//M ") and (h := parse_header(text[4:])):
                     st.upsert_header(h)
@@ -666,7 +668,7 @@ class Syncer:
             done = []
             for line in await self._lines_until("//KEND"):
                 p = line.split()
-                if len(p) == 3 and p[0] == "//K" and p[1].isdigit():
+                if len(p) == 3 and p[0] == "//K" and isnum(p[1]):
                     done.append(int(p[1]))       # ok, or not possible: either way gone here
             st.todo_done("kill", done)
         reads = st.todo("read")
@@ -747,11 +749,11 @@ class Syncer:
             if line.startswith("//M ") and (h := parse_header(line[4:])):
                 st.upsert_header(h, content=content)
                 self._set(done=self.status["done"] + 1)
-            elif line.startswith("//S ") and len(p) == 4 and p[1].isdigit():
+            elif line.startswith("//S ") and len(p) == 4 and isnum(p[1]):
                 st.set_status(int(p[1]), p[2], "" if p[3] == "-" else p[3])
             elif line.startswith("//D "):
-                st.remove_many([int(x) for x in p[1:] if x.isdigit()])
-            elif line.startswith("//K ") and len(p) == 3 and p[1].isdigit():
+                st.remove_many([int(x) for x in p[1:] if isnum(x)])
+            elif line.startswith("//K ") and len(p) == 3 and isnum(p[1]):
                 st.todo_done("kill", [int(p[1])])     # ok or not: gone here either way
             elif line.startswith("//RL "):
                 self._rubric_names = p[1:]
@@ -760,7 +762,7 @@ class Syncer:
                 self._rubric_static.append(line)
             elif line.startswith("//RN "):
                 self._rubric_counts = {k: int(v) for k, _, v in (x.partition("=") for x in p[1:])
-                                       if v.isdigit()}
+                                       if isnum(v)}
 
     async def _delta_mail(self) -> None:
         st = self.store
@@ -788,9 +790,9 @@ class Syncer:
                     continue
                 raise
             st.todo_done("read", reads)             # no answer line: done with the end line
-            more = int(end[1]) if len(end) > 1 and end[1].isdigit() else 0
+            more = int(end[1]) if len(end) > 1 and isnum(end[1]) else 0
             for word in end[2:]:
-                if word.startswith("seq=") and word[4:].isdigit():
+                if word.startswith("seq=") and isnum(word[4:]):
                     seq = int(word[4:])
             st.put("seq.mail", seq)
             first = self._pend_mail is None
@@ -824,9 +826,9 @@ class Syncer:
                     seq, retry = 0, False
                     continue
                 raise
-            more = int(end[1]) if len(end) > 1 and end[1].isdigit() else 0
+            more = int(end[1]) if len(end) > 1 and isnum(end[1]) else 0
             for word in end[2:]:
-                if word.startswith("seq=") and word[4:].isdigit():
+                if word.startswith("seq=") and isnum(word[4:]):
                     seq = int(word[4:])
                 elif word.startswith("h="):
                     st.put("rubrics.h", word[2:])
@@ -974,7 +976,7 @@ class Syncer:
                 if entry[0] == "line" and entry[1].startswith(("//HAVE ", "//ERR")):
                     break
             p = entry[1].split()
-            ids = [int(x) for x in p[2:] if x.isdigit()] if p[0] == "//HAVE" else []
+            ids = [int(x) for x in p[2:] if isnum(x)] if p[0] == "//HAVE" else []
             if ids:
                 log.info("mail %s was already in the TinyBox (%s) - not sent again",
                          item["mid"], " ".join(map(str, ids)))
@@ -999,7 +1001,7 @@ class Syncer:
                 continue
             line = entry[1]
             if line.startswith("//SENT "):
-                self._stored(item, to, [int(x) for x in line.split()[1:] if x.isdigit()])
+                self._stored(item, to, [int(x) for x in line.split()[1:] if isnum(x)])
                 self.store.drop(tried)
                 return
             if line.startswith("//ERR"):
@@ -1028,7 +1030,7 @@ class Syncer:
                     raise SyncError(line[2:])
                 if line.startswith("//NOMSG "):
                     p = line.split()
-                    if p[1].isdigit():
+                    if isnum(p[1]):
                         self.store.remove(int(p[1]))       # gone in the TinyBox
                     self._set(done=self.status["done"] + 1)
                 continue

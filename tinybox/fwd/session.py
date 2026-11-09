@@ -160,6 +160,9 @@ class ForwardSession:
                 self.r.error = str(exc) + (" (in a message)" if self.in_message else "")
         except ProtocolError as exc:
             self.r.error = f"protocol: {exc}"       # W0RLI: hang up, send nothing
+        except Exception as exc:                    # CR88 (TB-20c): a bug or bad input must
+            log.exception("%s: internal error in the forward session", self.p.call)
+            self.r.error = f"internal error: {type(exc).__name__}"   # end the session cleanly
         finally:
             await self.link.drain()
             await self.link.close()

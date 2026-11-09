@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- Alle Teile: **Robustheit CR88 (Audit TB-09, TB-20c, TB-23)** – Zahlen werden nur noch aus den
+  Ziffern 0–9 gelesen (`prcore.text.isnum`, 84 Stellen; `²` bestand bisher die Prüfung und ließ
+  `int()` scheitern), ein Test hält `isdigit()` aus dem Code. Die Forward-Sitzung endet bei einem
+  unerwarteten Fehler sauber mit Log, der Client verliert bei einem Fehler in einer Zeile nicht mehr
+  den Rest des Frames, und Telnet hängt nicht mehr still. brocastd nimmt keine Zeitstempel nach
+  2100 und keine Seiten mit mehr als einem Tag Vorlauf an; die Seitenliste übersteht kaputte Zeilen.
+  Client 2026.11.09, kisshub 2026.11.09, dxfeed 2026.11.09.
 - brocastd: **Sicherheitsfix CR87 (Audit TB-01)** – ein einzelnes UI-Frame mit falsch typisiertem
   Feld (z. B. `exp` als Text) konnte brocastd dauerhaft lahmlegen, auch nach jedem Neustart.
   Jetzt: Typprüfung aller Umschlag-Felder beim Empfang (Seite wird verworfen), Gültigkeit auch aus

@@ -54,6 +54,7 @@ RESULT_TEXT = {
     "subpage": "weiterer Teil ergänzt",
     "repeat": "Wiederholung – schon vorhanden, keine Änderung",
     "old": "ältere Revision – ignoriert",
+    "future": "Zeitstempel mehr als einen Tag in der Zukunft – ignoriert",
     "deleted": "von dir gelöscht – ausgeblendet bis zur nächsten Revision",
     "blocked": "abgewählt (Abo) – nicht angezeigt",
     "withdrawn": "von der Station zurückgezogen – entfernt",
@@ -119,14 +120,25 @@ class NotFound(ListenerError):
     pass
 
 
+FUTURE_SLACK_S = 86400        # CR88 (TB-09): a page from more than a day ahead is not taken
+
+
 def iso(ts: int | None) -> str | None:
-    return datetime.fromtimestamp(ts, timezone.utc).isoformat() if ts is not None else None
+    """None also for a value no date can show - one bad row must not break the
+    whole page list (CR88, TB-09)."""
+    try:
+        return datetime.fromtimestamp(ts, timezone.utc).isoformat() if ts is not None else None
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 def iso_ms(ts: float | None) -> str | None:
     """Like iso(), with milliseconds (receive log: older rows have whole seconds)."""
-    return (datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="milliseconds")
-            if ts is not None else None)
+    try:
+        return (datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="milliseconds")
+                if ts is not None else None)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 class Listener:
@@ -245,6 +257,8 @@ class Listener:
         if page.get("typ") == "index":              # the station's rubric list
             return self._index_page(page, org, now)
         page_id, rev = page["id"], page.get("rev", 0)
+        if page["t"] > now + FUTURE_SLACK_S:      # would never expire (CR88, TB-09)
+            return "future"
         lp = self.store.lpage(org, page_id)
 
         if "withdrawn" in (page.get("flg") or []):

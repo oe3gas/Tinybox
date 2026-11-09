@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from prcore import chatimg, lzhuf
+from prcore.text import isnum
 
 if TYPE_CHECKING:
     from .peer import Peer
@@ -140,7 +141,7 @@ class PeerFiles:
         if word == "FGET" and p:
             asyncio.ensure_future(self._serve(p[0]))
             return True
-        if word == "F" and len(p) == 3 and p[1] in ("z", "r") and p[2].isdigit():
+        if word == "F" and len(p) == 3 and p[1] in ("z", "r") and isnum(p[2]):
             self._incoming(p[0], p[1], int(p[2]))
             return True
         if word == "NOFILE" and p:

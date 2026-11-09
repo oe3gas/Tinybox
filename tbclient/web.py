@@ -69,6 +69,8 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from tinybox import connlog                # CSV and ADIF of the connection log (CR44)
 
+from prcore.text import isnum
+
 from . import VERSION, peerfile
 from .core import ClientCore
 
@@ -161,20 +163,20 @@ class WebServer:
                 since = int((query.get("since") or ["-1"])[0] or -1)
                 ch = (query.get("ch") or [""])[0]            # CR45: the channel shown
                 await core.wait_change(since, POLL_SEC)
-                return 200, core.snapshot(int(ch) if ch.isdigit() else None), None
+                return 200, core.snapshot(int(ch) if isnum(ch) else None), None
             if method == "GET" and path == "/api/aprs/station":     # CR65: one call
                 win = (query.get("win") or ["0"])[0]
                 call = (query.get("call") or [""])[0]
                 if not call:
                     return 400, {"error": "call"}, None
-                return 200, core.aprs_stats.station(call, int(win) if win.isdigit() else 0), None
+                return 200, core.aprs_stats.station(call, int(win) if isnum(win) else 0), None
             if method == "GET" and path == "/api/aprs/graph":       # CR79: network graph
                 win = (query.get("win") or ["0"])[0]
-                return 200, core.aprs_stats.graph(int(win) if win.isdigit() else 0,
+                return 200, core.aprs_stats.graph(int(win) if isnum(win) else 0,
                                                   me=core.cfg.mycall), None
             if method == "GET" and path == "/api/aprs/stats":       # CR61
                 win = (query.get("win") or ["0"])[0]
-                return 200, core.aprs_stats.report(int(win) if win.isdigit() else 0), None
+                return 200, core.aprs_stats.report(int(win) if isnum(win) else 0), None
             if method == "GET" and path == "/api/connlog":          # CR44
                 return 200, core.logbook.rows(200), None
             if method == "GET" and path in ("/api/connlog.csv", "/api/connlog.adi"):

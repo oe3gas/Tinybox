@@ -7,6 +7,7 @@ import re
 from typing import TYPE_CHECKING, Callable
 
 from prcore.profile import CALL_RE as BASE_CALL_RE, ProfileError
+from prcore.text import isnum
 
 from . import addressing, chatcmd, dictfile, linkq, profiles, texts
 from .service import ServiceError
@@ -27,7 +28,7 @@ def _yymmdd(iso: str) -> str:
 
 def _numbers(arg: str) -> list[int] | None:
     parts = arg.replace(",", " ").split()
-    if not parts or not all(p.isdigit() for p in parts):
+    if not parts or not all(isnum(p) for p in parts):
         return None
     return [int(p) for p in parts]
 
@@ -93,7 +94,7 @@ def cmd_qso(s: Session, arg: str) -> None:
     from .connlog import base_call, duration, kb
     words = arg.upper().split()
     base, n, which = base_call(s.call), QSO_DEFAULT, ""
-    if words and not words[0].isdigit():
+    if words and not isnum(words[0]):
         if not s.sysop:
             s.out(texts.USAGE_QSO)
             return
@@ -101,7 +102,7 @@ def cmd_qso(s: Session, arg: str) -> None:
         base = None if which in ("ALL", "ALLE") else base_call(which)
         words = words[1:]
     if words:
-        if not words[0].isdigit() or len(words) > 1:
+        if not isnum(words[0]) or len(words) > 1:
             s.out(texts.USAGE_QSO)
             return
         n = max(1, min(QSO_MAX, int(words[0])))
@@ -296,7 +297,7 @@ def cmd_edit(s: Session, arg: str) -> None:
         s.out(texts.NOT_ALLOWED)
         return
     parts = arg.split(None, 2)
-    if len(parts) != 3 or not parts[0].isdigit():
+    if len(parts) != 3 or not isnum(parts[0]):
         s.out(texts.USAGE_E)
         return
     msg_id = int(parts[0])

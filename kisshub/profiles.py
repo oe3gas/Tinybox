@@ -33,6 +33,8 @@ import dataclasses
 import re
 from dataclasses import dataclass
 
+from prcore.text import isnum
+
 KISS_EXIT = bytes((0xC0, 0xFF, 0xC0))      # KISS protocol: leave KISS (tnc.py, on stop)
 
 TYPES = ("tnc", "vara", "direwolf", "modem73")
@@ -253,7 +255,7 @@ def _positions(text: str, name: str) -> tuple[tuple[int, str], ...]:
     out = []
     for item in text.replace(",", " ").split():
         baud, colon, pos = item.partition(":")
-        if not colon or not baud.isdigit() or not pos:
+        if not colon or not isnum(baud) or not pos:
             raise ProfileError(f"[{name}] switch_positions: rate:position, e.g. 1200:1k2 9600:9k6")
         out.append((int(baud), pos))
     return tuple(out)

@@ -13,6 +13,12 @@ from .dxcc import DEFAULT_PATH as DICT_PATH
 from .mostwanted import DEFAULT_URL as MW_URL
 from .spots import BAND_ORDER, clean_call
 
+
+def _isnum(s: str) -> bool:
+    """ASCII digits only - isdigit() also accepts '²', int() then fails (CR88)."""
+    return s.isascii() and s.isdigit()
+
+
 VALID_RE = re.compile(r"^\d+[mhd]$", re.IGNORECASE)
 RUBRIC_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 
@@ -116,7 +122,7 @@ def parse_nodes(text: str) -> tuple[tuple[str, int], ...]:
     out = []
     for item in text.replace(",", " ").split():
         host, sep, port = item.rpartition(":")
-        if not sep or not host or not port.isdigit() or not 0 < int(port) < 65536:
+        if not sep or not host or not _isnum(port) or not 0 < int(port) < 65536:
             raise ConfigError(f"[cluster] nodes: '{item}' - format host:port")
         out.append((host, int(port)))
     if not out:

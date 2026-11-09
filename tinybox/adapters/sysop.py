@@ -15,6 +15,8 @@ import threading
 import time
 from typing import Callable
 
+from prcore.text import isnum
+
 from .. import VERSION, commands, config, logsetup, texts
 from ..app import App
 from ..config import base_call, normalize_call
@@ -304,7 +306,7 @@ class SysopConsole:
             self.out(texts.FWD_OFF)
             return
         nums = arg.split()
-        if not nums or not all(x.isdigit() for x in nums):
+        if not nums or not all(isnum(x) for x in nums):
             self.out(texts.USAGE_HOLD)
             return
         for x in nums:
@@ -335,7 +337,7 @@ class SysopConsole:
         if arg == "CANCEL":
             self.out(texts.SHUTDOWN_CANCEL_DONE if timer.cancel() else texts.SHUTDOWN_NONE)
             return
-        if arg and arg != "NOW" and not arg.isdigit():
+        if arg and arg != "NOW" and not isnum(arg):
             self.out(texts.USAGE_SHUTDOWN)
             return
         users = len(self.app.registry)
@@ -356,7 +358,7 @@ class SysopConsole:
         if arg == "CANCEL":
             self.out(texts.SHUTDOWN_CANCEL_DONE if timer.cancel() else texts.SHUTDOWN_NONE)
             return
-        if arg and arg != "NOW" and not arg.isdigit():
+        if arg and arg != "NOW" and not isnum(arg):
             self.out(texts.USAGE_RESTART)
             return
         if self.app.config_path:

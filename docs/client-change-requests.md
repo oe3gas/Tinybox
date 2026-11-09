@@ -66,7 +66,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 85 | Erwähnungs-Alarm: Popup des Betriebssystems und „BK“ in CW bei @CALL | ✅ siehe unten (Funktest offen) |
 | 86 | Dateien im Board-Chat (LZHUF), wie Bilder (CR12) und Dateien im TBClient-Chat (CR78 Stufe 7) | offen, siehe unten |
 | 87 | brocastd: Absturz durch ungültiges `exp` (TB-01) | ✅ siehe unten |
-| 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | offen, siehe unten |
+| 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | ✅ siehe unten (breiter Fuzz-Lauf mit CR98) |
 | 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | offen, siehe unten |
 | 90 | Interlink-Authentisierung, Challenge-Response pro Partner (TB-02) | offen, siehe unten |
 | 91 | Dictionary-Integrität: voller Vergleich, keine Auto-Installation/Weiterverbreitung (TB-04) | offen, siehe unten |
@@ -2829,7 +2829,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Feldtypen, vergiftete Datenbankzeile, gefälschtes Dictionary-`exp`, Housekeeping läuft nach einem
   Fehler weiter. Ohne den Fix reproduziert der PoC den `TypeError` im Housekeeping.
 
-## CR88 – Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23, offen, 09.11.2026)
+## CR88 – Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23, ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -2850,6 +2850,26 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   des Frames nicht verwirft.
 - TB-09 nachstellen und beheben; Schleifen mit Obergrenze.
 - Fuzz-Tests für alle Zeilenparser (Box, Client, brocast) mit Unicode-Ziffern, Überlängen, leeren Feldern.
+
+### Umsetzung (TinyBox, Client 2026.11.09, kisshub 2026.11.09, dxfeed 2026.11.09, brocast – 09.11.2026)
+
+- `prcore/text.py`: `isnum()` (nur ASCII-Ziffern) und `to_int()`. Alle 84 Stellen mit `isdigit()`
+  umgestellt; brocast und dxfeed (ohne `prcore`) haben ein gleiches lokales `_isnum()`.
+  `tests/test_cr88.py` schlägt fehl, sobald `.isdigit()` wieder im Code auftaucht.
+- `fwd/session.py`: `ForwardSession.run` fängt jede unerwartete Ausnahme, loggt sie mit Traceback,
+  setzt `error = "internal error: …"` und schließt die Verbindung (TB-20c).
+- `tbclient/links.py`: `LineSplitter` ruft jede Zeile (und jeden Binärblock) einzeln abgesichert auf –
+  ein Fehler kostet nur diese Zeile, nicht den Rest des Frames (AGW, KISS, Telnet). Die
+  Telnet-Leseschleife beendet sich bei einem unerwarteten Fehler mit Log und meldet „offline“
+  statt still zu hängen.
+- brocast (TB-09): `t` beim Empfang höchstens 01.01.2100, `sub` höchstens [999, 999] (schon CR87);
+  eine Seite mit mehr als einem Tag Vorlauf wird nicht angenommen (Ergebnis `future`, sonst liefe
+  sie nie ab); `iso()`/`iso_ms()` liefern bei unbrauchbaren Werten `None` statt die ganze
+  Seitenliste mit HTTP 500 zu brechen. Die Schleife der Seitenansicht ist damit auf 999 begrenzt.
+- Tests: `tests/test_cr88.py` (Unicode-Ziffern in Forward-Vorschlag, BBS-Nummernlisten, Profil;
+  LineSplitter läuft nach Fehler weiter; Forward-Sitzung endet sauber), `brocast/tests/test_cr88.py`
+  (absurde Zeiten, Zukunft, riesige Unterseitenzahl, kaputte Zeile in der Liste, `iso`).
+- Offen: ein breiter Fuzz-Lauf über alle Zeilenparser – mit dem Client-Audit (CR98).
 
 ## CR89 – Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b, offen, 09.11.2026)
 

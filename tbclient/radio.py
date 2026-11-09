@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from prcore import aprs
 from prcore.ax25.frame import addresses_valid
+from prcore.text import isnum
 
 UI_CONTROL = 0x03
 
@@ -93,7 +94,7 @@ def aprs_symbol(info: bytes) -> str | None:
         body = text[1:]
         if kind in "/@":                         # with timestamp (7 chars)
             body = body[7:]
-        if len(body) >= 19 and body[0].isdigit():            # uncompressed
+        if len(body) >= 19 and isnum(body[0]):            # uncompressed
             table, code = body[8], body[18]
         elif len(body) >= 10:                                 # compressed
             table, code = body[0], body[9]
@@ -104,7 +105,7 @@ def aprs_symbol(info: bytes) -> str | None:
     else:
         return None
     sym = table + code
-    if (table in "/\\" or table.isdigit() or "A" <= table <= "Z") and "!" <= code <= "~":
+    if (table in "/\\" or isnum(table) or "A" <= table <= "Z") and "!" <= code <= "~":
         return sym
     return None
 

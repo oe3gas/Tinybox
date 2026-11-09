@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from prcore.text import isnum
+
 # W0RLI spec, section 1:  "[" AUTHOR_ID ["-" AUTHOR_DATA] "-" FEATURE_LIST "]"
 # AUTHOR_DATA is optional and may itself contain '-'.
 SID_RE = re.compile(r"^\[([^\-\[\]]+)(?:-([^\[\]]*))?-([A-Za-z0-9$]+)\]$")
@@ -100,7 +102,7 @@ def parse_proposal(line: str) -> Proposal:
     if len(parts) < 7 or parts[0] not in ("FA", "FB"):
         raise ProtocolError(f"bad proposal: {line!r}")
     kind, typ, frm, at, to, bid, size = parts[:7]
-    if not size.isdigit():
+    if not isnum(size):
         raise ProtocolError(f"bad size in proposal: {line!r}")
     return Proposal(kind, typ.upper(), frm.upper(), at.upper(), to.upper(), bid.upper(), int(size))
 
@@ -137,7 +139,7 @@ def parse_fs(line: str, count: int) -> list[str]:
         c = symbols[i].upper()
         if c in ("!", "A"):          # resume offset follows (B1); treat as accept
             i += 1
-            while i < len(symbols) and symbols[i].isdigit():
+            while i < len(symbols) and isnum(symbols[i]):
                 i += 1
             out.append(ACCEPT)
             continue

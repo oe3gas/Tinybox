@@ -24,6 +24,7 @@ CALLSIGN = re.compile(r"([A-Z0-9]{1,4}/)?[A-Z0-9]{3,8}(/[A-Z0-9]{1,4})?(-[0-9]{1
 POS_FACTOR = 100_000          # degrees * 10^5, about 1 m
 MAX_UINT = 2**64 - 1
 MAX_RX_UINT = 2**63 - 1       # receive side: what SQLite can store (INTEGER is signed 64 bit)
+MAX_RX_TIME = 4_102_444_800   # receive side: times after 01.01.2100 are not real (CR88, TB-09)
 MAX_PAGE_BYTES = 240          # one page = one AX.25 frame (spec: "Seitengröße")
 
 
@@ -90,8 +91,11 @@ def _check_wire(value: Any, spec: dict[str, Any], what: str) -> None:
     stored and later used in arithmetic (exp, t) - a wrong type must reject the
     page, never crash brocastd."""
     kind = spec.get("type", "any")
-    if kind in ("uint", "time"):
+    if kind == "uint":
         _rx_uint(value, what)
+    elif kind == "time":
+        if _rx_uint(value, what) > MAX_RX_TIME:
+            raise BrocastError(f"{what}: Zeitpunkt nach 2100")
     elif kind == "int":
         if isinstance(value, bool) or not isinstance(value, int) or abs(value) > MAX_RX_UINT:
             raise BrocastError(f"{what}: Ganzzahl erwartet, nicht {value!r}")

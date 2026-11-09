@@ -42,6 +42,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable
 
 from prcore.chatimg import terminal_text
+from prcore.text import isnum
 
 from . import chatimg, linkq, texts
 from .config import ChatBoard, Config
@@ -98,7 +99,7 @@ class ChatHub:
     def find(self, arg: str) -> ChatBoard | None:
         """Board by name, or by its number in the board list (1, 2, ...)."""
         arg = arg.strip()
-        if arg.isdigit():
+        if isnum(arg):
             n = int(arg)
             return self.boards[n - 1] if 1 <= n <= len(self.boards) else None
         return self.cfg.chat.board(arg)

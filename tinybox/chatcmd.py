@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from prcore.profile import short as profile_short
+from prcore.text import isnum
 
 from . import clientnews, clientproto, texts
 from .config import ChatBoard
@@ -275,7 +276,7 @@ def handle(s: Session, line: str) -> None:
                 pass
             if not ok:
                 s.out("//ERR react" if s.client else texts.CHAT_UNKNOWN)
-        elif cmd in ("H", "HELP", "?") and arg.strip().isdigit():
+        elif cmd in ("H", "HELP", "?") and isnum(arg.strip()):
             _history(s, int(arg.strip()))
         elif cmd in ("H", "HELP", "?"):
             s.out(*texts.CHAT_HELP)

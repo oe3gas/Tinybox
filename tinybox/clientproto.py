@@ -92,6 +92,7 @@ from typing import TYPE_CHECKING
 
 from prcore import profile as pf
 from prcore.release import RELEASE
+from prcore.text import isnum
 
 from . import clientnews, clientsync, profiles
 from .addressing import base_call
@@ -263,7 +264,7 @@ def _whois(s: Session, parts: list[str]) -> None:
 
 
 def _iso(unix: str) -> str | None:
-    if not unix.isdigit():
+    if not isnum(unix):
         return None
     return datetime.fromtimestamp(int(unix), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -284,7 +285,7 @@ def _hist(s: Session, parts: list[str]) -> None:
     hub = s.service.chat
     board = hub.cfg.chat.board(s.chat_board or "")
     args = _parse_args(parts)
-    if board is None or not args.get("max", "").isdigit():
+    if board is None or not isnum(args.get("max", "")):
         s.out("//ERR hist")
         return
     lines, older = hub.history_page(board, int(args["max"]),

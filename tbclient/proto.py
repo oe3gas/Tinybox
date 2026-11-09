@@ -21,6 +21,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from prcore.text import isnum
+
 EVENT_RE = re.compile(r"^#([0-9A-F]{1,2}) (.+)$")
 CALL = r"[A-Z0-9]{1,6}(?:-\d{1,2})?"
 LINE_RE = re.compile(rf"^({CALL}): ?(.*)$", re.S)
@@ -91,7 +93,7 @@ def _quality(seq: int, rest: str) -> Event | None:
     for who, b in zip(parts[::2], parts[1::2]):
         if not QUALITY_ITEM_RE.match(f"{who} {b}"):
             return None
-        bars[int(who) if who.isdigit() else who] = None if b == "?" else int(b)
+        bars[int(who) if isnum(who) else who] = None if b == "?" else int(b)
     return Event(seq, "quality", bars=bars)
 
 

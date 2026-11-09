@@ -54,6 +54,7 @@ from typing import TYPE_CHECKING
 
 from prcore import aprs, linkq
 from prcore import profile as pf
+from prcore.text import isnum
 
 from .peerchat import new_gen
 from .peerfile import PeerFiles
@@ -88,7 +89,7 @@ def _args(text: str) -> dict[str, str]:
 
 
 def version_key(v: str) -> tuple:
-    return tuple(int(x) if x.isdigit() else 0 for x in v.split("."))
+    return tuple(int(x) if isnum(x) else 0 for x in v.split("."))
 
 
 class Peer:
@@ -101,7 +102,7 @@ class Peer:
         # clock: their time when they sent the line - ours now; the line took a
         # moment on the air, so a few seconds are no difference (CLOCK_SAME)
         t = a.get("t", "")
-        self.clock_off = int(t) - int(time.time()) if t.isdigit() else None
+        self.clock_off = int(t) - int(time.time()) if isnum(t) else None
         self.caps = {c.strip().upper() for c in a.get("caps", "").split(",") if c.strip()}
         self.prof: dict | None = None
         self.heard: list[tuple[str, int]] | None = None   # (call, minutes ago)
@@ -219,7 +220,7 @@ class Peer:
     def _on_hm(self, rest: str) -> None:
         """//HM <n> <unix> <text>: a line of theirs that did not arrive last time."""
         parts = rest.split(" ", 2)
-        if not self.hist or len(parts) < 3 or not parts[0].isdigit() or not parts[1].isdigit():
+        if not self.hist or len(parts) < 3 or not isnum(parts[0]) or not isnum(parts[1]):
             return
         if int(parts[0]) == self.store.state(self.call)["rx"][0] + 1:
             self.store.add(self.call, "rx", parts[2].rstrip(), int(parts[1]))
@@ -342,7 +343,7 @@ class Peer:
         heard = []
         for part in text.split():
             call, eq, mins = part.partition("=")
-            if eq and mins.isdigit():
+            if eq and isnum(mins):
                 heard.append((call.upper()[:9], int(mins)))
         self.heard, self.heard_at = heard, int(time.time())
         if heard:
