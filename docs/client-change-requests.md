@@ -3296,7 +3296,7 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 - Ansicht „Map“: die km-Beschriftungen der Ringe fehlen.
 - Direkt gehörte Calls voller gefärbt, die anderen blasser.
 
-### Umsetzung (Client 2026.11.09.6, `tbclient/web/aprsgraph.js`, `app.css`)
+### Umsetzung (Client 2026.11.09.6, News in 2026.11.09.7, `tbclient/web/aprsgraph.js`, `app.css`)
 
 - Keine Linien mehr zur eigenen Station. Sie bleibt nur als kleiner grauer Punkt in der Mitte
   (Bezugspunkt für Hop-Radar und Karte). Die Anordnung rechnet weiter mit allen Wegen, es
