@@ -3426,13 +3426,29 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 - Zu 2: Daten aus CR93 (`identity.key`): Status (freigegeben / wartet auf Sysop), Fingerabdruck
   (`7F3A-91C2-44E0`), Heimat-BBS. „Mit welchen TinyBoxen“: in Stufe 1 nur die Heimat-BBS, bei der
   der Schlüssel freigegeben ist; fremde Boxen erst mit der Vertrauenskette (CR93 Vorschlag/CR94).
-- Zu 4: Format für Zeiten unter einer Stunde klären: „53m38“ → „53m 38s“?
 - Zu 5: BpM = Buchstaben pro Minute; derzeit fest 60 BpM (12 WpM, Dit 100 ms, CR85).
   100 BpM = 20 WpM (Dit 60 ms), 150 BpM = 30 WpM (Dit 40 ms). Speichern wie die übrigen
   Alarm-Einstellungen im Browser.
-- Zu 3: Sonst gilt im Projekt „incoming/outgoing“ statt „in/out“ – hier bewusst „In/Out bytes“
-  wie erfasst.
 - Client-Änderung → `VERSION` erhöhen und News-Datei anlegen.
+
+### Entscheidungen (OE3GAS, 10.11.2026)
+
+1. **Zeitformat:** ab einer Stunde „2h 41m“, darunter Minuten und Sekunden „53m 28s“
+   (also auch „0m 22s“).
+2. **Mailbox im Status:** „x messages“ = Nachrichten in der Inbox, dieselbe Zahl wie in der
+   bisherigen Sektion „Mailbox“ („2 message(s) in the inbox, 39 sent, …“).
+3. **Auth-Hinweis:** nur die Heimat-BBS anzeigen (Status der Freigabe, Fingerabdruck) – keine
+   Liste fremder TinyBoxen.
+4. **Spaltenkopf:** die Spalte „In / out“ im Connection log heißt künftig „In/Out bytes“.
+
+### Noch offen (Claude, 10.11.2026)
+
+- Die bisherige Sektion „Mailbox“ (Inbox, sent, Rubriken, letzter Abgleich) kommt im neuen
+  Layout nicht vor. Vorschlag: die ganze Zeile in die Karte „Connection Status“ übernehmen,
+  die eigene Sektion entfällt.
+- Beobachtung im Connection log (Bild vom 10.11.): die Zeilen vom 07.11. stehen nicht in
+  zeitlicher Reihenfolge (23:02, 23:16, 23:01, 23:05, 23:03). Vermutlich sortiert nach
+  Verbindungsende statt Connect-Zeit – mit CR104 nach Connect-Zeit absteigend sortieren?
 
 ## CR105 – Eigenes Profilfoto (offen, 10.11.2026)
 
