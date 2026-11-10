@@ -373,7 +373,7 @@ class EndToEndTests(unittest.TestCase):
                 await asyncio.wait_for(core.link.agw_up.wait(), 5)
                 await core.connect()
                 await until(lambda: core.boards, 10)
-                self.assertEqual(core.caps, {"CHAT", "UI", "SYNC", "SYNC2", "SHORT", "Z", "IMG", "NUM", "HAVE", "PROF", "HSEQ"})
+                self.assertEqual(core.caps, {"CHAT", "UI", "SYNC", "SYNC2", "SHORT", "Z", "IMG", "NUM", "HAVE", "PROF", "HSEQ", "BFILE"})
                 self.assertTrue(core.join(1))
                 await until(lambda: core.board and "OE3GAS" in core.members)
                 self.assertEqual(core.members, {"OE3XYZ": "", "OE3GAS": "/-"})
@@ -850,8 +850,8 @@ class ImageTests(unittest.TestCase):
                 self.assertEqual(core.images.store.get(h), webp)
                 self.assertEqual(core.snapshot()["images"]["loading"], {})
                 # an image the TinyBox does not have
-                self.assertTrue(core.fetch_image("000000"))
-                await until(lambda: core.images.loading.get("000000", {}).get("error"), 10)
+                self.assertTrue(core.fetch_image("0000000000000000"))
+                await until(lambda: core.images.loading.get("0000000000000000", {}).get("error"), 10)
                 core.disconnect()
                 await until(lambda: core.state == "offline")
                 t2.cancel()
@@ -883,13 +883,13 @@ class ImageJsTests(unittest.TestCase):
         self.assertGreater(left[0], left[2] + 100)               # red on the left
         self.assertGreater(right[2], right[0] + 100)             # blue on the right
         self.assertLess(bottom[0], left[0] - 30)                 # darker at the bottom
-        self.assertEqual(r["ref"], {"hash": "a1b2c3", "size": 5120, "bh": r["bh"],
+        self.assertEqual(r["ref"], {"hash": "a1b2c3d4e5f6a7b8", "size": 5120, "bh": r["bh"],
                                     "caption": "vom Berg"})
         self.assertEqual(r["ref_nocap"]["caption"], "")
         self.assertEqual(r["ref_bad"], [None, None, None])
         # the same line parsed by the TinyBox
-        line = "~#a1b2c350" + r["bh"] + " vom Berg"
-        self.assertEqual(chatimg.parse_ref(line)[:3], ("a1b2c3", 5120, r["bh"]))
+        line = "~#a1b2c3d4e5f6a7b850" + r["bh"] + " vom Berg"
+        self.assertEqual(chatimg.parse_ref(line)[:3], ("a1b2c3d4e5f6a7b8", 5120, r["bh"]))
         self.assertEqual(chatimg.terminal_text(line),
                          "[Image 5.0 KB - TinyBox client only] vom Berg")
 
@@ -1047,7 +1047,7 @@ class UploadNoticeTests(unittest.TestCase):
                              [{"call": "OE1ABC", "size": 5120, "at": core.uploads["OE1ABC"]["at"],
                                "got": 0}])
             # the picture arrives: the notice is gone
-            line = f"~#a1b2c3{chatimg.size_code(5120)}BEHV6nWB2yk8pyo0"
+            line = f"~#a1b2c3d4e5f6a7b8{chatimg.size_code(5120)}BEHV6nWB2yk8pyo0"
             core._event(proto.Event(0x5B, "line", "OE1ABC", text=line))
             self.assertNotIn("OE1ABC", core.uploads)
 

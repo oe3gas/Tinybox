@@ -64,7 +64,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 83 | TinyBox-Web-GUI: Frame-Monitor auch im AGW-Mode – gehörte Frames (Stufe 1) und eigene gesendete Frames über den Direwolf-Fork (Stufe 2) | ✅ siehe unten (Funktest offen) |
 | 84 | Kommentar auf eine Nachricht aus der History: Text statt „message #n“ | ✅ siehe unten (Funktest offen) |
 | 85 | Erwähnungs-Alarm: Popup des Betriebssystems und „BK“ in CW bei @CALL | ✅ siehe unten (Funktest offen) |
-| 86 | Dateien im Board-Chat (LZHUF), wie Bilder (CR12) und Dateien im TBClient-Chat (CR78 Stufe 7) | offen, siehe unten |
+| 86 | Dateien im Board-Chat (LZHUF), wie Bilder (CR12) und Dateien im TBClient-Chat (CR78 Stufe 7) | ✅ 10.11.2026 (mit 16-Hex-Hash aus CR96), siehe unten |
 | 87 | brocastd: Absturz durch ungültiges `exp` (TB-01) | ✅ siehe unten |
 | 88 | Parser-Robustheit: Zahlen, Ausnahmen, Endlosschleifen (TB-09, TB-20c, TB-23) | ✅ siehe unten (Fuzz-Lauf mit CR98 ✅) |
 | 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | ✅ siehe unten |
@@ -2789,7 +2789,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Zeile ohne Erwähnung → nichts; `hallo @oe3gas …` → ein Popup `OE3TEC in TREFF`, ein BK; ist
   das Fenster vorne → nur BK.
 
-## CR86 – Dateien im Board-Chat (offen, 08.11.2026)
+## CR86 – Dateien im Board-Chat (✅ 10.11.2026)
 
 ### Erfassung (OE3GAS, 08.11.2026)
 
@@ -2826,6 +2826,26 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Mit CR86 kommt der **längere Hash** für alle Referenzen und Transfers (Bilder und Dateien, z. B.
   16 hex = 64 Bit statt 6 hex): neues Funkformat, neue Client- und Box-Version, **keine
   Übergangsregel** für ältere Clients. Die Absicherungen aus CR96 Stufe 1 gelten von Anfang an.
+
+### Umsetzung (TinyBox, Client 2026.11.10.12 – 10.11.2026) ✅
+
+- **Hash:** 16 Hex (64 Bit) für Bilder (`~#`) und Dateien (`~%`), Board und Client↔Client
+  (`prcore.chatimg.HASH_LEN`); keine Übergangsregel.
+- **Protokoll** (Fähigkeit `BFILE`, nur Funk/AXUDP): `//FPUT <hash> <z|r> <Bytes>` → `//FGO <hash>
+  <have>` → Bytes → `//FOK`; `//FGET <hash> [<offset>]` → `//BF <hash> <z|r> <offset> <total>` +
+  Bytes, sonst `//NOBFILE`. (`//F`/`//NOFILE` bleiben Client↔Client.) `//IN … file=<hex>`.
+- **Box** (`tinybox/chatfile.py`): Tabelle `chat_files` (Schema 15), Größe wie gesendet bis
+  `[chat] file_max` (Standard 16k, 1k–64k), `nofile` je Board, keine Live-Boards, ein Upload gehört
+  der Station, die ihn begann (CR96). Die Chatzeile mit dem Verweis nur, wenn die Datei hochgeladen
+  ist und ihr Name kein Programm ist (`prcore/filecheck.py`, aus dem Client hierher verschoben).
+  Aufbewahrung wie die Bilder (keine Zeile mehr → weg, frühestens nach 1 h). Konsole `FILES`,
+  `FILES DEL <hash>`, auch über die Sysop-Konsole im Client.
+- **Client** (`tbclient/boardfiles.py`, auf Basis der Bild-Übertragung): prüft Name und Inhalt vor
+  dem Hochladen, packt, eine Übertragung zugleich (auch mit Bildern), wartet auf einen laufenden
+  Abgleich; beim Holen Hash und Inhalt geprüft. Web-GUI: 📎 im Board, Datei-Blase mit „Save“ bzw.
+  „tap to load“ und Zeit auf Funk, Fortschritt beim Hochladen.
+- Entschieden ohne Rückfrage (aus dem Vorschlag): 16 KB, Programme gesperrt wie CR96, Sysop sieht
+  und löscht an der Konsole (nicht in der Web-GUI). Tests `tests/test_cr86.py`.
 ## CR87 – brocastd: Absturz durch ungültiges `exp` (TB-01, ✅ 09.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026, aus dem Audit, PLANUNG 29)

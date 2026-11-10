@@ -1,0 +1,3 @@
+- Dateien im Chatboard (Bueroklammer), liegen in
+  der TinyBox, holen per Antippen.
+- Laengerer Hash fuer Bilder/Dateien: alle updaten.

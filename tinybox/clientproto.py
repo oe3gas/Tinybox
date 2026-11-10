@@ -85,6 +85,7 @@ Other client commands:
     //MOTD                (inside a board) -> //MOTD <crc> <text> | //MOTD -  (CR3;
                           //IN tells motd=<crc>, the client asks only if it changed)
     //MLIST, //GET, //SEND ...   offline mailbox, see clientsync.py
+    //FPUT, //FGET        files in a board (CR86, cap BFILE), see chatfile.py;
     //IMGPUT, //IMG       small images in the chat (CR12), see chatimg.py;
                           //IN tells img (8 KB) or img=<max, hex> where allowed
 
@@ -144,8 +145,9 @@ REQUIRE_AUTH = True
 
 PROTO = "TB1"
 KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
-              "HSEQ", "ADM")
+              "HSEQ", "ADM", "BFILE")
 IMG_COMMANDS = ("IMGPUT", "IMG")
+FILE_COMMANDS = ("FPUT", "FGET")          # CR86: files in a board
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 
@@ -286,6 +288,12 @@ def handle(s: Session, line: str) -> None:
         else:
             img = s.service.chat.images
             (img.put if cmd == "IMGPUT" else img.get)(s, parts[1:])
+    elif cmd in FILE_COMMANDS:
+        if "BFILE" not in s.client.caps:
+            s.out(f"//ERR {cmd} needs BFILE")
+        else:
+            f = s.service.chat.files
+            (f.put if cmd == "FPUT" else f.get)(s, parts[1:])
     else:
         s.out(f"//ERR unknown {cmd}")
 
@@ -310,8 +318,11 @@ def _client(s: Session, parts: list[str]) -> None:
     if s.origin not in ("radio", "axudp") or not hasattr(s.transport, "write_bytes"):
         caps.discard("Z")         # compressed texts are binary: AX.25 only (radio, AXUDP)
         caps.discard("IMG")       # images too (and the raw bytes of an upload)
+        caps.discard("BFILE")     # and files (CR86)
     if s.cfg.chat.image_max <= 0:
         caps.discard("IMG")       # the sysop switched images off
+    if s.cfg.chat.file_max <= 0:
+        caps.discard("BFILE")
     symbol = args.get("sym", "")
     info = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "",
                       args.get("v", "")[:20])

@@ -198,9 +198,9 @@ class PeerHistoryTests(unittest.TestCase):
                 self.assertEqual(ref[2], len(rnd))                  # not packable: raw
                 self.assertEqual(peerfile.parse_ref(f"~%{chatimg.image_hash(text)} 1 1 x")[3], "x")
                 # a file never offered to them: refused
-                b.files.put("abcdef", b"geheim")
-                self.assertTrue(a.peer_file_get(1, "abcdef"))
-                await until(lambda: a.file_loading.get("abcdef", {}).get("error"))
+                b.files.put("abcdefabcdefabcd", b"geheim")
+                self.assertTrue(a.peer_file_get(1, "abcdefabcdefabcd"))
+                await until(lambda: a.file_loading.get("abcdefabcdefabcd", {}).get("error"))
                 for t in tasks:
                     t.cancel()
             dw.server.close()

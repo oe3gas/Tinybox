@@ -507,6 +507,23 @@ class SysopConsole:
                 why = {"not_found": "no bulletin", "bad_rubric": "not an accepted rubric"}
                 self.out(f"#{msg_id}: {why.get(exc.code, str(exc))}.")
 
+    def cmd_files(self, arg: str) -> None:
+        """CR86: FILES - the files in the boards; FILES DEL <hash> deletes one."""
+        store = self.app.store
+        words = arg.split()
+        if words[:1] and words[0].upper() == "DEL" and len(words) == 2:
+            self.out(f"File {words[1]} deleted." if store.file_delete(words[1].lower())
+                     else f"No file {words[1]}.")
+            return
+        if words:
+            self.out(texts.USAGE_FILES)
+            return
+        rows = store.file_list()
+        if not rows:
+            self.out("No files in the boards.")
+        for r in rows:
+            self.out(f"{r['hash']}  {r['size']:>6} B {r['how']}  {r['call']:<9} {r['created'][:16]}")
+
     def cmd_kill(self, arg: str) -> None:
         """KILL n[,n...]: delete messages and bulletins (the sysop may delete all)."""
         words = arg.replace(",", " ").split()
@@ -550,7 +567,7 @@ class SysopConsole:
     # output to this window), B (closes the console), UPDATE (answers later).
     REMOTE = ("H", "?", "HELP", "INFO", "W", "WHO", "STATUS", "DISC", "BEACON", "FWD", "FWQ",
               "HOLD", "REL", "SHUTDOWN", "RESTART", "RELOAD", "USER", "TRUST",
-              "KILL", "MOVE", "COPY")
+              "KILL", "MOVE", "COPY", "FILES")
 
     def remote(self, line: str) -> bool:
         """One console command from the admin channel; False if not allowed there."""
@@ -582,6 +599,7 @@ class SysopConsole:
         "USER": cmd_user,
         "TRUST": cmd_trust,
         "KILL": cmd_kill,
+        "FILES": cmd_files,
         "MOVE": cmd_move,
         "COPY": cmd_copy,
     }

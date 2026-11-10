@@ -89,11 +89,11 @@ class PeerAuthTests(unittest.TestCase):
             pa.img._sent_to_them = lambda h: True
             with mock.patch.object(type(pa.img), "store", mock.PropertyMock(
                     return_value=mock.Mock(get=lambda h: b"x" * 100))):
-                pa.img.take("IMG", "abc123")
-                self.assertEqual(sent[-1], "//NOIMG abc123")
+                pa.img.take("IMG", "abc123abc123abc1")
+                self.assertEqual(sent[-1], "//NOIMG abc123abc123abc1")
                 pa.auth.state = "known"                       # trusted: it would go out
-                pa.img.take("IMG", "abc123")
-                self.assertNotEqual(sent[-1], "//NOIMG abc123")
+                pa.img.take("IMG", "abc123abc123abc1")
+                self.assertNotEqual(sent[-1], "//NOIMG abc123abc123abc1")
                 pa.auth.state = "changed"
             self.assertTrue(pa.auth.accept())                 # the user compared: it is his
             self.assertEqual(pa.auth.state, "known")

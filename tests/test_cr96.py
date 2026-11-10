@@ -48,11 +48,11 @@ class Stores(unittest.TestCase):
     def test_received_never_replaces(self):
         with tempfile.TemporaryDirectory() as d:
             for store in (ImageStore(Path(d) / "i"), FileStore(Path(d) / "f")):
-                self.assertTrue(store.put("abc123", b"first"))
-                self.assertFalse(store.put("abc123", b"evil"))
-                self.assertEqual(store.get("abc123"), b"first")
-                self.assertTrue(store.put("abc123", b"mine", own=True))
-                self.assertEqual(store.get("abc123"), b"mine")
+                self.assertTrue(store.put("abc123abc123abc1", b"first"))
+                self.assertFalse(store.put("abc123abc123abc1", b"evil"))
+                self.assertEqual(store.get("abc123abc123abc1"), b"first")
+                self.assertTrue(store.put("abc123abc123abc1", b"mine", own=True))
+                self.assertEqual(store.get("abc123abc123abc1"), b"mine")
 
 
 def fake_peer(tmp: str, history=()):
@@ -90,21 +90,21 @@ class PeerPush(unittest.TestCase):                               # TB-05
     def test_too_big_drops_the_link(self):
         peer, core, expected, disconnected = fake_peer(self.tmp.name)
         pi = PeerImages(peer)
-        pi._want = "abcdef"
+        pi._want = "abcdefabcdefabcd"
         with self.assertLogs("tbclient.peerimg", "WARNING"):
-            pi.take("I", f"abcdef 0 {PEER_IMG_MAX + 1}")
+            pi.take("I", f"abcdefabcdefabcd 0 {PEER_IMG_MAX + 1}")
         self.assertEqual((expected, disconnected), ([], [True]))
 
     def test_unasked_file_and_big_raw_file(self):
         peer, core, expected, disconnected = fake_peer(self.tmp.name)
         pf = PeerFiles(peer)
         with self.assertLogs("tbclient.peerfile", "WARNING"):
-            pf.take("F", "abcdef r 100")
+            pf.take("F", "abcdefabcdefabcd r 100")
         self.assertEqual(len(expected), 1)
         self.assertEqual(core.file_loading, {})                     # no entry for strangers
-        pf._want = "abcdef"
+        pf._want = "abcdefabcdefabcd"
         with self.assertLogs("tbclient.peerfile", "WARNING"):
-            pf.take("F", f"abcdef r {FILE_MAX + 8}")                # 'r' is limited too
+            pf.take("F", f"abcdefabcdefabcd r {FILE_MAX + 8}")                # 'r' is limited too
         self.assertEqual(disconnected, [True])
 
     def test_program_file_refused_before_and_after(self):

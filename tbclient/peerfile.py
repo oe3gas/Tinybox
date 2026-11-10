@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 
 FILE_MAX = 64 * 1024        # bytes of the file itself
 IDLE_SEC = 120              # a download without a byte for this long may be asked again
-REF_RE = re.compile(r"^~%([0-9a-f]{6}) (\d+) (\d+) (.+)$")
+REF_RE = re.compile(rf"^~%([0-9a-f]{{{chatimg.HASH_LEN}}}) (\d+) (\d+) (.+)$")
 
 
 def parse_ref(text: str) -> tuple[str, int, int, str] | None:

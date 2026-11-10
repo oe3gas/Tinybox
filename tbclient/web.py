@@ -337,6 +337,19 @@ class WebServer:
                 h = core.send_image(raw, str(data.get("blurhash", "")),
                                     str(data.get("caption", "")), str(data.get("quote", "")))
                 return (200, {"ok": True, "hash": h}, None) if h else (400, {"ok": False}, None)
+            elif path == "/api/bfile":             # CR86: {"name", "data", "quote"} into the board
+                try:
+                    raw = base64.b64decode(str(data.get("data", "")), validate=True)
+                except (ValueError, TypeError):
+                    return 400, {"error": "bad data"}, None
+                h = core.send_board_file(str(data.get("name", "")), raw, str(data.get("quote", "")))
+                return (200, {"ok": True, "hash": h}, None) if h else (400, {"ok": False}, None)
+            elif path == "/api/bfile/get":         # CR86: {"hash", "name"}
+                ok = core.fetch_board_file(str(data.get("hash", "")), str(data.get("name", "")))
+            elif path == "/api/bfile/retry":
+                ok = core.bfiles.retry()
+            elif path == "/api/bfile/dismiss":
+                core.bfiles.dismiss_upload()
             elif path == "/api/image/get":
                 ok = core.fetch_image(str(data.get("hash", "")))
             elif path == "/api/image/retry":

@@ -11,10 +11,12 @@ size, hash and the file signature (WebP or JPEG) and keeps one copy per hash.
 Reference in a chat line (after an optional quote prefix ~^CALL HHMM), no
 separators - every field has a fixed or self-describing length:
 
-    ~#a1b2c350LEHV6nWB2yk8pyo0ad [caption]
-      ^^^^^^                      hash: first 6 hex digits of SHA-256 of the data
-            ^^                    size: 2 hex digits, in steps of 64 bytes (50 = 5120)
-              ^^^^^^^^^^^^^^^^    blurhash (base83); its first character tells
+    ~#a1b2c3d4e5f6a7b850LEHV6nWB2yk8pyo0ad [caption]
+      ^^^^^^^^^^^^^^^^            hash: first 16 hex digits (64 bits) of SHA-256 of the
+                                  data (CR86/CR96: was 6 - too easy to find a second
+                                  picture with the same hash)
+                      ^^          size: 2 hex digits, in steps of 64 bytes (50 = 5120)
+                        ^^^^^^^^  blurhash (base83); its first character tells
                                   the component counts and so its length
                                   (3x2 = 16, 3x3 = 22 characters), and the
                                   client shapes the placeholder from them
@@ -26,16 +28,17 @@ from __future__ import annotations
 import hashlib
 import re
 
-HASH_RE = re.compile(r"^[0-9a-f]{6}$")
+HASH_LEN = 16                       # hex digits (CR86/CR96, 10.11.2026; before: 6)
+HASH_RE = re.compile(rf"^[0-9a-f]{{{HASH_LEN}}}$")
 SIZE_UNIT = 64
 MAX_SIZE = 255 * SIZE_UNIT          # what two hex digits can say
 B83 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~"
 # the fixed part of a reference: at the start or after a space (quote prefix)
-REF_START = re.compile(r"(?:^|(?<= ))~#([0-9a-f]{6})([0-9a-f]{2})")
+REF_START = re.compile(rf"(?:^|(?<= ))~#([0-9a-f]{{{HASH_LEN}}})([0-9a-f]{{2}})")
 
 
 def image_hash(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()[:6]
+    return hashlib.sha256(data).hexdigest()[:HASH_LEN]
 
 
 def size_code(size: int) -> str:
@@ -80,9 +83,26 @@ def parse_ref(text: str) -> tuple[str, int, str, int, int] | None:
     return m.group(1), int(m.group(2), 16) * SIZE_UNIT, bh, m.start(), m.end() + n
 
 
+# CR86: a file in a chat line (board or client to client) - the rest of the line:
+#   ~%<hash 16 hex> <bytes> <bytes on air> <name>
+FILE_REF = re.compile(rf"(?:^|(?<= ))~%([0-9a-f]{{{HASH_LEN}}}) (\d{{1,7}}) (\d{{1,7}}) (\S.{{0,79}})$")
+
+
+def parse_file_ref(text: str) -> tuple[str, int, int, str, int] | None:
+    """(hash, bytes, bytes on air, name, start) of a file reference."""
+    m = FILE_REF.search(text)
+    if m is None:
+        return None
+    return m.group(1), int(m.group(2)), int(m.group(3)), m.group(4).strip(), m.start()
+
+
 def terminal_text(text: str, short: bool = False) -> str:
     """What a terminal user reads instead of the reference. short: inside a
     quoted excerpt, where the long note would eat the whole excerpt."""
+    f = parse_file_ref(text)
+    if f is not None:
+        mark = f"[File {f[3]}]" if short else f"[File {f[3]} {kb(f[1])} - TinyBox client only]"
+        return text[:f[4]] + mark
     r = parse_ref(text)
     if r is None:
         return text

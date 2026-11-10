@@ -2,6 +2,17 @@
 
 ## Unveröffentlicht
 
+- **Dateien im Chatboard (CR86, CR107 Teil 2):** 📎 im Board – der Client packt (LZHUF oder roh),
+  lädt einmal zur TinyBox hoch (`//FPUT`, Fortschritt in der eigenen Blase, „Try again“), die Zeile
+  trägt nur den Verweis `~%<hash> <Bytes> <auf Funk> <Name>`; die anderen holen per Antippen
+  (`//FGET` → `//BF`), der Client prüft Hash und Inhalt. Programme (nach Name und Inhalt) gehen
+  weder hoch noch werden sie angenommen. TinyBox: `[chat] file_max = 16k` (Größe wie gesendet),
+  `nofile` je Board, keine Dateien in Live-Boards, Aufbewahrung wie die History, Sysop-Konsole
+  `FILES` / `FILES DEL <hash>`; Schema 15 (`chat_files`). Terminal: `[File name 5.2 KB – TinyBox
+  client only]`.
+- **Längerer Hash für Bilder und Dateien (CR96/CR86):** 16 Hex-Zeichen (64 Bit) statt 6 – im Chat
+  10 Byte mehr je Verweis. **Keine Übergangsregel:** TinyBox und alle Clients gleichzeitig
+  aktualisieren; ältere Verweise erscheinen als Text. Client 2026.11.10.12.
 - **Client zu Client wie im Chatboard (CR107 Teil 1):** Shoutout (💥), Sticker (🏷️), Kommentar mit
   Zitat und Reaktionen (Antippen einer Blase), anklickbare Links, `Monospace`, großes Einzel-Emoji,
   Avatar, Alarm (Popup/„BK“, CR85-Einstellungen) bei jeder neuen Zeile, wenn das Fenster nicht vorne

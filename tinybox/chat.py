@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Callable
 from prcore.chatimg import terminal_text
 from prcore.text import clean_text, isnum
 
-from . import chatimg, linkq, texts
+from . import chatfile, chatimg, linkq, texts
 from .config import ChatBoard, Config
 from .events import EventBus
 from .store import ChatLine, Store, utc_now
@@ -85,6 +85,7 @@ class ChatHub:
         self._qs_text: dict[str, str] = {}      # board -> last %Q line (statistics)
         self._qs_at: dict[str, float] = {}
         self.images = chatimg.ChatImages(store, cfg)     # small images (CR12)
+        self.files = chatfile.ChatFiles(store, cfg)       # files (CR86)
 
     # --- boards ---------------------------------------------------------
 
@@ -438,4 +439,7 @@ class ChatHub:
         m = self.images.purge()
         if m:
             log.info("chat: %s image(s) without a line deleted", m)
+        f = self.files.purge()
+        if f:
+            log.info("chat: %s file(s) without a line deleted", f)
         return n

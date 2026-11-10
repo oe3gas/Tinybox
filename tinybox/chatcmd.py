@@ -113,6 +113,9 @@ def _board_lines(s: Session, board: ChatBoard) -> list[str]:
     limit = hub.cfg.chat.image_limit(board)        # CR12: images allowed here?
     if "IMG" in s.client.caps and limit:
         hist += " img" if limit == 8192 else f" img={limit:x}"
+    flimit = hub.cfg.chat.file_limit(board)        # CR86: files allowed here?
+    if "BFILE" in s.client.caps and flimit:
+        hist += f" file={flimit:x}"
     lines = [f"//IN {hub.number(board.name)} {board.name} {board.keep_label} "
              f"{hub.last_seq(board.name)}{hist}"]
     if clientnews.version_key(s.client.version) < clientnews.version_key(HIST_CLIENT):
@@ -290,5 +293,9 @@ def handle(s: Session, line: str) -> None:
         reason = hub.images.check_line(s, text)
         if reason:
             s.out(f"//ERR img {reason}")
+            return
+        reason = hub.files.check_line(s, text)          # CR86
+        if reason:
+            s.out(f"//ERR file {reason}")
             return
     hub.say(s, text)

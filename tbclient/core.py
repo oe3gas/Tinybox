@@ -30,6 +30,7 @@ from .logbook import Logbook
 from .mailstore import MailStore
 from . import peerfile
 from .peerchat import PeerChat
+from .boardfiles import BoardFiles
 from .peerfile import FileStore
 from .profiles import Profiles
 from .radio import RawFrame, aprs_symbol, guess_mod128, monitor_entry
@@ -170,6 +171,7 @@ class ClientCore:
         # small images in the chat (CR12)
         self.images = Images(self, ImageStore(cfg.data_dir / "images"))
         self.files = FileStore(cfg.data_dir / "files")      # CR78: files from/for TBClients
+        self.bfiles = BoardFiles(self, self.files)          # CR86: files in a board
         self.file_loading: dict[str, dict] = {}
         self.images.store.purge()
         # name, locator, home BBS - own and of the others (CR73)
@@ -643,6 +645,12 @@ class ClientCore:
             return 0
         return int(m.group(1), 16) if m.group(1) else 8192
 
+    @staticmethod
+    def _file_limit(in_line: str) -> int:
+        """//IN ... file=<hex>: files allowed here, max bytes as sent (CR86)."""
+        m = re.search(r"(?:^| )file=([0-9a-fA-F]{1,5})(?= |$)", in_line)
+        return int(m.group(1), 16) if m else 0
+
     def _motd_on_join(self, in_line: str) -> None:
         """//IN ... motd=<crc> (CR3): the text is fetched only when it is new."""
         m = re.search(r"\bmotd=([0-9a-f]{4})\b", in_line)
@@ -773,6 +781,7 @@ class ClientCore:
         self.pending.clear()
         self.sync.link_lost()
         self.images.link_lost()
+        self.bfiles.link_lost()
         self.profiles.link_lost()
         if self._hold is not None:           # held lines are gone with the link
             self._hold = []
@@ -818,7 +827,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM" + (",Z,IMG" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -827,7 +836,7 @@ class ClientCore:
             line = m.group(1)                    # an older TinyBox: the login answer after its prompt
         if self.sync.take(line):                 # mailbox sync answers and texts
             return
-        if self.images.take(line):               # image transfer answers and bytes
+        if self.images.take(line) or self.bfiles.take(line):   # image/file transfers
             self.console.append(line.rstrip())
             return
         line = line.rstrip()
@@ -1137,7 +1146,7 @@ class ClientCore:
                     (parts[3] == "-" or re.fullmatch(r"[0-9A-Fa-f]{1,4}", parts[3])):
                 self._clear_board()
                 self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2],
-                              "img": self._img_limit(rest)}
+                              "img": self._img_limit(rest), "file": self._file_limit(rest)}
                 self._history_on_join(rest)
                 self._motd_on_join(rest)
                 last = None if parts[3] == "-" else int(parts[3], 16)
@@ -1450,6 +1459,7 @@ class ClientCore:
             "uploads": [{"call": c, "size": u["size"], "at": u["at"], "got": u["got"]}
                         for c, u in self.uploads.items()],
             "images": self.images.status(self._image_refs(ch)),
+            "bfiles": self.bfiles.status(self._board_file_refs()),           # CR86
             "img": {"rate": self.cfg.img_rate, "target": self.cfg.img_target},
             **self.profiles.snapshot(calls),                            # CR73
         }
@@ -1487,6 +1497,26 @@ class ClientCore:
         if caption.startswith("/"):
             caption = " " + caption
         return self.images.send(data, blurhash, caption[:150], quote)
+
+    def _board_file_refs(self) -> set[str]:
+        refs = {r[0] for r in (chatimg.parse_file_ref(m.get("text") or "")
+                               for m in self.messages if m.get("kind") == "line") if r}
+        if self.bfiles.upload:
+            refs.add(self.bfiles.upload["hash"])
+        return refs
+
+    def send_board_file(self, name: str, data: bytes, quote: str) -> str | None:
+        """CR86: a file into the board - checked, packed, uploaded, then the line."""
+        if not self.board or not self.board.get("file") or "BFILE" not in self.caps:
+            return None
+        if quote and not re.match(r"^~\^(?:[0-9A-Fa-f]{1,2}) $", quote):
+            return None
+        return self.bfiles.send_file(name, data, quote)
+
+    def fetch_board_file(self, hash: str, name: str) -> bool:
+        if self.state != "online" or "BFILE" not in self.caps:
+            return False
+        return self.bfiles.fetch_file(hash, name)
 
     def fetch_image(self, hash: str) -> bool:
         if self.state != "online" or "IMG" not in self.caps:

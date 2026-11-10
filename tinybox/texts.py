@@ -244,6 +244,7 @@ HELP_CONSOLE = [
     "  TRUST ADD box key  Trust box (compare its fingerprint with its sysop first!)",
     "  TRUST DEL box  No longer",
     "  KILL n[,n]     Delete messages and bulletins",
+    "  FILES [DEL h]  Files in the chat boards (CR86) / delete one",
     "  MOVE n[,n] RUB Move bulletins into another rubric (new number) / COPY n[,n] RUB: copy",
 ]
 UPDATE_ASKING = "Asking GitHub for the newest release ..."
@@ -313,6 +314,7 @@ USAGE_HOLD = "Usage: HOLD n  /  REL n"
 USAGE_USER = "Usage: USER [LIST]  /  USER OK|REVOKE|DEL|SHOW call [fingerprint]"
 USAGE_MOVE = "Usage: MOVE n[,n...] RUBRIC   (bulletins into another rubric, new number)"
 USAGE_COPY = "Usage: COPY n[,n...] RUBRIC   (a copy in another rubric)"
+USAGE_FILES = "Usage: FILES  /  FILES DEL hash   (files in the chat boards)"
 USAGE_KILL = "Usage: KILL n[,n...]   (delete messages and bulletins)"
 USAGE_TRUST = "Usage: TRUST  /  TRUST ADD box key  /  TRUST DEL box"
 HELD = "Msg {id} held."

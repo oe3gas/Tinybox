@@ -23,7 +23,7 @@ BH33 = "KEHV6nWB2yk8pyo0adR*.7"       # 3x3: 22 ('K' = 20 = 3x3)
 
 
 def h6(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()[:6]
+    return hashlib.sha256(data).hexdigest()[:16]
 
 
 def ref(data: bytes, bh: str = BH32) -> str:
@@ -114,19 +114,19 @@ class ReferenceTests(unittest.TestCase):
         self.assertEqual(chatref.blurhash_len("L"), 28)       # 4x3 (the usual one)
         self.assertEqual(chatref.blurhash_len("A"), 12)       # 2x2
         self.assertEqual(chatref.blurhash_len(" "), 0)
-        r = chatref.parse_ref(f"~#a1b2c350{BH32} Blick vom Berg")
-        self.assertEqual(r, ("a1b2c3", 5120, BH32, 0, 26))
-        r = chatref.parse_ref(f"~^OE3TEC 1402 ~#a1b2c350{BH33}")
-        self.assertEqual(r[:3], ("a1b2c3", 5120, BH33))
-        self.assertIsNone(chatref.parse_ref("~#a1b2c350BEHV"))          # too short
-        self.assertIsNone(chatref.parse_ref(f"~#a1b2c350{BH32}x"))      # glued text
+        r = chatref.parse_ref(f"~#a1b2c3d4e5f6a7b850{BH32} Blick vom Berg")
+        self.assertEqual(r, ("a1b2c3d4e5f6a7b8", 5120, BH32, 0, 36))
+        r = chatref.parse_ref(f"~^OE3TEC 1402 ~#a1b2c3d4e5f6a7b850{BH33}")
+        self.assertEqual(r[:3], ("a1b2c3d4e5f6a7b8", 5120, BH33))
+        self.assertIsNone(chatref.parse_ref("~#a1b2c3d4e5f6a7b850BEHV"))          # too short
+        self.assertIsNone(chatref.parse_ref(f"~#a1b2c3d4e5f6a7b850{BH32}x"))      # glued text
         self.assertIsNone(chatref.parse_ref("plain ~# text"))
-        self.assertIsNone(chatref.parse_ref(f"x~#a1b2c350{BH32}"))       # not at a start
+        self.assertIsNone(chatref.parse_ref(f"x~#a1b2c3d4e5f6a7b850{BH32}"))       # not at a start
 
     def test_terminal_text(self):
-        self.assertEqual(chatref.terminal_text(f"~#a1b2c350{BH32} Blick vom Berg"),
+        self.assertEqual(chatref.terminal_text(f"~#a1b2c3d4e5f6a7b850{BH32} Blick vom Berg"),
                          "[Image 5.0 KB - TinyBox client only] Blick vom Berg")
-        self.assertEqual(chatref.terminal_text(f"~^OE3TEC 1402 ~#a1b2c350{BH33}"),
+        self.assertEqual(chatref.terminal_text(f"~^OE3TEC 1402 ~#a1b2c3d4e5f6a7b850{BH33}"),
                          "~^OE3TEC 1402 [Image 5.0 KB - TinyBox client only]")
         self.assertEqual(chatref.terminal_text("plain ~# text"), "plain ~# text")
 
@@ -197,8 +197,8 @@ class UploadTests(unittest.TestCase):
         type_lines(s, f"//IMG {h} 100")
         self.assertEqual(t.take(), f"//I {h} 100 {len(WEBP)}\r")
         self.assertEqual(t.raw, WEBP[100:])
-        type_lines(s, "//IMG 000000 0")
-        self.assertEqual(t.take(), "//NOIMG 000000\r")
+        type_lines(s, "//IMG 0000000000000000 0")
+        self.assertEqual(t.take(), "//NOIMG 0000000000000000\r")
         # react to the image line: the terminal sees [Image ...] as target too
         type_lines(term, "/R 3 :+1")
         self.assertNotIn("~#", tt.take())
@@ -218,7 +218,7 @@ class UploadTests(unittest.TestCase):
         s.feed_raw(WEBP[200:])
         self.assertEqual(t.take(), f"//IMGOK {h}\r")
         # wrong hash
-        type_lines(s, f"//IMGPUT 0bad00 {len(JPEG)}")
+        type_lines(s, f"//IMGPUT 0bad000000000000 {len(JPEG)}")
         t.take()
         s.feed_raw(JPEG)
         self.assertEqual(t.take(), "//ERR img bad_hash\r")
@@ -245,7 +245,7 @@ class UploadTests(unittest.TestCase):
         self.assertEqual(t2.take(), "//ERR img no_images\r")
         # a reference to an image that was never uploaded
         s3, t3 = client(self.app, "OE1ABC", board="TREFF")
-        type_lines(s3, f"~#01234550{BH32}")
+        type_lines(s3, f"~#0123456789abcdef50{BH32}")
         self.assertEqual(t3.take(), "//ERR img unknown\r")
         # outside a board: download works, upload not
         type_lines(s3, "/Q")

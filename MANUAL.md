@@ -817,6 +817,13 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   Fenster nicht vorne ist. Über Funk: `~^m12 Text` (Kommentar auf die eigene Zeile 12 des
   Schreibers), `~^y7` (auf seine empfangene Zeile 7), `~*m12 :+1` (Reaktion).
 
+- **Dateien im Chatboard (CR86):** 📎 im Board öffnet die Dateiauswahl (bis 64 KB, gepackt höchstens
+  `[chat] file_max`, Standard 16 KB auf Funk). Die Datei geht einmal zur TinyBox; im Chat steht eine
+  Datei-Blase, die anderen tippen sie an und holen sie von der TinyBox. Programme und Skripte
+  (`.exe`, `.bat`, `.ps1`, `.js`, ZIP mit Programmen …) gehen nicht. Der Sysop schaltet Dateien je
+  Board ab (`nofile` in `[chat_boards]`) und sieht sie mit `FILES` an der Konsole
+  (`FILES DEL <hash>` löscht).
+
 ### 3.7b Rollen und Rechte (CR92, PLANUNG 29.7)
 
 Das Rufzeichen einer Terminal-Verbindung ist nicht bewiesen – wer einen Sender hat, kann jedes

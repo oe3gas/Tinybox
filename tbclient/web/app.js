@@ -275,6 +275,9 @@ function render() {
   $("btn-img").disabled = !(inBoard && S.board.img);
   $("btn-img").title = inBoard && S.board.img ? `Send a picture (max. ${kbText(S.board.img)})`
     : inBoard ? "No pictures in this board" : "Picture";
+  $("btn-file").disabled = !(inBoard && S.board.file);            // CR86
+  $("btn-file").title = inBoard && S.board.file ? `Send a file (max. ${kbText(S.board.file)} on air, packed)`
+    : inBoard ? "No files in this board" : "File";
   renderMail();
   renderProfile();
   renderAuthInfo();
@@ -720,15 +723,20 @@ function renderMessages() {
   const up = S.images && S.images.upload;         // CR12: the picture on its way up
   const upBusy = up && up.state !== "done";
   const upLine = upBusy && up.line ? up.line.replace(/[\r\n]/g, " ").trim().slice(0, 200) : null;
+  const fup = S.bfiles && S.bfiles.upload;        // CR86: a file on its way up
+  const fupBusy = fup && fup.state !== "done";
+  const fupLine = fupBusy && fup.line ? fup.line.trim().slice(0, 200) : null;
   for (const text of S.pending) {
     // the chat line of the picture goes out right behind the bytes: while
     // the upload bubble (with the progress) is shown, do not show it twice
     if (upLine !== null && text === upLine) continue;
+    if (fupLine !== null && text === fupLine) continue;
     ol.append(bubble({ id: "p", call: S.mycall, text, time: Date.now() / 1000, reactions: {}, pending: true },
                      prevCall === S.mycall));
     prevCall = S.mycall;
   }
   if (upBusy) ol.append(uploadBubble(up));
+  if (fupBusy) ol.append(fileUploadBubble(fup));
   for (const u of S.uploads || []) ol.append(uploadRow(u));      // CR30: the others' pictures
   if (atEnd) box.scrollTop = box.scrollHeight;
 }
@@ -884,7 +892,11 @@ function bubble(m, cont) {
                + (!own && (mentionsMe(text) || quotesMe) ? " mention" : ""));
   if (qm) b.append(quoteBlock(qm, orig));
   const sm = body.match(STK_RE);
-  if (ir) {
+  const fm = !ir && body.match(FILE_RE);          // CR86: a file in the board
+  if (fm) {
+    b.classList.add("fileb");
+    b.append(boardFileBlock(fm));
+  } else if (ir) {
     b.append(imageBlock(ir, own));
     if (text) { const cap = el("div", "cap"); richText(cap, text); b.append(cap); }
   } else if (sm && STK[sm[1]]) {                 // CR11: sticker instead of text
@@ -1176,11 +1188,11 @@ function blurhashDecode(hash, w, h, punch = 1) {
 }
 
 // ---------------------------------------------------------------- images (CR12)
-/* Over the air only "~#<hash 6 hex><size 2 hex><blurhash>" (26-32 bytes, no
+/* Over the air only "~#<hash 16 hex><size 2 hex><blurhash>" (36-42 bytes, no
  * separators) and, after a space, the caption. The size is in steps of 64
  * bytes. The picture itself is fetched from the TinyBox on a tap (/api/image/get)
  * and then served by the client as /img/<hash>. */
-const IMG_RE = /^~#([0-9a-f]{6})([0-9a-f]{2})/;
+const IMG_RE = /^~#([0-9a-f]{16})([0-9a-f]{2})/;              // CR86/CR96: 16 hex (was 6)
 const IMG_SHRINK_MAX = 8192;            // fallback if the board says nothing
 /* Three sizes to choose from (CR34): the target in bytes decides the time on
  * air, the long side in px keeps the picture sharp enough for that size.
@@ -1305,6 +1317,73 @@ function uploadRow(u) {
 
 /* The own upload under way (or failed): a bubble of its own until the chat
  * line with the reference comes back from the TinyBox. */
+// CR86: a file in a board - kept by the TinyBox, fetched on a tap
+function boardFileBlock(m) {
+  const [, hash, size, air, name] = m;
+  const F = S.bfiles || { have: [], loading: {} };
+  const box = el("div", "fbox");
+  box.append(el("div", "fname", "📎 " + name));
+  const ld = F.loading[hash];
+  if (F.have.includes(hash)) {
+    const a = el("a", "fsave", `Save · ${Number(size)} bytes`);
+    a.href = `/file/${hash}/${encodeURIComponent(name)}`;
+    a.download = name;
+    a.onclick = (ev) => ev.stopPropagation();
+    box.append(a);
+  } else if (ld && !ld.error) {
+    const bar = el("div", "bar"), fill = el("div", "fill");
+    const total = ld.total || Number(air);
+    fill.style.width = Math.min(100, Math.round((100 * ld.done) / total)) + "%";
+    bar.append(fill);
+    box.append(el("div", "small", `${ld.done} / ${total} bytes on air`), bar);
+  } else {
+    box.append(el("div", "small", (ld && ld.error ? `⚠ ${ld.error} · ` : "")
+      + `${Number(size)} bytes, ${Number(air)} on air · ${secText(imgTime(Number(air), false))} · tap to load`));
+    box.classList.add("tap");
+    box.onclick = (ev) => { ev.stopPropagation(); api("bfile/get", { hash, name }); };
+  }
+  return box;
+}
+function fileUploadBubble(up) {
+  const li = el("li", "msg own");
+  const col = el("div", "col");
+  const b = el("div", "bubble fileb pending");
+  const box = el("div", "fbox");
+  box.append(el("div", "fname", "📎 " + (up.name || "file")));
+  if (up.state === "error") {
+    box.append(el("div", "small", `⚠ not sent: ${up.error}`));
+    const again = el("button", "sm", "Try again"), x = el("button", "sm", "Discard");
+    again.onclick = () => api("bfile/retry"); x.onclick = () => api("bfile/dismiss");
+    box.append(again, " ", x);
+  } else {
+    const bar = el("div", "bar"), fill = el("div", "fill");
+    fill.style.width = Math.min(100, Math.round((100 * up.sent) / up.size)) + "%";
+    bar.append(fill);
+    box.append(el("div", "small", up.state === "waiting" ? "waiting…" : `${up.sent} / ${up.size} bytes on air`), bar);
+  }
+  b.append(box);
+  col.append(b, el("div", "meta", up.state === "error" ? "failed" : "sending…"));
+  li.append(col);
+  return li;
+}
+async function boardSendFile(file) {
+  $("bfilein").value = "";
+  if (!file || !S.board || !S.board.file) return;
+  const hint = $("hint");
+  const say = (t) => { hint.className = "hint"; hint.classList.remove("hidden"); hint.textContent = t; };
+  if (file.size > 64 * 1024) { say(`Too big: ${file.size} bytes (max. 64 KB).`); return; }
+  const max = S.board.file;
+  if (!window.confirm(`Send "${file.name}" (${file.size} bytes) to ${S.board.name}?\n` +
+      `Packed it goes up once (max. ${max} bytes on air, about ${secText(imgTime(Math.min(file.size, max), true))} at most); ` +
+      `the others fetch it from the TinyBox when they tap it.`)) return;
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i += 4096) bin += String.fromCharCode(...buf.subarray(i, i + 4096));
+  const r = await postJson("bfile", { name: file.name, data: btoa(bin), quote: quotePrefix() });
+  if (!r.ok) say(`Not sent: too large for this board (max. ${max} bytes on air, packed), or a program file.`);
+  else if (quoteTo) setQuote(null);
+}
+
 function uploadBubble(up) {
   const li = el("li", "msg own");
   const col = el("div", "col");
@@ -2540,7 +2619,7 @@ function peerQuality(q, c) {
 
 let peerChatKey = "";
 /* CR78: "~%<hash> <bytes> <bytes on air> <name>" - a file offered by the sender */
-const FILE_RE = /^~%([0-9a-f]{6}) (\d+) (\d+) (.+)$/;
+const FILE_RE = /^~%([0-9a-f]{16}) (\d+) (\d+) (.+)$/;
 function fileBlock(m, ch) {
   const [, hash, size, air, name] = m;
   const F = (S.peerchat && S.peerchat.files) || { have: [], loading: {} };
@@ -3682,6 +3761,8 @@ async function start() {
   };
   $("qb-close").onclick = () => setQuote(null);
   $("btn-img").onclick = () => $("imgfile").click();
+  $("btn-file").onclick = () => $("bfilein").click();                 // CR86
+  $("bfilein").onchange = () => boardSendFile($("bfilein").files[0]);
   $("imgfile").onchange = () => chooseImage($("imgfile").files[0]);
   $("imgdlg-ok").onclick = sendImage;
   $("imgdlg-cancel").onclick = closeImageDialog;

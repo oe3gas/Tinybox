@@ -247,6 +247,9 @@ class Images:
             if time.monotonic() - start > WAIT_SYNC_SEC:
                 raise ConnectionError("the mailbox sync is still running")
             await asyncio.sleep(0.5)
+        other = getattr(self.core, "bfiles", None)   # CR86: one binary transfer at a time
+        while other is not None and other is not self and other.busy:
+            await asyncio.sleep(0.5)
 
     async def _answer(self, progress=None):
         """The next answer of the TinyBox. With `progress` (an upload under

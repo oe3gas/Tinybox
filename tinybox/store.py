@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 14  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 15  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
                      # 9: profiles (name, locator, home BBS of a station, CR73)
@@ -16,6 +16,7 @@ SCHEMA_VERSION = 14  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: 
                      # 12: user_keys (client login with a signature, CR93)
                      # 13: trusted_boxes (certificates of other TinyBoxen, CR93 stage 3)
                      # 14: client_keys - one key per device and call (replaces user_keys)
+                     # 15: chat_files (files in a board, CR86); hashes are 16 hex now
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -123,9 +124,16 @@ CREATE TABLE IF NOT EXISTS chat_lines (               -- only boards with histor
 );
 CREATE INDEX IF NOT EXISTS chat_lines_board ON chat_lines (board, created);
 CREATE TABLE IF NOT EXISTS chat_images (              -- small chat images (CR12), one per hash
-    hash    TEXT PRIMARY KEY,                         -- 6 hex digits of SHA-256 (the client's id)
+    hash    TEXT PRIMARY KEY,                         -- 16 hex digits of SHA-256 (6 before CR86)
     data    BLOB NOT NULL,                            -- WebP or JPEG, never decoded here
     created TEXT NOT NULL                             -- ISO 8601 UTC (upload time)
+);
+CREATE TABLE IF NOT EXISTS chat_files (               -- files in a board (CR86), one per hash
+    hash    TEXT PRIMARY KEY,                         -- 16 hex of SHA-256 of the file (unpacked)
+    how     TEXT NOT NULL,                            -- z = LZHUF packed by the client, r = raw
+    data    BLOB NOT NULL,                            -- as sent, never unpacked here
+    call    TEXT NOT NULL,                            -- who uploaded it
+    created TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sync_seq (                 -- change counter of the messages (CR26)
     k     INTEGER PRIMARY KEY CHECK (k = 1),
@@ -670,6 +678,36 @@ class Store:
             return self._db.execute(
                 "DELETE FROM chat_images WHERE created < ? AND NOT EXISTS"
                 " (SELECT 1 FROM chat_lines WHERE instr(text, '~#' || chat_images.hash) > 0)",
+                (before_iso,)).rowcount
+
+    # --- CR86: files in a board -------------------------------------------
+
+    def file_put(self, hash: str, how: str, data: bytes, call: str) -> None:
+        with self._db:
+            self._db.execute("INSERT OR IGNORE INTO chat_files (hash, how, data, call, created)"
+                             " VALUES (?, ?, ?, ?, ?)", (hash, how, data, call, utc_now()))
+
+    def file_get(self, hash: str) -> tuple[str, bytes] | None:
+        row = self._db.execute("SELECT how, data FROM chat_files WHERE hash = ?",
+                               (hash,)).fetchone()
+        return (row["how"], bytes(row["data"])) if row else None
+
+    def file_list(self) -> list[dict]:
+        return [dict(r) for r in self._db.execute(
+            "SELECT hash, how, length(data) AS size, call, created FROM chat_files"
+            " ORDER BY created DESC")]
+
+    def file_delete(self, hash: str) -> bool:
+        with self._db:
+            return self._db.execute("DELETE FROM chat_files WHERE hash = ?",
+                                    (hash,)).rowcount > 0
+
+    def file_purge(self, before_iso: str) -> int:
+        """Files no stored chat line refers to any more ('~%<hash>')."""
+        with self._db:
+            return self._db.execute(
+                "DELETE FROM chat_files WHERE created < ? AND NOT EXISTS"
+                " (SELECT 1 FROM chat_lines WHERE instr(text, '~%' || chat_files.hash) > 0)",
                 (before_iso,)).rowcount
 
     # --- JLOG / users ---------------------------------------------------
