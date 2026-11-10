@@ -674,15 +674,80 @@ function renderPeople() {
       const name = SYMNAMES[symOf(c)];
       const mine = (S.profile && S.profile.name ? `you · ${S.profile.name}` : "you") +
                    (localLink() ? ` · ${S.chat_link}` : "");
-      mem.append(personRow(c, symOf(c), c === S.mycall ? mine : (profileNote(c) || name || ""), true));
+      const row = personRow(c, symOf(c), c === S.mycall ? mine : (profileNote(c) || name || ""), true);
+      if (c !== S.mycall && S.link !== "telnet") {      // CR107: straight to it
+        const d = el("button", "icon-btn pdirect", "⇄");
+        d.type = "button";
+        d.title = `Direct connection to ${c}: Ping, Speed test, Heard there, Chess, QSL - ` +
+                  "if it is a TBClient and in range";
+        d.onclick = (ev) => { ev.stopPropagation(); directTo(c); };
+        row.append(d);
+      }
+      mem.append(row);
     }
   } else {
     mem.append(el("li", "muted small", "Not in a board"));
   }
+  renderMembersMap();
   const heard = $("heard");
   heard.replaceChildren();
   for (const h of S.heard || []) heard.append(personRow(h.call, h.symbol, ago(h.ago)));
   $("heard-none").classList.toggle("hidden", (S.heard || []).length > 0);
+}
+
+/* CR107: open a direct connection to a member of the board (a free channel) - the
+ * TBClient view then offers everything that only goes between two stations */
+async function directTo(call) {
+  const used = new Set((S.channels || []).map((c) => c.n));
+  const on = (S.channels || []).find((c) => c.target === call && c.state !== "offline");
+  if (on) { switchCh(on.n); return; }
+  let n = 0;
+  for (let x = 1; x <= (S.max_ch || 5) && !n; x++) if (!used.has(x)) n = x;
+  if (!n) {
+    const h = $("hint"); h.className = "hint"; h.classList.remove("hidden");
+    h.textContent = "No free channel for a direct connection - close one first.";
+    return;
+  }
+  if (await api("connect", { target: call, ch: n })) switchCh(n);
+}
+
+/* CR107: where the stations of the board are (their locators, as the 1:1 map) */
+function renderMembersMap() {
+  const box = $("members-map");
+  const here = S.profile_here, P = S.profiles || {};
+  const pts = (S.board ? S.members : []).filter((c) => c !== S.mycall && P[c] && P[c].ll)
+    .map((c) => ({ call: c, ll: P[c].ll, km: P[c].km }));
+  if (!pts.length) { box.classList.add("hidden"); return; }
+  if (here) pts.unshift({ call: S.mycall, ll: here, me: true });
+  const key = JSON.stringify(pts);
+  box.classList.remove("hidden");
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  const W = 240, H = 160, pad = 18;
+  const k = Math.cos((pts.reduce((a, p) => a + p.ll[0], 0) / pts.length) * Math.PI / 180);
+  const xs = pts.map((p) => p.ll[1] * k), ys = pts.map((p) => p.ll[0]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const span = Math.max(x1 - x0, y1 - y0, 0.05);
+  const sc = Math.min((W - 2 * pad) / span, (H - 2 * pad) / span);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const px = (p) => W / 2 + (p.ll[1] * k - cx) * sc, py = (p) => H / 2 - (p.ll[0] - cy) * sc;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "ph-map");
+  const mk = (tag, a, txt) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [kk, v] of Object.entries(a)) e.setAttribute(kk, v);
+    if (txt) e.textContent = txt;
+    svg.append(e); return e;
+  };
+  const me = pts.find((p) => p.me);
+  for (const p of pts) if (me && !p.me) mk("line", { x1: px(me), y1: py(me), x2: px(p), y2: py(p), class: "path" });
+  for (const p of pts) {
+    mk("circle", { cx: px(p), cy: py(p), r: 4, class: p.me ? "me" : "them" });
+    mk("text", { x: px(p) + 6, y: py(p) - 5, class: "lb" }, p.me ? "you" : p.call + (p.km !== undefined ? ` ${p.km} km` : ""));
+  }
+  mk("text", { x: W - 10, y: 14, class: "n" }, "N↑");
+  box.replaceChildren(el("div", "nav-h", "Map"), svg);
 }
 
 /* Bar at the top of the chat (CR13): older stored lines on request. */
@@ -929,7 +994,12 @@ function bubble(m, cont) {
     }
     col.append(rs);
   }
-  col.append(el("div", "meta", m.pending ? "sending…" : hhmm(m.time)));
+  const meta = el("div", "meta", m.pending ? "sending…" : hhmm(m.time));
+  if (own && !m.pending && !m.history) {         // CR107: the TinyBox has it (it came back)
+    meta.append(" ✓");
+    meta.title = "arrived at the TinyBox";
+  }
+  col.append(meta);
   if (own) li.append(col);
   else li.append(avatar(m.call, symOf(m.call)), col);
   return li;
@@ -2468,8 +2538,10 @@ function renderTerm() {
   $("ui-form").classList.toggle("hidden", !mon || !uiOpen);
   $("mon-ui").classList.toggle("on", uiOpen);
   showLens();
-  $("term-input").disabled = c.state !== "online";
-  $("term-input").placeholder = pv ? `Message to ${c.target} (Enter = send)` : "Command (Enter = send)";
+  const asMail = pv && c.state !== "online" && c.target;     // CR107: then as a mail
+  $("term-input").disabled = c.state !== "online" && !asMail;
+  $("term-input").placeholder = asMail ? `${c.target} is not connected - Enter writes a mail via your TinyBox`
+    : pv ? `Message to ${c.target} (Enter = send)` : "Command (Enter = send)";
   if (S.ch !== activeCh) return;                   // lines of another channel: wait
   if (mon) { renderMonitor(); return; }
   if (pv) { renderPeerChat(lines); return; }
@@ -3291,6 +3363,13 @@ async function termSend(e) {
   e.preventDefault();
   const inp = $("term-input");
   const text = inp.value;
+  if (S && activeCh && view === "peer" && curCh().state !== "online" && text.trim()) {
+    // CR107: the other one is not there - the line goes as a mail via the own TinyBox
+    inp.value = "";
+    openCompose({ type: "P", to_call: baseCall(curCh().target), subject: "Chat",
+                  body: text.trim() + "\n" });
+    return;
+  }
   if (!S || curCh().state !== "online" || !activeCh) return;
   if (view === "peer") {                          // emojis go as :-) or ~XY (PLANUNG 12.6)
     const { wire, bad } = textToWire(text);

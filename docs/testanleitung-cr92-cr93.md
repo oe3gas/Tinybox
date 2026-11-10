@@ -1,6 +1,6 @@
-# Testanleitung – Signieren (CR93), Rollen (CR92), Sysop über Funk (CR94)
+# Testanleitung – Signieren (CR93), Rollen (CR92), Sysop über Funk (CR94), Client zu Client (CR99, CR107), Dateien im Board (CR86)
 
-Stand 10.11.2026 · TinyBox mit Schema 14 · Client 2026.11.10.9
+Stand 10.11.2026 · TinyBox mit Schema 15 · Client 2026.11.10.13
 
 Vorgehen: Schritt für Schritt, jeweils **Erwartung** prüfen und ✔/✘ in die letzte Spalte.
 Bei ✘ bitte die Zeile aus der TinyBox-Konsole bzw. die Meldung im Client notieren.
@@ -18,7 +18,7 @@ die Gast-Tests ein anderes Rufzeichen nehmen, z. B. `OE1TST`.
 | # | Schritt | Erwartung | ✔/✘ |
 |---|---|---|---|
 | 0.1 | PC2: Datenbank `data\…db` sicherheitshalber wegkopieren. Dann `git pull`, TinyBox neu starten. | Start ohne Fehler. Datenbank auf Schema 14 (läuft automatisch). | |
-| 0.2 | PC1: `git pull`, Client neu starten. | Startblock zeigt Version **2026.11.10.9** und „Your key … Fingerabdruck“. Fingerabdruck notieren: ________ | |
+| 0.2 | PC1: `git pull`, Client neu starten. | Startblock zeigt Version **2026.11.10.13** und „Your key … Fingerabdruck“. Fingerabdruck notieren: ________ | |
 | 0.3 | Sysop-Web-GUI öffnen. | Links neuer Menüpunkt **Keys**. | |
 
 ## 1. Login mit Schlüssel (Stufe 1) und Freigabe in der Web-GUI
@@ -136,11 +136,55 @@ Am besten über Funk (Client auf PC1, TinyBox auf PC2), mit dem Rufzeichen `OE3G
 | 6b.7 | Sysop-Web-GUI: ein Bulletin öffnen, **Move / copy**. | Rubrik eingeben, Move bzw. Copy; die neue Nummer öffnet sich. | |
 | 6b.8 | Konsole: `MOVE <n> <Rubrik>`, `COPY <n> <Rubrik>`, `KILL <n>`. | „moved to … now #…“, „copied to … as #…“, „Msg … killed.“ | |
 
+## 8. Client zu Client: Schlüssel prüfen (CR99)
+
+Zwei TBClients mit Version 2026.11.10.13, z. B. PC1 zu Hause und ein Client bei OE3TEC (oder ein
+zweiter Client mit anderem Rufzeichen). Beide waren schon einmal an ihrer Heimat-BBS angemeldet.
+
+| # | Schritt | Erwartung | ✔/✘ |
+|---|---|---|---|
+| 8.1 | Client A connectet Client B direkt (Rufzeichen in „Connect to“). | TBClient-Ansicht; in der Karte des anderen: „✓ verified by OE3GAS-1“ (wenn beide dieselbe Heimat-BBS haben) oder „first contact – key stored“, dazu Fingerabdruck und Gerät. | |
+| 8.2 | Trennen, noch einmal verbinden. | „✓ known key“ (oder wieder „verified“). | |
+| 8.3 | Ein paar Zeilen schreiben, trennen, wieder verbinden. | Der Verlauf ist auf beiden Seiten gleich (wird nur bei ✓/first abgeglichen). | |
+| 8.4 | (Optional) Auf B `identity.key` wegkopieren und löschen (neuer Schlüssel), B neu starten, A verbindet B. | A: „⚠ another key than before – history, pictures and files paused“ und Knopf **Accept new key**. Danach: „known key“. Schlüssel zurücklegen. | |
+| 8.5 | Ein Client mit älterer Version am anderen Ende. | „older TBClient – no key check, chat only“. | |
+
+## 9. Client zu Client wie im Chatboard (CR107 Teil 1)
+
+In der TBClient-Ansicht zwischen A und B:
+
+| # | Schritt | Erwartung | ✔/✘ |
+|---|---|---|---|
+| 9.1 | 💥 drücken, „CQ CONTEST“ senden. | Große Bang!-Blase auf beiden Seiten. | |
+| 9.2 | 🏷️ drücken, einen Sticker wählen. | Sticker auf beiden Seiten. | |
+| 9.3 | Eine Blase des anderen antippen → ↩, Kommentar schreiben. | Beim anderen: Blase mit Zitat der richtigen Zeile oben drüber. | |
+| 9.4 | Eine Blase antippen → 👍. | Unter der Blase „👍 1“ – auf beiden Seiten an derselben Zeile. | |
+| 9.5 | Einen Link (`https://www.oevsv.at`) und `` `Code` `` schicken, dann ein einzelnes Emoji. | Link anklickbar, Code in Monospace, Emoji groß. | |
+| 9.6 | Settings > Mention alert einschalten, Fenster in den Hintergrund, der andere schreibt. | Popup bzw. „BK“ in CW. | |
+| 9.7 | Den anderen trennen lassen, dann in der TBClient-Ansicht etwas tippen, Enter. | Mail-Fenster öffnet sich: An = Rufzeichen des anderen, Text = das Getippte. | |
+
+## 10. Chatboard: Dateien, Karte, Haken, Direktverbindung (CR86, CR107 Teil 2)
+
+TinyBox mit Schema 15, `[chat] file_max = 16k` (Standard), zwei Clients im Board TREFF.
+
+| # | Schritt | Erwartung | ✔/✘ |
+|---|---|---|---|
+| 10.1 | 📎 im Board, eine Textdatei (einige KB) wählen, bestätigen. | Eigene Blase mit Fortschritt, dann Datei-Blase „Save“. | |
+| 10.2 | Am zweiten Client die Datei-Blase antippen. | Fortschritt, dann „Save“; die gespeicherte Datei ist identisch. | |
+| 10.3 | Eine `.exe` oder `.bat` wählen. | „Not sent: … or a program file.“ | |
+| 10.4 | Terminal-User im selben Board. | Liest „[File name 5.2 KB - TinyBox client only]“. | |
+| 10.5 | Konsole am PC2: `FILES`. | Liste mit Hash, Größe, Rufzeichen. | |
+| 10.6 | Eigene Zeile im Board senden. | Nach dem Echo „✓“ neben der Uhrzeit. | |
+| 10.7 | Rechte Spalte „In this board“. | Karte mit den Teilnehmern, die einen Locator im Profil haben. | |
+| 10.8 | ⇄ neben einem Teilnehmer (der ein TBClient in Reichweite ist). | Neuer Kanal, Direktverbindung, TBClient-Ansicht mit Ping, Speedtest, Chess, QSL. | |
+| 10.9 | Bild im Board senden (nach dem Update). | Funktioniert wie vorher (Verweis jetzt mit 16-Zeichen-Hash). | |
+
 ## 7. Was nicht getestet werden muss (automatische Tests)
 
 Wiederholte oder verfälschte Signaturen (`sig_replay`, `sig_bad`), veränderter Text eines
-`//SEND`, abgelaufene oder fremde Zertifikate und das Verdrängen von brocast-Seiten bei einer
-Flut erfundener Stationen prüfen die Tests im Repo (`tests/test_cr92.py`, `tests/test_cr93.py`,
+`//SEND`, abgelaufene oder fremde Zertifikate, falsche Peer-Signaturen, das Verdrängen von
+brocast-Seiten bei einer Flut erfundener Stationen und abgebrochene Datei-Uploads prüfen die Tests
+im Repo (`tests/test_cr86.py`, `test_cr92.py`, `test_cr93.py`, `test_cr94.py`, `test_cr99.py`,
 `brocast/tests/test_listener.py`).
 
 ## Rückmeldung

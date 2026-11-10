@@ -824,6 +824,12 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   Board ab (`nofile` in `[chat_boards]`) und sieht sie mit `FILES` an der Konsole
   (`FILES DEL <hash>` löscht).
 
+- **Im Chatboard (CR107):** rechts unter den Teilnehmern eine **Karte** (aus den Locatoren der
+  Profile), an der eigenen Zeile ein **✓**, sobald die TinyBox sie hat, und am Teilnehmer der Knopf
+  **⇄** – eine Direktverbindung zu ihm in einem freien Kanal mit allem, was nur zwischen zwei
+  Stationen geht (Ping, Speedtest, Heard there, Schach, QSL). Ist ein TBClient-Partner nicht
+  (mehr) verbunden, wird die getippte Zeile zu einer **Mail** an ihn über die eigene TinyBox.
+
 ### 3.7b Rollen und Rechte (CR92, PLANUNG 29.7)
 
 Das Rufzeichen einer Terminal-Verbindung ist nicht bewiesen – wer einen Sender hat, kann jedes

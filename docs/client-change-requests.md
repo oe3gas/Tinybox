@@ -84,7 +84,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 103 | APRS-Statistik bei viel Verkehr: fest 250.000 Frames, „All“ zeigt den Zeitraum, Auswertung im Thread | ✅ siehe unten, PLANUNG 30 |
 | 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, Log nach Connect-Zeit sortiert, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | ✅ siehe unten |
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
-| 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | Teil 1 (Client↔Client) ✅, Teil 2 (Chatboard) offen – siehe unten |
+| 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | ✅ 10.11.2026 (Teil 1 Client↔Client, Teil 2 Chatboard mit CR86) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3460,7 +3460,7 @@ Heimat-BBS. Damit:
 - Peer-Karte: Zeile mit Zustand, Fingerabdruck, Gerät; Knopf „Accept new key“ bei `changed`.
 - Tests `tests/test_cr99.py`.
 
-## CR107 – Gleiche Funktionen Client↔Client und im Chatboard (offen, 10.11.2026)
+## CR107 – Gleiche Funktionen Client↔Client und im Chatboard (✅ 10.11.2026)
 
 ### Erfassung (OE3GAS, 10.11.2026)
 
@@ -3539,6 +3539,19 @@ Kommentar, Reaktion, Alarm, Avatar; dazu „lädt Bild hoch“ und die Authentis
   Avatar links neben den Blasen des anderen, Alarm bei jeder neuen Zeile (Fenster nicht vorne).
 - „lädt Bild hoch“: zwischen zwei Clients holt der Empfänger das Bild selbst, mit Fortschritt –
   gleichwertig, nichts zu tun.
+
+### Umsetzung Teil 2: Chatboard (Client 2026.11.10.12/.13, TinyBox – 10.11.2026) ✅
+
+- Dateien: CR86 (mit 16-Hex-Hash).
+- Karte der Teilnehmer: aus den Profilen (`profiles.snapshot` gibt `ll` und `profile_here`), SVG wie
+  die Karte Client↔Client, unter „In this board“.
+- Zustellhaken: ✓ an der eigenen Zeile, sobald sie von der TinyBox zurückkommt (gilt für I-Frame
+  und UI – das Echo zeigt, dass die Box sie hat).
+- Ping, Speedtest, Heard there, Schach, QSL: Knopf ⇄ am Teilnehmer → Direktverbindung in einem
+  freien Kanal (`/api/connect`), dort die TBClient-Ansicht mit diesen Knöpfen.
+- Mail an Abwesende: TBClient-Ansicht ohne Verbindung – Enter öffnet eine Mail an das Rufzeichen
+  (ohne SSID) mit dem getippten Text, über die eigene TinyBox.
+- Tests `tests/test_cr107.py` (Python-Seite), Ansicht im Browser geprüft.
 
 ## CR100 – Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding (✅ 09.11.2026)
 

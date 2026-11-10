@@ -21,6 +21,10 @@ Kommentar mit Zitat, Reaktionen, Links, grosses Einzel-Emoji, Avatar und
 den Alarm bei neuen Zeilen, wenn das Fenster nicht vorne ist.
 Dateien im Chatboard (CR86): Bueroklammer im Board, einmal zur TinyBox
 hochgeladen (LZHUF), die anderen holen sie per Antippen; keine Programme.
+Im Board ausserdem: Karte der Teilnehmer aus ihren Locatoren, Haken an der
+eigenen Zeile (bei der TinyBox angekommen), Knopf fuer eine Direktverbindung
+zu einem Teilnehmer (Ping, Speedtest, Heard there, Schach, QSL). Ist der
+andere TBClient nicht verbunden, wird eine getippte Zeile zur Mail.
 
 (Uebersicht im Repository, wird nicht gesendet. Was in einer Version
 neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als

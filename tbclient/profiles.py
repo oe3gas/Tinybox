@@ -212,7 +212,10 @@ class Profiles:
             if here and there:
                 km, deg = aprs.distance_bearing(here, there)
                 row["km"], row["deg"] = round(km), round(deg)
+            if there:
+                row["ll"] = [round(there[0], 4), round(there[1], 4)]   # CR107: the board map
             others[c] = row
         return {"profile": {f: mine[f] for f in pf.FIELDS}, "profile_set": "profile" in self.core.settings,
+                "profile_here": [round(here[0], 4), round(here[1], 4)] if here else None,
                 "profile_err": self.error, "profile_ask": self.ask, "profile_box": self.ready,
                 "profiles": others}

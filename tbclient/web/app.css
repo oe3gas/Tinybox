@@ -867,3 +867,11 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .bubble.fileb .fsave { font-size: 13px; color: var(--accent); }
 .bubble.fileb .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .bubble.fileb .fill { height: 100%; background: var(--accent); transition: width .4s; }
+
+/* CR107: board - direct connection button, map of the stations */
+.plist li .pdirect { margin-left: auto; font-size: 15px; padding: 2px 6px; opacity: .7; }
+.plist li .pdirect:hover { opacity: 1; }
+.members-map { padding: 4px 12px 10px; }
+.members-map .ph-map { width: 100%; height: auto; }
+.members-map.hidden { display: none; }
+.members-map .ph-map { display: block; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }

@@ -1,0 +1,3 @@
+- Chatboard: Karte der Teilnehmer, Haken bei eigenen
+  Zeilen, Direktverbindung zu einem Teilnehmer.
+- Client zu Client getrennt: Zeile wird zur Mail.

@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **Chatboard wie Client zu Client (CR107 Teil 2):** Karte der Teilnehmer aus ihren Locatoren
+  (rechte Spalte), ✓ an der eigenen Zeile, sobald die TinyBox sie hat, Knopf ⇄ am Teilnehmer:
+  Direktverbindung in einem freien Kanal – dort Ping, Speedtest, Heard there, Schach, QSL (wenn der
+  andere ein TBClient in Reichweite ist). Ist der andere TBClient nicht verbunden, öffnet Enter im
+  TBClient-Chat eine Mail an ihn über die eigene TinyBox. Client 2026.11.10.13.
 - **Dateien im Chatboard (CR86, CR107 Teil 2):** 📎 im Board – der Client packt (LZHUF oder roh),
   lädt einmal zur TinyBox hoch (`//FPUT`, Fortschritt in der eigenen Blase, „Try again“), die Zeile
   trägt nur den Verweis `~%<hash> <Bytes> <auf Funk> <Name>`; die anderen holen per Antippen
