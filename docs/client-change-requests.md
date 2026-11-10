@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30)
+Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105)
 
 ## Übersicht
 
@@ -82,6 +82,8 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
 | 102 | APRS-Netzgraph: keine Linien zur eigenen Station, Auswahl nach Rolle, direkt gehört voll gefärbt, km an der Karte | ✅ siehe unten |
 | 103 | APRS-Statistik bei viel Verkehr: Auswertung blockiert den Client nicht, Grenze 200.000 Frames, Kopie pro Frame | offen, siehe unten, PLANUNG 30 |
+| 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | offen, siehe unten |
+| 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3395,3 +3397,58 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
    „All“ noch langsamer → nur zusammen mit Punkt 1).
 5. Test: Statistik mit 200.000 Records, Event-Loop bleibt während einer Abfrage ansprechbar;
    `add()` an der Grenze ohne Neuaufbau.
+
+## CR104 – Settings-Seite: Kosmetik und Umbau (offen, 10.11.2026)
+
+### Erfassung (OE3GAS, 10.11.2026)
+
+1. **Karten und Layout:** Die Sektionen als Karten darstellen (bessere visuelle Trennung).
+   Gesamtbreite bleibt gleich, oben zwei Spalten:
+   - links: **Connection Status** (bisher „Connection“) und **My profile**
+   - rechts: **Chat history** und **Mention alert**
+
+   Danach einspaltig: **Connection log**, **My APRS symbol**, **About**.
+   - „Connection Status“: die Knöpfe Connect, Disconnect, Terminal entfallen, nur der Status wird
+     angezeigt. Ergänzen um „Mailbox: x messages in the box“.
+   - About: hinter der TinyBox-Client-Version „by OE3GAS“ ergänzen.
+2. **Auth-Hinweis:** Anzeigen, dass der Client authentisiert ist („auth“), einen eigenen
+   Schlüssel hat und mit welchen TinyBoxen er sich verbinden kann/darf.
+3. **Connection log:** Spaltenkopf „In / out“ → „In/Out bytes“.
+4. **Connection log, Spalte „Time“:** Leerzeichen zwischen den Einheiten, „2h41m“ → „2h 41m“.
+5. **Mention alert:** CW-Tempo wählbar, kein Regler, sondern feste Stufen **60, 100, 150 BpM**.
+
+### Hinweise (Claude, 10.11.2026)
+
+- Zu 1: Connect/Disconnect/Terminal gibt es weiterhin an anderer Stelle (Kopfzeile/Menü) – vor
+  dem Entfernen prüfen, dass jeder Knopf dort erreichbar ist.
+- Zu 1: „x messages“ – gemeint vermutlich die ungelesenen persönlichen Nachrichten
+  (`S.mailbox.unread`); bei Mailbox ≠ TinyBox den Ruf der Mailbox dazuschreiben.
+- Zu 2: Daten aus CR93 (`identity.key`): Status (freigegeben / wartet auf Sysop), Fingerabdruck
+  (`7F3A-91C2-44E0`), Heimat-BBS. „Mit welchen TinyBoxen“: in Stufe 1 nur die Heimat-BBS, bei der
+  der Schlüssel freigegeben ist; fremde Boxen erst mit der Vertrauenskette (CR93 Vorschlag/CR94).
+- Zu 4: Format für Zeiten unter einer Stunde klären: „53m38“ → „53m 38s“?
+- Zu 5: BpM = Buchstaben pro Minute; derzeit fest 60 BpM (12 WpM, Dit 100 ms, CR85).
+  100 BpM = 20 WpM (Dit 60 ms), 150 BpM = 30 WpM (Dit 40 ms). Speichern wie die übrigen
+  Alarm-Einstellungen im Browser.
+- Zu 3: Sonst gilt im Projekt „incoming/outgoing“ statt „in/out“ – hier bewusst „In/Out bytes“
+  wie erfasst.
+- Client-Änderung → `VERSION` erhöhen und News-Datei anlegen.
+
+## CR105 – Eigenes Profilfoto (offen, 10.11.2026)
+
+### Erfassung (OE3GAS, 10.11.2026)
+
+- In „My profile“ ein eigenes Foto vorsehen, passend in das runde Format des Call-Icons.
+- Das Foto ist **optional**.
+- Wenn vorhanden, im Chatboard und bei Verbindung mit einem anderen Client anzeigen, und zwar
+  **links neben dem Call-Icon**.
+
+### Offene Punkte (Claude, 10.11.2026)
+
+- Größe über Funk: Foto im Browser rund zuschneiden und stark verkleinern (z. B. 48×48 px,
+  WebP/JPEG, Ziel wenige hundert Byte), Übertragung wie bei CR12.
+- Nur einmal senden: Hash im Profil mitschicken, Empfänger cachen je Rufzeichen und laden nur bei
+  geändertem Hash nach (nicht bei jedem Board-Beitritt).
+- Bei fremden Clients nur anzeigen, wenn der Absender verifiziert ist (CR93) – sonst könnte jeder
+  ein Foto unter fremdem Rufzeichen verteilen.
+- Bezug: CR7/APRS-Symbol als Badge am Avatar bleibt.
