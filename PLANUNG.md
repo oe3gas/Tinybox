@@ -1951,6 +1951,27 @@ vertraut, erkennt den User damit ebenfalls (CR93).
 4. CR91 (Dictionary) · 5. CR89, CR90 (Forwarding) · 6. CR95, CR96 · 7. CR97 · 8. CR92 ·
 9. CR98 (Audit) · 10. CR93, CR94, CR99 (Authentisierung, Konzept zuerst).
 
+## 30. APRS-Statistik bei viel Verkehr (Entwurf, 10.11.2026, CR103)
+
+Anlass: Auf unserem Kanal kommen ≈ 12.000 APRS-Frames in 8 h (1.500/h, 36.000/Tag). Die Prüfung
+von `prcore/aprsstats.py` ergab keinen Überlauf, aber drei Schwächen (Details und Messwerte in
+CR103):
+
+- **Grenze:** 7 Tage oder 200.000 Frames. Bei unserem Verkehr greift die Frame-Grenze nach
+  ≈ 5,5 Tagen; „All“ zeigt dann nicht 7 Tage. 7 Tage reichen bis ≈ 1.190 Frames/h.
+- **Blockade:** Die Auswertung läuft im asyncio-Loop des Clients. Mit voller Statistik steht
+  der Client bei „All“ alle 15 s ≈ 4 s still, solange die Statistikseite offen ist.
+- **Kopie pro Frame** an der Grenze (≈ 24 ms statt 0,1 ms).
+
+Vorgesehen (Reihenfolge):
+
+1. Auswertung in einen Thread verlegen, Ergebnis ≈ 15 s zwischenspeichern.
+2. Kürzen mit Luft bzw. `deque`, keine Kopie pro Frame.
+3. Danach entscheiden, ob `MAX_RECORDS` auf ≈ 260.000 steigt (7 Tage bei unserem Verkehr,
+   ≈ 190 MB RAM).
+
+Offen (Gerhard): Ist „All“ = 7 Tage wichtig, oder reicht, was die Grenze hergibt?
+
 ## Quellen
 
 - Security-Advisory TinyBox (9V1NE, 09.11.2026): https://gist.github.com/nnamon/3d93af6dd520d5f4b392c3fb57407d63

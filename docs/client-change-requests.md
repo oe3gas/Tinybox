@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
+Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30)
 
 ## Übersicht
 
@@ -81,6 +81,7 @@ Stand: 09.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29)
 | 100 | Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding und fremde Origins | ✅ siehe unten |
 | 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
 | 102 | APRS-Netzgraph: keine Linien zur eigenen Station, Auswahl nach Rolle, direkt gehört voll gefärbt, km an der Karte | ✅ siehe unten |
+| 103 | APRS-Statistik bei viel Verkehr: Auswertung blockiert den Client nicht, Grenze 200.000 Frames, Kopie pro Frame | offen, siehe unten, PLANUNG 30 |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3348,3 +3349,49 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
   Linien verdeckt), unten am Ring, mittig.
 - Geprüft im Browser (Playwright) mit Testdaten: Hop-Radar, Map mit 10/50/100/200 km, Auswahl
   „Heard directly“; keine JS-Fehler.
+
+## CR103 – APRS-Statistik bei viel Verkehr (offen, 10.11.2026, PLANUNG 30)
+
+### Erfassung (OE3GAS, 10.11.2026)
+
+- Code der APRS-Statistik (`prcore/aprsstats.py`) auf Überlauf prüfen. Bei uns: 12.000 Frames in
+  8 Stunden. Was ist das Maximum?
+
+### Befund (Claude, 10.11.2026)
+
+- Kein Zahlenüberlauf (Python-Ganzzahlen). Grenzen: `KEEP_SEC` = 7 Tage und
+  `MAX_RECORDS` = 200.000, was zuerst erreicht ist.
+- 12.000 Frames / 8 h = 1.500/h = 36.000/Tag → 7 Tage wären 252.000. Die 200.000 sind nach
+  ≈ 133 h (≈ 5,5 Tage) erreicht; „All“ umfasst dann ≈ 5,5 Tage. 7 Tage gehen sich bis
+  ≈ 1.190 Frames/h aus. „1 h“ und „24 h“ sind nicht betroffen.
+- Messung mit synthetischen Records (≈ 720 Byte RAM je Frame):
+
+  | | 96.000 Frames | 200.000 Frames |
+  |---|---|---|
+  | RAM im Client | ≈ 69 MB | ≈ 143 MB |
+  | Statistik + Graph, 1 h | ≈ 0,1 s | ≈ 0,14 s |
+  | Statistik + Graph, 24 h | ≈ 1,1 s | ≈ 0,9 s |
+  | Statistik + Graph, „All“ | ≈ 2,1 s | ≈ 4,1 s |
+
+1. **Auswertung blockiert den Client:** `report()`, `graph()` und `station()` laufen direkt im
+   asyncio-Loop (`tbclient/web.py`). Die Seite „APRS statistics“ fragt alle 15 s Statistik und
+   Graph ab → bei „All“ und voller Statistik steht der Client ≈ 4 s still (AGW, Chat, GUI),
+   bei „24 h“ knapp 1 s.
+2. **Kopie pro Frame an der Grenze:** `add()` kürzt die Liste auf genau 200.000; beim nächsten
+   Frame greift `len > MAX_RECORDS` wieder und die ganze Liste wird neu aufgebaut (≈ 24 ms je
+   Frame statt 0,1 ms). Ebenso, sobald die 7-Tage-Grenze greift.
+3. **Start:** alle Records werden aus der DB gelesen und einzeln aus JSON dekodiert – bei
+   200.000 einige Sekunden. Datei `aprsstats.db` grob 70–80 MB (geschätzt).
+
+### Vorschlag (Claude)
+
+1. Auswertung in einen eigenen Thread (`asyncio.to_thread`), Zugriff auf die Record-Liste dabei
+   über eine Kopie bzw. ein Lock absichern (`add()` läuft weiter im Loop).
+2. Ergebnis je Endpunkt und Fenster ≈ 15 s zwischenspeichern – zwei offene Tabs rechnen nur
+   einmal.
+3. Beim Kürzen Luft lassen (z. B. auf 99 % von `MAX_RECORDS`, bzw. alles älter als 7 Tage
+   plus eine Stunde) oder `collections.deque` – keine Kopie mehr pro Frame.
+4. Optional: `MAX_RECORDS` ≈ 260.000, damit 7 Tage bei unserem Verkehr reichen (≈ 190 MB RAM,
+   „All“ noch langsamer → nur zusammen mit Punkt 1).
+5. Test: Statistik mit 200.000 Records, Event-Loop bleibt während einer Abfrage ansprechbar;
+   `add()` an der Grenze ohne Neuaufbau.
