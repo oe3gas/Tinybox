@@ -260,7 +260,9 @@ function render() {
   $("off-reason").textContent = endedText() || S.reason || "";
   $("offline").classList.toggle("hidden", S.state !== "offline");
   $("pick").classList.toggle("hidden", !(S.state === "online" && S.mode === "tinybox" && !S.board && S.boards.length));
-  $("conn-info").textContent = `${S.mycall} → ${S.tinybox} via ${S.link}` +
+  const STATE = { online: "Connected", offline: "Not connected", connecting: "Connecting",
+                  disconnecting: "Disconnecting" };
+  $("conn-info").textContent = `${STATE[S.state] || S.state}: ${S.mycall} → ${S.tinybox} via ${S.link}` +
     (S.state === "online" ? (S.mode === "terminal" ? ", terminal (no TinyBox)"
       : S.ui ? ", chat as UI frames (heard directly)" : ", chat as I-frames") : "") +
     (S.tinybox !== S.home ? `. Mailbox: ${S.home}` : "");
@@ -275,6 +277,7 @@ function render() {
     : inBoard ? "No pictures in this board" : "Picture";
   renderMail();
   renderProfile();
+  renderAuthInfo();
   renderSys();
   renderUpdate();
   checkFetch();
@@ -412,6 +415,18 @@ function authText(a) {                             // CR93: login with the user'
     return `${a.box || S.tinybox} refused the login with your key (${a.reason}). ` +
       `Fingerprint of your key: ${a.fp}.`;
   return "";
+}
+// CR104: login state at the home BBS on the settings page
+function renderAuthInfo() {
+  const a = S.auth || {}, h = S.auth_home || {};
+  const live = a.state && baseCall(a.box || S.tinybox) === baseCall(S.home) ? a.state : "";
+  const st = live === "asking" ? "" : live || h.state || "";
+  const when = !live && h.at ? ` (last login ${longDate(h.at)})` : "";
+  const TXT = { ok: "authenticated (auth) - key approved by the sysop",
+                wait: "key waits for approval by the sysop",
+                refused: `login refused${h.reason || a.reason ? ` (${a.reason || h.reason})` : ""}` };
+  $("auth-info").textContent = `Home BBS ${S.home}: ${TXT[st] || "no login with the key yet"}${st ? when : ""}. ` +
+    `Own key of this client, fingerprint ${a.fp || "-"}. Client mode only with the home BBS.`;
 }
 function renderSys() {
   const m = S.sysmsg;
@@ -1602,7 +1617,7 @@ function renderMailbox() {
   buildMailNav($("nav-mailbox"));
   buildMailNav($("mvf-list"));                   // phone: folder list in the mail view
   $("mv-last").textContent = lastSyncText(M);
-  $("mb-info").textContent = `${M.inbox} message(s) in the inbox, ${M.sent} sent, ` +
+  $("mb-info").textContent = `Mailbox: ${M.inbox} message(s) in the inbox, ${M.sent} sent, ` +
     `${M.rubrics.filter((r) => r.sub).length} rubric(s) subscribed. ` +
     `Mail synced ${M.last_mail ? longDate(M.last_mail) : "never"}, ` +
     `bulletins ${M.last_bulletins ? longDate(M.last_bulletins) : "never"}.`;
@@ -2996,8 +3011,8 @@ function termKey(e) {
 // ---------------------------------------------------------------- connection log (CR44)
 function durText(s) {
   s = Math.max(0, s || 0);
-  return s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}m`
-    : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}`;
+  return s >= 3600 ? `${Math.floor(s / 3600)}h ${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}m`
+    : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;           // CR104
 }
 function byteText(n) { return n === null || n === undefined ? "-" : n < 1000 ? String(n) : (n / 1000).toFixed(1) + "k"; }
 async function loadConnlog() {
@@ -3084,10 +3099,11 @@ function openTerm() {
 
 // ---------------------------------------------------------------- mention alert (CR85)
 // "@MYCALL" or a comment on my message -> OS popup (Notification API) and/or
-// "BK" in CW (WebAudio, 60 letters/min = 12 WpM, dit 100 ms). Popup only when
+// "BK" in CW (WebAudio, 60/100/150 letters/min, CR104: dit = 6 s / BpM). Popup only when
 // the page is not in front; the tone also when it is. Settings per browser.
 const NOTIFY_KEY = "tbc-notify";
-let notifyCfg = { popup: false, tone: false, hz: 700 };
+const BPM = [60, 100, 150];
+let notifyCfg = { popup: false, tone: false, hz: 700, bpm: 60 };
 try { Object.assign(notifyCfg, JSON.parse(localStorage.getItem(NOTIFY_KEY) || "{}")); } catch (e) { /* ok */ }
 const notifySeen = new Map();          // "<ch>:<board>" -> newest live id already looked at
 let audioCtx = null, notifyIcon = null;
@@ -3104,7 +3120,7 @@ function wakeAudio() {                 // the browser lets a page play only afte
 function playBK() {
   wakeAudio();
   if (!audioCtx) return;
-  const U = 0.1, a = audioCtx, o = a.createOscillator(), g = a.createGain();
+  const U = 6 / (BPM.includes(notifyCfg.bpm) ? notifyCfg.bpm : 60), a = audioCtx, o = a.createOscillator(), g = a.createGain();
   o.frequency.value = notifyCfg.hz || 700;
   o.connect(g); g.connect(a.destination);
   let t = a.currentTime + 0.05;
@@ -3179,6 +3195,7 @@ function renderNotify() {
   $("nt-popup").checked = !!notifyCfg.popup;
   $("nt-tone").checked = !!notifyCfg.tone;
   $("nt-hz").value = String(notifyCfg.hz || 700);
+  $("nt-bpm").value = String(BPM.includes(notifyCfg.bpm) ? notifyCfg.bpm : 60);
   let note = "";
   if (!canPopup()) note = "Popups need the address http://127.0.0.1:7744 (or HTTPS) - not possible at this address.";
   else if (Notification.permission === "denied") note = "The browser blocks popups for this page. Allow them in the site settings (lock icon left of the address).";
@@ -3199,6 +3216,11 @@ function initNotify() {
   $("nt-tone").onchange = (e) => { notifyCfg.tone = e.target.checked; if (notifyCfg.tone) wakeAudio(); saveNotify(); };
   $("nt-hz").onchange = (e) => {
     notifyCfg.hz = Math.max(400, Math.min(1000, parseInt(e.target.value, 10) || 700));
+    saveNotify(); renderNotify();
+  };
+  $("nt-bpm").onchange = (e) => {
+    const v = parseInt(e.target.value, 10);
+    notifyCfg.bpm = BPM.includes(v) ? v : 60;
     saveNotify(); renderNotify();
   };
   $("nt-test").onclick = () => {
@@ -3284,8 +3306,7 @@ async function start() {
     else if (S && S.auth) authDismissed = S.auth.state + S.auth.reason;
     renderSys();
   };
-  $("btn-connect").onclick = $("btn-connect2").onclick = connectTinybox;
-  $("btn-disconnect").onclick = () => api("disconnect");
+  $("btn-connect").onclick = connectTinybox;
   $("btn-disc").onclick = () => api("disconnect", { ch: activeCh });
   $("to-form").onsubmit = connectTo;
   $("to-call").oninput = (e) => { e.target.classList.remove("bad"); targetPreview(); };
@@ -3301,7 +3322,6 @@ async function start() {
       if (n === 0 || (S && n <= S.max_ch && (S.channels.some((c) => c.n === n) || S.channels.length < S.max_ch))) switchCh(n);
     }
   });
-  $("btn-term").onclick = openTerm;
   $("peer-heard").onclick = peerHeard;                         // CR78
   $("peer-raw").onclick = peerToggle;
   $("peer-clear").onclick = peerClear;

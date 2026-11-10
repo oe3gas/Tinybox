@@ -271,50 +271,63 @@
   <div class="sheet-body">
     <div class="sheet-head"><h2>Settings</h2><button id="btn-close" class="icon-btn" aria-label="Close">✕</button></div>
 
-    <h3>Connection</h3>
-    <p id="conn-info" class="muted"></p>
-    <div class="row"><button id="btn-connect2">Connect</button><button id="btn-disconnect">Disconnect</button><button id="btn-term">Terminal</button></div>
-
-    <h3>My profile</h3>
-    <p class="muted small"><span id="prof-now">-</span> <button id="prof-edit" class="sm">Edit</button></p>
-    <p id="prof-note" class="muted small"></p>
-
-    <h3>Connection log</h3>
-    <p class="muted small">Frequency of this session: <b id="freq-now">-</b> <button id="freq-change" class="sm">Change</button></p>
-    <p class="muted small">Your connections are logged and kept on this PC.<br>
-      Log export as <a href="/api/connlog.csv" download>CSV</a> · <a href="/api/connlog.adi" download>ADIF</a></p>
-    <div class="clog-wrap"><table class="clog"><thead><tr><th>Connect</th><th>Time</th><th>Station</th><th>In / out</th><th></th></tr></thead>
-      <tbody id="clog"></tbody></table></div>
-
-    <h3>Chat history</h3>
-    <p class="muted">What the client fetches when you join a board with history. Older lines can always be loaded with the bar at the top of the chat.</p>
-    <div class="row hist-modes" id="hist-modes">
-      <label><input type="radio" name="histmode" value="missed"> Only what I missed (max. 20)</label>
-      <label><input type="radio" name="histmode" value="none"> None</label>
-      <label><input type="radio" name="histmode" value="10"> Last 10</label>
-      <label><input type="radio" name="histmode" value="20"> Last 20</label>
+    <div class="set-cols">
+      <div class="set-col">
+      <section class="set-card">
+        <h3>Connection status</h3>
+        <p id="conn-info" class="muted"></p>
+        <p id="auth-info" class="muted small"></p>
+        <p id="mb-info" class="muted small"></p>
+      </section>
+      <section class="set-card">
+        <h3>My profile</h3>
+        <p class="muted small"><span id="prof-now">-</span> <button id="prof-edit" class="sm">Edit</button></p>
+        <p id="prof-note" class="muted small"></p>
+      </section>
+      </div>
+      <div class="set-col">
+      <section class="set-card">
+        <h3>Chat history</h3>
+        <p class="muted">What the client fetches when you join a board with history. Older lines can always be loaded with the bar at the top of the chat.</p>
+        <div class="row hist-modes" id="hist-modes">
+          <label><input type="radio" name="histmode" value="missed"> Only what I missed (max. 20)</label>
+          <label><input type="radio" name="histmode" value="none"> None</label>
+          <label><input type="radio" name="histmode" value="10"> Last 10</label>
+          <label><input type="radio" name="histmode" value="20"> Last 20</label>
+        </div>
+      </section>
+      <section class="set-card">
+        <h3>Mention alert</h3>
+        <p class="muted">When someone writes <b>@yourcall</b> in the chat or comments on your message. Saved in this browser.</p>
+        <div class="row">
+          <label><input type="checkbox" id="nt-popup"> Popup (when the client is not in front)</label>
+          <label><input type="checkbox" id="nt-tone"> Tone: BK in CW</label>
+          <label>Pitch <select id="nt-hz"><option value="500">500 Hz</option><option value="600">600 Hz</option><option value="700">700 Hz</option><option value="800">800 Hz</option></select></label>
+          <label>Speed <select id="nt-bpm"><option value="60">60 BpM</option><option value="100">100 BpM</option><option value="150">150 BpM</option></select></label>
+          <button id="nt-test" class="sm">Test</button>
+        </div>
+        <p id="nt-note" class="muted small"></p>
+      </section>
+      </div>
     </div>
-
-    <h3>Mention alert</h3>
-    <p class="muted">When someone writes <b>@yourcall</b> in the chat or comments on your message. Saved in this browser.</p>
-    <div class="row">
-      <label><input type="checkbox" id="nt-popup"> Popup (when the client is not in front)</label>
-      <label><input type="checkbox" id="nt-tone"> Tone: BK in CW</label>
-      <label>Pitch <select id="nt-hz"><option value="500">500 Hz</option><option value="600">600 Hz</option><option value="700">700 Hz</option><option value="800">800 Hz</option></select></label>
-      <button id="nt-test" class="sm">Test</button>
-    </div>
-    <p id="nt-note" class="muted small"></p>
-
-    <h3>My APRS symbol</h3>
-    <p class="muted">Shown as a badge on your avatar. Sent when you join a board (2 bytes); a change is shown to the others in the board at once. “None”: others see the symbol of your APRS beacon, if they hear it.</p>
-    <div class="row"><input id="sym-search" type="search" placeholder="Search, e.g. car, house"><button id="sym-none">None</button></div>
-    <div id="sym-grid" class="sym-grid"></div>
-
-    <h3>Mailbox</h3>
-    <p id="mb-info" class="muted"></p>
-
-    <h3>About</h3>
-    <p class="muted small">TinyBox client <span id="version"></span>. APRS symbols: aprs.fi symbol set by OH7LZB, <a href="https://github.com/hessu/aprs-symbols" rel="noopener" target="_blank">github.com/hessu/aprs-symbols</a>.</p>
+    <section class="set-card">
+      <h3>Connection log</h3>
+      <p class="muted small">Frequency of this session: <b id="freq-now">-</b> <button id="freq-change" class="sm">Change</button></p>
+      <p class="muted small">Your connections are logged and kept on this PC.<br>
+        Log export as <a href="/api/connlog.csv" download>CSV</a> · <a href="/api/connlog.adi" download>ADIF</a></p>
+      <div class="clog-wrap"><table class="clog"><thead><tr><th>Connect</th><th>Time</th><th>Station</th><th>In/Out bytes</th><th></th></tr></thead>
+        <tbody id="clog"></tbody></table></div>
+    </section>
+    <section class="set-card">
+      <h3>My APRS symbol</h3>
+      <p class="muted">Shown as a badge on your avatar. Sent when you join a board (2 bytes); a change is shown to the others in the board at once. “None”: others see the symbol of your APRS beacon, if they hear it.</p>
+      <div class="row"><input id="sym-search" type="search" placeholder="Search, e.g. car, house"><button id="sym-none">None</button></div>
+      <div id="sym-grid" class="sym-grid"></div>
+    </section>
+    <section class="set-card">
+      <h3>About</h3>
+      <p class="muted small">TinyBox client <span id="version"></span> by OE3GAS. APRS symbols: aprs.fi symbol set by OH7LZB, <a href="https://github.com/hessu/aprs-symbols" rel="noopener" target="_blank">github.com/hessu/aprs-symbols</a>.</p>
+    </section>
   </div>
 </div>
 <script src="/aprsview.js"></script>

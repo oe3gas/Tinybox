@@ -82,7 +82,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
 | 102 | APRS-Netzgraph: keine Linien zur eigenen Station, Auswahl nach Rolle, direkt gehört voll gefärbt, km an der Karte | ✅ siehe unten |
 | 103 | APRS-Statistik bei viel Verkehr: fest 250.000 Frames, „All“ zeigt den Zeitraum, Auswertung im Thread | ✅ siehe unten, PLANUNG 30 |
-| 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, Log nach Connect-Zeit sortiert, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | offen, siehe unten |
+| 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, Log nach Connect-Zeit sortiert, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | ✅ siehe unten |
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
@@ -3420,7 +3420,7 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 5. Test: Statistik mit 200.000 Records, Event-Loop bleibt während einer Abfrage ansprechbar;
    `add()` an der Grenze ohne Neuaufbau.
 
-## CR104 – Settings-Seite: Kosmetik und Umbau (offen, 10.11.2026)
+## CR104 – Settings-Seite: Kosmetik und Umbau (✅ 10.11.2026)
 
 ### Erfassung (OE3GAS, 10.11.2026)
 
@@ -3467,6 +3467,25 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 6. **Connection log sortieren:** nach Connect-Zeit, neueste zuerst. Derzeit stehen Einträge
    durcheinander (07.11.: 23:02, 23:16, 23:01, 23:05, 23:03), vermutlich nach Verbindungsende
    sortiert.
+
+### Umsetzung (Client 2026.11.10.3)
+
+- `index.html`, `app.css`: Abschnitte als Karten (`.set-card`); oben zwei Spalten
+  (Connection status + My profile | Chat history + Mention alert), unter 640 px einspaltig.
+  Darunter Connection log, My APRS symbol, About („… by OE3GAS“). Die Knöpfe Connect,
+  Disconnect, Terminal in den Settings sind weg (bleiben in der Kopfzeile, im Offline-Bild und
+  unter Station > TinyBox terminal); die eigene Sektion „Mailbox“ ist in „Connection status“
+  aufgegangen.
+- Connection status: „Connected: …“ / „Not connected: …“, darunter Login bei der Heimat-BBS
+  (authenticated / wartet auf den Sysop / refused) mit Fingerabdruck des eigenen Schlüssels,
+  dann die Mailbox-Zeile. Der Client merkt sich die letzte Antwort der Heimat-BBS
+  (`auth_home` in den Client-Settings, `core._note_home_auth`) – so steht der Status auch
+  ohne Verbindung da („last login …“).
+- Connection log: Spaltenkopf „In/Out bytes“, Dauer „2h 41m“ bzw. „53m 28s“; sortiert nach
+  Connect-Zeit absteigend (`logbook.rows`: `ORDER BY t_on DESC`, die Zeile wird erst am Ende der
+  Verbindung geschrieben – daher die alte Unordnung). Gilt auch für CSV/ADIF.
+- Mention alert: Auswahl „Speed“ 60/100/150 BpM (Dit = 6 s / BpM), gespeichert im Browser.
+- Test: `tests/test_cr104.py` (Reihenfolge des Logbuchs).
 
 ## CR105 – Eigenes Profilfoto (offen, 10.11.2026)
 

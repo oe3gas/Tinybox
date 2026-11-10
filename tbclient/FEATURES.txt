@@ -114,7 +114,8 @@ Zuletzt dazugekommen
   Terminal. Telnet-Testport: ein Kanal.
 - Verbindungslogbuch (CR44): jede Verbindung mit Gegenstation, Weg, Connect,
   Disconnect, Dauer und Bytes rein/raus (Nutzdaten), auch Fehlversuche
-  ("no answer"). Unter Settings > Connection log, Export als CSV (alles)
+  ("no answer"). Unter Settings > Connection log (neueste Verbindung oben,
+  nach Connect-Zeit; Dauer "2h 41m" bzw. "53m 28s"), Export als CSV (alles)
   und ADIF (nur zustande gekommene Verbindungen, MODE PKT). Die Frequenz
   wird beim Start des Clients einmal abgefragt (die letzte wird angeboten)
   und steht in jedem Eintrag; [station] locator fuer MY_GRIDSQUARE.
@@ -204,7 +205,7 @@ Chat
 - @RUFZEICHEN hebt einen Beitrag beim Angesprochenen farbig hervor.
 - Erwaehnungs-Alarm (CR85): bei @RUFZEICHEN oder einem Kommentar auf den
   eigenen Beitrag ein Popup des Betriebssystems (nur wenn der Client nicht
-  vorne ist) und/oder "BK" in CW (60 BpM, 500-800 Hz). Einschalten unter
+  vorne ist) und/oder "BK" in CW (60, 100 oder 150 BpM, 500-800 Hz). Einschalten unter
   Settings > "Mention alert", gilt je Browser. Popups nur unter
   http://127.0.0.1:7744 oder HTTPS.
 - Die eigene Reaktion erscheint sofort.
@@ -275,6 +276,9 @@ Station
   Fehler beginnen mit [ERROR] (rot), Warnungen mit [WARN] (gelb), stehende
   Verbindungen sind gruen. Farben nur in einem echten Konsolenfenster;
   abschalten mit [console] color = no. Technische Details mit -v.
+- Settings-Seite (CR104): Abschnitte als Karten, oben zweispaltig.
+  "Connection status" zeigt die Verbindung, den Login mit dem eigenen
+  Schluessel bei der Heimat-BBS (Fingerabdruck) und die Mailbox.
 - Profil (CR73): Name, Locator und Home-BBS unter Settings > "My profile".
   Fehlen Name oder Locator, laedt ein Balken ueber dem Chat zum Ausfuellen
   ein ("Later" = in einer Woche wieder). Die TinyBox haelt das Profil fuer

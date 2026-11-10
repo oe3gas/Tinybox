@@ -918,6 +918,17 @@ class ClientCore:
                                          payload)
         return f"{line} c={self._cmd_ctr} sig={sig}"
 
+    def _note_home_auth(self, state: str, reason: str = "") -> None:
+        """CR104: the last login answer of the home BBS, kept for the settings page."""
+        if auth.base(self.auth.get("box") or self.target) != auth.base(self.home):
+            return
+        new = {"state": state, "reason": reason, "at": int(time.time())}
+        old = self.settings.get("auth_home") or {}
+        if (old.get("state"), old.get("reason")) == (state, reason) and new["at"] - old.get("at", 0) < 3600:
+            return                                  # same answer: no write per login
+        self.settings["auth_home"] = new
+        self._save_settings()
+
     def _control(self, line: str) -> None:
         cmd, _, rest = line[2:].partition(" ")
         if cmd == "AUTH?":                       # CR93: log in with the user's key
@@ -933,6 +944,7 @@ class ClientCore:
             return
         if cmd == "AUTHWAIT":
             self.auth.update(state="wait", reason="")
+            self._note_home_auth("wait")
             self.console.append(f"*** your key ({self.identity.fp}) waits for the sysop of "
                                 f"{self.auth['box'] or self.target} - tell him the fingerprint")
             self._touch()
@@ -940,11 +952,13 @@ class ClientCore:
         if cmd == "ERR" and rest.startswith("auth"):
             why = rest[4:].strip() or "refused"
             self.auth.update(state="refused", reason=why)
+            self._note_home_auth("refused", why)
             self.console.append(f"*** login with your key refused: {why}")
             self._touch()
             return
         if cmd == "OK":
             self.auth.update(state="ok", reason="")
+            self._note_home_auth("ok")
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
             self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
@@ -1281,6 +1295,7 @@ class ClientCore:
             "mail": self.mail,
             "sysmsg": self.sysmsg,
             "auth": self.auth,
+            "auth_home": self.settings.get("auth_home") or {},          # CR104
             "heard": [{"call": c, "symbol": self.heard.get(c, ""), "ago": int(now - t)}
                       for c, t in sorted(self.heard_at.items(), key=lambda kv: -kv[1])[:30]
                       if c not in self.members and c != self.target],

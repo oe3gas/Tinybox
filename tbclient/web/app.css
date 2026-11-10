@@ -467,6 +467,13 @@ li.msg.flash .bubble { outline: 2px solid var(--accent); transition: outline-col
 .sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .sheet h2 { font-size: 18px; margin: 4px 0; } .sheet h3 { font-size: 14px; margin: 18px 0 6px; }
 .sheet p { margin: 4px 0 8px; font-size: 13px; }
+/* CR104: sections as cards, two columns at the top */
+.set-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 2px 14px 10px; margin-top: 12px; min-width: 0; }
+.set-card h3 { margin-top: 12px; }
+.set-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }
+.set-col { min-width: 0; }
+@media (max-width: 640px) { .set-cols { grid-template-columns: 1fr; } }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .row input { flex: 1; border-radius: 8px; }
 .sym-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; margin-top: 8px;

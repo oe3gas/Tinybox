@@ -1,0 +1,4 @@
+- Settings as cards. Connection status shows login
+  with your key at the home BBS and the mailbox.
+- Mention alert: CW speed 60, 100 or 150 BpM.
+- Connection log: newest connect on top, "2h 41m".

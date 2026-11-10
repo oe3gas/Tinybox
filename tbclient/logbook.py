@@ -50,10 +50,10 @@ class Logbook:
                  row.get("tx"), row["ended"], row.get("freq") or None))
 
     def rows(self, limit: int | None = None, connected_only: bool = False) -> list[dict]:
-        """Newest first."""
+        """Newest connect first (CR104: by t_on, the row is written at the end)."""
         sql = "SELECT * FROM connlog" + (" WHERE ended NOT IN ('failed', 'cancelled')"
                                          if connected_only else "")
-        sql += " ORDER BY id DESC" + (" LIMIT ?" if limit else "")
+        sql += " ORDER BY t_on DESC, id DESC" + (" LIMIT ?" if limit else "")
         cur = self.db.execute(sql, (limit,) if limit else ())
         return [{"call": r["call"], "via": r["via"], "start": r["t_on"], "end": r["t_off"],
                  "secs": r["secs"], "rx": r["rx"], "tx": r["tx"], "air_tx": None,
