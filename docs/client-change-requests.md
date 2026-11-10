@@ -3463,14 +3463,11 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
    Liste fremder TinyBoxen.
 4. **Spaltenkopf:** die Spalte „In / out“ im Connection log heißt künftig „In/Out bytes“.
 
-### Noch offen (Claude, 10.11.2026)
-
-- Die bisherige Sektion „Mailbox“ (Inbox, sent, Rubriken, letzter Abgleich) kommt im neuen
-  Layout nicht vor. Vorschlag: die ganze Zeile in die Karte „Connection Status“ übernehmen,
-  die eigene Sektion entfällt.
-- Beobachtung im Connection log (Bild vom 10.11.): die Zeilen vom 07.11. stehen nicht in
-  zeitlicher Reihenfolge (23:02, 23:16, 23:01, 23:05, 23:03). Vermutlich sortiert nach
-  Verbindungsende statt Connect-Zeit – mit CR104 nach Connect-Zeit absteigend sortieren?
+5. **Sektion „Mailbox“:** die ganze Zeile (Inbox, sent, Rubriken, letzter Abgleich) kommt in
+   die Karte „Connection Status“, die eigene Sektion entfällt.
+6. **Connection log sortieren:** nach Connect-Zeit, neueste zuerst. Derzeit stehen Einträge
+   durcheinander (07.11.: 23:02, 23:16, 23:01, 23:05, 23:03), vermutlich nach Verbindungsende
+   sortiert.
 
 ## CR105 – Eigenes Profilfoto (offen, 10.11.2026)
 
