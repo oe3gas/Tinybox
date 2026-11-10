@@ -558,7 +558,7 @@ class FreeConnectTests(unittest.TestCase):
                 rows = core.logbook.rows()
                 self.assertEqual([(r["call"], r["ended"]) for r in rows],
                                  [("OE3XBS-8", "user"), ("OE3NIX-1", "failed")])
-                probe = len(peer_mod.probe_line()) + 1                # CR76: //TB? ... CR
+                probe = len(peer_mod.probe_line("x" * 22)) + 1        # CR76: //TB? ... n= CR
                 self.assertEqual(rows[0]["tx"], probe + 2)            # and "N" CR
                 self.assertGreater(rows[0]["rx"], 60)
                 self.assertIsNone(rows[1]["rx"])

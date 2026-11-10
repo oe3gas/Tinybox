@@ -2451,6 +2451,7 @@ function renderPeerHead(c, p) {
   if (c.state !== "online") ver.append(el("span", "st-chip warn", "not connected"));
   info.append(ver);
   info.append(peerQuality(p.q, c));
+  info.append(peerAuthRow(p.auth, c));                        // CR99: who is it really
   if (p.clock !== null && p.clock !== undefined) {            // CR78: the two clocks
     const off = p.clock, a = Math.abs(off);
     const row = el("div", "ph-clock small");
@@ -2470,6 +2471,31 @@ function renderPeerHead(c, p) {
   const m = peerMap(pr, c.target);
   head.replaceChildren(avatar(c.target, "", false), info, ...(m ? [m] : []));
   renderChess(c, p);
+}
+
+/* CR99: the key of the other TBClient - verified by a TinyBox, known, first contact,
+ * or another one than before (then history, pictures and files wait: accept?) */
+function peerAuthRow(a, c) {
+  const row = el("div", "ph-auth small");
+  a = a || {};
+  const fp = a.fp ? ` · key ${a.fp}${a.dev ? " · device " + a.dev : ""}` : "";
+  const T = { verified: ["ok", `✓ verified by ${a.issuer}`],
+              known: ["ok", "✓ known key"],
+              first: ["", "first contact - key stored"],
+              changed: ["warn", "⚠ another key than before - history, pictures and files paused"],
+              bad: ["warn", "⚠ wrong signature - chat only"],
+              old: ["", "older TBClient - no key check, chat only"] };
+  const [cls, txt] = T[a.state] || ["", "checking the key …"];
+  row.append(el("span", cls ? "st-chip " + cls : "", txt), fp);
+  row.title = "CR99: the other client signs a challenge with its key. Compare the fingerprint " +
+    "in a QSO if in doubt.";
+  if (a.state === "changed") {
+    const b = el("button", "sm", "Accept new key");
+    b.title = "Only after comparing the fingerprint with the other operator (QSO, phone)";
+    b.onclick = () => { if (window.confirm(`Accept key ${a.fp} for ${c.target}?\nCompared with the operator?`)) api("peer/accept", { ch: activeCh }); };
+    row.append(" ", b);
+  }
+  return row;
 }
 
 // 5 bars, 0 = one red bar, null = no result yet (grey)

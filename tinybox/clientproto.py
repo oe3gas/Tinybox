@@ -31,6 +31,9 @@ of a //SEND is read anyway so it never runs as commands. In such a session the
 terminal commands that write or delete (S, SP, SB, K, KM, E, N, NH, NL) are
 refused: the client does that, signed.
 
+CR99: //TRUST? -> //TRUST <this box>=<key> <trusted box>=<key> ... (public keys,
+the client checks other TBClients' certificates with them).
+
 CR94 (Variante B) - the sysop over the radio, only through the client: with cap
 ADM (granted only to the sysop call logged in with the key released here) one
 console command at a time, signed like the commands above:
@@ -252,6 +255,8 @@ def handle(s: Session, line: str) -> None:
         s.out("//ERR not a client session")
     elif cmd == "CERT?":
         _cert(s)
+    elif cmd == "TRUST?":
+        _trust_list(s)
     elif cmd == "ADM":
         _admin(s, line[2:][3:].strip())
     elif cmd == "BOARDS":
@@ -454,6 +459,16 @@ def _admin(s: Session, command: str) -> None:
     out = [f"//ADM> {visible(x).rstrip()}" for chunk in lines
            for x in re.split(r"[\r\n]+", str(chunk)) if x.strip()]
     s.out(*out[:ADMIN_MAX_LINES], "//ADMEND " + ("ok" if known else "unknown"))
+
+
+def _trust_list(s: Session) -> None:
+    """//TRUST?: this box's key and the boxes its sysop trusts - the client checks
+    with them the certificates of other TBClients (CR99). Public keys only."""
+    from . import keys
+    me = keys.this_box(s.service)
+    parts = [f"{me['box']}={me['pub']}"] + [f"{r['box']}={r['pub']}"
+                                            for r in keys.trusted(s.service)][:20]
+    s.out("//TRUST " + " ".join(parts))
 
 
 def _cert(s: Session) -> None:

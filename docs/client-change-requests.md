@@ -77,7 +77,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash mit CR86) |
 | 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | ✅ siehe unten |
 | 98 | Client-Audit: Zugriff auf PC-Daten und In-Band-Befehle | ✅ siehe unten, Bericht `docs/audit-client-cr98.md` |
-| 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | offen, siehe unten |
+| 99 | Chatverlauf und Peer-Identität (TB-06, TB-07) | ✅ 10.11.2026 (TB-06; TB-07 Zeilen bleiben unsigniert), siehe unten |
 | 100 | Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding und fremde Origins | ✅ siehe unten |
 | 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
 | 102 | APRS-Netzgraph: keine Linien zur eigenen Station, Auswahl nach Rolle, direkt gehört voll gefärbt, km an der Karte | ✅ siehe unten |
@@ -3391,7 +3391,7 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 - Die Befunde waren klein genug, um sie gleich zu beheben – keine eigenen CRs. Peer-Verlauf (TB-06)
   bleibt bei CR99.
 
-## CR99 – Chatverlauf und Peer-Identität (TB-06, TB-07, offen, 09.11.2026)
+## CR99 – Chatverlauf und Peer-Identität (TB-06, TB-07, ✅ 10.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3424,6 +3424,21 @@ Heimat-BBS. Damit:
    davon, nur Chat, mit Warnbalken (schließt TB-06).
 4. **Einzelne Zeilen** bleiben unsigniert (Byte-Kosten je Zeile; Rest-Risiko eingeschleuster
    Zeilen wie im Chatboard, TB-07). Optional später: signiert nur, was etwas auslöst (Löschen).
+
+### Umsetzung (Client 2026.11.10.10, TinyBox – 10.11.2026) ✅
+
+- Wie vorgeschlagen (OE3GAS: „passt so“). `tbclient/peerauth.py`; Fähigkeit `AUTH`, Zufallszahl
+  `n=` in `//TB?` / `//TB CLIENT` (+25 Byte), `//PAUTH sig= pub= dev= [cert=]`, signiert
+  `TINYBOX-PEER1|<eigener Ruf>|<Ruf des anderen>|<seine Zufallszahl>` (`auth.peer_message`).
+- Zustände `verified` (Zertifikat, Herausgeber vertraut), `known`, `first` (TOFU), `changed`,
+  `bad`, `old`. Bekannte Schlüssel in `settings.json` (`peer_keys`, 5 je Rufzeichen, 300 Rufzeichen).
+  Ein Zertifikat gilt auch für ein neues Gerät des anderen ohne Rückfrage.
+- Vertraute Herausgeber: `//TRUST?` an die Heimat-BBS (einmal am Tag) → `//TRUST <Box>=<Schlüssel> …`
+  (die Box selbst und ihre `TRUST`-Liste).
+- Nur bei `verified`/`known`/`first`: `//HIST`, `//HM` (also auch Löschen auf beiden Seiten),
+  eigene Bilder (`//IMG`) und Dateien (`//FGET`) an den anderen. Sonst Warnung im Log, nur Chat.
+- Peer-Karte: Zeile mit Zustand, Fingerabdruck, Gerät; Knopf „Accept new key“ bei `changed`.
+- Tests `tests/test_cr99.py`.
 
 ## CR107 – Gleiche Funktionen Client↔Client und im Chatboard (offen, 10.11.2026)
 

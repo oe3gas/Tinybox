@@ -13,7 +13,9 @@ stellt ein Zertifikat aus; damit klappt der Login auch an TinyBoxen,
 deren Sysop der Heimat-BBS vertraut (Stufe 3). Der Sysop selbst hat in
 den Settings eine Sysop-Konsole: Befehle an seine TinyBox, signiert (CR94),
 und im Leser "Sysop": in der TinyBox loeschen, Bulletins verschieben und
-kopieren (CR21).
+kopieren (CR21). Zwei TBClients pruefen beim Connect gegenseitig ihre
+Schluessel (CR99): bestaetigt durch die Heimat-BBS, bekannt oder anderer
+Schluessel (Warnung) - Verlauf, Bilder und Dateien nur mit vertrautem Peer.
 
 (Uebersicht im Repository, wird nicht gesendet. Was in einer Version
 neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als

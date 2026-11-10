@@ -130,7 +130,8 @@ class PeerImages:
 
     def _serve(self, h: str, off: int) -> None:
         data = self.store.get(h) if chatimg.HASH_RE.match(h) else None
-        if data is None or not self._sent_to_them(h) or off > len(data):
+        # CR99 (TB-06): only to the station whose key we trust
+        if data is None or not self.peer.trusted or not self._sent_to_them(h) or off > len(data):
             self.peer._send(f"//NOIMG {h}")
             return
         b = budget.of(self.core)             # CR97 (TB-03): a few times an hour, from the budget

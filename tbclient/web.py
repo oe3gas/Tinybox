@@ -304,6 +304,9 @@ class WebServer:
             elif path == "/api/peer/clear":        # CR78: {"ch": n} - delete the chat history
                 ch = data.get("ch")
                 ok = core.peer_clear(ch if isinstance(ch, int) else 0)
+            elif path == "/api/peer/accept":       # CR99: {"ch": n} - take its new key
+                ch = data.get("ch")
+                ok = core.peer_accept(ch if isinstance(ch, int) else 0)
             elif path == "/api/peer/heard":        # CR78: {"ch": n} - whom it hears
                 ch = data.get("ch")
                 ok = core.peer_heard(ch if isinstance(ch, int) else 0)

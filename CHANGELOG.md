@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- **Client zu Client mit Schlüssel (CR99, Audit TB-06):** `//TB?` und `//TB CLIENT` tragen eine
+  Zufallszahl, beide antworten `//PAUTH` (Signatur, Schlüssel, Gerätekennzeichen, Zertifikat der
+  Heimat-BBS). Die Peer-Karte zeigt „✓ verified by OE3GAS-1“, „✓ known key“, „first contact“ oder
+  „⚠ another key than before“ (Knopf „Accept new key“). Verlauf abgleichen/löschen, Bilder und
+  Dateien an den anderen nur bei vertrautem Schlüssel; ältere Clients: nur Chat. Box: `//TRUST?`
+  liefert ihren Schlüssel und die vertrauten Boxen (der Client prüft damit Zertifikate).
+  Client 2026.11.10.10 – **beide Seiten aktualisieren**, sonst kein Verlaufsabgleich.
 - **Ein Schlüssel je Gerät (CR93, OE3GAS):** jeder Client-PC hat seinen eigenen Schlüssel, der Sysop
   gibt jeden einzeln frei; ein neues Gerät stört die anderen nicht mehr (vorher `other_key`).
   Höchstens 5 je Rufzeichen. Box: Schema 14 (`client_keys`, die bisherigen Schlüssel werden

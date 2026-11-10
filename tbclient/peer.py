@@ -49,6 +49,7 @@ directions (prcore/linkq.py), polled every 30 s by the core.
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING
 
@@ -56,6 +57,7 @@ from prcore import aprs, linkq
 from prcore import profile as pf
 from prcore.text import isnum
 
+from .peerauth import PeerAuth
 from .peerchat import new_gen
 from .peerfile import PeerFiles
 from .peerfun import PeerFun
@@ -63,20 +65,24 @@ from .peerimg import PeerImages
 
 from . import VERSION, budget
 
+log = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from .channels import Channel
 
-PEER_CAPS = ("PROF", "HEARD", "HIST", "IMG", "FILE", "FUN")
+PEER_CAPS = ("PROF", "HEARD", "HIST", "IMG", "FILE", "FUN", "AUTH")
 HEARD_MAX = 10              # stations in one //HEARD line
 RESEND_MAX = 10             # lines sent again at most (//HM); more missing = both delete
 
 
-def probe_line() -> str:
-    return f"//TB? CLIENT v={VERSION} caps={','.join(PEER_CAPS)} t={int(time.time())}"
+def probe_line(nonce: str = "") -> str:
+    return (f"//TB? CLIENT v={VERSION} caps={','.join(PEER_CAPS)} t={int(time.time())}"
+            + (f" n={nonce}" if nonce else ""))
 
 
-def answer_line() -> str:
-    return f"//TB CLIENT v={VERSION} caps={','.join(PEER_CAPS)} t={int(time.time())}"
+def answer_line(nonce: str = "") -> str:
+    return (f"//TB CLIENT v={VERSION} caps={','.join(PEER_CAPS)} t={int(time.time())}"
+            + (f" n={nonce}" if nonce else ""))
 
 
 def _args(text: str) -> dict[str, str]:
@@ -95,7 +101,7 @@ def version_key(v: str) -> tuple:
 class Peer:
     """The TBClient on the other end of one channel."""
 
-    def __init__(self, ch: "Channel", args: str) -> None:
+    def __init__(self, ch: "Channel", args: str, my_nonce: str = "") -> None:
         a = _args(args)
         self.ch = ch
         self.version = a.get("v", "")[:20]
@@ -116,6 +122,9 @@ class Peer:
         self.files = PeerFiles(self)         # files, LZHUF (peerfile.py)
         self.fun = PeerFun(self)             # ping, speed test, chess (peerfun.py)
         self.pending: list[int] = []         # sent lines (numbers) not acknowledged yet
+        their = a.get("n", "")
+        self.auth = PeerAuth(self, my_nonce, their if 8 <= len(their) <= 32 and
+                             their.replace("-", "").replace("_", "").isalnum() else "")
 
     @property
     def newer(self) -> bool:
@@ -133,9 +142,20 @@ class Peer:
         if "PROF" in self.caps and ch.core.settings.get("profile") is not None \
                 and not pf.empty(mine):
             self._send(f"//PROF {pf.encode(mine, with_time=False)}")
+        if "AUTH" in self.caps and self.auth.their_nonce:
+            self.auth.send()                     # CR99: who we are; history after theirs
+        else:
+            self.auth._set("old")
+
+    def trusted_now(self) -> None:
+        """CR99: the other one's key is good - now the history is compared."""
         if self.hist:
             self._snap = self.store.state(self.call)["tx"]
             self._send(self.store.hist_line(self.call))
+
+    @property
+    def trusted(self) -> bool:
+        return self.auth.trusted
 
     # --- chat history (peerchat.py) --------------------------------------------------
 
@@ -269,10 +289,16 @@ class Peer:
                 self._send(self._heard_line())
         elif word == "HEARD":
             self._on_heard(rest)
-        elif word == "HIST":
-            self._on_hist(rest)
-        elif word == "HM":
-            self._on_hm(rest)
+        elif word == "PAUTH":
+            self.auth.take(rest)
+        elif word in ("HIST", "HM"):
+            if not self.trusted:                 # CR99 (TB-06): not with an unproven key
+                log.warning("%s: //%s ignored - key not trusted (%s)", self.call, word,
+                            self.auth.state or "none")
+            elif word == "HIST":
+                self._on_hist(rest)
+            else:
+                self._on_hm(rest)
         elif word in ("IMG", "I", "NOIMG"):
             if not self.img.take(word, rest):
                 return False
@@ -360,7 +386,8 @@ class Peer:
                 "prof": self.profile_row(), "heard": self.heard, "heard_at": self.heard_at,
                 "hist": self.hist, "img": self.img.ok, "file": self.files.ok,
                 "clock": self.clock_off, "q": self.quality_summary(now),
-                "fun": self.fun.summary() if "FUN" in self.caps else None}
+                "fun": self.fun.summary() if "FUN" in self.caps else None,
+                "auth": self.auth.summary()}
 
 
 def _dir(deg: float) -> str:

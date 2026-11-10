@@ -1,0 +1,3 @@
+- Client zu Client: Schluessel werden geprueft
+  (bekannt / bestaetigt durch BBS / anderer Schluessel).
+- Verlauf, Bilder, Dateien nur mit vertrautem Peer.

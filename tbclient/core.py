@@ -537,6 +537,11 @@ class ClientCore:
             return chan.peer.fun.chess(act[6:], arg)
         return False
 
+    def peer_accept(self, ch: int) -> bool:
+        """CR99: the user takes the other key of the TBClient in channel ch."""
+        chan = self.channels.get(ch)
+        return chan is not None and chan.peer is not None and chan.peer.auth.accept()
+
     def peer_heard(self, ch: int) -> bool:
         """CR78: ask the TBClient in channel ch whom it hears."""
         chan = self.channels.get(ch)
@@ -974,6 +979,45 @@ class ClientCore:
         self.console.append(f"*** certificate of {box} until {c['until'][:4]}-{c['until'][4:6]}-"
                             f"{c['until'][6:]}: other TinyBoxen that trust {box} let you log in")
 
+    def _trust_due(self) -> bool:
+        box = self.auth.get("box") or self.target
+        if self._login is None or auth.base(box) != auth.base(self.home):
+            return False
+        tr = self.settings.get("trust")
+        return not isinstance(tr, dict) or time.time() - tr.get("at", 0) > 86400
+
+    def _store_trust(self, rest: str) -> None:
+        """//TRUST box=key ...: from the home BBS (the first one is the home BBS itself)."""
+        box = (self.auth.get("box") or self.target).upper()
+        if self._login is None or auth.base(box) != auth.base(self.home):
+            return
+        keys = {}
+        for part in rest.split()[:21]:
+            name, eq, pub = part.partition("=")
+            try:
+                if eq and 3 <= len(name) <= 9:
+                    auth.b64d(pub, 32)
+                    keys[name.upper()] = pub
+            except auth.AuthError:
+                continue
+        if box in keys:
+            self.settings["trust"] = {"at": int(time.time()), "home": box, "keys": keys}
+            self._save_settings()
+
+    def trusted_issuer(self, issuer: str) -> bytes | None:
+        """CR99: the key of a TinyBox whose certificates this client believes - its
+        home BBS and the boxes that one trusts (fetched with //TRUST?)."""
+        tr = self.settings.get("trust")
+        pub = tr.get("keys", {}).get(issuer.upper()) if isinstance(tr, dict) else None
+        try:
+            return auth.b64d(pub, 32) if pub else None
+        except auth.AuthError:
+            return None
+
+    def own_cert(self) -> str:
+        """The certificate of the home BBS for this key (for other TBClients, CR99)."""
+        return self._cert_for("")
+
     def _cert_for(self, box: str) -> str:
         """At another TinyBox: the newest valid certificate of another box (home)."""
         today = time.strftime("%Y%m%d", time.gmtime())
@@ -1023,6 +1067,9 @@ class ClientCore:
                 self.sync.start(scope)
             self._touch()
             return
+        if cmd == "TRUST":                       # CR99: keys the home BBS trusts
+            self._store_trust(rest)
+            return
         if cmd == "CERT":                        # stage 3: from the home BBS
             self._store_cert(rest.strip())
             return
@@ -1045,6 +1092,8 @@ class ClientCore:
             self._note_home_auth("ok")
             if self._cert_due():
                 self._send("//CERT?")            # stage 3: for logins at other TinyBoxen
+            if self._trust_due():
+                self._send("//TRUST?")           # CR99: whose certificates count
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
             self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")

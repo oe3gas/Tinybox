@@ -180,7 +180,7 @@ class PeerFiles:
 
     async def _serve(self, h: str) -> None:
         data = self.store.get(h) if chatimg.HASH_RE.match(h) else None
-        if data is None or not self._offered(h):
+        if data is None or not self.peer.trusted or not self._offered(h):    # CR99 (TB-06)
             self.peer._send(f"//NOFILE {h}")
             return
         packed = await asyncio.to_thread(lzhuf.compress, data)

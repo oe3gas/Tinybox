@@ -796,6 +796,21 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   `SB`, `K`, `KM`, `E`, `N`, `NH`, `NL`) nicht an: „Not in client mode …“ – das macht der Client,
   signiert. In einer normalen Terminal-Verbindung gilt 3.7b.
 
+- **Client zu Client (CR99):** zwei TBClients prüfen beim Connect gegenseitig ihre Schlüssel
+  (je eine Zufallszahl, signiert). Die Karte des anderen zeigt:
+
+  | Anzeige | Bedeutung |
+  |---|---|
+  | ✓ verified by OE3GAS-1 | Zertifikat seiner Heimat-BBS – einer Box, der deine Heimat-BBS vertraut (oder sie selbst) |
+  | ✓ known key | derselbe Schlüssel wie bei früheren Verbindungen |
+  | first contact – key stored | erstes Mal; der Schlüssel wird gemerkt (wie bei SSH) |
+  | ⚠ another key than before | ein neues Gerät des anderen – oder jemand verwendet sein Rufzeichen. Fingerabdruck im QSO vergleichen, dann „Accept new key“ |
+  | older TBClient | der andere kann das noch nicht: nur Chat |
+
+  Verlauf abgleichen oder löschen, eigene Bilder und Dateien an den anderen gibt es nur bei ✓ oder
+  „first contact“. Die vertrauten Boxen holt der Client einmal am Tag von der Heimat-BBS
+  (`//TRUST?`).
+
 ### 3.7b Rollen und Rechte (CR92, PLANUNG 29.7)
 
 Das Rufzeichen einer Terminal-Verbindung ist nicht bewiesen – wer einen Sender hat, kann jedes

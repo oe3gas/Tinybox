@@ -263,6 +263,12 @@ def check_cert(cert: dict, issuer_pub: bytes, today: str) -> bool:
         cert["sig"])
 
 
+def peer_message(signer: str, other: str, nonce: str) -> bytes:
+    """What a TBClient signs for another TBClient (CR99): the other one's challenge,
+    with both calls - a recorded answer is good for no other connection."""
+    return f"TINYBOX-PEER1|{base(signer)}|{base(other)}|{nonce}".encode("ascii")
+
+
 def base(call: str) -> str:
     return call.strip().upper().split("-", 1)[0]
 
@@ -323,6 +329,9 @@ class Identity:
 
     def sign_login(self, box: str, call: str, nonce: str) -> str:
         return b64e(sign(self.secret, login_message(box, call, nonce)))
+
+    def sign_peer(self, me: str, other: str, nonce: str) -> str:
+        return b64e(sign(self.secret, peer_message(me, other, nonce)))
 
     def sign_command(self, box: str, call: str, nonce: str, counter: int, line: str,
                      payload: list[str] | tuple[str, ...] = ()) -> str:

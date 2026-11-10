@@ -12,6 +12,7 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING
 
+from prcore import auth
 from prcore.text import clean_text
 
 from . import peer as peer_mod
@@ -60,6 +61,7 @@ class Channel:
         self._disc_timer: asyncio.TimerHandle | None = None
         self._detect_task: asyncio.Task | None = None
         self.probed = False                       # CR76: //TB? sent on this connection
+        self._peer_nonce = ""                     # CR99: our challenge for a TBClient
         self._probe_until = 0.0                   # CR98: its answer only comes this soon
         self.peer: peer_mod.Peer | None = None    # CR78: the other side is a TBClient
         self._t0 = 0.0
@@ -217,7 +219,8 @@ class Channel:
     # --- CR76: who is there / CR78: TBClient to TBClient ------------------------------
 
     def _probe(self) -> None:
-        line = peer_mod.probe_line()
+        self._peer_nonce = auth.new_nonce()        # CR99: the other TBClient signs it
+        line = peer_mod.probe_line(self._peer_nonce)
         self.probed = True
         self._probe_until = time.monotonic() + PROBE_ANSWER_SEC
         self.term_line("tx", line)
@@ -230,12 +233,14 @@ class Channel:
         word, _, rest = line[2:].partition(" ")
         word = word.upper()
         if word == "TB?" and self.incoming:          # a TBClient called us
-            self.link.send_line(peer_mod.answer_line())
-            self.core.console.append(f"[{self.n}]> {peer_mod.answer_line()}")
+            self._peer_nonce = auth.new_nonce()
+            answer = peer_mod.answer_line(self._peer_nonce)
+            self.link.send_line(answer)
+            self.core.console.append(f"[{self.n}]> {answer}")
             kind, _, args = rest.partition(" ")
             if kind.upper() == "CLIENT" and self.peer is None:
                 self._terminal()
-                self.peer = peer_mod.Peer(self, args)
+                self.peer = peer_mod.Peer(self, args, self._peer_nonce)
                 self.peer.start()
             return True
         if word == "TB" and self.probed and not self.incoming:
@@ -254,7 +259,7 @@ class Channel:
                 if self._detect_task:
                     self._detect_task.cancel()
                 self._terminal()
-                self.peer = peer_mod.Peer(self, args)
+                self.peer = peer_mod.Peer(self, args, self._peer_nonce)
                 self.peer.start()
                 return True
             return False
