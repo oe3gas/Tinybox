@@ -31,6 +31,13 @@ of a //SEND is read anyway so it never runs as commands. In such a session the
 terminal commands that write or delete (S, SP, SB, K, KM, E, N, NH, NL) are
 refused: the client does that, signed.
 
+CR94 (Variante B) - the sysop over the radio, only through the client: with cap
+ADM (granted only to the sysop call logged in with the key released here) one
+console command at a time, signed like the commands above:
+
+    //ADM <console command> c=<n> sig=..   e.g. //ADM STATUS, //ADM REL 12
+        -> //ADM> <line> ... //ADMEND ok|unknown|refused
+
 v = client version (date). If the client in this repository is newer, the
 answer also has cur=<newest version> and news=<number of the feature bulletin
 in the rubric TBNEWS>, see clientnews.py.
@@ -134,7 +141,7 @@ REQUIRE_AUTH = True
 
 PROTO = "TB1"
 KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
-              "HSEQ")
+              "HSEQ", "ADM")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
@@ -176,7 +183,7 @@ def split_signature(line: str) -> tuple[str, int | None, str | None]:
 
 def critical(cmd: str, parts: list[str]) -> bool:
     """The commands that need a signature after the login (see module doc)."""
-    if cmd in ("SEND", "KILL"):
+    if cmd in ("SEND", "KILL", "ADM"):
         return True
     if cmd == "PROF":
         return parts[1:] != ["?"]
@@ -216,6 +223,8 @@ def _refuse(s: Session, cmd: str, reason: str) -> None:
         s.out(f"//ERR kill {reason}", "//KEND")
     elif cmd == "PROF":
         s.out(f"//PROF ERR {reason}")
+    elif cmd == "ADM":
+        s.out(f"//ADMEND {reason}")
     else:
         s.out(f"//ERR {cmd.lower()} {reason}")
 
@@ -243,6 +252,8 @@ def handle(s: Session, line: str) -> None:
         s.out("//ERR not a client session")
     elif cmd == "CERT?":
         _cert(s)
+    elif cmd == "ADM":
+        _admin(s, line[2:][3:].strip())
     elif cmd == "BOARDS":
         _boards(s)
     elif cmd == "RESEND":
@@ -395,6 +406,46 @@ def _cert_ok(s: Session, text: str, call: str, pub64: str) -> tuple[str, str]:
     return c["issuer"], ""
 
 
+# --- CR94 (Variante B): the sysop over the radio, through the client ------------------
+
+ADMIN_MAX_LINES = 60
+
+
+def admin_allowed(s: Session) -> bool:
+    """Only the sysop's own call, logged in with the key released here (not via a
+    certificate of another box) - the radio call alone gives nothing."""
+    if not s.auth or s.auth_cert or s.auth_pub is None \
+            or not s.service.is_sysop_call(s.call):
+        return False
+    row = s.service.store.key_get(auth.base(s.call))
+    return row is not None and row["status"] == "active" and row["pub"] == auth.b64e(s.auth_pub)
+
+
+def _admin(s: Session, command: str) -> None:
+    """//ADM <console command> c=.. sig=..: one sysop console command (signed, see
+    handle()). Answer: //ADM> <line> ... //ADMEND [ok|refused|unknown]."""
+    from prcore.text import visible
+
+    from .adapters.sysop import MonitorFilter, SysopConsole
+    if not admin_allowed(s):
+        log.warning("%s: admin command refused (not the sysop with his released key)", s.call)
+        s.out("//ADMEND refused")
+        return
+    lines: list[str] = []
+    console = SysopConsole(s.service.app, MonitorFilter(False), lines.append)
+    console.out = lambda *xs: lines.extend(xs)
+    log.warning("%s: admin command over %s: %s", s.call, s.origin, visible(command)[:80])
+    try:
+        known = console.remote(command)
+    except Exception:
+        log.exception("admin command %r failed", command)
+        lines.append("Internal error.")
+        known = True
+    out = [f"//ADM> {visible(x).rstrip()}" for chunk in lines
+           for x in re.split(r"[\r\n]+", str(chunk)) if x.strip()]
+    s.out(*out[:ADMIN_MAX_LINES], "//ADMEND " + ("ok" if known else "unknown"))
+
+
 def _cert(s: Session) -> None:
     """//CERT?: the certificate of this box for the key the user logged in with -
     only at his home BBS (the key released here, not via a certificate)."""
@@ -421,6 +472,8 @@ def _client_ok(s: Session, info: ClientInfo) -> None:
             extra += f" news={s.service.client_news_id}"
     if "NUM" in caps:                 # CR33: how the TinyBox turns the counters into bars
         extra += " " + s.service.chat.quality_config()
+    if "ADM" in caps and not admin_allowed(s):
+        caps.discard("ADM")           # CR94: only the sysop with his own released key
     if "PROF" in caps:                # CR73: the client sends or fetches only on a change
         extra += f" prof={pf.crc(profiles.get(s.service.store, s.call))}"
     # the human prompt is still on the line: start the answer on a fresh line

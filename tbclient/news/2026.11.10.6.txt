@@ -1,0 +1,2 @@
+- Sysop: Konsolenbefehle der eigenen TinyBox
+  ueber Funk, jeder einzeln signiert (Settings).

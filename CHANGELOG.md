@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- **Sysop über Funk mit dem Client (CR94, Variante B):** meldet sich der Sysop mit seinem hier
+  freigegebenen Schlüssel an, bekommt der Client die Fähigkeit `ADM` und in den Settings eine
+  **Sysop console**. Jeder Konsolenbefehl geht einzeln signiert (`//ADM <Befehl> c= sig=`), die
+  Antwort als `//ADM>`-Zeilen. Über Funk erlaubt: H, INFO, WHO, STATUS, DISC, BEACON, FWD, FWQ, HOLD,
+  REL, SHUTDOWN, RESTART, RELOAD, USER, TRUST – nicht WEB, MON, LOG, UPDATE. Jeder Befehl steht im
+  Log. Mit einem Zertifikat einer anderen Box gibt es kein `ADM`. Client 2026.11.10.6.
 - **Kein Sysop über Funk per Rufzeichen** (CR94, OE3GAS): eine Terminal-Verbindung über Funk mit dem
   Sysop-Rufzeichen hat Gast-Rechte, `[station] sysop_via_radio` wird ignoriert (Warnung beim Start).
   Jede Terminal-Sitzung (nicht der Client) mit diesem Rufzeichen über Funk steht im Log; der Sysop

@@ -139,6 +139,7 @@ class ClientCore:
         self.identity = auth.Identity(cfg.data_dir / "identity.key")
         self.auth: dict = {"state": "", "fp": self.identity.fp, "reason": "", "box": ""}
         self._login: tuple[str, str] | None = None    # (mailbox, challenge) of the login
+        self.adm_log: deque = deque(maxlen=300)       # CR94: sysop console over the radio
         self._cmd_ctr = 0
         # CR75: a station connected to us - the GUI switches to its terminal
         self.focus = {"n": 0, "seq": 0}
@@ -809,7 +810,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ" + (",Z,IMG" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM" + (",Z,IMG" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -910,6 +911,17 @@ class ClientCore:
 
     # --- protocol lines -------------------------------------------------------------
 
+    def admin(self, command: str) -> bool:
+        """CR94 (Variante B): one sysop console command at the TinyBox, signed. Only
+        if the box granted ADM (the sysop, logged in with his released key)."""
+        command = " ".join(command.split())[:200]
+        if "ADM" not in self.caps or not command or self.state != "online":
+            return False
+        self.adm_log.append({"k": "cmd", "x": command, "t": int(time.time())})
+        self._send(self.signed("//ADM " + command))
+        self._touch()
+        return True
+
     def signed(self, line: str, payload: list[str] | tuple[str, ...] = ()) -> str:
         """CR93 stage 2: a critical command (//SEND, //KILL, //SYNC k=, //PROF) with
         its number and signature - bound to this login, so an injected or recorded
@@ -994,6 +1006,11 @@ class ClientCore:
             cert = self._cert_for(box)
             self._send(f"//AUTH sig={self.identity.sign_login(box, self.cfg.mycall, nonce)} "
                        f"pub={self.identity.pub}" + (f" cert={cert}" if cert else ""))
+            return
+        if cmd in ("ADM>", "ADMEND"):            # CR94: answer of an admin command
+            k = "out" if cmd == "ADM>" else "end"
+            self.adm_log.append({"k": k, "x": rest, "t": int(time.time())})
+            self._touch()
             return
         if cmd == "CERT":                        # stage 3: from the home BBS
             self._store_cert(rest.strip())
@@ -1353,6 +1370,8 @@ class ClientCore:
             "mail": self.mail,
             "sysmsg": self.sysmsg,
             "auth": self.auth,
+            "adm": "ADM" in self.caps,
+            "adm_log": list(self.adm_log)[-120:],
             "auth_home": self.settings.get("auth_home") or {},          # CR104
             "heard": [{"call": c, "symbol": self.heard.get(c, ""), "ago": int(now - t)}
                       for c, t in sorted(self.heard_at.items(), key=lambda kv: -kv[1])[:30]

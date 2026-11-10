@@ -307,6 +307,8 @@ class WebServer:
             elif path == "/api/peer/heard":        # CR78: {"ch": n} - whom it hears
                 ch = data.get("ch")
                 ok = core.peer_heard(ch if isinstance(ch, int) else 0)
+            elif path == "/api/adm":               # CR94: {"line": "STATUS"} - sysop, signed
+                ok = core.admin(str(data.get("line", "")))
             elif path == "/api/say":
                 ok = core.say(str(data.get("text", "")))
             elif path == "/api/react":

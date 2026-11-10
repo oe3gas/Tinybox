@@ -1,6 +1,6 @@
-# Testanleitung – Signieren (CR93) und Rollen (CR92)
+# Testanleitung – Signieren (CR93), Rollen (CR92), Sysop über Funk (CR94)
 
-Stand 10.11.2026 · TinyBox mit Schema 13 · Client 2026.11.10.5
+Stand 10.11.2026 · TinyBox mit Schema 13 · Client 2026.11.10.6
 
 Vorgehen: Schritt für Schritt, jeweils **Erwartung** prüfen und ✔/✘ in die letzte Spalte.
 Bei ✘ bitte die Zeile aus der TinyBox-Konsole bzw. die Meldung im Client notieren.
@@ -18,7 +18,7 @@ die Gast-Tests ein anderes Rufzeichen nehmen, z. B. `OE1TST`.
 | # | Schritt | Erwartung | ✔/✘ |
 |---|---|---|---|
 | 0.1 | PC2: Datenbank `data\…db` sicherheitshalber wegkopieren. Dann `git pull`, TinyBox neu starten. | Start ohne Fehler. Datenbank auf Schema 13 (läuft automatisch). | |
-| 0.2 | PC1: `git pull`, Client neu starten. | Startblock zeigt Version **2026.11.10.5** und „Your key … Fingerabdruck“. Fingerabdruck notieren: ________ | |
+| 0.2 | PC1: `git pull`, Client neu starten. | Startblock zeigt Version **2026.11.10.6** und „Your key … Fingerabdruck“. Fingerabdruck notieren: ________ | |
 | 0.3 | Sysop-Web-GUI öffnen. | Links neuer Menüpunkt **Keys**. | |
 
 ## 1. Login mit Schlüssel (Stufe 1) und Freigabe in der Web-GUI
@@ -105,6 +105,20 @@ Telnet auf PC2, Rufzeichen `OE1TST`.
 | 6.1 | Web-GUI → Keys → bei `OE3GAS` **Revoke**, Client neu verbinden. | Client: „login with your key refused: revoked“, Hinweisbalken; kein Client-Modus. | |
 | 6.2 | **Release**, Client neu verbinden. | Client-Modus wieder da. | |
 | 6.3 | (Optional) Auf PC1 `data\tbclient\identity.key` wegkopieren und löschen, Client starten und verbinden. | Neuer Fingerabdruck im Startblock; Box meldet „other_key“ (der alte ist freigegeben). Danach die Kopie zurücklegen, Client neu starten → wieder Client-Modus. | |
+
+## 6a. Sysop-Konsole über den Client (CR94)
+
+Am besten über Funk (Client auf PC1, TinyBox auf PC2), mit dem Rufzeichen `OE3GAS`.
+
+| # | Schritt | Erwartung | ✔/✘ |
+|---|---|---|---|
+| 6a.1 | Client verbinden, Settings öffnen. | Karte **Sysop console** ist da (nur für OE3GAS mit dem hier freigegebenen Schlüssel). | |
+| 6a.2 | `STATUS` eingeben, Send. | Die Statuszeilen der TinyBox erscheinen in der Karte. | |
+| 6a.3 | `USER`, dann `FWQ`. | Schlüsselliste bzw. Forward-Warteschlange. | |
+| 6a.4 | `WEB` | „(not possible over the radio)“ – der Login-Link geht nie über Funk. | |
+| 6a.5 | Konsole am PC2 ansehen. | Je Befehl eine Warnung „OE3GAS-…: admin command over radio: …“. | |
+| 6a.6 | Mit einem anderen Rufzeichen (zweiter Client oder OE3TEC) verbinden, Settings. | Keine Sysop-Konsole. | |
+| 6a.7 | (Optional) `RESTART` | TinyBox startet nach der Vorwarnung neu; der Client verbindet sich danach wieder. | |
 
 ## 7. Was nicht getestet werden muss (automatische Tests)
 

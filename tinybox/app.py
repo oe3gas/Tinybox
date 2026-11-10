@@ -45,4 +45,5 @@ class App:
                                                              cfg.mailbox.idle_timeout_min * 60))
         from .shutdown import ShutdownTimer
         app.shutdown = ShutdownTimer(app)
+        service.app = app                     # CR94: the admin channel runs console commands
         return app

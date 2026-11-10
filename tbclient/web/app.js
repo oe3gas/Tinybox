@@ -278,6 +278,7 @@ function render() {
   renderMail();
   renderProfile();
   renderAuthInfo();
+  renderAdmin();
   renderSys();
   renderUpdate();
   checkFetch();
@@ -427,6 +428,24 @@ function renderAuthInfo() {
                 refused: `login refused${h.reason || a.reason ? ` (${a.reason || h.reason})` : ""}` };
   $("auth-info").textContent = `Home BBS ${S.home}: ${TXT[st] || "no login with the key yet"}${st ? when : ""}. ` +
     `Own key of this client, fingerprint ${a.fp || "-"}. Client mode only with the home BBS.`;
+}
+// CR94: the sysop console over the radio (only when the TinyBox grants ADM)
+function renderAdmin() {
+  $("adm-card").classList.toggle("hidden", !S.adm);
+  if (!S.adm) return;
+  const box = $("adm-out"), log = S.adm_log || [];
+  const text = log.map((e) => e.k === "cmd" ? "> " + e.x : e.k === "end"
+    ? (e.x === "ok" ? "" : `(${e.x === "unknown" ? "not possible over the radio" : e.x})`) : e.x)
+    .filter((x) => x !== "").join("\n");
+  if (box.textContent !== text) {
+    box.textContent = text;
+    box.scrollTop = box.scrollHeight;
+  }
+}
+async function sendAdmin() {
+  const line = $("adm-line").value.trim();
+  if (!line) return;
+  if (await api("adm", { line })) $("adm-line").value = "";
 }
 function renderSys() {
   const m = S.sysmsg;
@@ -3278,6 +3297,8 @@ async function start() {
   $("pb-fill").onclick = openProfile;                         // CR73
   $("pb-later").onclick = () => api("profile/later");
   $("prof-edit").onclick = openProfile;
+  $("adm-send").onclick = sendAdmin;                          // CR94
+  $("adm-line").onkeydown = (e) => { if (e.key === "Enter") sendAdmin(); };
   $("prof-form").onsubmit = saveProfile;
   $("prof-cancel").onclick = () => $("profdlg").classList.add("hidden");
   $("profdlg").onclick = (e) => { if (e.target === $("profdlg")) $("profdlg").classList.add("hidden"); };

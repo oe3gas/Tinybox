@@ -496,6 +496,20 @@ class SysopConsole:
         except keys.KeysError as exc:
             self.out(str(exc))
 
+    # CR94 (Variante B): what the sysop may run over the radio through the client -
+    # signed, one command at a time. Not: WEB (the login link), MON and LOG (live
+    # output to this window), B (closes the console), UPDATE (answers later).
+    REMOTE = ("H", "?", "HELP", "INFO", "W", "WHO", "STATUS", "DISC", "BEACON", "FWD", "FWQ",
+              "HOLD", "REL", "SHUTDOWN", "RESTART", "RELOAD", "USER", "TRUST")
+
+    def remote(self, line: str) -> bool:
+        """One console command from the admin channel; False if not allowed there."""
+        word, _, arg = line.strip().partition(" ")
+        if word.upper() not in self.REMOTE:
+            return False
+        self.COMMANDS[word.upper()](self, arg.strip())
+        return True
+
     COMMANDS: dict[str, Callable[["SysopConsole", str], None]] = {
         "H": cmd_help, "?": cmd_help, "HELP": cmd_help,
         "B": cmd_bye, "BYE": cmd_bye,

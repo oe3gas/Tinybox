@@ -835,3 +835,8 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
   #app.view-term.peer-wide .ph-fun, #app.view-term.peer-wide #peer-heard,
   #app.view-term.peer-wide #peer-clear { display: none !important; }
 }
+
+/* CR94: sysop console over the radio */
+.adm-out { max-height: 14em; min-height: 3em; overflow: auto; margin: 6px 0; padding: 6px 8px;
+           background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font-size: 12px;
+           white-space: pre-wrap; word-break: break-word; }

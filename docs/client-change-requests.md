@@ -376,6 +376,10 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 2. Wo: **nur in der Sysop-Konsole (Terminal am TinyBox-PC) und in der Sysop-Weboberfläche** – **keine Sysop-Rechte über Funk und keine im Client** (Entscheidung Gerhard, 11.10.2026).
 3. Eine Kopie übernimmt die Ablaufzeit des Originals.
 
+**Geändert 10.11.2026 (OE3GAS, CR94):** Sysop über Funk gibt es jetzt – nur mit dem Client, Login
+mit dem Schlüssel des Sysops und jeder Konsolenbefehl einzeln signiert. Verschieben/Kopieren
+(MOVE/COPY) gehört, wenn es kommt, in diese Befehlsliste.
+
 **Sysop-Rechte im Client – verworfen (11.10.2026):** Es gibt keine Sysop-Rechte über Funk und keine im Client. Der folgende Vorschlag bleibt nur zur Dokumentation stehen:
 - **Lokal (Client auf dem TinyBox-PC, `link = telnet`):** schon heute bekommt eine Telnet-Sitzung mit dem Sysop-Rufzeichen Sysop-Rechte (der Testport hört nur auf 127.0.0.1). Die TinyBox meldet das im Handshake (`//OK … sysop=1`), der Client zeigt dann die Sysop-Knöpfe.
 - **Über Funk:** Rufzeichen sind nicht authentisch (`sysop_via_radio = no`). Neu: Anmeldung mit **Challenge-Response** wie Winlink „Secure Login“: Die TinyBox schickt eine Zufallszahl, der Client antwortet mit einem daraus und einem geheimen Sysop-Passwort berechneten Code (HMAC). Das Passwort geht nie über Funk, ein mitgehörter Code nützt beim nächsten Mal nichts. Der Inhalt bleibt Klartext – es wird nur angemeldet, nichts verschlüsselt.
@@ -3175,11 +3179,18 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
    Log, der Sysop bekommt höchstens alle 6 h eine persönliche Nachricht („Sysop call … connected
    over the radio“). Der eigene Client über Funk löst nichts aus. AXUDP von einem
    Loopback-Partner und Telnet (nur `127.0.0.1`) bleiben lokal und damit Sysop.
-2. **Sysop über Funk nur mit dem Client (Variante B):** Login mit dem Schlüssel des Sysops (CR93),
-   jeder Admin-Befehl einzeln signiert wie CR93 Stufe 2. Noch umzusetzen.
+2. **Sysop über Funk nur mit dem Client (Variante B) ✅** (Client 2026.11.10.6): Login mit dem
+   Schlüssel des Sysops (CR93), Fähigkeit `ADM` nur für das Sysop-Rufzeichen mit dem **hier**
+   freigegebenen Schlüssel (nicht per Zertifikat). `//ADM <Konsolenbefehl> c=<n> sig=…` – signiert
+   wie CR93 Stufe 2 –, Antwort `//ADM> …` und `//ADMEND ok|unknown|refused|sig_…`. Über Funk nur
+   die Liste `SysopConsole.REMOTE` (H, INFO, WHO, STATUS, DISC, BEACON, FWD, FWQ, HOLD, REL,
+   SHUTDOWN, RESTART, RELOAD, USER, TRUST); nicht WEB (Login-Link), MON, LOG, UPDATE und keine
+   Mailbox-Befehle als Sysop. Jeder Befehl als Warnung im Log. Client: Karte „Sysop console“ in
+   den Settings. Tests `tests/test_cr94.py`.
 3. **Kein Notzugang** über Terminal (kein TOTP, kein Passwort).
 - Damit entfällt auch die frühere Idee aus CR21 (`sysop_via_radio = auth` mit HMAC-Passwort):
-  ersetzt durch Variante B.
+  ersetzt durch Variante B. Die Entscheidung aus CR21 („keine Sysop-Rechte über Funk und keine im
+  Client“) ist damit geändert – bestätigt von OE3GAS, 10.11.2026.
 
 ## CR95 – Zeichensatz-Policy und Ausgabe-Maskierung (TB-11, TB-12, TB-22, ✅ 09.11.2026)
 

@@ -279,6 +279,12 @@
         <p id="auth-info" class="muted small"></p>
         <p id="mb-info" class="muted small"></p>
       </section>
+      <section class="set-card hidden" id="adm-card">
+        <h3>Sysop console</h3>
+        <p class="muted small">Console commands at your TinyBox over this connection, each one signed with your key (STATUS, WHO, FWQ, REL n, USER, TRUST, RESTART …).</p>
+        <pre id="adm-out" class="adm-out"></pre>
+        <div class="row"><input id="adm-line" class="grow" placeholder="STATUS" autocomplete="off"><button id="adm-send" class="sm">Send</button></div>
+      </section>
       <section class="set-card">
         <h3>My profile</h3>
         <p class="muted small"><span id="prof-now">-</span> <button id="prof-edit" class="sm">Edit</button></p>

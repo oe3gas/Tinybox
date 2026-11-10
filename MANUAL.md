@@ -812,8 +812,18 @@ Rufzeichen verwenden. Deshalb unterscheidet die TinyBox:
 - **Sysop über Funk gibt es nicht per Rufzeichen:** eine Terminal-Verbindung über Funk mit dem
   Sysop-Rufzeichen ist ein Gast (`sysop_via_radio` wird ignoriert). Jede solche Terminal-Sitzung
   steht als Warnung im Log, der Sysop bekommt höchstens alle 6 h eine Nachricht – war er es nicht,
-  verwendet jemand sein Rufzeichen. Der eigene Client über Funk löst das nicht aus. Sysop-Arbeit: Konsole, Web-GUI, Telnet am PC der Box; über Funk später
-  nur mit dem Client und Schlüssel (CR94).
+  verwendet jemand sein Rufzeichen. Der eigene Client über Funk löst das nicht aus.
+- **Sysop über Funk mit dem Client (CR94):** Sysop-Arbeit geht an der Konsole, in der Web-GUI und
+  per Telnet am PC der Box – und über Funk nur mit dem Client: meldet sich der Sysop mit **seinem
+  hier freigegebenen Schlüssel** an, zeigt der Client in den Settings die Karte **Sysop console**.
+  Jeder Befehl geht einzeln signiert; eingeschleuste oder wiederholte Frames weist die Box ab.
+
+  | über Funk erlaubt | nicht über Funk |
+  |---|---|
+  | `H`, `INFO`, `WHO`, `STATUS`, `DISC`, `BEACON`, `FWD`, `FWQ`, `HOLD`, `REL`, `SHUTDOWN`, `RESTART`, `RELOAD`, `USER`, `TRUST` | `WEB` (Login-Link), `MON`, `LOG`, `UPDATE`, Mailbox-Befehle als Sysop |
+
+  Jeder Befehl steht als Warnung im Log der Box. Wer nur ein Zertifikat einer anderen Box hat
+  (Stufe 3), bekommt die Sysop-Konsole nie.
 - Forward-Partner bleiben wie bisher (eigene Anmeldung im Forwarding).
 
 ### 3.8 AXUDP: Client und TinyBox am selben PC (PLANUNG 25)
