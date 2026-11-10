@@ -82,7 +82,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
 | 102 | APRS-Netzgraph: keine Linien zur eigenen Station, Auswahl nach Rolle, direkt gehört voll gefärbt, km an der Karte | ✅ siehe unten |
 | 103 | APRS-Statistik bei viel Verkehr: fest 250.000 Frames, „All“ zeigt den Zeitraum, Auswertung im Thread | ✅ siehe unten, PLANUNG 30 |
-| 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | offen, siehe unten |
+| 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, Log nach Connect-Zeit sortiert, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | offen, siehe unten |
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
@@ -3462,7 +3462,6 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 3. **Auth-Hinweis:** nur die Heimat-BBS anzeigen (Status der Freigabe, Fingerabdruck) – keine
    Liste fremder TinyBoxen.
 4. **Spaltenkopf:** die Spalte „In / out“ im Connection log heißt künftig „In/Out bytes“.
-
 5. **Sektion „Mailbox“:** die ganze Zeile (Inbox, sent, Rubriken, letzter Abgleich) kommt in
    die Karte „Connection Status“, die eigene Sektion entfällt.
 6. **Connection log sortieren:** nach Connect-Zeit, neueste zuerst. Derzeit stehen Einträge
