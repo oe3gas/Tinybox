@@ -7,6 +7,7 @@ It validates input, enforces permissions, stores data and publishes events.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -140,6 +141,33 @@ class MessageService:
             from prcore import auth
             self._box_identity = auth.Identity(self.cfg.storage.data_dir / "box.key")
         return self._box_identity
+
+    SYSOP_ON_AIR_MAIL_SEC = 6 * 3600
+
+    def sysop_call_on_air(self, call: str, where: str) -> None:
+        """A terminal session (no client) over the radio with the sysop call has
+        ended - it had guest rights (no sysop over the air by call). Logged every
+        time; the sysop gets a mail at most every 6 h: if it was not him, somebody
+        uses his call."""
+        log.warning("%s: terminal session over %s with the sysop call (guest rights, "
+                    "no sysop over the radio)", call, where)
+        now = time.monotonic()
+        last = getattr(self, "_sysop_on_air_mail", None)
+        if last is not None and now - last < self.SYSOP_ON_AIR_MAIL_SEC:
+            return
+        self._sysop_on_air_mail = now
+        st = self.cfg.station
+        try:
+            self.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
+                        subject=f"Sysop call {call} connected over the radio",
+                        body=(f"{call} had a terminal session over {where} (ended "
+                              f"{utc_now()[:16]} UTC).\n"
+                              "Over the radio the sysop call gets no sysop rights - the\n"
+                              "session was a guest. If that was not you, somebody uses\n"
+                              "your call (the log shows what the session did).\n"),
+                        origin="sysop", sysop=True)
+        except Exception:
+            log.exception("sysop mail about %s on the air failed", call)
 
     def key_waiting(self, call: str, fp: str, seen_as: str) -> None:
         """CR93: a new client key waits for the sysop - he gets a personal mail."""

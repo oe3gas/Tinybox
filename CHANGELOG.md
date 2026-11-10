@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **Kein Sysop über Funk per Rufzeichen** (CR94, OE3GAS): eine Terminal-Verbindung über Funk mit dem
+  Sysop-Rufzeichen hat Gast-Rechte, `[station] sysop_via_radio` wird ignoriert (Warnung beim Start).
+  Jede Terminal-Sitzung (nicht der Client) mit diesem Rufzeichen über Funk steht im Log; der Sysop
+  bekommt höchstens alle 6 h eine Nachricht. Lokal
+  (Konsole, Web-GUI, Telnet auf 127.0.0.1, AXUDP vom eigenen PC) bleibt alles wie bisher.
 - **Rollen und Rechte CR92** (Audit TB-08, TB-14, TB-15, TB-21; MANUAL 3.7b): Terminal-Verbindungen
   sind Gäste – keine Bulletins, Post nur als Text, Post an andere BBS wird für den Sysop gehalten
   (`REL n`). Bulletins löscht nur der Sysop (oder der angemeldete Autor); ein Rufzeichen wie `70CM`

@@ -140,6 +140,31 @@ class AgwTests(unittest.TestCase):
         self.assertNotIn("SYSOP", out)
         self.assertIn("Not allowed.", out)
 
+    def test_no_sysop_over_radio_even_when_configured(self):
+        # OE3GAS, 10.11.2026: a call on the air proves nothing - sysop_via_radio is ignored
+        async def scenario():
+            app = make_app()
+            app.cfg.station = dataclasses.replace(app.cfg.station, sysop_via_radio=True)
+            dw, server, adapter, task = await start(app)
+            dw.connect("OE3GAS-7")
+            await asyncio.sleep(0.1)
+            dw.data("OE3GAS-7", "E 1 SUBJ x\rB\r")
+            await asyncio.wait_for(dw.disconnected.wait(), 5)
+            dw.connect("OE3GAS-8")                     # a second time: no second mail
+            await asyncio.sleep(0.1)
+            dw.data("OE3GAS-8", "B\r")
+            await asyncio.sleep(0.3)
+            await stop(server, task, dw)
+            return dw, app
+
+        with self.assertLogs("tinybox", "WARNING") as logs:
+            dw, app = asyncio.run(scenario())
+        self.assertIn("Not allowed.", dw.output_for("OE3GAS-7"))
+        self.assertTrue(any("sysop_via_radio = yes is ignored" in x for x in logs.output))
+        self.assertTrue(any("terminal session over" in x for x in logs.output))
+        mails = [m for m in app.store.list_messages() if m.subject.startswith("Sysop call")]
+        self.assertEqual(len(mails), 1)
+
     def test_abort_drops_queued_output(self):
         async def scenario():
             app = make_app()
@@ -189,18 +214,18 @@ class AgwTests(unittest.TestCase):
 
             app.store.add_message = flaky_add
             dw, server, adapter, task = await start(app)
-            dw.connect("OE3GAS")
+            dw.connect("OE1ABC")
             await asyncio.sleep(0.1)
-            dw.data("OE3GAS", "S OE3TEC\rEine Mail für Tobi\rThe quick brown fox\r/EX\r")
+            dw.data("OE1ABC", "S OE3TEC\rEine Mail für Tobi\rThe quick brown fox\r/EX\r")
             await asyncio.sleep(0.3)
-            still_connected = "OE3GAS" in adapter.conns
-            dw.data("OE3GAS", "S OE3TEC\rZweiter Versuch\rText\r/EX\rB\r")
+            still_connected = "OE1ABC" in adapter.conns
+            dw.data("OE1ABC", "S OE3TEC\rZweiter Versuch\rText\r/EX\rB\r")
             await asyncio.wait_for(dw.disconnected.wait(), 5)
             await stop(server, task, dw)
             return dw, still_connected, task
 
         dw, still_connected, task = asyncio.run(scenario())
-        out = dw.output_for("OE3GAS")
+        out = dw.output_for("OE1ABC")
         self.assertTrue(still_connected)
         self.assertIn("Internal error", out)
         self.assertIn("Msg 1 saved.", out)

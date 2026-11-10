@@ -3149,7 +3149,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 
 - Widerruf über brocast, Notfall-Schlüssel, gemeinsamer Herausgeber (CR94).
 
-## CR94 – Admin-Protokoll mit Signatur (Konzept, offen, 09.11.2026)
+## CR94 – Admin-Protokoll mit Signatur (Richtung entschieden 10.11.2026, Umsetzung offen)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3166,6 +3166,20 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   CR93 und signierte Alarmseiten.
 - Zu entscheiden: Ed25519 oder P-256 (GUST), Herausgeber der Zertifikate, TOTP für Sysops ohne
   tbclient, Widerruf über brocast, Notfall-Schlüssel.
+
+### Entscheidungen (OE3GAS, 10.11.2026)
+
+1. **Kein Sysop über Funk per Rufzeichen – sofort ✅.** Eine Terminal-Verbindung über Funk mit dem
+   Sysop-Rufzeichen ist Gast. `[station] sysop_via_radio` wird ignoriert (Warnung beim Start, wenn
+   `yes`). Jede Terminal-Sitzung (nicht der Client) mit diesem Rufzeichen über Funk steht als Warnung im
+   Log, der Sysop bekommt höchstens alle 6 h eine persönliche Nachricht („Sysop call … connected
+   over the radio“). Der eigene Client über Funk löst nichts aus. AXUDP von einem
+   Loopback-Partner und Telnet (nur `127.0.0.1`) bleiben lokal und damit Sysop.
+2. **Sysop über Funk nur mit dem Client (Variante B):** Login mit dem Schlüssel des Sysops (CR93),
+   jeder Admin-Befehl einzeln signiert wie CR93 Stufe 2. Noch umzusetzen.
+3. **Kein Notzugang** über Terminal (kein TOTP, kein Passwort).
+- Damit entfällt auch die frühere Idee aus CR21 (`sysop_via_radio = auth` mit HMAC-Passwort):
+  ersetzt durch Variante B.
 
 ## CR95 – Zeichensatz-Policy und Ausgabe-Maskierung (TB-11, TB-12, TB-22, ✅ 09.11.2026)
 

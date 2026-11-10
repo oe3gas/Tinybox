@@ -1935,6 +1935,9 @@ vertraut, erkennt den User damit ebenfalls (CR93).
   CR93 Stufe 1). Offen: wer Zertifikate ausstellt (Sysop je Box / gemeinsamer Herausgeber /
   LoTW-Anker), TOTP-Variante ja/nein. Für User-Zertifikate vorerst die Heimat-BBS mit eigenem
   Box-Schlüssel, Vertrauen je Box durch den Sysop (CR93 Stufe 3, 10.11.2026).
+- Entschieden (OE3GAS, 10.11.2026): **über Funk nie Sysop per Rufzeichen** (umgesetzt,
+  `sysop_via_radio` wird ignoriert); Sysop über Funk nur mit dem Client, Login mit Schlüssel und
+  jeder Admin-Befehl signiert (Variante B, CR94); **kein Notzugang** per Terminal (kein TOTP/Passwort).
 
 ### 29.9 Zeichensatz-Policy (CR95)
 

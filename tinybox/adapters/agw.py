@@ -219,6 +219,9 @@ class AgwAdapter:
         self._q_reply = asyncio.Event()
         # CR83: own sent frames from the Direwolf fork ('O'), per AGW connect
         self.own_frames = False
+        if self.cfg.station.sysop_via_radio and self.origin == "radio":
+            log.warning("[station] sysop_via_radio = yes is ignored: no sysop rights over "
+                        "the radio by call (the sysop call gets guest rights there)")
 
     def describe(self) -> str:
         """For STATUS and the web GUI."""
@@ -428,7 +431,13 @@ class AgwAdapter:
         return f"agw port {self.radio_port}"
 
     def _sysop_allowed(self, remote: str) -> bool:
-        return self.cfg.station.sysop_via_radio and self.app.service.is_sysop_call(remote)
+        """Never over the radio (OE3GAS, 10.11.2026): a call on the air proves
+        nothing, a terminal with the sysop call is a guest. The sysop works locally,
+        over the web GUI or - at a remote site - later with the client and his key
+        (CR94). [station] sysop_via_radio is ignored."""
+        if self.app.service.is_sysop_call(remote):
+            log.info("%s: sysop call over the radio - guest rights (no sysop by call)", remote)
+        return False
 
     def _connected_elsewhere(self, remote: str) -> str | None:
         """PLANUNG 25: one station once - over the radio or AXUDP, not both
@@ -496,6 +505,11 @@ class AgwAdapter:
             conn.pump_task.cancel()
         if conn.session is not None:
             if isinstance(conn.session, Session):
+                s = conn.session
+                if self.origin == "radio" and s.client is None and \
+                        self.app.service.is_sysop_call(remote):
+                    # a terminal (not the client) with the sysop call: was it him?
+                    self.app.service.sysop_call_on_air(remote, self.port_label())
                 conn.session.end(lost=lost)
             else:
                 conn.session.end()                  # forward link

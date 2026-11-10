@@ -9,8 +9,9 @@
 [station]
 mailbox_call = OE3GAS-1        # callsign + SSID the mailbox answers on
 sysop_call   = OE3GAS          # this call (any SSID) gets sysop rights
-sysop_via_radio = no           # no: sysop rights only locally (callsigns
-                               # on the air are not authenticated)
+sysop_via_radio = no           # ignored since 10.11.2026: over the radio the sysop call is a
+                               # guest (calls on the air are not authenticated); sysop
+                               # locally, web GUI, later client with key (CR94)
 haddress     =                 # hierarchical address of this mailbox, without SSID,
                                # e.g. OE3GAS.#NOE.AUT.EU (needed for [forward])
 qth          =                 # place name shown in R: lines, e.g. Hollabrunn

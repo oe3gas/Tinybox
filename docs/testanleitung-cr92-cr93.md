@@ -63,6 +63,12 @@ Telnet auf PC2, Rufzeichen `OE1TST`.
 
 Über Funk gilt dasselbe: jede Terminal-Verbindung (ohne Client) ist Gast.
 
+| # | Schritt | Erwartung | ✔/✘ |
+|---|---|---|---|
+| 3.10 | Über Funk (anderes Gerät/Terminalprogramm) mit `OE3GAS-<SSID>` zur TinyBox verbinden, `SB ALL` und `E 1 SUBJ x` probieren. | Beides abgewiesen – auch das Sysop-Rufzeichen ist über Funk Gast. | |
+| 3.11 | Konsole und Post von OE3GAS ansehen. | Nach dem Trennen: Warnung „… terminal session over … with the sysop call (guest rights …)“; persönliche Nachricht „Sysop call … connected over the radio“ (höchstens eine je 6 h). Der Client über Funk löst das nicht aus. | |
+| 3.12 | Falls in `tinybox.conf` `sysop_via_radio = yes` steht: Start der TinyBox ansehen. | Warnung „sysop_via_radio = yes is ignored …“. | |
+
 ## 4. Warnseiten in brocast (nur wenn `[brocast] publish = yes`)
 
 | # | Schritt | Erwartung | ✔/✘ |

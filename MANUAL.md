@@ -809,6 +809,11 @@ Rufzeichen verwenden. Deshalb unterscheidet die TinyBox:
   Suffix aus Buchstaben (`OE3GAS`, `4X1AB`, `2E0ABC`). Rubriknamen wie `70CM`, `10M`, `QO100` und
   erfundene Wörter werden abgewiesen. Ein Rufzeichen gleich einer Rubrik bekommt nie Rechte an
   deren Bulletins.
+- **Sysop über Funk gibt es nicht per Rufzeichen:** eine Terminal-Verbindung über Funk mit dem
+  Sysop-Rufzeichen ist ein Gast (`sysop_via_radio` wird ignoriert). Jede solche Terminal-Sitzung
+  steht als Warnung im Log, der Sysop bekommt höchstens alle 6 h eine Nachricht – war er es nicht,
+  verwendet jemand sein Rufzeichen. Der eigene Client über Funk löst das nicht aus. Sysop-Arbeit: Konsole, Web-GUI, Telnet am PC der Box; über Funk später
+  nur mit dem Client und Schlüssel (CR94).
 - Forward-Partner bleiben wie bisher (eigene Anmeldung im Forwarding).
 
 ### 3.8 AXUDP: Client und TinyBox am selben PC (PLANUNG 25)
