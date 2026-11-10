@@ -1429,18 +1429,18 @@ function viewKeys() {
       "Public key ", h("span", { class: "mono", text: d.box.pub }),
       h("br"), "Give both to the sysop of another TinyBox; he enters them under Trusted TinyBoxen.");
     users.replaceChildren(...(d.users.length ? d.users.map((u) => h("tr", {},
-      h("td", { class: "mono", text: u.call }),
+      h("td", { class: "mono", text: u.call }), h("td", { class: "mono", text: u.device || "-" }),
       h("td", { class: u.status === "pending" ? "warn" : "", text: statusText[u.status] || u.status }),
       h("td", { class: "mono", text: u.fp }), h("td", { class: "mono", text: fullDate(u.changed) }),
       h("td", { text: u.note }),
       h("td", {}, ...(u.status !== "active" ? [h("button", { class: "btn sm primary", type: "button",
-          text: "Release", onclick: () => act("user", { call: u.call, action: "OK" },
+          text: "Release", onclick: () => act("user", { id: u.id, action: "OK" },
             `Release the key of ${u.call}?\nFingerprint ${u.fp} - compared with ${u.call} (phone, QSO, paper)?`) })] : []),
         ...(u.status !== "revoked" ? [h("button", { class: "btn sm", type: "button", text: "Revoke",
-          onclick: () => act("user", { call: u.call, action: "REVOKE" }, `Revoke the key of ${u.call}?`) })] : []),
+          onclick: () => act("user", { id: u.id, action: "REVOKE" }, `Revoke the key ${u.fp} of ${u.call}${u.device ? " (" + u.device + ")" : ""}? The other keys of ${u.call} stay.`) })] : []),
         h("button", { class: "btn sm danger", type: "button", text: "Delete",
-          onclick: () => act("user", { call: u.call, action: "DEL" }, `Forget the key of ${u.call}?`) }))))
-      : [h("tr", {}, h("td", { colspan: 6, text: "No client keys yet." }))]));
+          onclick: () => act("user", { id: u.id, action: "DEL" }, `Forget the key ${u.fp} of ${u.call}?`) }))))
+      : [h("tr", {}, h("td", { colspan: 7, text: "No client keys yet." }))]));
     trusted.replaceChildren(...(d.trusted.length ? d.trusted.map((b) => h("tr", {},
       h("td", { class: "mono", text: b.box }), h("td", { class: "mono", text: b.fp }),
       h("td", { class: "mono", text: fullDate(b.added) }),
@@ -1453,10 +1453,10 @@ function viewKeys() {
     h("section", { class: "card" },
       h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Client keys" })),
       h("div", { class: "card-body note",
-        text: "Release a key only after comparing its fingerprint with the user - by phone, " +
-              "in a QSO or on paper, never over the same connection." }),
+        text: "One key per device. Release a key only after comparing its fingerprint with the user - " +
+              "by phone, in a QSO or on paper, never over the same connection." }),
       h("div", { class: "scroll" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Call", "Status", "Fingerprint", "Changed (UTC)", "Note", ""]
+        h("thead", {}, h("tr", {}, ["Call", "Device", "Status", "Fingerprint", "Changed (UTC)", "Note", ""]
           .map((x) => h("th", { text: x })))), users))),
     h("section", { class: "card" },
       h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Trusted TinyBoxen" })), me,

@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **Ein Schlüssel je Gerät (CR93, OE3GAS):** jeder Client-PC hat seinen eigenen Schlüssel, der Sysop
+  gibt jeden einzeln frei; ein neues Gerät stört die anderen nicht mehr (vorher `other_key`).
+  Höchstens 5 je Rufzeichen. Box: Schema 14 (`client_keys`, die bisherigen Schlüssel werden
+  übernommen); Konsole `USER OK|REVOKE|DEL call [fingerprint]`, Web-GUI „Keys“ mit Gerät und Knöpfen
+  je Schlüssel. Client 2026.11.10.8 nennt den PC-Namen (`dev=`).
 - **Bulletins verschieben und kopieren (CR21)** – nur der Sysop: Konsole `MOVE n[,n] RUBRIK`,
   `COPY n[,n] RUBRIK`, `KILL n[,n]`; Sysop-Web-GUI: „Move / copy“ im Leser; Client (Sysop mit
   Schlüssel, Client 2026.11.10.7): Knopf „Sysop ▾“ im Leser – in der TinyBox löschen, verschieben,

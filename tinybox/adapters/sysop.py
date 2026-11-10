@@ -442,34 +442,35 @@ class SysopConsole:
         asyncio.get_running_loop().create_task(ask())
 
     def cmd_user(self, arg: str) -> None:
-        """CR93: client keys. USER [LIST] | USER OK|REVOKE|DEL|SHOW <call>"""
-        from prcore import auth
-
+        """CR93: client keys, one per device. USER [LIST] | USER OK|REVOKE|DEL|SHOW
+        <call> [fingerprint]"""
         from .. import keys
         svc = self.app.service
-        word, _, rest = arg.strip().upper().partition(" ")
-        call = auth.base(rest) if rest.strip() else ""
+        words = arg.strip().upper().split()
+        word = words[0] if words else ""
         if word in ("", "LIST"):
             rows = keys.users(svc)
             if not rows:
                 self.out("No client keys yet.")
             for r in rows:
-                self.out(f"{r['call']:<8} {r['status']:<8} {r['fp']}  {r['changed'][:16]}  "
-                         f"{r['note']}")
+                self.out(f"{r['call']:<8} {r['status']:<8} {r['fp']}  {r['device'] or '-':<16} "
+                         f"{r['changed'][:16]}  {r['note']}")
             return
-        if not call or word not in (*keys.USER_ACTIONS, "SHOW"):
+        if len(words) < 2 or word not in (*keys.USER_ACTIONS, "SHOW"):
             self.out(texts.USAGE_USER)
             return
-        if word == "SHOW":
-            row = next((r for r in keys.users(svc) if r["call"] == call), None)
-            if row is None:
-                self.out(f"{call}: no client key.")
-            else:
-                self.out(f"{call}: {row['status']}, fingerprint {row['fp']}, since "
-                         f"{row['changed'][:16]}", f"  {row['note']}")
-            return
+        call, sel = words[1], words[2] if len(words) > 2 else ""
         try:
-            self.out(keys.user_action(svc, word, call))
+            if word == "SHOW":
+                from prcore import auth
+                rows = [r for r in keys.users(svc) if r["call"] == auth.base(call)]
+                if not rows:
+                    self.out(f"{auth.base(call)}: no client key.")
+                for r in rows:
+                    self.out(f"{r['call']}: {r['status']}, fingerprint {r['fp']}, device "
+                             f"{r['device'] or '-'}, since {r['changed'][:16]}  {r['note']}")
+                return
+            self.out(keys.user_action(svc, word, call, sel))
         except keys.KeysError as exc:
             self.out(str(exc))
 

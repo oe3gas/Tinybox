@@ -9,7 +9,7 @@ CR93: first the client logs in with the key of its user (Ed25519, prcore/auth.py
     //AUTH? n=<challenge> box=<mailbox call>           mailbox
     //AUTH sig=<signature> pub=<public key>            client
     //AUTHWAIT fp=7F3A-91C2-44E0                       new key: the sysop releases it
-    //ERR auth bad_signature|other_key|revoked|...     refused
+    //ERR auth bad_signature|revoked|too_many_keys|... refused
 
 and only with a released key the mailbox answers with the features both sides know:
 
@@ -323,15 +323,20 @@ def _client(s: Session, parts: list[str]) -> None:
     s.out("", f"//AUTH? n={s._auth_nonce} box={s.cfg.station.mailbox_call}")
 
 
-def _auth(s: Session, parts: list[str]) -> None:
-    """//AUTH sig=<86> pub=<43> [cert=<certificate>]: the answer to //AUTH? (CR93).
+MAX_KEYS = 5                     # keys per call (devices) that are not revoked
+DEVICE_RE = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
 
-    Known and released key: client mode. At another TinyBox (stage 3) a valid
+
+def _auth(s: Session, parts: list[str]) -> None:
+    """//AUTH sig=<86> pub=<43> [dev=<device>] [cert=<certificate>]: the answer to
+    //AUTH? (CR93).
+
+    One key per device (OE3GAS, 10.11.2026): every key of a call is released on
+    its own. Released key: client mode. At another TinyBox (stage 3) a valid
     certificate of a home BBS the sysop here trusts (TRUST) does the same. New
     key: proves it holds it (the signature), waits for the sysop (//AUTHWAIT).
-    Another key than the released one, or a revoked one: refused. Every answer
-    starts on a line of its own: a prompt written before it would hide it from
-    the client."""
+    Revoked: refused; more than MAX_KEYS: refused. Every answer starts on a line of
+    its own: a prompt written before it would hide it from the client."""
     info, nonce = getattr(s, "_client_wait", None), getattr(s, "_auth_nonce", None)
     args = _parse_args(parts)
     if info is None or nonce is None:
@@ -350,31 +355,36 @@ def _auth(s: Session, parts: list[str]) -> None:
         s.out("", "//ERR auth bad_signature")
         return
     store, pub64, fp = s.service.store, auth.b64e(pub), auth.fingerprint(pub)
-    row = store.key_get(call)
-    if row is not None and row["status"] == "revoked" and row["pub"] == pub64:
+    dev = args.get("dev", "") if DEVICE_RE.match(args.get("dev", "")) else ""
+    row = store.key_get(call, pub64)
+    if row is not None and dev and row["device"] != dev:
+        store.key_device(row["id"], dev)
+    if row is not None and row["status"] == "revoked":
         s.out("", "//ERR auth revoked")
         return
     if row is not None and row["status"] == "active":
-        if row["pub"] != pub64:
-            log.warning("%s: client login with another key (%s) than the released one",
-                        s.call, fp)
-            s.out("", "//ERR auth other_key")
-            return
         _logged_in(s, info, pub, nonce, "")
         return
     if args.get("cert"):                          # stage 3: a certificate of the home BBS
         issuer, why = _cert_ok(s, args["cert"], call, pub64)
         if not why:
-            if row is None or row["status"] != "cert" or row["pub"] != pub64:
-                store.key_put(call, pub64, "cert", note=f"certificate of {issuer} via {s.call}")
+            if row is None or row["status"] != "cert":
+                store.key_put(call, pub64, "cert", device=dev,
+                              note=f"certificate of {issuer} via {s.call}")
             _logged_in(s, info, pub, nonce, issuer)
             return
         log.warning("%s: certificate not taken (%s)", s.call, why)
-    if row is None or row["pub"] != pub64 or row["status"] == "cert":
-        # new, a new key while waiting/revoked, or the certificate is gone
-        store.key_put(call, pub64, "pending", note=f"from {s.call} via {s.origin}")
-        log.warning("%s: new client key %s - waits for the sysop (USER OK %s)", s.call, fp, call)
-        s.service.key_waiting(call, fp, s.call)
+    if row is None or row["status"] == "cert":
+        # a new device, or its certificate is gone: waits for the sysop
+        if row is None and len([k for k in store.keys_of(call)
+                                if k["status"] != "revoked"]) >= MAX_KEYS:
+            log.warning("%s: new client key %s refused - %d keys already", s.call, fp, MAX_KEYS)
+            s.out("", "//ERR auth too_many_keys")
+            return
+        store.key_put(call, pub64, "pending", device=dev, note=f"from {s.call} via {s.origin}")
+        log.warning("%s: new client key %s%s - waits for the sysop (USER OK %s %s)", s.call, fp,
+                    f" ({dev})" if dev else "", call, fp[:4])
+        s.service.key_waiting(call, fp, s.call, dev)
     s.out("", f"//AUTHWAIT fp={fp}")
 
 
@@ -417,8 +427,8 @@ def admin_allowed(s: Session) -> bool:
     if not s.auth or s.auth_cert or s.auth_pub is None \
             or not s.service.is_sysop_call(s.call):
         return False
-    row = s.service.store.key_get(auth.base(s.call))
-    return row is not None and row["status"] == "active" and row["pub"] == auth.b64e(s.auth_pub)
+    row = s.service.store.key_get(auth.base(s.call), auth.b64e(s.auth_pub))
+    return row is not None and row["status"] == "active"
 
 
 def _admin(s: Session, command: str) -> None:
@@ -449,9 +459,9 @@ def _admin(s: Session, command: str) -> None:
 def _cert(s: Session) -> None:
     """//CERT?: the certificate of this box for the key the user logged in with -
     only at his home BBS (the key released here, not via a certificate)."""
-    row = s.service.store.key_get(auth.base(s.call))
-    if not s.auth or s.auth_pub is None or row is None or row["status"] != "active" \
-            or row["pub"] != auth.b64e(s.auth_pub):
+    row = s.service.store.key_get(auth.base(s.call), auth.b64e(s.auth_pub)) \
+        if s.auth_pub is not None else None
+    if not s.auth or row is None or row["status"] != "active":
         s.out("//CERT -")
         return
     until = (datetime.now(timezone.utc) + timedelta(days=auth.CERT_DAYS)).strftime("%Y%m%d")

@@ -471,14 +471,16 @@ class WebServer:
         raise HttpError(404)
 
     def _keys(self, parts: list[str], data: dict) -> dict:
-        """CR93: POST keys/user {call, action OK|REVOKE|DEL}, keys/trust {box, pub},
+        """CR93: POST keys/user {id, action OK|REVOKE|DEL}, keys/trust {box, pub},
         keys/untrust {box} - the same as USER and TRUST at the console."""
         from .. import keys
         svc = self.app.service
         try:
             if parts == ["user"] and data.get("action") in keys.USER_ACTIONS:
+                kid = data.get("id")
                 return {"text": keys.user_action(svc, str(data["action"]),
-                                                 str(data.get("call", "")))}
+                                                 str(data.get("call", "")),
+                                                 key_id=kid if isinstance(kid, int) else None)}
             if parts == ["trust"]:
                 return {"text": keys.trust_add(svc, str(data.get("box", "")),
                                                str(data.get("pub", "")))}

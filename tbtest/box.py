@@ -144,10 +144,9 @@ class TestBox:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         with sqlite3.connect(str(db)) as con:
             for call, pub in keys.items():
-                con.execute("INSERT INTO user_keys (call, pub, status, created, changed, note)"
-                            " VALUES (?, ?, 'active', ?, ?, 'tbtest') ON CONFLICT (call) DO"
-                            " UPDATE SET pub = excluded.pub, status = 'active'",
-                            (base(call), pub, now, now))
+                con.execute("INSERT INTO client_keys (call, pub, status, created, changed, note)"
+                            " VALUES (?, ?, 'active', ?, ?, 'tbtest') ON CONFLICT (call, pub) DO"
+                            " UPDATE SET status = 'active'", (base(call), pub, now, now))
 
     async def start(self) -> None:
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",

@@ -42,8 +42,8 @@ def run(key: str | None):
             core = ClientCore(client_cfg(tmp, agw_port=port, sync_chunk=256, sync_pause=0.05))
             if key == "active":
                 app.service.store.key_put("OE3GAS", core.identity.pub, "active")
-            elif key == "other":
-                app.service.store.key_put("OE3GAS", auth.b64e(b"\1" * 32), "active")
+            elif key == "revoked":
+                app.service.store.key_put("OE3GAS", core.identity.pub, "revoked")
             t2 = asyncio.create_task(core.run())
             await asyncio.wait_for(core.link.agw_up.wait(), 5)
             await core.connect()
@@ -76,10 +76,10 @@ class LoginAnswers(unittest.TestCase):
         self.assertEqual(n, 0)
         self.assertLess(secs, 5)                   # at once, not after 90 s
 
-    def test_other_key_refused(self):
-        a, st, _, secs = run("other")
-        self.assertEqual((a["state"], a["reason"]), ("refused", "other_key"))
-        self.assertIn("other_key", st["error"])
+    def test_revoked_key_refused(self):
+        a, st, _, secs = run("revoked")
+        self.assertEqual((a["state"], a["reason"]), ("refused", "revoked"))
+        self.assertIn("revoked", st["error"])
         self.assertLess(secs, 5)
 
 
@@ -109,8 +109,8 @@ class ClientOldBox(unittest.TestCase):
             core = ClientCore(client_cfg(tmp))
             core._on_line("TinyBox (A,B,C,F,H,J,K,L,R,S,V,?) > //AUTHWAIT fp=1234-5678-9ABC")
             self.assertEqual(core.auth["state"], "wait")
-            core._on_line("TinyBox (A,B,C,F,H,J,K,L,R,S,V,?) > //ERR auth other_key")
-            self.assertEqual((core.auth["state"], core.auth["reason"]), ("refused", "other_key"))
+            core._on_line("TinyBox (A,B,C,F,H,J,K,L,R,S,V,?) > //ERR auth revoked")
+            self.assertEqual((core.auth["state"], core.auth["reason"]), ("refused", "revoked"))
             core.mailbox.close()
 
     def test_abort_while_waiting_for_login(self):

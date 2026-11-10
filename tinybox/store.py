@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 13  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 14  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
                      # 9: profiles (name, locator, home BBS of a station, CR73)
@@ -15,6 +15,7 @@ SCHEMA_VERSION = 13  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: 
                      # 11: fwd_partial.size (restart only for the same proposal, CR89)
                      # 12: user_keys (client login with a signature, CR93)
                      # 13: trusted_boxes (certificates of other TinyBoxen, CR93 stage 3)
+                     # 14: client_keys - one key per device and call (replaces user_keys)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -53,13 +54,16 @@ CREATE TABLE IF NOT EXISTS fwd_queue (                -- filled by the forward m
     changed TEXT NOT NULL,
     PRIMARY KEY (msg_id, partner)
 );
-CREATE TABLE IF NOT EXISTS user_keys (                -- CR93: the key of a client user
-    call     TEXT PRIMARY KEY,                         -- base call (all SSIDs)
+CREATE TABLE IF NOT EXISTS client_keys (              -- CR93: keys of client users, per device
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    call     TEXT NOT NULL,                            -- base call (all SSIDs)
     pub      TEXT NOT NULL,                            -- Ed25519 public key, base64url
     status   TEXT NOT NULL,                            -- pending|active|revoked|cert
+    device   TEXT NOT NULL DEFAULT '',                 -- what the client calls its PC
     created  TEXT NOT NULL,
     changed  TEXT NOT NULL,
-    note     TEXT NOT NULL DEFAULT ''
+    note     TEXT NOT NULL DEFAULT '',
+    UNIQUE (call, pub)
 );
 CREATE TABLE IF NOT EXISTS trusted_boxes (            -- CR93 stage 3: whose certificates count
     box      TEXT PRIMARY KEY,                         -- mailbox call of the issuing TinyBox
@@ -253,6 +257,11 @@ class Store:
         self._db.execute("UPDATE messages SET seq = id, cseq = id WHERE seq = 0")
         self._db.execute("INSERT OR IGNORE INTO sync_seq (k, v) VALUES (1, "
                          "COALESCE((SELECT MAX(id) FROM messages), 0))")
+        # 13 -> 14: one key per call became one key per device (OE3GAS, 10.11.2026)
+        if self._db.execute("SELECT 1 FROM sqlite_master WHERE name = 'user_keys'").fetchone():
+            self._db.execute("INSERT OR IGNORE INTO client_keys (call, pub, status, created, changed,"
+                             " note) SELECT call, pub, status, created, changed, note FROM user_keys")
+            self._db.execute("DROP TABLE user_keys")
         self._db.executescript(TRIGGERS)
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._db.commit()
@@ -573,34 +582,53 @@ class Store:
 
     # --- chat images (CR12) ---------------------------------------------
 
-    # --- CR93: keys of client users -------------------------------------------
+    # --- CR93: keys of client users, one per device ------------------------------
 
-    def key_get(self, call: str) -> dict | None:
-        row = self._db.execute("SELECT * FROM user_keys WHERE call = ?", (call,)).fetchone()
+    def key_get(self, call: str, pub: str) -> dict | None:
+        row = self._db.execute("SELECT * FROM client_keys WHERE call = ? AND pub = ?",
+                               (call, pub)).fetchone()
         return dict(row) if row else None
+
+    def key_by_id(self, key_id: int) -> dict | None:
+        row = self._db.execute("SELECT * FROM client_keys WHERE id = ?", (key_id,)).fetchone()
+        return dict(row) if row else None
+
+    def keys_of(self, call: str) -> list[dict]:
+        return [dict(r) for r in self._db.execute(
+            "SELECT * FROM client_keys WHERE call = ? ORDER BY id", (call,))]
 
     def key_list(self) -> list[dict]:
         return [dict(r) for r in self._db.execute(
-            "SELECT * FROM user_keys ORDER BY status = 'pending' DESC, call")]
+            "SELECT * FROM client_keys ORDER BY status = 'pending' DESC, call, id")]
 
-    def key_put(self, call: str, pub: str, status: str, note: str = "") -> None:
+    def key_put(self, call: str, pub: str, status: str, note: str = "",
+                device: str | None = None) -> int:
         now = utc_now()
         with self._db:
             self._db.execute(
-                "INSERT INTO user_keys (call, pub, status, created, changed, note)"
-                " VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (call) DO UPDATE SET pub = excluded.pub,"
+                "INSERT INTO client_keys (call, pub, status, device, created, changed, note)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (call, pub) DO UPDATE SET"
                 " status = excluded.status, changed = excluded.changed, note = excluded.note",
-                (call, pub, status, now, now, note))
+                (call, pub, status, device or "", now, now, note))
+            if device:
+                self._db.execute("UPDATE client_keys SET device = ? WHERE call = ? AND pub = ?",
+                                 (device, call, pub))
+        return int(self.key_get(call, pub)["id"])
 
-    def key_status(self, call: str, status: str) -> bool:
+    def key_device(self, key_id: int, device: str) -> None:
         with self._db:
-            cur = self._db.execute("UPDATE user_keys SET status = ?, changed = ? WHERE call = ?",
-                                   (status, utc_now(), call))
+            self._db.execute("UPDATE client_keys SET device = ? WHERE id = ?", (device, key_id))
+
+    def key_status(self, key_id: int, status: str) -> bool:
+        with self._db:
+            cur = self._db.execute("UPDATE client_keys SET status = ?, changed = ? WHERE id = ?",
+                                   (status, utc_now(), key_id))
         return cur.rowcount > 0
 
-    def key_delete(self, call: str) -> bool:
+    def key_delete(self, key_id: int) -> bool:
         with self._db:
-            return self._db.execute("DELETE FROM user_keys WHERE call = ?", (call,)).rowcount > 0
+            return self._db.execute("DELETE FROM client_keys WHERE id = ?",
+                                    (key_id,)).rowcount > 0
 
     def trust_get(self, box: str) -> dict | None:
         row = self._db.execute("SELECT * FROM trusted_boxes WHERE box = ?", (box,)).fetchone()

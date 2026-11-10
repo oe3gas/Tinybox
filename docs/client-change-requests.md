@@ -3091,7 +3091,8 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
    später möglich).
 2. **Freigabe durch den Sysop** mit Vergleich des Fingerabdrucks (kein TOFU).
 3. Schutz nach dem Login: **Variante b** – kritische Befehle einzeln signiert (Stufe 2).
-4. Ein Schlüssel **je Rufzeichen, geräteunabhängig** (Datei auf einen zweiten PC kopieren).
+4. ~~Ein Schlüssel je Rufzeichen, geräteunabhängig~~ – **geändert (OE3GAS, 10.11.2026): ein
+   Schlüssel je Gerät**, jeder einzeln freigegeben (siehe „Umstellung“ unten).
 5. **Kein Passwort** auf der Schlüsseldatei.
 6. **Sofort Pflicht** – keine Übergangsphase, keine Einstellung zum Abschalten.
 
@@ -3161,6 +3162,19 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Vergleich des Fingerabdrucks), Schlüssel dieser Box, vertraute TinyBoxen hinzufügen/entfernen
   (`/api/keys`, gemeinsamer Code mit der Konsole in `tinybox/keys.py`).
 - Tests `tests/test_cr93.py` (`Certificates`, `ClientCertificate`), `tests/test_web.py` (`KeysApi`).
+
+### Umstellung: ein Schlüssel je Gerät (Client 2026.11.10.8 – 10.11.2026) ✅
+
+- Anlass: Client am Box-PC (AXUDP) freigegeben, ein zweiter Client zu Hause über Funk bekam
+  `other_key`. Entscheidung OE3GAS: je Gerät ein Schlüssel statt die Datei zu kopieren.
+- Box: Tabelle `client_keys` (Schema 14, ersetzt `user_keys`, alte Einträge werden übernommen):
+  je (Rufzeichen, Schlüssel) ein Eintrag mit Status und Gerätename. Ein unbekannter Schlüssel
+  wartet auf `USER OK`, die anderen Geräte laufen weiter; `other_key` gibt es nicht mehr.
+  Höchstens 5 nicht widerrufene Schlüssel je Rufzeichen (`too_many_keys`).
+- Client schickt `dev=<PC-Name>` (Hostname, ASCII, max. 16 Zeichen) in `//AUTH`.
+- Konsole: `USER OK|REVOKE|DEL call [fp]` – fp nur nötig, wenn mehrere passen; Web-GUI „Keys“:
+  Knöpfe je Schlüssel, Spalte Gerät. Zertifikat, signierte Befehle und Sysop-Konsole gelten je
+  Schlüssel (der des Logins).
 
 ### Offen
 

@@ -738,9 +738,12 @@ Den Client-Modus an der Heimat-BBS gibt es nur nach einem Login mit dem **Schlü
 Benutzers** (Ed25519, Signatur – nichts wird verschlüsselt, der Inhalt bleibt lesbar).
 Terminal-Benutzer ohne Client sind Gäste (3.7b).
 
-- **Der Schlüssel** entsteht beim ersten Start des Clients: `data/tbclient/identity.key`. Er gehört
-  zum Rufzeichen, nicht zum PC – für einen zweiten PC die Datei dorthin kopieren. Geht er verloren:
-  Datei löschen, der Client erzeugt einen neuen, den der Sysop wieder freigibt. Den
+- **Der Schlüssel** entsteht beim ersten Start des Clients: `data/tbclient/identity.key`. **Jedes
+  Gerät hat seinen eigenen** (OE3GAS, 10.11.2026): ein zweiter PC – etwa zu Hause statt am
+  Box-PC – meldet sich mit seinem Schlüssel an und wartet auf die Freigabe wie ein neuer; die
+  anderen Geräte laufen weiter. Höchstens 5 Schlüssel je Rufzeichen. Der Client nennt der Box
+  dabei den Namen des PCs (`dev=`), den der Sysop in der Liste sieht. Geht ein Gerät verloren: nur
+  dessen Schlüssel widerrufen. Den
   **Fingerabdruck** (z. B. `7F3A-91C2-44E0`) zeigt der Client im Startblock („Your key“).
 - **Erster Login:** die TinyBox schickt eine Zufallszahl, der Client antwortet mit Signatur und
   öffentlichem Schlüssel. Ein neuer Schlüssel wartet auf den Sysop; der Client zeigt
@@ -750,14 +753,17 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
 
   | Befehl | |
   |---|---|
-  | `USER` | alle Schlüssel: wartend zuerst, mit Fingerabdruck |
-  | `USER OK call` | freigeben – der nächste Login ist im Client-Modus |
-  | `USER REVOKE call` | widerrufen (verloren, kopiert); ein neuer Schlüssel braucht wieder `USER OK` |
-  | `USER DEL call` | vergessen |
-  | `USER SHOW call` | Status und Fingerabdruck |
+  | `USER` | alle Schlüssel: wartend zuerst, mit Fingerabdruck und Gerät |
+  | `USER OK call [fp]` | einen Schlüssel freigeben – der nächste Login dieses Geräts ist im Client-Modus |
+  | `USER REVOKE call [fp]` | einen widerrufen (Gerät verloren); die anderen Geräte bleiben |
+  | `USER DEL call [fp]` | einen vergessen – sein nächster Login wartet wieder |
+  | `USER SHOW call` | alle Schlüssel von call |
 
-- **Abgewiesen** wird ein Login mit falscher Signatur, mit einem anderen als dem freigegebenen
-  Schlüssel (`other_key`) und mit einem widerrufenen (`revoked`). Eine abgehörte Antwort nützt
+  `fp` = die ersten Zeichen des Fingerabdrucks (z. B. `0C57`); nur nötig, wenn mehrere Schlüssel
+  passen – die Box sagt dann, welche es gibt. In der Web-GUI hat jeder Schlüssel eigene Knöpfe.
+
+- **Abgewiesen** wird ein Login mit falscher Signatur, mit einem widerrufenen Schlüssel
+  (`revoked`) und ein sechstes Gerät (`too_many_keys`). Eine abgehörte Antwort nützt
   nichts: sie gilt nur für diese Zufallszahl, diese Box und dieses Rufzeichen.
 - **An einer anderen TinyBox (Stufe 3):** Nach dem Login an der Heimat-BBS holt der Client einmal
   ein **Zertifikat** (`//CERT?`, 180 Tage gültig, nach 120 Tagen erneuert): die Heimat-BBS bestätigt

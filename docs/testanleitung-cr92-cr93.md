@@ -1,6 +1,6 @@
 # Testanleitung – Signieren (CR93), Rollen (CR92), Sysop über Funk (CR94)
 
-Stand 10.11.2026 · TinyBox mit Schema 13 · Client 2026.11.10.7
+Stand 10.11.2026 · TinyBox mit Schema 14 · Client 2026.11.10.8
 
 Vorgehen: Schritt für Schritt, jeweils **Erwartung** prüfen und ✔/✘ in die letzte Spalte.
 Bei ✘ bitte die Zeile aus der TinyBox-Konsole bzw. die Meldung im Client notieren.
@@ -17,8 +17,8 @@ die Gast-Tests ein anderes Rufzeichen nehmen, z. B. `OE1TST`.
 
 | # | Schritt | Erwartung | ✔/✘ |
 |---|---|---|---|
-| 0.1 | PC2: Datenbank `data\…db` sicherheitshalber wegkopieren. Dann `git pull`, TinyBox neu starten. | Start ohne Fehler. Datenbank auf Schema 13 (läuft automatisch). | |
-| 0.2 | PC1: `git pull`, Client neu starten. | Startblock zeigt Version **2026.11.10.7** und „Your key … Fingerabdruck“. Fingerabdruck notieren: ________ | |
+| 0.1 | PC2: Datenbank `data\…db` sicherheitshalber wegkopieren. Dann `git pull`, TinyBox neu starten. | Start ohne Fehler. Datenbank auf Schema 14 (läuft automatisch). | |
+| 0.2 | PC1: `git pull`, Client neu starten. | Startblock zeigt Version **2026.11.10.8** und „Your key … Fingerabdruck“. Fingerabdruck notieren: ________ | |
 | 0.3 | Sysop-Web-GUI öffnen. | Links neuer Menüpunkt **Keys**. | |
 
 ## 1. Login mit Schlüssel (Stufe 1) und Freigabe in der Web-GUI
@@ -104,7 +104,10 @@ Telnet auf PC2, Rufzeichen `OE1TST`.
 |---|---|---|---|
 | 6.1 | Web-GUI → Keys → bei `OE3GAS` **Revoke**, Client neu verbinden. | Client: „login with your key refused: revoked“, Hinweisbalken; kein Client-Modus. | |
 | 6.2 | **Release**, Client neu verbinden. | Client-Modus wieder da. | |
-| 6.3 | (Optional) Auf PC1 `data\tbclient\identity.key` wegkopieren und löschen, Client starten und verbinden. | Neuer Fingerabdruck im Startblock; Box meldet „other_key“ (der alte ist freigegeben). Danach die Kopie zurücklegen, Client neu starten → wieder Client-Modus. | |
+| 6.3 | **Zweites Gerät:** Client zu Hause (über Funk) verbinden, der andere (Box-PC, AXUDP) ist schon freigegeben. | Client zu Hause: „waits for the sysop“. Web-GUI → Keys: zweite Zeile `OE3GAS` mit dem PC-Namen und *waits*. | |
+| 6.4 | Fingerabdruck vergleichen, **Release** bei dieser Zeile. | Client zu Hause kommt in den Client-Modus; der Client am Box-PC weiterhin auch. | |
+| 6.5 | Konsole: `USER REVOKE OE3GAS` | „several keys – add the fingerprint …“ mit beiden Schlüsseln. | |
+| 6.6 | Konsole: `USER REVOKE OE3GAS <erste 4 Zeichen des Heim-Schlüssels>`, beide Clients neu verbinden. | Zu Hause: „refused: revoked“; am Box-PC: Client-Modus. Danach in der Web-GUI wieder **Release**. | |
 
 ## 6a. Sysop-Konsole über den Client (CR94)
 

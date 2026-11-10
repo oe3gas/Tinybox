@@ -237,9 +237,9 @@ HELP_CONSOLE = [
     "  RELOAD         Read tinybox.conf again WITHOUT disconnecting anybody: takes",
     "                 over what may change at runtime, lists what needs a RESTART",
     "  USER           Client keys: who waits for release, who is released",
-    "  USER OK call   Release the key of call (compare the fingerprint first!)",
-    "  USER REVOKE call  Revoke it (a lost or copied key) / USER DEL call: forget it",
-    "  USER SHOW call    Status and fingerprint",
+    "  USER OK call [fp]  Release a key of call - one per device (compare the fingerprint!)",
+    "  USER REVOKE call [fp]  Revoke one (lost device) / USER DEL call [fp]: forget it",
+    "  USER SHOW call    All keys of call: status, fingerprint, device",
     "  TRUST          Key of this box, other TinyBoxen whose certificates count here",
     "  TRUST ADD box key  Trust box (compare its fingerprint with its sysop first!)",
     "  TRUST DEL box  No longer",
@@ -310,7 +310,7 @@ FWQ_EMPTY = "Forward queue is empty."
 FWQ_HEADER = "Partner  Msg#  State  Since (UTC)"
 FWQ_ROW = "{partner:<8} {id:>4}  {state:<6} {changed}"
 USAGE_HOLD = "Usage: HOLD n  /  REL n"
-USAGE_USER = "Usage: USER [LIST]  /  USER OK|REVOKE|DEL|SHOW call"
+USAGE_USER = "Usage: USER [LIST]  /  USER OK|REVOKE|DEL|SHOW call [fingerprint]"
 USAGE_MOVE = "Usage: MOVE n[,n...] RUBRIC   (bulletins into another rubric, new number)"
 USAGE_COPY = "Usage: COPY n[,n...] RUBRIC   (a copy in another rubric)"
 USAGE_KILL = "Usage: KILL n[,n...]   (delete messages and bulletins)"

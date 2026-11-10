@@ -105,13 +105,13 @@ class BoxLogin(unittest.TestCase):
         with self.assertLogs("tinybox.clientproto", "WARNING"):
             self.answer(s, n)
         self.assertIn(f"//AUTHWAIT fp={self.key.fp}", t.take())
-        self.assertEqual(self.app.store.key_get("OE3ABC")["status"], "pending")
+        self.assertEqual(self.app.store.key_get("OE3ABC", self.key.pub)["status"], "pending")
         self.assertTrue(any(self.key.fp in m.body for m in self.app.store.list_messages()
                             if m.to_call == self.app.cfg.station.sysop_call))
         # the sysop releases it
         out = []
         SysopConsole(self.app, MonitorFilter(True), out.append).handle_line("USER OK oe3abc")
-        self.assertEqual(self.app.store.key_get("OE3ABC")["status"], "active")
+        self.assertEqual(self.app.store.key_get("OE3ABC", self.key.pub)["status"], "active")
         s, t, n = self.hello("OE3ABC-2")                           # another SSID, same key
         self.answer(s, n, call="OE3ABC-2")
         self.assertIn("//OK TB1", t.take())
@@ -132,17 +132,43 @@ class BoxLogin(unittest.TestCase):
                            f"pub={self.key.pub}")                     # old answer, new challenge
         self.assertIn("bad_signature", t2.take())
 
-    def test_other_key_and_revoked(self):
+    def test_second_device_and_revoked(self):
+        # one key per device (OE3GAS, 10.11.2026): a second device waits for its own release
         self.app.store.key_put("OE3ABC", self.key.pub, "active")
-        thief = auth.Identity(Path(self.tmp.name) / "thief.key")
+        home = auth.Identity(Path(self.tmp.name) / "home.key")
         s, t, n = self.hello()
         with self.assertLogs("tinybox.clientproto", "WARNING"):
-            self.answer(s, n, key=thief)
-        self.assertIn("//ERR auth other_key", t.take())
-        self.app.store.key_status("OE3ABC", "revoked")
+            type_lines(s, f"//AUTH sig={home.sign_login(self.box, 'OE3ABC', n)} pub={home.pub} "
+                          "dev=SHACK-PC")
+        self.assertIn(f"//AUTHWAIT fp={home.fp}", t.take())
+        row = self.app.store.key_get("OE3ABC", home.pub)
+        self.assertEqual((row["status"], row["device"]), ("pending", "SHACK-PC"))
+        s, t, n = self.hello()                                       # the first one still works
+        self.answer(s, n)
+        self.assertIn("//OK TB1", t.take())
+        out = []
+        c = SysopConsole(self.app, MonitorFilter(True), out.append)
+        c.handle_line("USER OK OE3ABC")                              # the only one not active
+        self.assertEqual(self.app.store.key_get("OE3ABC", home.pub)["status"], "active")
+        c.handle_line("USER REVOKE OE3ABC")                          # two fit: name it
+        self.assertIn("several keys", "".join(out))
+        c.handle_line(f"USER REVOKE OE3ABC {self.key.fp[:4]}")
+        self.assertEqual(self.app.store.key_get("OE3ABC", self.key.pub)["status"], "revoked")
         s, t, n = self.hello()
         self.answer(s, n)
         self.assertIn("//ERR auth revoked", t.take())
+        s, t, n = self.hello()                                       # the other device: still in
+        type_lines(s, f"//AUTH sig={home.sign_login(self.box, 'OE3ABC', n)} pub={home.pub}")
+        self.assertIn("//OK TB1", t.take())
+
+    def test_at_most_five_devices(self):
+        for i in range(5):
+            self.app.store.key_put("OE3ABC", auth.Identity(Path(self.tmp.name) / f"{i}.key").pub,
+                                   "active")
+        s, t, n = self.hello()
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            self.answer(s, n)
+        self.assertIn("//ERR auth too_many_keys", t.take())
 
     def test_signed_for_another_box_is_refused(self):
         self.app.store.key_put("OE3ABC", self.key.pub, "active")
@@ -153,17 +179,35 @@ class BoxLogin(unittest.TestCase):
         self.assertIn("bad_signature", t.take())
 
     def test_user_console(self):
-        self.app.store.key_put("OE3ABC", self.key.pub, "pending", note="from OE3ABC-7")
+        self.app.store.key_put("OE3ABC", self.key.pub, "pending", note="from OE3ABC-7",
+                               device="PC2")
         out = []
         c = SysopConsole(self.app, MonitorFilter(True), out.append)
         c.handle_line("USER")
         self.assertIn(self.key.fp, "".join(out))
+        self.assertIn("PC2", "".join(out))
         c.handle_line("USER REVOKE OE3ABC")
-        self.assertEqual(self.app.store.key_get("OE3ABC")["status"], "revoked")
+        self.assertEqual(self.app.store.key_get("OE3ABC", self.key.pub)["status"], "revoked")
         c.handle_line("USER DEL OE3ABC")
-        self.assertIsNone(self.app.store.key_get("OE3ABC"))
+        self.assertIsNone(self.app.store.key_get("OE3ABC", self.key.pub))
         c.handle_line("USER OK")
         self.assertIn("Usage: USER", "".join(out))
+
+    def test_old_table_is_taken_over(self):
+        import sqlite3
+
+        from tinybox.store import Store
+        db = Path(self.tmp.name) / "old.db"
+        with sqlite3.connect(db) as con:
+            con.execute("CREATE TABLE user_keys (call TEXT PRIMARY KEY, pub TEXT NOT NULL, "
+                        "status TEXT NOT NULL, created TEXT NOT NULL, changed TEXT NOT NULL, "
+                        "note TEXT NOT NULL DEFAULT '')")
+            con.execute("INSERT INTO user_keys VALUES ('OE3GAS', ?, 'active', 'x', 'x', '')",
+                        (self.key.pub,))
+        st = Store(db)
+        self.assertEqual(st.key_get("OE3GAS", self.key.pub)["status"], "active")
+        self.assertIsNone(st._db.execute("SELECT 1 FROM sqlite_master WHERE name='user_keys'")
+                          .fetchone())
 
 
 class ClientSide(unittest.TestCase):
@@ -175,13 +219,14 @@ class ClientSide(unittest.TestCase):
             core._on_line("//AUTH? n=abcDEF123 box=OE3XTC-1")
             [line] = sent
             args = dict(x.split("=", 1) for x in line.split()[1:])
+            self.assertTrue(args["dev"])
             pub, sig = auth.b64d(args["pub"], 32), auth.b64d(args["sig"], 64)
             self.assertTrue(auth.verify(pub, auth.login_message("OE3XTC-1", "OE3GAS", "abcDEF123"),
                                         sig))
             core._on_line(f"//AUTHWAIT fp={core.identity.fp}")
             self.assertEqual(core.auth["state"], "wait")
-            core._on_line("//ERR auth other_key")
-            self.assertEqual((core.auth["state"], core.auth["reason"]), ("refused", "other_key"))
+            core._on_line("//ERR auth revoked")
+            self.assertEqual((core.auth["state"], core.auth["reason"]), ("refused", "revoked"))
             core._on_line("//OK TB1 caps=CHAT")
             self.assertEqual(core.auth["state"], "ok")
             self.assertTrue((Path(tmp) / "identity.key").is_file())
@@ -357,7 +402,7 @@ class Certificates(unittest.TestCase):
         s, t = self.login(self.other, cert)
         self.assertIn("//OK", t.take())
         self.assertEqual((s.auth, s.auth_cert), (True, "OE3GAS-1"))
-        self.assertEqual(self.other.store.key_get("OE3ABC")["status"], "cert")
+        self.assertEqual(self.other.store.key_get("OE3ABC", self.key.pub)["status"], "cert")
         type_lines(s, "//CERT?")                                     # only the home BBS issues
         self.assertIn("//CERT -", t.take())
         keys.user_action(self.other.service, "REVOKE", "OE3ABC")     # the sysop there decides

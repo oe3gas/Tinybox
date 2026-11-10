@@ -169,18 +169,20 @@ class MessageService:
         except Exception:
             log.exception("sysop mail about %s on the air failed", call)
 
-    def key_waiting(self, call: str, fp: str, seen_as: str) -> None:
+    def key_waiting(self, call: str, fp: str, seen_as: str, device: str = "") -> None:
         """CR93: a new client key waits for the sysop - he gets a personal mail."""
         st = self.cfg.station
         try:
             self.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
                         subject=f"Client key of {call} waits for release",
-                        body=(f"{seen_as} logged in with the TinyBox client and a new key.\n"
+                        body=(f"{seen_as} logged in with the TinyBox client and a new key"
+                              + (f" (device {device})" if device else "") + ".\n"
                               f"Fingerprint: {fp}\n\n"
                               f"Compare it with {call} (by voice, on paper - not over this link),\n"
                               f"then on the sysop console:\n"
-                              f"  USER OK {call}       release it\n"
-                              f"  USER DEL {call}      throw it away\n"),
+                              f"  USER OK {call} {fp[:4]}    release it\n"
+                              f"  USER DEL {call} {fp[:4]}   throw it away\n"
+                              "(or in the sysop web GUI under Keys)\n"),
                         origin="sysop", sysop=True)
         except Exception:                       # the log line is there anyway
             log.exception("sysop mail about the key of %s failed", call)

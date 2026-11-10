@@ -5,8 +5,8 @@ Der TinyBox-Client ist Chat und Mailbox fuer die TinyBox mit einer
 Weboberflaeche: am PC drei Spalten, am Handy eine eigene Ansicht
 (im eigenen Netz erreichbar, nur private Adressen - [web] allow).
 Login an der Heimat-BBS mit dem eigenen Schluessel (Ed25519, CR93):
-der Sysop gibt ihn einmal frei, data/tbclient/identity.key gilt fuer
-alle PCs desselben Rufzeichens. Senden, Loeschen und Profil gehen
+jeder PC hat seinen eigenen (data/tbclient/identity.key), der Sysop
+gibt jeden einmal frei. Senden, Loeschen und Profil gehen
 danach einzeln signiert zur Box (CR93 Stufe 2). Wartet der Schluessel
 auf den Sysop, sagt der Mail-Sync das sofort (CR106). Die Heimat-BBS
 stellt ein Zertifikat aus; damit klappt der Login auch an TinyBoxen,
