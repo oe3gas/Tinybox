@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **Client zu Client wie im Chatboard (CR107 Teil 1):** Shoutout (💥), Sticker (🏷️), Kommentar mit
+  Zitat und Reaktionen (Antippen einer Blase), anklickbare Links, `Monospace`, großes Einzel-Emoji,
+  Avatar, Alarm (Popup/„BK“, CR85-Einstellungen) bei jeder neuen Zeile, wenn das Fenster nicht vorne
+  ist. Bezug über die Zeilennummer im gemeinsamen Verlauf (`~^m12`, `~^y7`, Reaktion `~*m12 :+1`);
+  ältere Clients sehen den Text. Client 2026.11.10.11.
 - **Client zu Client mit Schlüssel (CR99, Audit TB-06):** `//TB?` und `//TB CLIENT` tragen eine
   Zufallszahl, beide antworten `//PAUTH` (Signatur, Schlüssel, Gerätekennzeichen, Zertifikat der
   Heimat-BBS). Die Peer-Karte zeigt „✓ verified by OE3GAS-1“, „✓ known key“, „first contact“ oder

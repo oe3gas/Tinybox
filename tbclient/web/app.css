@@ -844,3 +844,16 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .rd-sysbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 12px;
              border-bottom: 1px solid var(--line); }
 .rd-sysbar.hidden { display: none; }
+
+/* CR107: chat board features between two clients */
+.termview.peer .pb-row { display: flex; gap: 6px; align-items: flex-end; align-self: flex-start; max-width: 80%; }
+.termview.peer .pb-row .pb { max-width: 100%; }
+.termview.peer .pb.tappable { cursor: pointer; }
+.termview.peer .pb-t.big { font-size: 40px; line-height: 1.1; }
+.termview.peer .pb.pstk { background: transparent; border: 0; padding: 0; }
+.termview.peer .pb.pstk img { display: block; width: 128px; height: auto; }
+.termview.peer .pb.pcry { background: transparent; border: 0; padding: 0; max-width: 92%; }
+.termview.peer .pb.pcry.tx .bang { transform: rotate(3deg); }
+.termview.peer .pb.pcry .bang { transform: rotate(-3deg); }
+.termview.peer .pb .quote { margin-bottom: 4px; }
+.termview.peer .pb .reacts { margin-top: 4px; }

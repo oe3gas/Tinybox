@@ -2416,6 +2416,9 @@ function renderPeer(c, mon) {
   $("peer-heard").classList.toggle("hidden", !p || !on || !p.caps.includes("HEARD"));
   $("peer-clear").classList.toggle("hidden", !p || !p.hist || !pv);
   $("peer-emoji").classList.toggle("hidden", !pv);
+  $("peer-stk").classList.toggle("hidden", !pv);                 // CR107
+  $("peer-cry").classList.toggle("hidden", !pv);
+  if (!pv && (peerQuote || peerCry)) { setPeerQuote(null); setPeerCry(false); }
   $("peer-img").classList.toggle("hidden", !pv || !p || !p.img);
   $("peer-file").classList.toggle("hidden", !pv || !p || !p.file);
   if (!pv) { $("peer-picker").classList.add("hidden"); $("peer-hint").classList.add("hidden");
@@ -2579,10 +2582,184 @@ function peerBubble(kind, text, t, ok) {
     const ch = activeCh;
     b.append(imageBlock(ref, kind === "tx", () => api("peer/imgget", { ch, hash: ref.hash })));
     if (ref.caption) b.append(el("div", "pb-t", wireToText(ref.caption)));
-  } else b.append(el("div", "pb-t", wireToText(text) || " "));   // :-) -> emoji
+  } else if (STK_RE.test(text) && STK[text.match(STK_RE)[1]]) {   // CR107: a sticker
+    const s = STK[text.match(STK_RE)[1]];
+    b.classList.add("pstk");
+    const img = el("img"); img.src = "/stickers/" + s.file; img.alt = img.title = s.title;
+    b.append(img);
+  } else {
+    const shown = wireToText(text);
+    const tx = el("div", "pb-t" + (isSingleEmoji(shown) ? " big" : ""));
+    richText(tx, shown || " ");                     // CR107: links, `monospace`, as in the boards
+    b.append(tx);
+  }
   b.append(el("div", "pb-time", hhmm(t) + (kind === "tx" && ok !== undefined ? (ok ? " ✓" : " ·") : "")));
   if (kind === "tx" && ok !== undefined) b.lastChild.title = ok ? "arrived (acknowledged by AX.25)" : "on its way";
   return b;
+}
+
+// ---------------------------------------------------------------- CR107: board features, 1:1
+/* Between two clients the reference is the line number in the shared history
+ * (each side numbers its own sent lines): "~^m12 text" = a comment on the
+ * writer's own line 12, "~^y7 text" = on the writer's received line 7;
+ * "~*m12 :+1" = a reaction. Older clients just show the text. */
+const PREF_RE = /^~\^([my])(\d{1,4})(?: |$)/;
+const PREACT_RE = /^~\*([my])(\d{1,4}) (\S{1,8})$/;
+let peerQuote = null, peerCry = false;
+const QUICK_PEER = ["👍", "😂", "❤️", "😮", "👏"];
+
+/* the stored line a reference means: dir = who wrote the referring line */
+function peerTarget(dir, side, n) {
+  const own = side === "m";                            // the writer's own line
+  return (dir === "tx" ? (own ? "tx" : "rx") : (own ? "rx" : "tx")) + ":" + n;
+}
+function peerIndex(msgs) {
+  const idx = {}, reacts = {};
+  for (const m of msgs) if (m.dir === "tx" || m.dir === "rx") idx[m.dir + ":" + m.n] = m;
+  for (const m of msgs) {
+    const r = (m.text || "").match(PREACT_RE);
+    if (!r) continue;
+    const key = peerTarget(m.dir, r[1], +r[2]);
+    const per = (reacts[key] = reacts[key] || {});
+    (per[r[3]] = per[r[3]] || new Set()).add(m.dir === "tx" ? "me" : "them");
+  }
+  return { idx, reacts };
+}
+function peerMsgEl(m, idx, reacts) {
+  let text = m.text || "";
+  const q = text.match(PREF_RE);
+  let quoted = null;
+  if (q) { quoted = idx[peerTarget(m.dir, q[1], +q[2])] || { missing: true }; text = text.slice(q[0].length); }
+  let b;
+  if (text.startsWith(CRY)) {                           // shout-out
+    b = el("div", "pb pcry " + m.dir);
+    const outer = el("div", "burst outer"), inner = el("div", "burst inner");
+    outer.style.clipPath = inner.style.clipPath = burstPath();
+    const bang = el("div", "bang"), tt = wireToText(text.slice(CRY.length));
+    const t = el("div", "bang-text", tt);
+    const longest = Math.max(...tt.split(/\s+/).map((w) => [...w].length));
+    t.style.fontSize = (tt.length <= 12 && longest <= 9 ? 36 : longest <= 11 ? 28 : 23) + "px";
+    bang.append(outer, inner, t);
+    b.append(bang, el("div", "pb-time", hhmm(m.t)));
+  } else b = peerBubble(m.dir, text, m.t, m.ok);
+  if (quoted) {
+    const qb = el("div", "quote");
+    const who = quoted.missing ? "↩ an older line" : `↩ ${quoted.dir === "tx" ? "you" : curCh().target} ${hhmm(quoted.t)}`;
+    qb.append(el("div", "q-who", who));
+    if (!quoted.missing) qb.append(el("div", "q-text", excerpt(quoted.text.replace(PREF_RE, ""))));
+    b.prepend(qb);
+  }
+  const rs = reacts[m.dir + ":" + m.n];
+  if (rs) {
+    const row = el("div", "reacts");
+    for (const [code, who] of Object.entries(rs)) {
+      const pill = el("button", "react" + (who.has("me") ? " mine" : ""), `${wireToText(code)} ${who.size}`);
+      pill.type = "button";
+      pill.title = [...who].map((w) => (w === "me" ? "you" : curCh().target)).join(", ");
+      if (!who.has("me")) pill.onclick = (ev) => { ev.stopPropagation(); peerReact(m, code); };
+      row.append(pill);
+    }
+    b.append(row);
+  }
+  if (m.n && curCh().state === "online") {
+    b.classList.add("tappable");
+    b.onclick = (ev) => { if (ev.target.closest("a,button,img.imgfull")) return; ev.stopPropagation(); openPeerBar(m, b); };
+  }
+  if (m.dir !== "rx") return b;
+  const row = el("div", "pb-row");                       // the avatar, as in the boards
+  row.append(avatar(curCh().target, symOf(curCh().target), true), b);
+  return row;
+}
+function peerQuotePrefix() {
+  return peerQuote ? `~^${peerQuote.dir === "tx" ? "m" : "y"}${peerQuote.n} ` : "";
+}
+function setPeerQuote(m) {
+  peerQuote = m;
+  if (m && peerCry) setPeerCry(false);
+  $("peer-quote").classList.toggle("hidden", !m);
+  if (m) {
+    $("pq-text").replaceChildren("Comment on ", el("b", "", m.dir === "tx" ? "your line: " : curCh().target + ": "),
+                                 excerpt(m.text.replace(PREF_RE, ""), 50));
+    $("term-input").focus();
+  }
+}
+function setPeerCry(on) {
+  peerCry = on;
+  if (on && peerQuote) setPeerQuote(null);
+  $("peer-cry").classList.toggle("active", on);
+  const i = $("term-input");
+  i.maxLength = on ? CRY_MAX : 250;
+  if (on && i.value.length > CRY_MAX) i.value = i.value.slice(0, CRY_MAX);
+  i.placeholder = on ? `Cry out! (max. ${CRY_MAX} characters)` : "Message";
+  i.focus();
+}
+function peerReact(m, code) {
+  closePeerBar();
+  $("peer-picker").classList.add("hidden");
+  const { wire, bad } = textToWire(code);
+  if (bad.length || !wire) return;
+  api("term", { text: `~*${m.dir === "tx" ? "m" : "y"}${m.n} ${wire}`, ch: activeCh });
+}
+function closePeerBar() { $("peer-bar").classList.add("hidden"); }
+function openPeerBar(m, anchor) {
+  const bar = $("peer-bar");
+  bar.replaceChildren();
+  const q = el("button", "q-btn", "↩");
+  q.title = "Comment / reply";
+  q.onclick = (ev) => { ev.stopPropagation(); closePeerBar(); setPeerQuote(m); };
+  bar.append(q);
+  for (const e of QUICK_PEER) {
+    const btn = el("button", "", e);
+    btn.onclick = (ev) => { ev.stopPropagation(); peerReact(m, e); };
+    bar.append(btn);
+  }
+  const more = el("button", "", "＋");
+  more.onclick = (ev) => { ev.stopPropagation(); closePeerBar(); peerPicker(m); };
+  bar.append(more);
+  bar.classList.remove("hidden");
+  const r = anchor.getBoundingClientRect(), c = $("term-out").getBoundingClientRect();
+  bar.style.top = Math.max(8, r.top - 48) + "px";
+  bar.style.left = Math.max(c.left + 8, Math.min(c.right - bar.offsetWidth - 8, r.left)) + "px";
+}
+function peerStickers() {
+  const box = $("peer-picker"), grid = $("peer-picker-grid");
+  if (!box.classList.contains("hidden") && grid.classList.contains("stk-grid")) { box.classList.add("hidden"); return; }
+  grid.replaceChildren();
+  grid.classList.add("stk-grid");
+  for (const s of STK_LIST) {
+    const b = el("button", "stk-btn");
+    b.type = "button";
+    const img = el("img"); img.src = "/stickers/" + s.file; img.alt = s.title;
+    b.title = `${s.title}  ([STK]${s.name})`;
+    b.append(img);
+    b.onclick = () => {
+      box.classList.add("hidden");
+      const pre = peerQuotePrefix();
+      setPeerQuote(null);
+      api("term", { text: pre + "[STK]" + s.name, ch: activeCh });
+    };
+    grid.append(b);
+  }
+  box.classList.remove("hidden");
+}
+/* CR107: alert for a new line of the other one - in a talk of two every line is
+ * meant for me; only when the window is not in front (the CR85 settings) */
+const peerAlertSeen = new Map();
+function checkPeerAlert(msgs) {
+  const key = activeCh + ":" + curCh().target;
+  const rx = msgs.filter((m) => m.dir === "rx" && !PREACT_RE.test(m.text));
+  const top = rx.length ? rx[rx.length - 1].id : 0;
+  if (!peerAlertSeen.has(key)) { peerAlertSeen.set(key, top); return; }
+  const last = peerAlertSeen.get(key);
+  peerAlertSeen.set(key, Math.max(last, top));
+  const hits = rx.filter((m) => m.id > last);
+  const away = document.hidden || !document.hasFocus();
+  if (!hits.length || !away || !(notifyCfg.popup || notifyCfg.tone)) return;
+  if (notifyCfg.tone) playBK();
+  if (notifyCfg.popup && canPopup() && Notification.permission === "granted") {
+    const m = hits[hits.length - 1];
+    showPopup(curCh().target, excerpt(m.text.replace(PREF_RE, ""), 80) || "…", activeCh);
+  }
 }
 
 /* CR78 stage 8: ping, speed test, chess, QSL - a row of buttons and the results */
@@ -2861,9 +3038,11 @@ function renderPeerChat(lines) {
     const atBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 40;
     peerChatKey = key;
     termShown = S.term_n || 0;
-    out.replaceChildren(...pc.msgs.map((m) => m.dir === "note" ? el("div", "pb sys", m.text)
-      : peerBubble(m.dir, m.text, m.t, m.ok)));
+    const { idx, reacts } = peerIndex(pc.msgs);
+    out.replaceChildren(...pc.msgs.filter((m) => !PREACT_RE.test(m.text))
+      .map((m) => m.dir === "note" ? el("div", "pb sys", m.text) : peerMsgEl(m, idx, reacts)));
     if (first || atBottom) out.scrollTop = out.scrollHeight;
+    checkPeerAlert(pc.msgs);
     return;
   }
   peerChatKey = "";
@@ -3038,9 +3217,12 @@ async function termSend(e) {
     const { wire, bad } = textToWire(text);
     if (bad.length || !wire) { peerHint(); return; }
     inp.value = "";
-    peerHint();
     $("peer-picker").classList.add("hidden");
-    await api("term", { text: wire, ch: activeCh });
+    // CR107: a shout-out or a comment, as in the chat boards
+    const out = peerCry ? CRY + wire.slice(0, CRY_MAX) : peerQuotePrefix() + wire;
+    setPeerQuote(null); setPeerCry(false);
+    peerHint();
+    await api("term", { text: out, ch: activeCh });
     return;
   }
   if (text && termHist[termHist.length - 1] !== text) termHist.push(text);
@@ -3061,16 +3243,21 @@ function peerHint() {
     : `${new TextEncoder().encode(wire).length} bytes on air: ${wire}`;
 }
 
-function peerPicker() {
+function peerPicker(target) {
   const box = $("peer-picker"), grid = $("peer-picker-grid");
-  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  const react = target && target.n ? target : null;        // CR107: a reaction to this line
+  if (!react && !box.classList.contains("hidden") && !grid.classList.contains("stk-grid")) {
+    box.classList.add("hidden"); return;
+  }
   grid.replaceChildren();
+  grid.classList.remove("stk-grid");
   for (const g of emojiGroups()) {
     if (g.name) grid.append(el("div", "picker-h", g.name));
     for (const e of g.items) {
       const b = el("button", "", e);
       b.type = "button";
       b.onclick = () => {
+        if (react) { peerReact(react, e); return; }
         const i = $("term-input");
         const a = i.selectionStart ?? i.value.length, z = i.selectionEnd ?? i.value.length;
         i.value = i.value.slice(0, a) + e + i.value.slice(z);
@@ -3412,6 +3599,9 @@ async function start() {
   $("peer-raw").onclick = peerToggle;
   $("peer-clear").onclick = peerClear;
   $("peer-emoji").onclick = peerPicker;
+  $("peer-stk").onclick = peerStickers;                        // CR107
+  $("peer-cry").onclick = () => setPeerCry(!peerCry);
+  $("pq-close").onclick = () => setPeerQuote(null);
   $("peer-img").onclick = () => $("imgfile").click();          // CR78: the same dialog
   $("peer-file").onclick = () => $("peer-filein").click();     // CR78: a file, LZHUF
   $("peer-filein").onchange = () => peerSendFile($("peer-filein").files[0]);
@@ -3502,6 +3692,7 @@ async function start() {
   $("input").addEventListener("input", (e) => { if (e.inputType !== "deleteContentBackward") liveEmoticon(e.target); updateHint(); });
   document.addEventListener("click", (e) => {
     if (!$("react-bar").contains(e.target)) closeReactBar();
+    if (!$("peer-bar").contains(e.target)) closePeerBar();         // CR107
   });
   $("chat").addEventListener("scroll", () => {
     if (performance.now() > ignoreChatScrollUntil) closeReactBar();   // CR23

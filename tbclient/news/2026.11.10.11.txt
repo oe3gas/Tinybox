@@ -1,0 +1,2 @@
+- Client zu Client wie im Chatboard: Shoutout,
+  Sticker, Kommentar, Reaktion, Links, Alarm.

@@ -811,6 +811,12 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   „first contact“. Die vertrauten Boxen holt der Client einmal am Tag von der Heimat-BBS
   (`//TRUST?`).
 
+- **Im TBClient-Chat (Client zu Client) wie im Chatboard (CR107):** 💥 Shoutout, 🏷️ Sticker,
+  eine Blase antippen → ↩ Kommentar mit Zitat oder eine Reaktion; Links, `Monospace`, großes
+  Einzel-Emoji. Der Alarm (Settings > Mention alert) meldet jede neue Zeile des anderen, wenn das
+  Fenster nicht vorne ist. Über Funk: `~^m12 Text` (Kommentar auf die eigene Zeile 12 des
+  Schreibers), `~^y7` (auf seine empfangene Zeile 7), `~*m12 :+1` (Reaktion).
+
 ### 3.7b Rollen und Rechte (CR92, PLANUNG 29.7)
 
 Das Rufzeichen einer Terminal-Verbindung ist nicht bewiesen – wer einen Sender hat, kann jedes

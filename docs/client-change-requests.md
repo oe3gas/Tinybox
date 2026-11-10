@@ -84,7 +84,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 103 | APRS-Statistik bei viel Verkehr: fest 250.000 Frames, „All“ zeigt den Zeitraum, Auswertung im Thread | ✅ siehe unten, PLANUNG 30 |
 | 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, Log nach Connect-Zeit sortiert, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | ✅ siehe unten |
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
-| 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | offen, Bestandsaufnahme siehe unten |
+| 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | Teil 1 (Client↔Client) ✅, Teil 2 (Chatboard) offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3503,12 +3503,22 @@ Kommentar, Reaktion, Alarm, Avatar; dazu „lädt Bild hoch“ und die Authentis
   Clients sehen den Text bzw. ignorieren `//R`.
 - Alarm: jede neue Zeile des Peers zählt (ein Gespräch zu zweit), wenn das Fenster nicht im
   Vordergrund ist – mit denselben Einstellungen wie CR85.
-- Fähigkeit `CHAT2` in `//TB?` / `//TB CLIENT`; ohne sie bleibt alles wie bisher.
+- ~~Fähigkeit `CHAT2`~~ – nicht nötig: alles sind Textzeilen, ältere Clients zeigen den Text.
 - **Umgekehrt ins Chatboard** (für viele Teilnehmer sinnvoll): Dateien (CR86), Karte der Teilnehmer
   aus ihren Locatoren, Zustellhaken für die eigene Zeile (bei I-Frame: AX.25-bestätigt bis zur
   Box; bei UI: „gesendet“), QSL-Karte an einen Teilnehmer. Ping/Speedtest/Heard there/Schach gehen
   direkt Client ↔ Client – im Board als Knopf am Teilnehmer, der eine Direktverbindung aufbaut
   (wenn er direkt erreichbar ist). Zu entscheiden: OE3GAS.
+
+### Umsetzung Teil 1: Client ↔ Client (Client 2026.11.10.11 – 10.11.2026) ✅
+
+- Nur Web-GUI (`app.js`), keine neuen Protokollzeilen: Shoutout `~!`, Sticker `[STK]`, Kommentar
+  `~^m<n>` / `~^y<n>` (m = eigene Zeile des Schreibers, y = seine empfangene), Reaktion
+  `~*m<n> <Emoji>` – als Zeilen im gemeinsamen Verlauf gespeichert und abgeglichen; Reaktionen
+  erscheinen als Pillen unter der Blase. Links, `Monospace`, großes Einzel-Emoji (`richText`),
+  Avatar links neben den Blasen des anderen, Alarm bei jeder neuen Zeile (Fenster nicht vorne).
+- „lädt Bild hoch“: zwischen zwei Clients holt der Empfänger das Bild selbst, mit Fortschritt –
+  gleichwertig, nichts zu tun.
 
 ## CR100 – Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding (✅ 09.11.2026)
 
