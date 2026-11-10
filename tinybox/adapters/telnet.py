@@ -11,6 +11,7 @@ import asyncio
 import logging
 
 from prcore import termcolor
+from prcore.kissport import plausible_call
 
 from .. import logsetup, texts
 from ..app import App
@@ -121,7 +122,7 @@ class TelnetConnection:
             transport.write(texts.TELNET_LOGIN)
             await self.writer.drain()
             call = normalize_call(await self._timed_line())
-            if is_valid_call(call):
+            if is_valid_call(call) and plausible_call(call):     # CR92 (TB-15)
                 return call
             transport.write(texts.TELNET_BAD_CALL + "\r")
         return None

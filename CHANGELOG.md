@@ -2,6 +2,19 @@
 
 ## Unveröffentlicht
 
+- **Rollen und Rechte CR92** (Audit TB-08, TB-14, TB-15, TB-21; MANUAL 3.7b): Terminal-Verbindungen
+  sind Gäste – keine Bulletins, Post nur als Text, Post an andere BBS wird für den Sysop gehalten
+  (`REL n`). Bulletins löscht nur der Sysop (oder der angemeldete Autor); ein Rufzeichen wie `70CM`
+  bekommt keine Rechte an der Rubrik, und solche Nicht-Rufzeichen werden beim Connect abgewiesen.
+  Warnseiten (`WARN`) gehen nur aus Sysop-Quellen an brocast. brocast-Listener: die Seite gehört
+  immer der sendenden Station (`org` aus den Daten zählt nicht mehr), eine ganz abgewählte Station
+  schickt auch keine Warnungen, je Station höchstens 150 Seiten, und beim Platzmachen gehen zuerst
+  Seiten von Stationen, die erst seit weniger als einem Tag gehört werden – Warnungen zuletzt.
+- **Zertifikat der Heimat-BBS CR93 Stufe 3** (MANUAL 3.7a): die Box hat einen eigenen Schlüssel
+  (`data/box.key`) und bestätigt damit den Schlüssel ihrer User (`//CERT?`, 180 Tage). Eine andere
+  TinyBox, deren Sysop ihr vertraut (`TRUST ADD box key`), lässt den User damit in den Client-Modus.
+  Box: Schema 13 (`trusted_boxes`). Sysop-Web-GUI: neue Ansicht **Keys** (Schlüssel freigeben,
+  widerrufen, löschen; vertraute TinyBoxen). Client 2026.11.10.5 holt und schickt das Zertifikat.
 - **Fix CR106:** Wartete der Schlüssel auf den Sysop (`//AUTHWAIT`) oder wurde er abgewiesen
   (`//ERR auth`), stand die Antwort der Box hinter dem Prompt und kam beim Client nie an: kein
   Client-Modus, kein Hinweis, Mail-Hinweis „4 new messages“ bei leerer Inbox und ein Sync, der 90 s

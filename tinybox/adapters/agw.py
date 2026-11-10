@@ -29,6 +29,7 @@ import time
 from collections import deque
 
 from prcore.agw import PID_NO_L3, AgwProtocolError, Frame, read_frame, via_data
+from prcore.kissport import plausible_call
 from prcore.termcolor import OK
 
 from .. import chatimg, framemon, linkguard, linkq, logsetup, texts
@@ -392,7 +393,8 @@ class AgwAdapter:
         self.conns[remote] = conn
         self.app.service.links[remote] = conn.quality
         conn.pump_task = asyncio.create_task(conn.pump())
-        if not is_valid_call(remote):
+        if not is_valid_call(remote) or not plausible_call(remote):
+            # CR92 (TB-15): also no rubric name (70CM, QO100) and no made-up word
             log.warning("connect from invalid call %r refused", remote)
             conn.write(texts.INVALID_CALL.format(call=remote) + "\r")
             conn.close()

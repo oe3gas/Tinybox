@@ -922,6 +922,54 @@ class ClientCore:
                                          payload)
         return f"{line} c={self._cmd_ctr} sig={sig}"
 
+    # --- CR93 stage 3: the certificate of the home BBS ----------------------------------
+
+    def _certs(self) -> dict[str, str]:
+        certs = self.settings.get("certs")
+        return certs if isinstance(certs, dict) else {}
+
+    def _cert_due(self) -> bool:
+        """At the home BBS: no certificate of it yet, or one that runs out soon."""
+        box = self.auth.get("box") or self.target
+        if self._login is None or auth.base(box) != auth.base(self.home):
+            return False
+        try:
+            until = auth.parse_cert(self._certs().get(box.upper(), ""))["until"]
+        except auth.AuthError:
+            return True
+        soon = time.strftime("%Y%m%d", time.gmtime(time.time() + auth.CERT_RENEW_DAYS * 86400))
+        return until < soon
+
+    def _store_cert(self, text: str) -> None:
+        try:
+            c = auth.parse_cert(text)
+        except auth.AuthError:
+            return                                   # '-': this box issues none
+        box = (self.auth.get("box") or self.target).upper()
+        if c["call"] != auth.base(self.cfg.mycall) or c["pub"] != self.identity.pub \
+                or c["issuer"] != box:
+            log.warning("certificate from %s not for this key - ignored", box)
+            return
+        self.settings["certs"] = {**self._certs(), box: text}
+        self._save_settings()
+        self.console.append(f"*** certificate of {box} until {c['until'][:4]}-{c['until'][4:6]}-"
+                            f"{c['until'][6:]}: other TinyBoxen that trust {box} let you log in")
+
+    def _cert_for(self, box: str) -> str:
+        """At another TinyBox: the newest valid certificate of another box (home)."""
+        today = time.strftime("%Y%m%d", time.gmtime())
+        best = ("", "")
+        for issuer, text in self._certs().items():
+            if issuer == box.upper():
+                continue
+            try:
+                c = auth.parse_cert(text)
+            except auth.AuthError:
+                continue
+            if c["until"] >= today and c["pub"] == self.identity.pub and c["until"] > best[0]:
+                best = (c["until"], text)
+        return best[1]
+
     def _note_home_auth(self, state: str, reason: str = "") -> None:
         """CR104: the last login answer of the home BBS, kept for the settings page."""
         if auth.base(self.auth.get("box") or self.target) != auth.base(self.home):
@@ -943,8 +991,12 @@ class ClientCore:
             self.auth.update(state="asking", box=box, reason="")
             self._login = (box, nonce)            # stage 2: signed commands of this login
             self._cmd_ctr = 0
+            cert = self._cert_for(box)
             self._send(f"//AUTH sig={self.identity.sign_login(box, self.cfg.mycall, nonce)} "
-                       f"pub={self.identity.pub}")
+                       f"pub={self.identity.pub}" + (f" cert={cert}" if cert else ""))
+            return
+        if cmd == "CERT":                        # stage 3: from the home BBS
+            self._store_cert(rest.strip())
             return
         if cmd == "AUTHWAIT":
             self.auth.update(state="wait", reason="")
@@ -963,6 +1015,8 @@ class ClientCore:
         if cmd == "OK":
             self.auth.update(state="ok", reason="")
             self._note_home_auth("ok")
+            if self._cert_due():
+                self._send("//CERT?")            # stage 3: for logins at other TinyBoxen
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
             self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")

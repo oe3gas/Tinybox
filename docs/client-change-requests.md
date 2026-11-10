@@ -70,8 +70,8 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 89 | Forwarding-Robustheit: BID, Restart, Sitzungsdauer, Ctrl-Z (TB-10, TB-11, TB-20a/b) | ✅ siehe unten |
 | 90 | Interlink-Authentisierung (TB-02): Stufe 1 Doppel-Rufzeichen erkennen ✅, Stufe 2 HMAC offen | Stufe 1 ✅, siehe unten |
 | 91 | Dictionary-Integrität: voller Vergleich, keine automatische Weiterverbreitung (TB-04) | ✅ siehe unten (Signatur mit CR94) |
-| 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | offen, siehe unten |
-| 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | Stufe 1 ✅, Stufe 2 ✅, Stufe 3 offen, siehe unten |
+| 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | ✅ 10.11.2026, siehe unten |
+| 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | Stufe 1–3 ✅, Sysop-Web-GUI ✅, siehe unten |
 | 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
 | 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | ✅ siehe unten (Abstufung nach Rolle mit CR92) |
 | 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash mit CR86) |
@@ -3003,7 +3003,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Dictionary wird nicht weitergesendet, Freigabe per Knopf und per Hand.
 - Offen: signierte Dictionaries – mit CR94.
 
-## CR92 – Rollen und Rechte (TB-08, TB-14, TB-15, TB-21, offen, 09.11.2026)
+## CR92 – Rollen und Rechte (TB-08, TB-14, TB-15, TB-21, ✅ 10.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3022,6 +3022,35 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
 - Rufzeichen-Plausibilität: Präfix-Struktur (ITU-Präfix + Ziffer + Suffix, SSID 0–15), Abgleich mit
   Rubriknamen; bei Kollision Rechte nur über die Rolle, nie über den Namen.
 - Grenzen für die Zahl der brocast-Seiten je Quelle (TB-21).
+
+### Umsetzung (TinyBox, brocast-Listener – 10.11.2026) ✅
+
+- `tinybox/rights.py`: Rollen `sysop` (Sitzung mit Sysop-Rechten; Konsole, Web-GUI, Inbox, MQTT),
+  `user` (Login mit Schlüssel, CR93), `guest` (jede Terminal-Verbindung), Forward-Partner wie bisher.
+  Alle Rechte dort, `service.create(role=…)`, `service.delete(role=…)`.
+- Gast: kein `SB` (Meldung `NEED_LOGIN` schon vor dem Text; `//SEND B` → `need_login`), Post nur Text
+  (`clean_text(emoji=False)`, PLANUNG 29.9), Post an eine andere BBS wird gehalten (`fwd=H`, Notiz
+  „guest mail …“, Hinweis an den Gast) und mit `REL n` freigegeben. Lokale Post und Post an den Sysop
+  gehen wie bisher.
+- TB-15: Bulletins löscht nur der Sysop oder der angemeldete Autor – nie der „Empfänger“ (die
+  Rubrik). Beim Connect (AGW, AXUDP, KISS über `prcore.kissport`, Telnet) wird die Struktur des
+  Rufzeichens geprüft: Präfix 1–3 Zeichen mit Buchstabe, Ziffer(n), Suffix aus Buchstaben
+  (`plausible_call`) – `70CM`, `10M`, `QO100`, `WX` sind kein Rufzeichen.
+- TB-14: ein Bulletin an ein `alert_destinations`-Ziel (`WARN`) geht nur aus Sysop-Quellen
+  (`origin` sysop, inbox, mqtt) an brocastd; sonst bleibt es ein Bulletin.
+- TB-08 (brocast-Listener): die Seite gehört immer der Station, die den Frame sendet – ein `org` in
+  den Daten wird nicht mehr genommen (brocastd sendet keins). Eine ganz abgewählte Station kommt auch
+  mit Warnungen nicht mehr durch (abgewählte Rubriken weiterhin schon).
+- TB-21: je Station höchstens `max_pages_per_station` (150) Seiten; beim Platzmachen gehen zuerst
+  Seiten von Stationen, die seit weniger als 24 h gehört werden, dann gelesene, dann ältere –
+  Warnungen zuletzt. 500 Frames erfundener Stationen verdrängen die Seiten bekannter Stationen nicht
+  mehr.
+- Grenzen, die bleiben (brauchen signierte Seiten, CR94): wer das AX.25-Rufzeichen einer echten
+  Station fälscht, kann deren Seiten weiterhin überschreiben oder zurückziehen; die Reihenfolge der
+  Fragmente (erstes gewinnt) ist unverändert.
+- Tests `tests/test_cr92.py`, `brocast/tests/test_listener.py`; im Rest der Tests schaltet
+  `tests/__init__.py` die Gast-Regeln ab (`rights.GUEST_LIMITS`). tbtest: Bulletins schreiben nur
+  noch die Client-User.
 
 ## CR93 – User-Authentisierung tbclient ↔ Heimat-BBS (Stufe 1 ✅ 09.11.2026, Stufe 2 ✅ 10.11.2026)
 
@@ -3093,11 +3122,32 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Chatzeilen bleiben unsigniert (Aufwand je Zeile).
 - Tests `tests/test_cr93.py` (`SignedCommands`, `ClientSigns`).
 
+### Umsetzung Stufe 3 (TinyBox, Client 2026.11.10.5 – 10.11.2026) ✅
+
+- Herausgeber: **die Heimat-BBS** (Vorschlag oben; die allgemeine Frage aus CR94 – gemeinsamer
+  Herausgeber, LoTW-Anker – bleibt dort offen). Jede Box hat `data/box.key` (Ed25519, beim ersten
+  Gebrauch angelegt).
+- Zertifikat `TBC1:<Ruf>:<User-Schlüssel>:<Herausgeber>:<gültig bis JJJJMMTT>:<Signatur>`,
+  signiert `TINYBOX-CERT1|…` (`prcore/auth.make_cert/parse_cert/check_cert`), 180 Tage gültig, ≈ 165 Byte.
+- Client: nach dem `//OK` an der Heimat-BBS `//CERT?`, wenn keins da ist oder es in weniger als
+  60 Tagen abläuft; Box antwortet `//CERT <…>` (nur für den hier freigegebenen Schlüssel, sonst
+  `//CERT -`). Gespeichert in `settings.json` (`certs`). An einer anderen Box hängt der Client
+  ` cert=<…>` an `//AUTH`.
+- Andere Box: Zertifikat gilt, wenn Ruf und Schlüssel passen, der Herausgeber in `trusted_boxes`
+  steht (Schema 13, Konsole `TRUST`, `TRUST ADD box key`, `TRUST DEL box`), die Signatur stimmt und
+  es nicht abgelaufen ist → Client-Modus, Eintrag `cert` in `user_keys` (sichtbar in `USER`).
+  Lokale Entscheidungen gehen vor: `revoked` sperrt, ein hier freigegebener anderer Schlüssel →
+  `other_key`. Ungültiges Zertifikat → Warnung im Log, Schlüssel wartet wie ein neuer.
+- Widerruf an der Heimat-BBS erreicht andere Boxen nicht – dort gilt das Zertifikat bis zum Ablauf
+  (Widerruf über brocast: CR94).
+- **Sysop-Web-GUI ✅:** Ansicht „Keys“ – Schlüssel freigeben/widerrufen/löschen (mit Hinweis auf den
+  Vergleich des Fingerabdrucks), Schlüssel dieser Box, vertraute TinyBoxen hinzufügen/entfernen
+  (`/api/keys`, gemeinsamer Code mit der Konsole in `tinybox/keys.py`).
+- Tests `tests/test_cr93.py` (`Certificates`, `ClientCertificate`), `tests/test_web.py` (`KeysApi`).
+
 ### Offen
 
-- **Stufe 3:** Zertifikat der Heimat-BBS für fremde Boxen (mit CR94). Bis dahin gibt es an einer
-  fremden TinyBox keinen Client-Modus.
-- Sysop-Web-GUI: Schlüssel anzeigen und freigeben (bisher nur Konsole).
+- Widerruf über brocast, Notfall-Schlüssel, gemeinsamer Herausgeber (CR94).
 
 ## CR94 – Admin-Protokoll mit Signatur (Konzept, offen, 09.11.2026)
 

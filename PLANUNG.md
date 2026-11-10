@@ -1911,6 +1911,9 @@ I = Integrität, A = Authentizität, V = Verfügbarkeit, C = Vertraulichkeit
 | Forwarding-Post abholen | – | ✓ | ✗ | ✗ |
 | Admin-Befehle | ✓ | ✗ | ✗ | ✗ |
 
+Umgesetzt mit CR92 (10.11.2026): `tinybox/rights.py`, Terminal-Verbindung = nicht authentifiziert
+(Gast), User = Login mit Schlüssel (CR93).
+
 Vertrauenskette (Idee): Sysop-Schlüssel → Box-Schlüssel → User-Schlüssel. Die Heimat-BBS
 bestätigt den Schlüssel des Users mit ihrer Unterschrift; eine fremde BBS, die der Heimat-BBS
 vertraut, erkennt den User damit ebenfalls (CR93).
@@ -1930,7 +1933,8 @@ vertraut, erkennt den User damit ebenfalls (CR93).
   Schlüssel und Widerrufe. Notfall-Schlüssel offline.
 - Entschieden (OE3GAS, 09.11.2026, CR93): **Ed25519**, gemeinsames `prcore/auth.py` (umgesetzt mit
   CR93 Stufe 1). Offen: wer Zertifikate ausstellt (Sysop je Box / gemeinsamer Herausgeber /
-  LoTW-Anker), TOTP-Variante ja/nein.
+  LoTW-Anker), TOTP-Variante ja/nein. Für User-Zertifikate vorerst die Heimat-BBS mit eigenem
+  Box-Schlüssel, Vertrauen je Box durch den Sysop (CR93 Stufe 3, 10.11.2026).
 
 ### 29.9 Zeichensatz-Policy (CR95)
 

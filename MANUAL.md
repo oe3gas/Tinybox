@@ -736,7 +736,7 @@ Alle Benutzer sehen diese Angaben.
 
 Den Client-Modus an der Heimat-BBS gibt es nur nach einem Login mit dem **Schlüssel des
 Benutzers** (Ed25519, Signatur – nichts wird verschlüsselt, der Inhalt bleibt lesbar).
-Terminal-Benutzer ohne Client sind nicht betroffen.
+Terminal-Benutzer ohne Client sind Gäste (3.7b).
 
 - **Der Schlüssel** entsteht beim ersten Start des Clients: `data/tbclient/identity.key`. Er gehört
   zum Rufzeichen, nicht zum PC – für einen zweiten PC die Datei dorthin kopieren. Geht er verloren:
@@ -745,7 +745,7 @@ Terminal-Benutzer ohne Client sind nicht betroffen.
 - **Erster Login:** die TinyBox schickt eine Zufallszahl, der Client antwortet mit Signatur und
   öffentlichem Schlüssel. Ein neuer Schlüssel wartet auf den Sysop; der Client zeigt
   „Your key waits for the sysop … fingerprint …“, der Sysop bekommt eine persönliche Nachricht.
-- **Freigabe (Sysop-Konsole):** den Fingerabdruck mit dem Benutzer vergleichen – am Telefon, im
+- **Freigabe (Sysop-Konsole oder Web-GUI „Keys“):** den Fingerabdruck mit dem Benutzer vergleichen – am Telefon, im
   QSO, auf Papier, **nicht** über dieselbe Verbindung –, dann:
 
   | Befehl | |
@@ -759,7 +759,24 @@ Terminal-Benutzer ohne Client sind nicht betroffen.
 - **Abgewiesen** wird ein Login mit falscher Signatur, mit einem anderen als dem freigegebenen
   Schlüssel (`other_key`) und mit einem widerrufenen (`revoked`). Eine abgehörte Antwort nützt
   nichts: sie gilt nur für diese Zufallszahl, diese Box und dieses Rufzeichen.
-- An einer **fremden** TinyBox gibt es den Client-Modus erst mit Stufe 3 (Zertifikat der Heimat-BBS).
+- **An einer anderen TinyBox (Stufe 3):** Nach dem Login an der Heimat-BBS holt der Client einmal
+  ein **Zertifikat** (`//CERT?`, 180 Tage gültig, nach 120 Tagen erneuert): die Heimat-BBS bestätigt
+  mit ihrem eigenen Schlüssel (`data/box.key`) „dieser Schlüssel gehört OE3ABC“. An einer anderen
+  TinyBox schickt der Client das Zertifikat beim Login mit (≈ 165 Byte). Hat deren Sysop der
+  Heimat-BBS vertraut, ist der User sofort im Client-Modus (Status `cert` in `USER`); sonst wartet
+  der Schlüssel dort wie ein neuer auf `USER OK`. Was der Sysop dort entscheidet, gilt vor dem
+  Zertifikat: `USER REVOKE` sperrt auch mit gültigem Zertifikat. Ein an der Heimat-BBS
+  widerrufener Schlüssel gilt woanders bis zum Ablauf seines Zertifikats.
+- **Einer anderen TinyBox vertrauen** (Sysop-Konsole oder Web-GUI „Keys“, Karte „Trusted
+  TinyBoxen“): `TRUST` zeigt Mailbox-Ruf, öffentlichen Schlüssel und Fingerabdruck **dieser** Box –
+  das gibt man dem anderen Sysop. Der trägt es bei sich ein und vergleicht den Fingerabdruck mit
+  dir (Telefon, QSO), umgekehrt genauso:
+
+  | Befehl | |
+  |---|---|
+  | `TRUST` | Schlüssel dieser Box, vertraute Boxen |
+  | `TRUST ADD box key` | den Zertifikaten von `box` (z. B. `OE5XBL-1`) vertrauen |
+  | `TRUST DEL box` | nicht mehr |
 - **Signierte Befehle (Stufe 2):** AX.25 prüft keine Absender – jemand könnte einen Frame in eine
   laufende Verbindung einschleusen. Deshalb unterschreibt der Client nach dem Login jeden
   kritischen Befehl einzeln: Post und Bulletins senden (samt Betreff und Text), Post löschen, das
@@ -768,7 +785,31 @@ Terminal-Benutzer ohne Client sind nicht betroffen.
   nicht, weist die Box ab (`sig_missing`, `sig_bad`, `sig_replay`) und schreibt eine Warnung ins Log.
 - Im Client-Modus nimmt die Box die **Terminal-Befehle zum Schreiben und Löschen** (`S`, `SP`,
   `SB`, `K`, `KM`, `E`, `N`, `NH`, `NL`) nicht an: „Not in client mode …“ – das macht der Client,
-  signiert. In einer normalen Terminal-Verbindung gilt alles wie bisher.
+  signiert. In einer normalen Terminal-Verbindung gilt 3.7b.
+
+### 3.7b Rollen und Rechte (CR92, PLANUNG 29.7)
+
+Das Rufzeichen einer Terminal-Verbindung ist nicht bewiesen – wer einen Sender hat, kann jedes
+Rufzeichen verwenden. Deshalb unterscheidet die TinyBox:
+
+| Recht | Sysop | User (Login mit Schlüssel) | Gast (Terminal) |
+|---|---|---|---|
+| Post und Bulletins lesen | ✓ | ✓ | ✓ |
+| Persönliche Post schreiben | ✓ | ✓ | nur Text (keine Emoji); an eine andere BBS erst nach Freigabe |
+| Bulletins schreiben | ✓ | ✓ | ✗ – „Bulletins only with the TinyBox client …“ |
+| Bulletins löschen | ✓ | nur eigene | ✗ |
+| Warnungen in brocast (`WARN`) | ✓ (Konsole, Web-GUI, Inbox, MQTT) | ✗ | ✗ |
+
+- **Post eines Gastes an eine andere BBS** (`SP call @ BBS`) wird gespeichert und **gehalten**; der
+  Gast liest „Mail to another BBS waits until the sysop … releases it“. Der Sysop sieht sie in
+  `FWQ` bzw. der Web-GUI (Status H, Notiz „guest mail“) und gibt sie mit `REL n` frei.
+- Ein Bulletin an `WARN` von einem User bleibt ein normales Bulletin in der Mailbox; zur
+  Warnseite in brocast wird nur, was der Sysop selbst eingibt.
+- **Rufzeichen-Prüfung beim Connect** (Funk, AXUDP, Telnet): Präfix mit Buchstabe, Ziffer(n),
+  Suffix aus Buchstaben (`OE3GAS`, `4X1AB`, `2E0ABC`). Rubriknamen wie `70CM`, `10M`, `QO100` und
+  erfundene Wörter werden abgewiesen. Ein Rufzeichen gleich einer Rubrik bekommt nie Rechte an
+  deren Bulletins.
+- Forward-Partner bleiben wie bisher (eigene Anmeldung im Forwarding).
 
 ### 3.8 AXUDP: Client und TinyBox am selben PC (PLANUNG 25)
 

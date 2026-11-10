@@ -392,3 +392,10 @@ legend { padding: 0; margin-bottom: 8px; }
 .reload-dlg pre { margin: 0 0 14px; font-size: 13px; line-height: 1.45; white-space: pre-wrap;
   overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }
 .reload-dlg form { text-align: right; }
+
+/* CR93: keys view */
+.card-body.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.card-body.row input { padding: 6px 8px; min-width: 0; }
+.card-body.row input.grow { flex: 1 1 260px; }
+table.data td.warn { color: #8A5A00; font-weight: 600; }
+table.data td .btn.sm + .btn.sm { margin-left: 6px; }

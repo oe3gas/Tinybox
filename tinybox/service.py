@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from prcore.text import clean_text, defuse_lines
 
-from . import addressing
+from . import addressing, rights
 from .addressing import AddressError
 from .chat import ChatHub
 from .config import (
@@ -73,8 +73,11 @@ class MessageService:
         return (sysop or msg.type == "B"
                 or self._is_addressee(msg, call) or self._is_author(msg, call))
 
-    def can_delete(self, msg: Message, call: str, sysop: bool) -> bool:
-        return sysop or self._is_addressee(msg, call) or self._is_author(msg, call)
+    def can_delete(self, msg: Message, call: str, sysop: bool, role: str = "") -> bool:
+        # CR92 (TB-15): see rights.may_delete
+        role = rights.SYSOP if sysop else (role or rights.default_role())
+        return rights.may_delete(msg.type, role, self._is_addressee(msg, call),
+                                 self._is_author(msg, call))
 
     def _visible(self, msg_id: int, call: str, sysop: bool) -> Message:
         msg = self.store.get(msg_id)
@@ -129,6 +132,14 @@ class MessageService:
         return [m for m in self.store.list_messages()
                 if m.type == "B" and m.fwd == "H" and m.note.startswith(NEW_RUBRIC_NOTE)
                 and (name is None or m.to_call == name)]
+
+    def box_identity(self):
+        """CR93 stage 3: the key of this TinyBox (data/box.key), made at first use.
+        It signs the certificates of its users."""
+        if getattr(self, "_box_identity", None) is None:
+            from prcore import auth
+            self._box_identity = auth.Identity(self.cfg.storage.data_dir / "box.key")
+        return self._box_identity
 
     def key_waiting(self, call: str, fp: str, seen_as: str) -> None:
         """CR93: a new client key waits for the sysop - he gets a personal mail."""
@@ -256,14 +267,16 @@ class MessageService:
                replace_key: str | None = None, expires: str | None = None,
                brocast: str | None = None, at_addr: str = "", bid: str | None = None,
                rlines: list[str] | None = None, bid_kind: str | None = None,
-               hold: str = "") -> int:
+               hold: str = "", role: str = rights.TRUSTED) -> int:
         """replace_key/expires/brocast: inbox folder only (bulletins). An existing
         bulletin with the same replace_key gets the new content under its old number.
         brocast: a ready brocast page (JSON text) that the brocast adapter sends
         instead of turning the text into a text page.
         at_addr/bid/rlines: forwarding. A partner mailbox (origin "forward") passes
         the R: lines it received; TinyBox adds its own on top.
-        hold: forward module only - keep the message held (H) with this reason."""
+        hold: forward module only - keep the message held (H) with this reason.
+        role: who writes from a session (rights.py, CR92); TRUSTED for the
+        mailbox itself and the sysop's tools."""
         if origin not in ORIGINS:
             raise ServiceError("invalid_value", f"origin {origin}")
         from_call = normalize_call(from_call)
@@ -271,6 +284,8 @@ class MessageService:
             raise ServiceError("invalid_call", from_call)
         type = type.upper()
         forwarded = origin == "forward"
+        if type == "B" and not rights.may_write_bulletin(role):
+            raise ServiceError("need_login", "bulletins need the TinyBox client")
         # third-party rule is for local users, not for mail arriving from partners
         to_call = self.check_send(from_call, to_call, type, sysop or forwarded)
         if type == "B" and origin in ("inbox", "mqtt"):
@@ -279,7 +294,8 @@ class MessageService:
 
         # CR95 (PLANUNG 29.9): any script, but no control/format characters, and a
         # local text cannot carry lines a mailbox would read as protocol
-        subject, body = clean_text(subject), clean_text(body)
+        emoji = rights.emoji_ok(role)
+        subject, body = clean_text(subject, emoji=emoji), clean_text(body, emoji=emoji)
         if not forwarded:
             body = defuse_lines(body)
         if len(body.encode("utf-8")) > self.cfg.mailbox.max_msg_bytes:
@@ -321,7 +337,8 @@ class MessageService:
             brocast=brocast if type == "B" else None,
             at_addr=at_addr, bid=bid,
         )
-        self._forward_fields(msg_id, type, at_addr, bid, rlines or [], origin, bid_kind, hold)
+        self._forward_fields(msg_id, type, at_addr, bid, rlines or [], origin, bid_kind, hold,
+                             role)
         log.info("msg %d created: %s %s -> %s%s (%s)", msg_id, type, from_call, to_call,
                  f" @ {at_addr}" if at_addr else "", origin)
         self.bus.publish("message.created", message=self.store.get(msg_id))
@@ -331,7 +348,7 @@ class MessageService:
 
     def _forward_fields(self, msg_id: int, type: str, at_addr: str, bid: str | None,
                         incoming: list[str], origin: str, bid_kind: str | None,
-                        hold: str = "") -> None:
+                        hold: str = "", role: str = rights.TRUSTED) -> None:
         """BID, own R: line, forward state ($ / H) of a new message.
 
         bid_kind (W0RLI): 'B' = real BID (bulletins, or given by the sender),
@@ -359,6 +376,9 @@ class MessageService:
             if note:
                 fwd = "H"
                 log.warning("msg %d (%s) held: %s", msg_id, bid, note)
+        elif guest := rights.hold_reason(role, leaves):
+            fwd, note = "H", guest                 # CR92: the sysop releases it (REL n)
+            log.warning("msg %d of a guest to %s held for the sysop", msg_id, at_addr)
         if not fwd and leaves and self.cfg.forward.enabled:
             fwd = "$"
         self.store.set_forward_fields(msg_id, bid=bid or "", rlines="\n".join(rlines),
@@ -459,9 +479,9 @@ class MessageService:
 
     # --- deleting / editing ---------------------------------------------
 
-    def delete(self, msg_id: int, call: str, sysop: bool) -> None:
+    def delete(self, msg_id: int, call: str, sysop: bool, role: str = "") -> None:
         msg = self._visible(msg_id, call, sysop)
-        if not self.can_delete(msg, call, sysop):
+        if not self.can_delete(msg, call, sysop, role):
             raise ServiceError("not_allowed")
         self.store.delete(msg_id)
         log.info("msg %d deleted by %s", msg_id, call)

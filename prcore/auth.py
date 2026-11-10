@@ -22,6 +22,8 @@ import hashlib
 import os
 from pathlib import Path
 
+from .text import isnum
+
 try:                                                      # the fast path
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (Ed25519PrivateKey,
@@ -210,6 +212,54 @@ def command_message(box: str, call: str, nonce: str, counter: int, line: str,
     if payload:
         text += "\n" + "\n".join(payload)
     return text.encode("utf-8")
+
+
+# --- certificates (CR93 stage 3) ---------------------------------------------------
+#
+# The home BBS confirms the key of a user with its own key (box.key):
+#
+#     TBC1:<call>:<user key>:<issuer>:<valid until YYYYMMDD>:<signature of the issuer>
+#
+# signed: "TINYBOX-CERT1|<call>|<user key>|<issuer>|<until>". call = base call, issuer
+# = mailbox call of the home BBS (with SSID). Another TinyBox whose sysop trusts
+# that issuer (TRUST, after comparing its fingerprint) lets the user log in with
+# it. About 165 bytes, sent only at the login at another box.
+
+CERT_DAYS = 180              # valid this long
+CERT_RENEW_DAYS = 60         # the client fetches a new one at home when fewer are left
+
+
+def cert_message(call: str, pub: str, issuer: str, until: str) -> bytes:
+    return f"TINYBOX-CERT1|{base(call)}|{pub}|{issuer.upper()}|{until}".encode("ascii")
+
+
+def make_cert(issuer_key: Identity, call: str, pub: str, issuer: str, until: str) -> str:
+    sig = b64e(sign(issuer_key.secret, cert_message(call, pub, issuer, until)))
+    return f"TBC1:{base(call)}:{pub}:{issuer.upper()}:{until}:{sig}"
+
+
+def parse_cert(text: str) -> dict:
+    """The fields of a certificate (not checked against any key), or AuthError."""
+    parts = text.strip().split(":")
+    if len(parts) != 6 or parts[0] != "TBC1":
+        raise AuthError("not a certificate")
+    _, call, pub, issuer, until, sig = parts
+    b64d(pub, 32)
+    raw = b64d(sig, 64)
+    if not (isnum(until) and len(until) == 8) \
+            or not (call.isascii() and call.isalnum() and 3 <= len(call) <= 6) \
+            or not (issuer.isascii() and 3 <= len(issuer) <= 9
+                    and issuer.replace("-", "").isalnum()):
+        raise AuthError("not a certificate")
+    return {"call": call.upper(), "pub": pub, "issuer": issuer.upper(), "until": until,
+            "sig": raw}
+
+
+def check_cert(cert: dict, issuer_pub: bytes, today: str) -> bool:
+    """Signature of the issuer right and not expired (today = YYYYMMDD)."""
+    return cert["until"] >= today and verify(
+        issuer_pub, cert_message(cert["call"], cert["pub"], cert["issuer"], cert["until"]),
+        cert["sig"])
 
 
 def base(call: str) -> str:

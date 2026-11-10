@@ -186,6 +186,31 @@ class ExpiryAndLimitTests(Base):
             self.clock.t += 60
         self.assertEqual(sorted(i for _, i in self.visible()), list(range(3, 13)))
 
+    def test_flood_of_unknown_stations_keeps_known_pages(self):
+        # CR92 (TB-21): 500 frames of made-up stations pushed every real page out
+        self.li.set_settings({"max_pages_total": 20})
+        for i in range(1, 6):
+            self.rx(page_id=i)
+        self.rx(page_id=9, typ="alert", ti="Warnung")
+        self.clock.t += 2 * 86400                         # OE3GAS-5 is known by now
+        for i in range(60):
+            self.rx(page_id=100 + i, src=f"OE{i % 10}F{chr(65 + i // 10)}K-5",
+                    t=int(self.clock()) + 3600)           # newer t than the real pages
+        mine = sorted(i for org, i in self.visible() if org == ST)
+        self.assertEqual(mine, [1, 2, 3, 4, 5, 9])
+
+    def test_limit_per_station(self):
+        self.li.set_settings({"max_pages_per_station": 3})
+        for i in range(1, 6):
+            self.rx(page_id=i, cat=["dx" if i % 2 else "wx"])
+            self.clock.t += 60
+        self.assertEqual(sorted(i for _, i in self.visible()), [3, 4, 5])
+
+    def test_org_in_the_payload_is_ignored(self):
+        # CR92 (TB-08): a page claiming another station is the sender's own
+        self.rx(page_id=7, src="OE1BAD-5", org=ST, ti="Fake")
+        self.assertEqual(self.visible(), [("OE1BAD-5", 7)])
+
     def test_settings_validation(self):
         for bad in ({"max_pages_total": 0}, {"lang": "fr"}, {"x": 1},
                     {"alert_sound": "ja"}, {"max_age_days": True}, []):
@@ -210,11 +235,16 @@ class SubscriptionTests(Base):
         self.assertEqual(self.rx(page_id=1, src="OE3XYZ-5", cat=["dx"]), "blocked")
         self.assertEqual(self.rx(page_id=2, src=ST, cat=["dx"]), "new")
 
-    def test_alert_always_passes(self):
-        self.li.set_optouts([{"station": ST, "cat": "*"}])
-        self.assertEqual(self.rx(typ="alert", ti="Unwetter"), "new")
+    def test_alert_passes_a_deselected_rubric(self):
+        self.li.set_optouts([{"station": ST, "cat": "wx"}, {"station": "*", "cat": "all"}])
+        self.assertEqual(self.rx(typ="alert", ti="Unwetter", cat=["wx"]), "new")
         self.assertEqual(self.rx(page_id=25, pri="emergency"), "new")
         self.assertTrue(all(p["alert"] for p in self.li.list_pages()))
+
+    def test_station_switched_off_sends_no_alerts(self):
+        # CR92 (TB-08): a station the user switched off completely - also its alerts
+        self.li.set_optouts([{"station": ST, "cat": "*"}])
+        self.assertEqual(self.rx(typ="alert", ti="Unwetter"), "blocked")
 
     def test_cannot_opt_out_of_everything(self):
         with self.assertRaises(ListenerError):

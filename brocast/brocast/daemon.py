@@ -160,14 +160,14 @@ class Daemon:
         wire = (frames_used, entry["bytes"]) if fmt == FORMAT_FRAGMENT else None
         result = self.listener.on_page(page, raw, frame.src, wire=wire)
         sub, total = page.get("sub") or [frames_used, frames_used]
-        self.store.add_rxlog({**entry, "org": page.get("org") or frame.src, "id": page["id"],
+        self.store.add_rxlog({**entry, "org": frame.src, "id": page["id"],
                               "sub": sub, "sub_total": total, "rev": page.get("rev", 0),
                               "ti": page.get("ti", ""), "result": result})
         if not own:
             self.rx_pages += 1
         if result in ("new", "updated", "subpage", "withdrawn") and not own:
             log.info("empfangen: %s Seite %s rev %s (%s/%s%s) %s [%s]",
-                     page.get("org") or frame.src, page["id"], page.get("rev", 0),
+                     frame.src, page["id"], page.get("rev", 0),
                      sub, total, " Fragmente" if fmt == FORMAT_FRAGMENT and total > 1 else "",
                      page.get("ti", ""), result)
 

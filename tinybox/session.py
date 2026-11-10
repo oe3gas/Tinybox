@@ -13,7 +13,7 @@ from typing import Protocol
 
 from prcore.profile import ProfileError
 
-from . import logsetup, profiles, texts
+from . import logsetup, profiles, rights, texts
 from .config import Config
 from .service import MessageService, ServiceError
 from .store import utc_now
@@ -80,6 +80,7 @@ class Session:
         self.auth_pub: bytes | None = None
         self.auth_nonce: str | None = None
         self.auth_ctr = 0
+        self.auth_cert = ""         # stage 3: logged in with a certificate of this home BBS
         self.ui_rx = None   # linkq.RxWindow while a UI client is in a chat board
         # message being composed
         self._to = ""
@@ -162,6 +163,8 @@ class Session:
             self.out(texts.THIRD_PARTY_OFF.format(sysop=self.cfg.station.sysop_call))
         elif exc.code == "not_allowed":
             self.out(texts.NOT_ALLOWED)
+        elif exc.code == "need_login":
+            self.out(texts.NEED_LOGIN)
         elif exc.code == "invalid_call":
             self.out(texts.INVALID_CALL.format(call=str(exc)))
         elif exc.code == "too_large":
@@ -499,13 +502,16 @@ class Session:
                         from_call=self.call, to_call=to, type=self._type,
                         subject=self._subject, body=body,
                         origin=self.origin, sysop=self.sysop,
-                        at_addr=self._at, bid=self._bid,
+                        at_addr=self._at, bid=self._bid, role=rights.role_of(self),
                     ))
             except ServiceError as exc:
                 self.error(exc)
                 if not ids:
                     return
             self.out(texts.SAVED.format(id=", ".join(map(str, ids))))
+            held = [i for i in ids if (m := self.service.store.get(i)) and m.fwd == "H"]
+            if held:                                # CR92: a guest's mail to another BBS
+                self.out(texts.GUEST_HELD.format(sysop=self.cfg.station.sysop_call))
 
 
 MAX_PER_CALL = 2          # CR97 (TB-17): sessions of one call (all SSIDs) at once

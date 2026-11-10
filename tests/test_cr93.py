@@ -3,6 +3,7 @@ the critical commands (stage 2)."""
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import stat
 import tempfile
@@ -12,7 +13,7 @@ from unittest import mock
 
 from prcore import auth
 from tbclient.core import ClientCore
-from tinybox import clientproto
+from tinybox import clientproto, keys
 from tinybox.adapters.sysop import MonitorFilter, SysopConsole
 
 from tests.test_tbclient import client_cfg
@@ -307,6 +308,110 @@ class ClientSigns(unittest.TestCase):
                 self.assertTrue(auth.verify(pub, msg, auth.b64d(sig, 64)))
             core._clear_chat()
             self.assertEqual(core.signed("//KILL 5"), "//KILL 5")
+
+
+class Certificates(unittest.TestCase):
+    """Stage 3: the home BBS confirms the key, another TinyBox that trusts it
+    lets the user log in."""
+
+    def setUp(self):
+        p = mock.patch.object(clientproto, "REQUIRE_AUTH", True)
+        p.start()
+        self.addCleanup(p.stop)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        d = Path(self.tmp.name)
+        self.home, self.other = make_app(), make_app()
+        for app, name, call in ((self.home, "home", "OE3GAS-1"), (self.other, "other", "OE5XBL-1")):
+            app.cfg.storage = dataclasses.replace(app.cfg.storage, data_dir=d / name)
+            app.cfg.station = dataclasses.replace(app.cfg.station, mailbox_call=call)
+        self.key = auth.Identity(d / "identity.key")
+        self.home.store.key_put("OE3ABC", self.key.pub, "active")
+
+    def login(self, app, cert=None):
+        s, t = login(app, "OE3ABC-7")
+        type_lines(s, "//CLIENT TB1 v=2026.11.10 caps=CHAT")
+        n = t.take().split("//AUTH? n=", 1)[1].split()[0]
+        box = app.cfg.station.mailbox_call
+        type_lines(s, f"//AUTH sig={self.key.sign_login(box, 'OE3ABC', n)} pub={self.key.pub}"
+                      + (f" cert={cert}" if cert else ""))
+        return s, t
+
+    def cert(self) -> str:
+        s, t = self.login(self.home)
+        self.assertIn("//OK", t.take())
+        type_lines(s, "//CERT?")
+        line = t.take().strip()
+        self.assertTrue(line.startswith("//CERT TBC1:OE3ABC:"), line)
+        return line[7:]
+
+    def test_login_elsewhere_with_the_certificate(self):
+        cert = self.cert()
+        c = auth.parse_cert(cert)
+        self.assertEqual((c["issuer"], c["pub"]), ("OE3GAS-1", self.key.pub))
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            s, t = self.login(self.other, cert)                    # not trusted yet
+        self.assertIn("//AUTHWAIT", t.take())
+        me = keys.this_box(self.home.service)
+        keys.trust_add(self.other.service, me["box"], me["pub"])
+        s, t = self.login(self.other, cert)
+        self.assertIn("//OK", t.take())
+        self.assertEqual((s.auth, s.auth_cert), (True, "OE3GAS-1"))
+        self.assertEqual(self.other.store.key_get("OE3ABC")["status"], "cert")
+        type_lines(s, "//CERT?")                                     # only the home BBS issues
+        self.assertIn("//CERT -", t.take())
+        keys.user_action(self.other.service, "REVOKE", "OE3ABC")     # the sysop there decides
+        s, t = self.login(self.other, cert)
+        self.assertIn("//ERR auth revoked", t.take())
+
+    def test_bad_certificates(self):
+        me = keys.this_box(self.home.service)
+        keys.trust_add(self.other.service, me["box"], me["pub"])
+        ident = self.home.service.box_identity()
+        thief = auth.Identity(Path(self.tmp.name) / "thief.key")
+        for cert in (auth.make_cert(ident, "OE3ABC", self.key.pub, "OE3GAS-1", "20200101"),
+                     auth.make_cert(ident, "OE3ABC", thief.pub, "OE3GAS-1", "20991231"),
+                     auth.make_cert(thief, "OE3ABC", self.key.pub, "OE3GAS-1", "20991231"),
+                     "TBC1:garbage"):
+            with self.assertLogs("tinybox.clientproto", "WARNING"):
+                s, t = self.login(self.other, cert)
+            self.assertIn("//AUTHWAIT", t.take(), cert)
+
+    def test_console_trust(self):
+        out = []
+        c = SysopConsole(self.other, MonitorFilter(True), out.append)
+        c.handle_line("TRUST")
+        self.assertIn("This box OE5XBL-1", "".join(out))
+        me = keys.this_box(self.home.service)
+        c.handle_line(f"TRUST ADD OE3GAS-1 {me['pub']}")
+        c.handle_line("TRUST")
+        self.assertIn(me["fp"], "".join(out))
+        c.handle_line("TRUST ADD OE3GAS-1 nonsense")
+        self.assertIn("Not a public key", "".join(out))
+        c.handle_line("TRUST DEL OE3GAS-1")
+        self.assertIsNone(self.other.store.trust_get("OE3GAS-1"))
+
+
+class ClientCertificate(unittest.TestCase):
+    def test_fetch_at_home_send_elsewhere(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = ClientCore(client_cfg(tmp))
+            sent = []
+            core._send = sent.append
+            core._on_line("//AUTH? n=abc123 box=OE3GAS-1")
+            core._on_line("//OK TB1 caps=CHAT")
+            self.assertIn("//CERT?", sent)
+            box = auth.Identity(Path(tmp) / "box.key")
+            cert = auth.make_cert(box, "OE3GAS", core.identity.pub, "OE3GAS-1", "20991231")
+            core._on_line("//CERT " + cert)
+            self.assertEqual(core.settings["certs"]["OE3GAS-1"], cert)
+            sent.clear()
+            core._on_line("//OK TB1 caps=CHAT")
+            self.assertNotIn("//CERT?", sent)                        # still long valid
+            core._on_line("//AUTH? n=xyz789 box=OE5XBL-1")
+            self.assertTrue(sent[-1].endswith(" cert=" + cert))
+            core._on_line("//AUTH? n=xyz780 box=OE3GAS-1")           # at home: no certificate
+            self.assertNotIn("cert=", sent[-1])
 
 
 if __name__ == "__main__":

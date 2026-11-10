@@ -90,7 +90,7 @@ from typing import TYPE_CHECKING
 
 from prcore.text import isnum
 
-from . import logsetup
+from . import logsetup, rights
 from .config import base_call
 from .service import ServiceError
 from .store import Message
@@ -325,7 +325,7 @@ def _send(s: Session, parts: list[str], signed=None) -> None:
                 ids.append(s.service.create(
                     from_call=s.call, to_call=to, type=kind, subject=lines[0],
                     body=body, origin=s.origin, at_addr=m.group("at") or "",
-                    bid=m.group("bid"), msgid=msgid))
+                    bid=m.group("bid"), msgid=msgid, role=rights.role_of(s)))
         except ServiceError as exc:
             if not ids:
                 s.out(f"//ERR send {exc.code} {exc}".rstrip())

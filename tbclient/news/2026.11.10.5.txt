@@ -1,0 +1,2 @@
+- Zertifikat der Heimat-BBS: Login mit Schluessel
+  auch an TinyBoxen, die ihr vertrauen.

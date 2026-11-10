@@ -99,6 +99,7 @@ RESULT_CHIP = {
 DEFAULT_SETTINGS: dict[str, Any] = {
     "max_pages_total": 500,
     "max_pages_per_cat": 100,
+    "max_pages_per_station": 150,   # CR92 (TB-21): one station (or one faking it) fills no more
     "max_age_days": 30,
     "lang": "de",
     "alert_sound": True,
@@ -120,6 +121,7 @@ class NotFound(ListenerError):
     pass
 
 
+ESTABLISHED_S = 86400         # CR92 (TB-21): a station heard for a day counts as known
 FUTURE_SLACK_S = 86400        # CR88 (TB-09): a page from more than a day ahead is not taken
 
 
@@ -166,6 +168,7 @@ class Listener:
         checks = {
             "max_pages_total": lambda v: isinstance(v, int) and 10 <= v <= 100_000,
             "max_pages_per_cat": lambda v: isinstance(v, int) and 1 <= v <= 100_000,
+            "max_pages_per_station": lambda v: isinstance(v, int) and 1 <= v <= 100_000,
             "max_age_days": lambda v: isinstance(v, int) and 1 <= v <= 3650,
             "lang": lambda v: v in self.d.raw.get("languages", ["de", "en"]),
             "alert_sound": lambda v: isinstance(v, bool),
@@ -202,6 +205,9 @@ class Listener:
             pairs.append((station, cat if cat == ALL else self.cat_key(cat)))
         self.store.set_optouts(pairs)
         return self.optouts()
+
+    def station_blocked(self, org: str) -> bool:
+        return (org, ALL) in set(self.store.optouts())
 
     def blocked(self, org: str, keys: list[str]) -> bool:
         out = set(self.store.optouts())
@@ -246,7 +252,10 @@ class Listener:
         entpackte Seite."""
         now = int(self.clock())
         self.store.heard(heard_from, now)
-        org = page.get("org") or heard_from
+        # CR92 (TB-08): the page belongs to the station that sent the frame. brocastd
+        # never puts org on air - one in the payload would let any transmitter
+        # write, change or withdraw pages of another station
+        org = heard_from
         self._note_dictionary(page.get("dv"), org, now)
         if page.get("typ") == "dict":               # not a page to read
             part = dicttransfer.part_of(page)
@@ -273,7 +282,9 @@ class Listener:
         cats = page.get("cat") or []
         keys = self.cat_keys(cats)
         alert = self._is_alert(page)
-        if not alert and self.blocked(org, keys):
+        if self.blocked(org, keys) and (not alert or self.station_blocked(org)):
+            # an alert still comes through a deselected rubric - but not from a
+            # station the user switched off completely (TB-08)
             return "blocked"
 
         sub, total = page.get("sub") or [1, 1]
@@ -621,11 +632,19 @@ class Listener:
         s = self.settings
         removed = 0
 
+        now = int(self.clock())
+        known = {st["call"]: st["first_heard"] for st in self.store.stations()}
+
+        def keep_order(p: dict) -> tuple:
+            # CR92 (TB-21): a flood of pages from stations never heard before must
+            # not push out the pages of known stations, and alerts go last
+            established = known.get(p["org"], now) <= now - ESTABLISHED_S
+            return (bool(p["alert"]), established, p["status"] == "unread", p["t"])
+
         def evict(pages: list[dict], limit: int) -> int:
             if len(pages) <= limit:
                 return 0
-            candidates = sorted((p for p in pages if not p["favorite"]),
-                                key=lambda p: (p["status"] == "unread", p["t"]))
+            candidates = sorted((p for p in pages if not p["favorite"]), key=keep_order)
             gone = 0
             for p in candidates[:len(pages) - limit]:
                 self.store.delete_lpage(p["org"], p["id"])
@@ -637,6 +656,11 @@ class Listener:
             by_cat.setdefault(p["cat_key"], []).append(p)
         for pages in by_cat.values():
             removed += evict(pages, s["max_pages_per_cat"])
+        by_org: dict[str, list[dict]] = {}
+        for p in self.store.lpages():
+            by_org.setdefault(p["org"], []).append(p)
+        for pages in by_org.values():                 # one station cannot fill the store
+            removed += evict(pages, s["max_pages_per_station"])
         removed += evict(self.store.lpages(), s["max_pages_total"])
         return removed
 

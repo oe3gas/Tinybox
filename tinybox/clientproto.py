@@ -110,7 +110,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -241,6 +241,8 @@ def handle(s: Session, line: str) -> None:
         _auth(s, parts[1:])
     elif s.client is None:
         s.out("//ERR not a client session")
+    elif cmd == "CERT?":
+        _cert(s)
     elif cmd == "BOARDS":
         _boards(s)
     elif cmd == "RESEND":
@@ -311,12 +313,14 @@ def _client(s: Session, parts: list[str]) -> None:
 
 
 def _auth(s: Session, parts: list[str]) -> None:
-    """//AUTH sig=<86> pub=<43>: the answer to //AUTH? (CR93, PLANUNG 29.7).
+    """//AUTH sig=<86> pub=<43> [cert=<certificate>]: the answer to //AUTH? (CR93).
 
-    Known and released key: client mode. New key: proves it holds it (the
-    signature), waits for the sysop (//AUTHWAIT). Another key than the released
-    one, or a revoked one: refused. Every answer starts on a line of its own:
-    a prompt written before it would hide it from the client."""
+    Known and released key: client mode. At another TinyBox (stage 3) a valid
+    certificate of a home BBS the sysop here trusts (TRUST) does the same. New
+    key: proves it holds it (the signature), waits for the sysop (//AUTHWAIT).
+    Another key than the released one, or a revoked one: refused. Every answer
+    starts on a line of its own: a prompt written before it would hide it from
+    the client."""
     info, nonce = getattr(s, "_client_wait", None), getattr(s, "_auth_nonce", None)
     args = _parse_args(parts)
     if info is None or nonce is None:
@@ -345,16 +349,64 @@ def _auth(s: Session, parts: list[str]) -> None:
                         s.call, fp)
             s.out("", "//ERR auth other_key")
             return
-        s.auth, s.auth_pub, s.auth_nonce, s.auth_ctr = True, pub, nonce, 0
-        s._client_wait = None
-        log.info("%s: client login, key %s", s.call, fp)
-        _client_ok(s, info)
+        _logged_in(s, info, pub, nonce, "")
         return
-    if row is None or row["pub"] != pub64:       # new, or a new key while waiting/revoked
+    if args.get("cert"):                          # stage 3: a certificate of the home BBS
+        issuer, why = _cert_ok(s, args["cert"], call, pub64)
+        if not why:
+            if row is None or row["status"] != "cert" or row["pub"] != pub64:
+                store.key_put(call, pub64, "cert", note=f"certificate of {issuer} via {s.call}")
+            _logged_in(s, info, pub, nonce, issuer)
+            return
+        log.warning("%s: certificate not taken (%s)", s.call, why)
+    if row is None or row["pub"] != pub64 or row["status"] == "cert":
+        # new, a new key while waiting/revoked, or the certificate is gone
         store.key_put(call, pub64, "pending", note=f"from {s.call} via {s.origin}")
         log.warning("%s: new client key %s - waits for the sysop (USER OK %s)", s.call, fp, call)
         s.service.key_waiting(call, fp, s.call)
     s.out("", f"//AUTHWAIT fp={fp}")
+
+
+def _logged_in(s: Session, info: ClientInfo, pub: bytes, nonce: str, issuer: str) -> None:
+    s.auth, s.auth_pub, s.auth_nonce, s.auth_ctr = True, pub, nonce, 0
+    s.auth_cert = issuer
+    s._client_wait = None
+    log.info("%s: client login, key %s%s", s.call, auth.fingerprint(pub),
+             f", certificate of {issuer}" if issuer else "")
+    _client_ok(s, info)
+
+
+def _cert_ok(s: Session, text: str, call: str, pub64: str) -> tuple[str, str]:
+    """(issuer, '') for a certificate that lets this key log in here, else (issuer, why)."""
+    try:
+        c = auth.parse_cert(text)
+    except auth.AuthError:
+        return "", "syntax"
+    if c["call"] != call or c["pub"] != pub64:
+        return c["issuer"], "for another call or key"
+    if c["issuer"] == s.cfg.station.mailbox_call.upper():
+        return c["issuer"], "issued here"          # at home only the released key counts
+    trusted = s.service.store.trust_get(c["issuer"])
+    if trusted is None:
+        return c["issuer"], f"{c['issuer']} not trusted here (TRUST)"
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    if not auth.check_cert(c, auth.b64d(trusted["pub"], 32), today):
+        return c["issuer"], "expired or wrong signature"
+    return c["issuer"], ""
+
+
+def _cert(s: Session) -> None:
+    """//CERT?: the certificate of this box for the key the user logged in with -
+    only at his home BBS (the key released here, not via a certificate)."""
+    row = s.service.store.key_get(auth.base(s.call))
+    if not s.auth or s.auth_pub is None or row is None or row["status"] != "active" \
+            or row["pub"] != auth.b64e(s.auth_pub):
+        s.out("//CERT -")
+        return
+    until = (datetime.now(timezone.utc) + timedelta(days=auth.CERT_DAYS)).strftime("%Y%m%d")
+    box = s.cfg.station.mailbox_call.upper()
+    s.out("//CERT " + auth.make_cert(s.service.box_identity(), s.call, row["pub"], box, until))
+    log.info("%s: certificate issued, valid until %s", s.call, until)
 
 
 def _client_ok(s: Session, info: ClientInfo) -> None:

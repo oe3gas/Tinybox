@@ -47,9 +47,29 @@ _CALL_RE = re.compile(r"^(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{3,6}(-([0-
 
 
 def plausible_call(call: str) -> bool:
-    """A station that connects: 3-6 letters and digits with at least one of each
-    (OE3GAS, DL1ABC-7, 4X1AB) - not 'ABCDEF', 'QST' or '123456'."""
-    return bool(_CALL_RE.match(call.upper()))
+    """A station that connects: at most 6 characters, prefix (with a letter) +
+    digit(s) + letters (OE3GAS, DL1ABC-7, 4X1AB) - not 'ABCDEF', 'QST',
+    '123456', or a rubric name like '70CM' or 'QO100'."""
+    call = call.upper()
+    if not _CALL_RE.match(call):
+        return False
+    return _structure_ok(call.split("-", 1)[0])
+
+
+def _structure_ok(base: str) -> bool:
+    """CR92 (TB-15): prefix of 1-3 characters with a letter, digits, a suffix of
+    letters - OE3GAS, 4X1AB, 2E0ABC, 3DA0RU, K1A. Rubric names like 70CM, 10M,
+    23CM, QO100 or WX are no call."""
+    i = len(base)
+    while i and base[i - 1].isalpha():
+        i -= 1
+    suffix = base[i:]
+    j = i
+    while j and base[j - 1] in "0123456789":
+        j -= 1
+    prefix = base[:j]
+    return bool(suffix) and j < i and 1 <= len(prefix) <= 3 and any(c.isalpha() for c in prefix)
+
 
 log = logging.getLogger(__name__)
 

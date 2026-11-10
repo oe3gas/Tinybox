@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Callable
 from prcore.profile import CALL_RE as BASE_CALL_RE, ProfileError
 from prcore.text import client_safe, isnum
 
-from . import addressing, chatcmd, dictfile, linkq, profiles, texts
+from . import addressing, chatcmd, dictfile, linkq, profiles, rights, texts
 from .service import ServiceError
 from .store import Message
 
@@ -145,7 +145,7 @@ def cmd_kill(s: Session, arg: str) -> None:
         return
     for msg_id in ids:
         try:
-            s.service.delete(msg_id, s.call, s.sysop)
+            s.service.delete(msg_id, s.call, s.sysop, rights.role_of(s))
             s.out(texts.KILLED.format(id=msg_id))
         except ServiceError as exc:
             s.error(exc, msg_id)
@@ -214,6 +214,9 @@ def _send(s: Session, arg: str, type: str) -> None:
     m = SEND_RE.match(arg.strip())
     if not arg or m is None:
         s.out(texts.USAGE_S)
+        return
+    if type == "B" and not rights.may_write_bulletin(rights.role_of(s)):
+        s.out(texts.NEED_LOGIN)              # CR92: before the user types the text
         return
     try:
         to_calls = s.service.check_send_list(s.call, m.group("to"), type, s.sysop,

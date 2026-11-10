@@ -1383,6 +1383,69 @@ function viewSettings() {
   return {};
 }
 
+// CR93: client keys (USER at the console) and trusted TinyBoxen (TRUST)
+function viewKeys() {
+  const users = h("tbody"), trusted = h("tbody"), me = h("div", { class: "card-body note" });
+  const boxIn = h("input", { class: "mono", placeholder: "OE5XBL-1", size: 10 });
+  const pubIn = h("input", { class: "mono grow", placeholder: "public key of that box (43 characters)" });
+  async function act(path, body, ask) {
+    if (ask && !confirm(ask)) return;
+    try { toast((await api("keys/" + path, body)).text); await update(); }
+    catch (e) { toast(e.message, true); }
+  }
+  const statusText = { pending: "waits", active: "released", revoked: "revoked",
+                       cert: "certificate" };
+  async function update() {
+    let d;
+    try { d = await api("keys"); } catch (e) { toast(e.message, true); return; }
+    me.replaceChildren("This box ", h("strong", { class: "mono", text: d.box.box }),
+      " - fingerprint ", h("strong", { class: "mono", text: d.box.fp }), h("br"),
+      "Public key ", h("span", { class: "mono", text: d.box.pub }),
+      h("br"), "Give both to the sysop of another TinyBox; he enters them under Trusted TinyBoxen.");
+    users.replaceChildren(...(d.users.length ? d.users.map((u) => h("tr", {},
+      h("td", { class: "mono", text: u.call }),
+      h("td", { class: u.status === "pending" ? "warn" : "", text: statusText[u.status] || u.status }),
+      h("td", { class: "mono", text: u.fp }), h("td", { class: "mono", text: fullDate(u.changed) }),
+      h("td", { text: u.note }),
+      h("td", {}, ...(u.status !== "active" ? [h("button", { class: "btn sm primary", type: "button",
+          text: "Release", onclick: () => act("user", { call: u.call, action: "OK" },
+            `Release the key of ${u.call}?\nFingerprint ${u.fp} - compared with ${u.call} (phone, QSO, paper)?`) })] : []),
+        ...(u.status !== "revoked" ? [h("button", { class: "btn sm", type: "button", text: "Revoke",
+          onclick: () => act("user", { call: u.call, action: "REVOKE" }, `Revoke the key of ${u.call}?`) })] : []),
+        h("button", { class: "btn sm danger", type: "button", text: "Delete",
+          onclick: () => act("user", { call: u.call, action: "DEL" }, `Forget the key of ${u.call}?`) }))))
+      : [h("tr", {}, h("td", { colspan: 6, text: "No client keys yet." }))]));
+    trusted.replaceChildren(...(d.trusted.length ? d.trusted.map((b) => h("tr", {},
+      h("td", { class: "mono", text: b.box }), h("td", { class: "mono", text: b.fp }),
+      h("td", { class: "mono", text: fullDate(b.added) }),
+      h("td", {}, h("button", { class: "btn sm danger", type: "button", text: "Remove",
+        onclick: () => act("untrust", { box: b.box }, `No longer trust ${b.box}?`) }))))
+      : [h("tr", {}, h("td", { colspan: 4, text: "No other TinyBox trusted yet." }))]));
+  }
+  main().className = "one";
+  main().replaceChildren(
+    h("section", { class: "card" },
+      h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Client keys" })),
+      h("div", { class: "card-body note",
+        text: "Release a key only after comparing its fingerprint with the user - by phone, " +
+              "in a QSO or on paper, never over the same connection." }),
+      h("div", { class: "scroll" }, h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Call", "Status", "Fingerprint", "Changed (UTC)", "Note", ""]
+          .map((x) => h("th", { text: x })))), users))),
+    h("section", { class: "card" },
+      h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Trusted TinyBoxen" })), me,
+      h("div", { class: "scroll" }, h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Box", "Fingerprint", "Since (UTC)", ""].map((x) => h("th", { text: x })))),
+        trusted)),
+      h("div", { class: "card-body row" }, boxIn, pubIn,
+        h("button", { class: "btn primary sm", type: "button", text: "Trust",
+          onclick: () => act("trust", { box: boxIn.value, pub: pubIn.value },
+            `Trust ${boxIn.value.toUpperCase()}? Its users then log in here with their certificate.\n` +
+            "Fingerprint compared with its sysop?") }))));
+  update();
+  return {};
+}
+
 // ---- routing ------------------------------------------------------------------------
 
 function route() {
@@ -1395,7 +1458,7 @@ function route() {
     a.classList.toggle("active", a.dataset.nav === navKey));
   renderRubricNav();                              // Rubrik in der Seitenleiste markieren
   const views = { dashboard: viewDashboard, messages: viewMessages, compose: viewCompose,
-                  monitor: viewMonitor, settings: viewSettings };   // users, jlog, connlog: on the dashboard
+                  monitor: viewMonitor, settings: viewSettings, keys: viewKeys };   // users, jlog, connlog: on the dashboard
   if (name === "message" && /^\d+$/.test(parts[1] || "")) {
     if (S.view && S.view.showMessage) { S.view.showMessage(Number(parts[1])); return; }   // CR51
     S.view = viewMessage(Number(parts[1]));

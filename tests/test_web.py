@@ -296,3 +296,37 @@ class WebTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KeysApi(unittest.TestCase):
+    """CR93: the Keys view of the sysop web GUI - the same as USER and TRUST."""
+
+    setUp, tearDown = WebTests.setUp, WebTests.tearDown
+    run_async, login = WebTests.run_async, WebTests.login
+
+    def test_release_and_trust(self):
+        from prcore import auth
+        key = auth.Identity(Path(self.tmp.name) / "user.key")
+        self.app.store.key_put("OE1ABC", key.pub, "pending")
+        other = auth.Identity(Path(self.tmp.name) / "other-box.key")
+
+        async def scenario(s):
+            cookie, csrf = await self.login(s)
+            post = lambda path, body: request(s.port, "POST", path, cookie=cookie, csrf=csrf,
+                                              body=body)
+            _, _, payload = await request(s.port, "GET", "/api/keys", cookie=cookie)
+            before = json.loads(payload)
+            st, _, _ = await post("/api/keys/user", {"call": "OE1ABC", "action": "OK"})
+            bad, _, err = await post("/api/keys/trust", {"box": "OE5XBL-1", "pub": "x"})
+            ok, _, _ = await post("/api/keys/trust", {"box": "OE5XBL-1", "pub": other.pub})
+            _, _, payload = await request(s.port, "GET", "/api/keys", cookie=cookie)
+            return before, st, bad, err, ok, json.loads(payload)
+
+        before, st, bad, err, ok, after = self.run_async(scenario)
+        self.assertEqual(before["users"][0]["status"], "pending")
+        self.assertEqual(before["box"]["box"], "OE3GAS-1")
+        self.assertEqual((st, bad, ok), (200, 400, 200))
+        self.assertIn(b"Not a public key", err)
+        self.assertEqual(after["users"][0]["status"], "active")
+        self.assertEqual(after["trusted"][0]["fp"], other.fp)
+        self.assertTrue((Path(self.tmp.name) / "box.key").is_file())

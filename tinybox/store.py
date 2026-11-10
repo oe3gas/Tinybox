@@ -7,13 +7,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 12  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 13  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
                      # 9: profiles (name, locator, home BBS of a station, CR73)
                      # 10: chat_lines.seq (event number, so a quote finds its history line)
                      # 11: fwd_partial.size (restart only for the same proposal, CR89)
                      # 12: user_keys (client login with a signature, CR93)
+                     # 13: trusted_boxes (certificates of other TinyBoxen, CR93 stage 3)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -55,9 +56,15 @@ CREATE TABLE IF NOT EXISTS fwd_queue (                -- filled by the forward m
 CREATE TABLE IF NOT EXISTS user_keys (                -- CR93: the key of a client user
     call     TEXT PRIMARY KEY,                         -- base call (all SSIDs)
     pub      TEXT NOT NULL,                            -- Ed25519 public key, base64url
-    status   TEXT NOT NULL,                            -- pending | active | revoked
+    status   TEXT NOT NULL,                            -- pending|active|revoked|cert
     created  TEXT NOT NULL,
     changed  TEXT NOT NULL,
+    note     TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS trusted_boxes (            -- CR93 stage 3: whose certificates count
+    box      TEXT PRIMARY KEY,                         -- mailbox call of the issuing TinyBox
+    pub      TEXT NOT NULL,                            -- its Ed25519 public key, base64url
+    added    TEXT NOT NULL,
     note     TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS fwd_partial (              -- B1 restart: half received messages
@@ -594,6 +601,25 @@ class Store:
     def key_delete(self, call: str) -> bool:
         with self._db:
             return self._db.execute("DELETE FROM user_keys WHERE call = ?", (call,)).rowcount > 0
+
+    def trust_get(self, box: str) -> dict | None:
+        row = self._db.execute("SELECT * FROM trusted_boxes WHERE box = ?", (box,)).fetchone()
+        return dict(row) if row else None
+
+    def trust_list(self) -> list[dict]:
+        return [dict(r) for r in self._db.execute("SELECT * FROM trusted_boxes ORDER BY box")]
+
+    def trust_put(self, box: str, pub: str, note: str = "") -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO trusted_boxes (box, pub, added, note) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT (box) DO UPDATE SET pub = excluded.pub, added = excluded.added,"
+                " note = excluded.note", (box, pub, utc_now(), note))
+
+    def trust_delete(self, box: str) -> bool:
+        with self._db:
+            return self._db.execute("DELETE FROM trusted_boxes WHERE box = ?",
+                                    (box,)).rowcount > 0
 
     def image_put(self, hash: str, data: bytes) -> None:
         with self._db:

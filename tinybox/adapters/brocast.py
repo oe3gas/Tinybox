@@ -37,6 +37,11 @@ Mapping bulletin -> page (agreed 02.10.2026):
 bulletins are left out of the sync, so brocastd withdraws them, while TinyBox
 keeps them until bulletin_expire_days.
 
+Alerts (CR92, TB-14): a bulletin to an alert destination (WARN) goes to
+brocastd only if the sysop put it in (console, web GUI, inbox, MQTT); from a
+user or a partner mailbox it stays a bulletin in the mailbox. A ready page
+of the inbox may be an alert - the inbox is the sysop's.
+
 Bulletins from the inbox may carry a ready page ("Brocast:" header, PLANUNG
 6d, e.g. a weather page typ wx). Then that page is sent instead; TinyBox only
 fills in ti, cat and exp if missing. If brocastd rejects it, the text page is
@@ -222,8 +227,20 @@ def rubric_list(app: App) -> list[dict[str, str]]:
     return out
 
 
+SYSOP_ORIGINS = ("sysop", "inbox", "mqtt")   # console, web GUI, the sysop's scripts
+
+
+def sysop_source(msg: Message) -> bool:
+    """CR92 (TB-14): an alert page only from what the sysop himself put in - a
+    bulletin to WARN by a user (or a call that only claims to be the sysop's)
+    is no warning for the listeners."""
+    return msg.origin in SYSOP_ORIGINS
+
+
 def wanted(msg: Message, app: App) -> bool:
     dests = app.cfg.brocast.destinations
+    if msg.to_call in app.cfg.brocast.alert_destinations and not sysop_source(msg):
+        return False                    # alerts: only from the sysop (CR92, TB-14)
     if msg.origin == "forward" and not app.cfg.forward.publish_to_brocast:
         return False                    # bulletins from other mailboxes stay off the air
     if msg.fwd == "H":

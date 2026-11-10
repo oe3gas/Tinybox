@@ -406,7 +406,13 @@ class WebServer:
                 return self._rubrics()
             if parts == ["channel"]:
                 return self._channel()
+            if parts == ["keys"]:                                # CR93: client keys, trust
+                from .. import keys
+                return {"users": keys.users(svc), "box": keys.this_box(svc),
+                        "trusted": keys.trusted(svc)}
         else:
+            if parts and parts[0] == "keys":
+                return self._keys(parts[1:], data)
             if parts == ["messages"]:
                 to_call, at_addr, bid = self._split_to(str(data.get("to", "")))
                 msg_id = svc.create(from_call=sysop, to_call=to_call, at_addr=at_addr, bid=bid,
@@ -458,6 +464,24 @@ class WebServer:
                 return {"ok": True}
             if parts == ["shutdown", "cancel"]:
                 return {"ok": app.shutdown.cancel()}
+        raise HttpError(404)
+
+    def _keys(self, parts: list[str], data: dict) -> dict:
+        """CR93: POST keys/user {call, action OK|REVOKE|DEL}, keys/trust {box, pub},
+        keys/untrust {box} - the same as USER and TRUST at the console."""
+        from .. import keys
+        svc = self.app.service
+        try:
+            if parts == ["user"] and data.get("action") in keys.USER_ACTIONS:
+                return {"text": keys.user_action(svc, str(data["action"]),
+                                                 str(data.get("call", "")))}
+            if parts == ["trust"]:
+                return {"text": keys.trust_add(svc, str(data.get("box", "")),
+                                               str(data.get("pub", "")))}
+            if parts == ["untrust"]:
+                return {"text": keys.trust_del(svc, str(data.get("box", "")))}
+        except keys.KeysError as exc:
+            raise HttpError(400, str(exc)) from None
         raise HttpError(404)
 
     def _connlog_file(self, writer, name: str, query: dict) -> None:

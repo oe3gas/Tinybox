@@ -443,41 +443,58 @@ class SysopConsole:
     def cmd_user(self, arg: str) -> None:
         """CR93: client keys. USER [LIST] | USER OK|REVOKE|DEL|SHOW <call>"""
         from prcore import auth
-        store = self.app.store
+
+        from .. import keys
+        svc = self.app.service
         word, _, rest = arg.strip().upper().partition(" ")
         call = auth.base(rest) if rest.strip() else ""
         if word in ("", "LIST"):
-            rows = store.key_list()
+            rows = keys.users(svc)
             if not rows:
                 self.out("No client keys yet.")
-                return
             for r in rows:
-                fp = auth.fingerprint(auth.b64d(r["pub"], 32))
-                self.out(f"{r['call']:<8} {r['status']:<8} {fp}  {r['changed'][:16]}  {r['note']}")
+                self.out(f"{r['call']:<8} {r['status']:<8} {r['fp']}  {r['changed'][:16]}  "
+                         f"{r['note']}")
             return
-        if not call or word not in ("OK", "REVOKE", "DEL", "SHOW"):
+        if not call or word not in (*keys.USER_ACTIONS, "SHOW"):
             self.out(texts.USAGE_USER)
             return
-        row = store.key_get(call)
-        if row is None:
-            self.out(f"{call}: no client key.")
-            return
-        fp = auth.fingerprint(auth.b64d(row["pub"], 32))
         if word == "SHOW":
-            self.out(f"{call}: {row['status']}, fingerprint {fp}, since {row['changed'][:16]}",
-                     f"  {row['note']}")
-        elif word == "OK":
-            store.key_status(call, "active")
-            log.info("sysop: client key of %s released (%s)", call, fp)
-            self.out(f"{call}: key {fp} released - the next login is in client mode.")
-        elif word == "REVOKE":
-            store.key_status(call, "revoked")
-            log.info("sysop: client key of %s revoked (%s)", call, fp)
-            self.out(f"{call}: key {fp} revoked. A new key needs USER OK again.")
-        else:
-            store.key_delete(call)
-            log.info("sysop: client key of %s deleted (%s)", call, fp)
-            self.out(f"{call}: key {fp} deleted.")
+            row = next((r for r in keys.users(svc) if r["call"] == call), None)
+            if row is None:
+                self.out(f"{call}: no client key.")
+            else:
+                self.out(f"{call}: {row['status']}, fingerprint {row['fp']}, since "
+                         f"{row['changed'][:16]}", f"  {row['note']}")
+            return
+        try:
+            self.out(keys.user_action(svc, word, call))
+        except keys.KeysError as exc:
+            self.out(str(exc))
+
+    def cmd_trust(self, arg: str) -> None:
+        """CR93 stage 3: TRUST | TRUST ADD <box> <key> | TRUST DEL <box>"""
+        from .. import keys
+        svc = self.app.service
+        words = arg.split()
+        try:
+            if not words:
+                me = keys.this_box(svc)
+                self.out(f"This box {me['box']}: key {me['pub']}",
+                         f"  fingerprint {me['fp']} - give both to the other sysop")
+                rows = keys.trusted(svc)
+                if not rows:
+                    self.out("No other TinyBox trusted yet.")
+                for r in rows:
+                    self.out(f"{r['box']:<10} {r['fp']}  since {r['added'][:16]}")
+            elif words[0].upper() == "ADD" and len(words) == 3:
+                self.out(keys.trust_add(svc, words[1], words[2]))
+            elif words[0].upper() == "DEL" and len(words) == 2:
+                self.out(keys.trust_del(svc, words[1]))
+            else:
+                self.out(texts.USAGE_TRUST)
+        except keys.KeysError as exc:
+            self.out(str(exc))
 
     COMMANDS: dict[str, Callable[["SysopConsole", str], None]] = {
         "H": cmd_help, "?": cmd_help, "HELP": cmd_help,
@@ -499,4 +516,5 @@ class SysopConsole:
         "RESTART": cmd_restart,
         "RELOAD": cmd_reload,
         "USER": cmd_user,
+        "TRUST": cmd_trust,
     }

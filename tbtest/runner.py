@@ -31,7 +31,7 @@ log = logging.getLogger("tbtest")
 FUNCS = {
     "conn": ("TC", 0, "connect, log in, disconnect - a new session every few actions"),
     "send": ("TC", 3, "personal mail to another test user"),
-    "bull": ("TC", 1, f"bulletin to the rubric {RUBRIC}"),
+    "bull": ("C", 1, f"bulletin to the rubric {RUBRIC} (CR92: only with the client login)"),
     "read": ("TC", 3, "read own mail and bulletins, compare the checksum"),
     "kill": ("TC", 1, "delete read personal mail, check it is gone"),
     "info": ("T", 2, "other commands: V H L LB LP F I N NL J QSO C, an unknown one"),
