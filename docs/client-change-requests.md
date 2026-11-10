@@ -84,7 +84,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 103 | APRS-Statistik bei viel Verkehr: fest 250.000 Frames, „All“ zeigt den Zeitraum, Auswertung im Thread | ✅ siehe unten, PLANUNG 30 |
 | 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, Log nach Connect-Zeit sortiert, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | ✅ siehe unten |
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
-| 107 | Client zu Client: alle Chatboard-Funktionen (Shoutout, Kommentar, Reaktion, Sticker, Links, Erwähnungs-Alarm) | offen, siehe unten |
+| 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | offen, Bestandsaufnahme siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3425,7 +3425,7 @@ Heimat-BBS. Damit:
 4. **Einzelne Zeilen** bleiben unsigniert (Byte-Kosten je Zeile; Rest-Risiko eingeschleuster
    Zeilen wie im Chatboard, TB-07). Optional später: signiert nur, was etwas auslöst (Löschen).
 
-## CR107 – Client zu Client: alle Chatboard-Funktionen (offen, 10.11.2026)
+## CR107 – Gleiche Funktionen Client↔Client und im Chatboard (offen, 10.11.2026)
 
 ### Erfassung (OE3GAS, 10.11.2026)
 
@@ -3433,21 +3433,50 @@ Bei der Kommunikation Client zu Client soll die gesamte Palette an Funktionen ve
 es in den Chatboards schon gibt – Shoutout, Kommentar usw. Vorab prüfen, was fehlt. Dazu: wie die
 Authentisierung zwischen den beiden Teilnehmern gehen kann (→ CR99, Vorschlag oben).
 
-### Bestandsaufnahme (Claude, 10.11.2026)
+### Bestandsaufnahme (Claude, 10.11.2026) – Client↔TinyBox-Chatboard und Client↔Client
 
-| Funktion | Chatboard | Client zu Client |
-|---|---|---|
-| Text, Emoticons/Emoji | ✓ | ✓ |
-| Bilder | ✓ (CR12) | ✓ (CR78) |
-| Dateien | ✗ (CR86) | ✓ (CR78) |
-| Zustellhaken | – | ✓ |
-| Ping, Speedtest, Schach, QSL, Heard there | – | ✓ |
-| **Shoutout** (`~!`, Sprechblase als Stern) | ✓ | ✗ – kommt als `~!Text` an, kein Knopf |
-| **Kommentar** mit Zitat (`~^4F`, CR31/CR84) | ✓ | ✗ |
-| **Reaktion** (Emoji auf eine Zeile, `*4F :+1`) | ✓ | ✗ |
-| **Sticker** (`[STK]CQ`, CR11) | ✓ | ✗ – kommt als `[STK]CQ` an, keine Auswahl |
-| **Links** anklickbar | ✓ | ✗ – nur Text |
-| **Erwähnungs-/Nachrichten-Alarm** (Popup, „BK“, CR85) | ✓ bei @CALL | ✗ |
+✓ vorhanden · ✗ fehlt · – passt hier nicht
+
+| Bereich | Funktion | Chatboard (über TinyBox) | Client ↔ Client |
+|---|---|---|---|
+| Text | Text, Emoticons → Emoji (1–3 Byte über Funk) | ✓ | ✓ |
+| | Ein einzelnes Emoji groß | ✓ | ✗ |
+| | `Monospace` (ASCII-Art), _fett_ | ✓ | ✗ |
+| | Links anklickbar | ✓ | ✗ |
+| | Shoutout („Cry out“, Bang!-Blase) | ✓ | ✗ (kommt als `~!Text`) |
+| | Sticker | ✓ | ✗ (kommt als `[STK]CQ`) |
+| | Animationen (CR11) | ✗ | ✗ |
+| Bezug | Kommentar mit Zitat (auch auf History-Zeilen) | ✓ | ✗ |
+| | Reaktion (Emoji auf einen Beitrag), eigene sofort sichtbar | ✓ | ✗ |
+| Aufmerksamkeit | @RUFZEICHEN hervorgehoben | ✓ | – (zu zweit) |
+| | Alarm: Popup / „BK“ in CW (CR85) | ✓ bei @Ruf oder Kommentar | ✗ |
+| | Kanal-Chip blinkt bei Neuem im Hintergrund | ✓ | ✓ |
+| Medien | Bilder (Vorschau, holen per Antippen) | ✓ | ✓ |
+| | „lädt Bild hoch“ mit Fortschritt bei den anderen | ✓ | ✗ |
+| | Dateien (LZHUF) | ✗ (CR86) | ✓ |
+| | QSL-Karte mit ADIF | ✗ | ✓ |
+| Zustellung | Zustellhaken (von AX.25 bestätigt) | ✗ | ✓ |
+| Verlauf | Verlauf beim Wiederkommen | ✓ verpasste / 10 / 20, „load all“ | ✓ 100 Zeilen, abgeglichen |
+| | Verlauf löschen | – (Sysop) | ✓ beide Seiten |
+| Gegenüber | Profil: Name, Locator, Entfernung/Richtung | ✓ in der Teilnehmerliste | ✓ Karte |
+| | Avatar mit APRS-Symbol | ✓ | ✗ |
+| | Mini-Karte aus den Locatoren | ✗ | ✓ |
+| | „Heard there“ – wen hört der andere | ✗ | ✓ |
+| | Uhrabweichung | – | ✓ |
+| | Version des anderen, Hinweis auf neuere | ✓ (TBNEWS) | ✓ |
+| Verbindung | Linkqualität (Balken, Zahlen) | ✓ je Teilnehmer zur Box | ✓ beide Richtungen |
+| | Ping, Speedtest | ✗ | ✓ |
+| | „Connection … lost“ | ✓ | ✓ |
+| Spiel | Schach | ✗ | ✓ |
+| Sicherheit | Gegenüber nachgewiesen | ✓ Login mit Schlüssel bei der Box (CR93); Zeilen unsigniert | ✗ (CR99) |
+| Reichweite | mehrere Teilnehmer, einmal als UI-Frame für alle | ✓ | – (1:1) |
+| | Nachricht, wenn der andere nicht da ist | ✓ History des Boards | ✗ (Idee: als Mail über die TinyBox) |
+
+**Lücken Client ↔ Client (9):** großes Einzel-Emoji, Formatierung, Links, Shoutout, Sticker,
+Kommentar, Reaktion, Alarm, Avatar; dazu „lädt Bild hoch“ und die Authentisierung (CR99).
+
+**Lücken im Chatboard (7):** Dateien (CR86), QSL-Karte, Zustellhaken, Mini-Karte der Teilnehmer,
+„Heard there“, Ping/Speedtest, Schach – nicht alles passt für viele Teilnehmer (siehe Vorschlag).
 
 ### Vorschlag (Claude)
 
@@ -3460,6 +3489,11 @@ Authentisierung zwischen den beiden Teilnehmern gehen kann (→ CR99, Vorschlag 
 - Alarm: jede neue Zeile des Peers zählt (ein Gespräch zu zweit), wenn das Fenster nicht im
   Vordergrund ist – mit denselben Einstellungen wie CR85.
 - Fähigkeit `CHAT2` in `//TB?` / `//TB CLIENT`; ohne sie bleibt alles wie bisher.
+- **Umgekehrt ins Chatboard** (für viele Teilnehmer sinnvoll): Dateien (CR86), Karte der Teilnehmer
+  aus ihren Locatoren, Zustellhaken für die eigene Zeile (bei I-Frame: AX.25-bestätigt bis zur
+  Box; bei UI: „gesendet“), QSL-Karte an einen Teilnehmer. Ping/Speedtest/Heard there/Schach gehen
+  direkt Client ↔ Client – im Board als Knopf am Teilnehmer, der eine Direktverbindung aufbaut
+  (wenn er direkt erreichbar ist). Zu entscheiden: OE3GAS.
 
 ## CR100 – Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding (✅ 09.11.2026)
 
