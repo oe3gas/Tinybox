@@ -198,8 +198,8 @@ class Syncer:
             else:
                 self._body = (msg_id, left - 1, lines)
             return True
-        if not line.startswith(PREFIXES):
-            return False
+        if not line.startswith(PREFIXES) or line.startswith("//ERR auth"):
+            return False                           # the login answer is the core's (CR93)
         if line.startswith("//MSG "):
             p = line.split()
             if len(p) == 3 and isnum(p[1]) and isnum(p[2]):
@@ -512,6 +512,14 @@ class Syncer:
     async def _wait_ready(self) -> None:
         start = time.monotonic()
         while time.monotonic() - start < CONNECT_SEC:
+            if self._abort:                        # nothing on the air yet: stop at once
+                raise Aborted()
+            a = self.core.auth                     # CR93: no client mode without the login
+            if a.get("state") == "wait":
+                raise SyncError(f"your key {a.get('fp', '')} waits for the sysop of "
+                                f"{a.get('box') or self.core.target} (USER OK)")
+            if a.get("state") == "refused":
+                raise SyncError(f"login with your key refused: {a.get('reason') or 'refused'}")
             if self.core.state == "offline" and time.monotonic() - start > 1:
                 raise SyncError("not connected" + (f": {self.core.reason}"
                                                    if self.core.reason else ""))

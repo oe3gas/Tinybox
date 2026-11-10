@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- **Fix CR106:** Wartete der Schlüssel auf den Sysop (`//AUTHWAIT`) oder wurde er abgewiesen
+  (`//ERR auth`), stand die Antwort der Box hinter dem Prompt und kam beim Client nie an: kein
+  Client-Modus, kein Hinweis, Mail-Hinweis „4 new messages“ bei leerer Inbox und ein Sync, der 90 s
+  in „connecting“ hing (Abort: weitere 30 s). Die Box schreibt während des Logins keinen Prompt
+  mehr und jede Login-Antwort auf eine eigene Zeile; Client 2026.11.10.4 liest sie auch hinter dem
+  Prompt einer älteren Box, der Sync bricht sofort mit dem Grund ab, Abort wirkt sofort.
 - **Signierte Befehle CR93 Stufe 2** (MANUAL 3.7a): nach dem Login mit Schlüssel kommen `//SEND`
   (samt Betreff und Text), `//KILL`, `//SYNC k=` und `//PROF` (Speichern) einzeln signiert, mit
   aufsteigender Nummer und an die Login-Challenge gebunden. Unsigniert, falsch oder wiederholt →

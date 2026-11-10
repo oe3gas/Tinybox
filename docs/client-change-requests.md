@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105)
+Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106)
 
 ## Übersicht
 
@@ -3534,3 +3534,34 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 - Tests: `tests/test_aprsstats.py` (Grenze ohne Kopie pro Frame, keine Altersgrenze, Zeitraum,
   Datei), `tests/test_cr103.py` (Auswertung nicht im Loop-Thread, Loop läuft weiter, eine
   Rechnung für gleichzeitige Abfragen).
+
+## CR106 – Mail-Hinweis, aber leere Inbox; Sync hängt in „connecting“ (✅ 10.11.2026)
+
+### Erfassung (OE3GAS, 10.11.2026)
+
+- Client zeigt „4 new messages for OE3GAS at OE3GAS-1“, die Inbox bleibt leer. Der Sync bleibt
+  in „connecting“ stehen, nach Abort in „connecting (aborting)…“.
+
+### Ursache (Claude, 10.11.2026)
+
+- Seit CR93 antwortet die Box auf `//CLIENT` mit `//AUTH?`; solange der Login läuft, ist die
+  Sitzung noch kein Client und die Box schreibt nach jeder Zeile ihren Prompt. Die Antworten
+  `//AUTHWAIT fp=…` (Schlüssel wartet auf den Sysop) und `//ERR auth …` (z. B. `other_key`) kamen
+  daher als `TinyBox (A,B,…) > //AUTHWAIT …` – für den Client keine Steuerzeile. Folge: kein
+  Client-Modus, kein Hinweisbalken, kein Eintrag in der Konsole.
+- Der Sync wartete in `_wait_ready` bis zu 90 s auf den Client-Modus und reagierte dort nicht auf
+  Abort (erst der harte Abbruch nach 30 s). Läuft ein Sync, nahm er außerdem `//ERR auth` als
+  eigene Zeile an sich.
+- Der Mail-Hinweis selbst stimmt: er kommt aus dem Begrüßungstext „You have 4 new message(s)“.
+
+### Umsetzung (Client 2026.11.10.4, Box)
+
+- Box: kein Prompt, solange ein Client-Login läuft (`Session.prompt`); alle Antworten von
+  `//AUTH` beginnen auf einer eigenen Zeile (`clientproto._auth`).
+- Client: `//AUTHWAIT` und `//ERR auth` werden auch hinter dem Prompt einer älteren Box erkannt
+  (`core.AUTH_AFTER_PROMPT`); der Sync lässt `//ERR auth` dem Core.
+- Sync: wartet der Schlüssel oder ist er abgewiesen, bricht er sofort ab mit dem Grund im
+  Mail-Kasten („your key … waits for the sysop of OE3GAS-1 (USER OK)“ bzw. „login with your key
+  refused: other_key“); Abort wirkt beim Warten auf den Login sofort.
+- Tests: `tests/test_cr106.py` (freigegeben/wartend/anderer Schlüssel Ende-zu-Ende mit Login,
+  kein Prompt beim Login, ältere Box, Abort beim Warten).

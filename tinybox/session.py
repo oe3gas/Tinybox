@@ -145,6 +145,8 @@ class Session:
     def prompt(self) -> None:
         if self.client is not None:     # a client program needs no prompt
             return
+        if self._client_wait is not None:
+            return                      # CR93: a client logging in - no prompt before //AUTHWAIT
         self.transport.write(texts.PROMPT_SYSOP if self.sysop else texts.PROMPT)
 
     def prompt_again(self) -> None:

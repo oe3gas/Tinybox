@@ -48,6 +48,8 @@ MONITOR_MAX = 500         # CR45: frames kept for the monitor (channel 0)
 OUTSTANDING_SEC = 3       # CR45: how often the send queues of the channels are asked
 PEER_Q_SEC = 30           # CR78: how often the link counters of a TBClient channel are read
 INCOMING_IDLE_SEC = 30 * 60   # CR97 (TB-17): a station that called us and says nothing - gone
+# CR93: an older TinyBox writes its prompt in front of //AUTHWAIT and //ERR auth
+AUTH_AFTER_PROMPT = re.compile(r"^.*?> (//(?:AUTHWAIT|ERR auth)\b.*)$")
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 UI_MAX_BYTES = 1024       # CR66: info field of a UI frame from the monitor
 UI_MAX_VIA = 8            # AX.25 allows 8 digipeaters
@@ -812,6 +814,8 @@ class ClientCore:
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
     def _on_line(self, line: str) -> None:
+        if not self.caps and (m := AUTH_AFTER_PROMPT.match(line)):
+            line = m.group(1)                    # an older TinyBox: the login answer after its prompt
         if self.sync.take(line):                 # mailbox sync answers and texts
             return
         if self.images.take(line):               # image transfer answers and bytes

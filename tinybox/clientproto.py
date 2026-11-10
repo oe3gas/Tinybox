@@ -315,34 +315,35 @@ def _auth(s: Session, parts: list[str]) -> None:
 
     Known and released key: client mode. New key: proves it holds it (the
     signature), waits for the sysop (//AUTHWAIT). Another key than the released
-    one, or a revoked one: refused."""
+    one, or a revoked one: refused. Every answer starts on a line of its own:
+    a prompt written before it would hide it from the client."""
     info, nonce = getattr(s, "_client_wait", None), getattr(s, "_auth_nonce", None)
     args = _parse_args(parts)
     if info is None or nonce is None:
-        s.out("//ERR auth not_asked")
+        s.out("", "//ERR auth not_asked")
         return
     s._auth_nonce = None                         # one answer per challenge
     try:
         pub = auth.b64d(args.get("pub", ""), 32)
         sig = auth.b64d(args.get("sig", ""), 64)
     except auth.AuthError:
-        s.out("//ERR auth syntax")
+        s.out("", "//ERR auth syntax")
         return
     box, call = s.cfg.station.mailbox_call, auth.base(s.call)
     if not auth.verify(pub, auth.login_message(box, call, nonce), sig):
         log.warning("%s: client login with a wrong signature", s.call)
-        s.out("//ERR auth bad_signature")
+        s.out("", "//ERR auth bad_signature")
         return
     store, pub64, fp = s.service.store, auth.b64e(pub), auth.fingerprint(pub)
     row = store.key_get(call)
     if row is not None and row["status"] == "revoked" and row["pub"] == pub64:
-        s.out("//ERR auth revoked")
+        s.out("", "//ERR auth revoked")
         return
     if row is not None and row["status"] == "active":
         if row["pub"] != pub64:
             log.warning("%s: client login with another key (%s) than the released one",
                         s.call, fp)
-            s.out("//ERR auth other_key")
+            s.out("", "//ERR auth other_key")
             return
         s.auth, s.auth_pub, s.auth_nonce, s.auth_ctr = True, pub, nonce, 0
         s._client_wait = None
@@ -353,7 +354,7 @@ def _auth(s: Session, parts: list[str]) -> None:
         store.key_put(call, pub64, "pending", note=f"from {s.call} via {s.origin}")
         log.warning("%s: new client key %s - waits for the sysop (USER OK %s)", s.call, fp, call)
         s.service.key_waiting(call, fp, s.call)
-    s.out(f"//AUTHWAIT fp={fp}")
+    s.out("", f"//AUTHWAIT fp={fp}")
 
 
 def _client_ok(s: Session, info: ClientInfo) -> None:

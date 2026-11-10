@@ -1,0 +1,2 @@
+Fix: no mail sync while the key waits for
+the sysop - now said at once, Abort at once.

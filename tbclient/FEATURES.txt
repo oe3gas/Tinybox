@@ -7,7 +7,8 @@ Weboberflaeche: am PC drei Spalten, am Handy eine eigene Ansicht
 Login an der Heimat-BBS mit dem eigenen Schluessel (Ed25519, CR93):
 der Sysop gibt ihn einmal frei, data/tbclient/identity.key gilt fuer
 alle PCs desselben Rufzeichens. Senden, Loeschen und Profil gehen
-danach einzeln signiert zur Box (CR93 Stufe 2).
+danach einzeln signiert zur Box (CR93 Stufe 2). Wartet der Schluessel
+auf den Sysop, sagt der Mail-Sync das sofort (CR106).
 
 (Uebersicht im Repository, wird nicht gesendet. Was in einer Version
 neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
