@@ -72,7 +72,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 91 | Dictionary-Integrität: voller Vergleich, keine automatische Weiterverbreitung (TB-04) | ✅ siehe unten (Signatur mit CR94) |
 | 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | ✅ 10.11.2026, siehe unten |
 | 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | Stufe 1–3 ✅, Sysop-Web-GUI ✅, siehe unten |
-| 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
+| 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | Sysop über Funk nur mit Client ✅ (Variante B), kein Notzugang; offen: signierte brocast-Seiten, Widerruf über brocast, gemeinsamer Herausgeber – siehe unten |
 | 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | ✅ siehe unten (Abstufung nach Rolle mit CR92) |
 | 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash mit CR86) |
 | 97 | Ratenbegrenzung und Obergrenzen (TB-03, 13, 17, 18, 19) | ✅ siehe unten |
