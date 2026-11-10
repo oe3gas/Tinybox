@@ -137,9 +137,8 @@ const AprsStatsView = (() => {
     const d = data, T = d.totals;
     const body = root.querySelector(".st-body");
     body.replaceChildren();
-    root.querySelector(".st-since").textContent = d.window
-      ? `last ${d.window >= 86400 ? "24 h" : "hour"}`
-      : `since ${new Date(d.since * 1000).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}`;
+    root.querySelector(".st-since").textContent = sinceText(d);
+    labelAll(d);
 
     const tiles = mk("div", "st-tiles");
     tiles.append(
@@ -223,6 +222,29 @@ const AprsStatsView = (() => {
   }
 
   const page = () => stack[stack.length - 1];
+  // CR103: "All" = the last 250,000 frames (or since the reset) - say how long that is
+  function keptSpan(d) {
+    const s = Math.max(0, (d.now || 0) - (d.kept_from || d.now || 0));
+    if (s < 3600) return Math.max(1, Math.round(s / 60)) + " min";
+    if (s < 48 * 3600) return Math.round(s / 3600) + " h";
+    const days = s / 86400;
+    return (days < 10 ? days.toFixed(1) : String(Math.round(days))) + " days";
+  }
+  function keptText(d) {
+    const from = new Date((d.kept_from || d.since) * 1000).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+    return `last ${keptSpan(d)} (since ${from}` +
+      (d.kept_full ? `, limit ${Number(d.kept_max).toLocaleString("en")} frames reached)` : ")");
+  }
+  function sinceText(d) {
+    return d.window ? `last ${d.window >= 86400 ? "24 h" : "hour"}` : keptText(d);
+  }
+  let allBtn = null;
+  function labelAll(d) {
+    if (!allBtn || !d || d.kept_from === undefined) return;
+    allBtn.textContent = "Last " + keptSpan(d);
+    allBtn.title = `everything kept: ${keptText(d).replace(/^last /, "")} - ` +
+      `the newest ${Number(d.kept_max).toLocaleString("en")} frames, or since the last reset`;
+  }
   async function load() {
     const p = page();
     const url = p.kind === "station" ? `/api/aprs/station?call=${encodeURIComponent(p.call)}&win=${win}`
@@ -297,8 +319,8 @@ const AprsStatsView = (() => {
     const d = data;
     const body = root.querySelector(".st-body");
     body.replaceChildren();
-    root.querySelector(".st-since").textContent = d.window
-      ? `last ${d.window >= 86400 ? "24 h" : "hour"}` : `since ${when(d.since)}`;
+    root.querySelector(".st-since").textContent = sinceText(d);
+    labelAll(d);
 
     // head: symbol, call, roles, device, distance, first/last heard, links
     const head = mk("section", "st-card st-head");
@@ -419,7 +441,7 @@ const AprsStatsView = (() => {
     sel.setAttribute("aria-label", "Time window");
     const segs = [];
     for (const [v, t, tip] of [[3600, "Last hour", "the last 60 minutes"], [86400, "24 h", "the last 24 hours"],
-                               [0, "All", "everything kept (max. 7 days, or since the last reset)"]]) {
+                               [0, "All", "everything kept: the newest 250,000 frames, or since the last reset"]]) {
       const b = mk("button", "", t);
       b.type = "button";
       b.title = tip;
@@ -430,6 +452,7 @@ const AprsStatsView = (() => {
         load();
       });
       b.classList.toggle("on", v === win);
+      if (v === 0) allBtn = b;                       // CR103: becomes "Last 5.5 days"
       segs.push([b, v]);
       sel.append(b);
     }

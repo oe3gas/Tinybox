@@ -235,7 +235,9 @@ Station
   Geraete, Pakettypen, Digipeater und Wege, iGates, Reichweite, Laender,
   Verlauf und Kanalauslastung - dazu die "Suenden" (zu haeufige Baken,
   unveraenderte Wiederholungen, lange Pfade, falsche Uhren, kaputte Pakete,
-  viel Internet-Verkehr auf Funk). Gespeichert bis 7 Tage.
+  viel Internet-Verkehr auf Funk). Gespeichert werden die letzten 250.000
+  Frames, egal wie viele Tage; der Knopf "All" zeigt den Zeitraum ("Last 6.9 days").
+  Die Auswertung laeuft im Hintergrund, der Client bleibt dabei bedienbar.
 - Netzgraph in der APRS-Statistik: wer dich ueber wen erreicht - Stationen,
   Digipeater, iGates und du als Bubbles, Wege als Pfeile (Staerke = Frames).
   Drei Ansichten: Hop-Radar (Ring = Hops, Winkel = Richtung), Karte (echte

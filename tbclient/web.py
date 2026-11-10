@@ -108,6 +108,7 @@ CALL_AT_RE = re.compile(r"^[A-Z0-9]{1,6}(-\d{1,2})?(,[A-Z0-9]{1,6}(-\d{1,2})?){0
 RUBRIC_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 MAX_BODY = 131072        # a message for the outbox can be long
 POLL_SEC = 25
+APRS_CACHE_SEC = 10      # CR103: one evaluation serves all tabs for this long
 
 
 class WebServer:
@@ -116,6 +117,28 @@ class WebServer:
         self.allow = webguard.parse_allow(core.cfg.web_allow)     # CR100
         self.hosts = webguard.parse_hosts(core.cfg.web_hosts)
         self._refused: set[str] = set()                           # log each address once
+        self._aprs: dict[tuple, tuple[float, asyncio.Task]] = {}  # CR103: evaluations by query
+
+    async def _aprs_eval(self, kind: str, *args):
+        """CR103: APRS statistics in a thread (with 250,000 frames "All" takes seconds - the
+        client must not stand still meanwhile), the result kept APRS_CACHE_SEC; the same
+        query while it runs waits for the same evaluation."""
+        key = (kind, *args)
+        now = time.monotonic()
+        hit = self._aprs.get(key)
+        if hit and (not hit[1].done() or now - hit[0] < APRS_CACHE_SEC):
+            return await hit[1]
+        st = self.core.aprs_stats
+        fn = {"stats": st.report, "graph": lambda w, me: st.graph(w, me=me), "station": st.station}[kind]
+        task = asyncio.ensure_future(asyncio.to_thread(fn, *args))
+        for k in [k for k, (t, tk) in self._aprs.items() if tk.done() and now - t >= APRS_CACHE_SEC]:
+            del self._aprs[k]
+        self._aprs[key] = (now, task)
+        try:
+            return await task
+        except Exception:
+            self._aprs.pop(key, None)
+            raise
 
     async def start(self) -> asyncio.base_events.Server:
         cfg = self.core.cfg
@@ -194,14 +217,13 @@ class WebServer:
                 call = (query.get("call") or [""])[0]
                 if not call:
                     return 400, {"error": "call"}, None
-                return 200, core.aprs_stats.station(call, int(win) if isnum(win) else 0), None
+                return 200, await self._aprs_eval("station", call.upper().strip(), int(win) if isnum(win) else 0), None
             if method == "GET" and path == "/api/aprs/graph":       # CR79: network graph
                 win = (query.get("win") or ["0"])[0]
-                return 200, core.aprs_stats.graph(int(win) if isnum(win) else 0,
-                                                  me=core.cfg.mycall), None
+                return 200, await self._aprs_eval("graph", int(win) if isnum(win) else 0, core.cfg.mycall), None
             if method == "GET" and path == "/api/aprs/stats":       # CR61
                 win = (query.get("win") or ["0"])[0]
-                return 200, core.aprs_stats.report(int(win) if isnum(win) else 0), None
+                return 200, await self._aprs_eval("stats", int(win) if isnum(win) else 0), None
             if method == "GET" and path == "/api/connlog":          # CR44
                 return 200, core.logbook.rows(200), None
             if method == "GET" and path in ("/api/connlog.csv", "/api/connlog.adi"):
@@ -233,6 +255,7 @@ class WebServer:
                 core.disconnect(ch if isinstance(ch, int) else None)
             elif path == "/api/aprs/stats/reset":  # CR61
                 core.aprs_stats.reset()
+                self._aprs.clear()                   # CR103: no old numbers after a reset
             elif path == "/api/monitor/clear":    # CR50
                 core.clear_monitor()
             elif path == "/api/ui":               # CR66: one UI frame from the monitor

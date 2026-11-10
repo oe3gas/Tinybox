@@ -81,7 +81,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 100 | Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding und fremde Origins | ✅ siehe unten |
 | 101 | TinyBox-Web-GUI: Live-Monitor im Dashboard nur mit Filter, Knopf „Switch to monitor screen“ | ✅ siehe unten |
 | 102 | APRS-Netzgraph: keine Linien zur eigenen Station, Auswahl nach Rolle, direkt gehört voll gefärbt, km an der Karte | ✅ siehe unten |
-| 103 | APRS-Statistik bei viel Verkehr: Auswertung blockiert den Client nicht, Grenze 200.000 Frames, Kopie pro Frame | offen, siehe unten, PLANUNG 30 |
+| 103 | APRS-Statistik bei viel Verkehr: fest 250.000 Frames, „All“ zeigt den Zeitraum, Auswertung im Thread | ✅ siehe unten, PLANUNG 30 |
 | 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | offen, siehe unten |
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
 
@@ -3352,7 +3352,7 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 - Geprüft im Browser (Playwright) mit Testdaten: Hop-Radar, Map mit 10/50/100/200 km, Auswahl
   „Heard directly“; keine JS-Fehler.
 
-## CR103 – APRS-Statistik bei viel Verkehr (offen, 10.11.2026, PLANUNG 30)
+## CR103 – APRS-Statistik bei viel Verkehr (✅ 10.11.2026, PLANUNG 30)
 
 ### Erfassung (OE3GAS, 10.11.2026)
 
@@ -3452,3 +3452,32 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 - Bei fremden Clients nur anzeigen, wenn der Absender verifiziert ist (CR93) – sonst könnte jeder
   ein Foto unter fremdem Rufzeichen verteilen.
 - Bezug: CR7/APRS-Symbol als Badge am Avatar bleibt.
+
+### Entscheidung (OE3GAS, 10.11.2026)
+
+- `MAX_RECORDS` fest auf **250.000**, egal wie viele Tage da hineinpassen (keine Altersgrenze
+  mehr). Der Gesamtzeitraum muss in der Statistik erkennbar sein: „All“ wird zu „Last … days“.
+
+### Umsetzung (Client 2026.11.10)
+
+- `prcore/aprsstats.py`: `KEEP_SEC` entfällt, `MAX_RECORDS = 250_000`. Gekürzt wird erst bei
+  250.000 + `TRIM_SLACK` (2.500) auf 250.000 – eine neue Liste, keine Kopie mehr pro Frame. Die
+  Datei behält stündlich die neuesten 250.000 (Abfrage über den Index statt `NOT IN`), beim
+  Start werden nur diese geladen.
+- Jede Auswertung arbeitet auf einer Kopie der Liste (`_snap()`), kann also in einem Thread
+  laufen, während `add()` weiterläuft. „Alles“ beginnt beim Reset – oder, sobald die Grenze
+  ältere Frames verworfen hat, beim ältesten noch gespeicherten Frame. Neu in Statistik, Graph
+  und Stationsseite: `kept_from`, `kept_frames`, `kept_max`, `kept_full`.
+- `tbclient/web.py`: Statistik, Graph und Stationsseite laufen in `asyncio.to_thread`; das
+  Ergebnis gilt 10 s (`APRS_CACHE_SEC`), dieselbe Abfrage während der Rechnung wartet auf
+  dieselbe Auswertung (zwei Tabs = eine Rechnung). Reset leert den Zwischenspeicher.
+- GUI (`aprsstats.js`): der Knopf „All“ heißt nach dem ersten Laden z. B. „Last 6.9 days“
+  (unter 48 h in Stunden, ab 10 Tagen ganze Tage), der Kopf zeigt „last 6.9 days (since …)“ und
+  bei voller Grenze „limit 250,000 frames reached“.
+- Gemessen mit 250.000 synthetischen Frames bei unserem Verkehr (1.500/h): „All“ = 6,9 Tage,
+  Statistik + Graph ≈ 4,7 s im Hintergrund, längste Pause des Event-Loops 68 ms (vorher stand der
+  Client die ganze Zeit). Zweiter Tab: aus dem Zwischenspeicher. `add()` an der Grenze im
+  Schnitt 0,8 ms je Frame (vorher 24 ms). RAM ≈ 180 MB.
+- Tests: `tests/test_aprsstats.py` (Grenze ohne Kopie pro Frame, keine Altersgrenze, Zeitraum,
+  Datei), `tests/test_cr103.py` (Auswertung nicht im Loop-Thread, Loop läuft weiter, eine
+  Rechnung für gleichzeitige Abfragen).

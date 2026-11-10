@@ -2,6 +2,9 @@
 
 ## Unveröffentlicht
 
+- Client 2026.11.10: **APRS-Statistik bei viel Verkehr (CR103)** – fest die neuesten 250.000 Frames
+  statt 7 Tage, der Knopf „All“ zeigt den Zeitraum („Last 6.9 days“). Die Auswertung läuft in einem
+  Thread und wird 10 s zwischengespeichert; der Client steht dabei nicht mehr still.
 - **Client-Login mit Schlüssel CR93 Stufe 1** (MANUAL 3.7a): Client-Modus nur nach Login mit dem
   Ed25519-Schlüssel des Benutzers (Challenge-Response, `//AUTH?`/`//AUTH`); ein neuer Schlüssel
   wartet auf die Freigabe durch den Sysop (`USER OK call` nach Vergleich des Fingerabdrucks).

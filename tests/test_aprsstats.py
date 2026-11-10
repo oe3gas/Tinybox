@@ -83,19 +83,56 @@ class StatsTests(unittest.TestCase):
             self.assertEqual(st2.report(0)["totals"]["frames"], 1)
             st2.close()
 
-    def test_file_is_tidied_while_running(self):
+    def test_file_is_tidied_while_running(self):   # CR103: by count, no age limit
         import sqlite3
-        import time as _t
+        from unittest import mock
         from prcore import aprsstats
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(aprsstats, "MAX_RECORDS", 3), \
+                mock.patch.object(aprsstats, "TRIM_SLACK", 1):
             p = Path(d) / "aprsstats.db"
             st = AprsStats(p)
-            now = _t.time()
-            feed(st, now - aprsstats.KEEP_SEC - 10, "OE3OLD", [], [], b">old")
-            feed(st, now + aprsstats.PRUNE_SEC + 1, "OE3NEW", [], [], b">new")    # an hour later
+            now = __import__("time").time()
+            for i in range(5):
+                feed(st, now + i, "OE3OLD", [], [], b">old %d" % i)
+            feed(st, now + aprsstats.PRUNE_SEC + 10, "OE3NEW", [], [], b">new")   # an hour later
             st.close()
-            n = sqlite3.connect(str(p)).execute("SELECT count(*) FROM rec").fetchone()[0]
-            self.assertEqual(n, 1)
+            db = sqlite3.connect(str(p))
+            self.assertEqual(db.execute("SELECT count(*) FROM rec").fetchone()[0], 3)
+            db.close()
+            st2 = AprsStats(p)
+            self.assertEqual(len(st2.recs), 3)
+            self.assertEqual(st2.recs[-1]["origin"], "OE3NEW")
+            st2.close()
+
+    def test_limit_without_copy_per_frame(self):    # CR103
+        from unittest import mock
+        from prcore import aprsstats
+        with mock.patch.object(aprsstats, "MAX_RECORDS", 10), mock.patch.object(aprsstats, "TRIM_SLACK", 5):
+            ids = []
+            for i in range(16):
+                feed(self.st, T0 + i, "OE3ABC", [], [], b">%d" % i)
+                ids.append(id(self.st.recs))
+            self.assertEqual(len(set(ids[:15])), 1)    # up to 10 + 5: the same list, only appended
+            self.assertEqual(len(self.st.recs), 10)   # the 16th trims to the limit
+            r = self.st.report(0, now=T0 + 100)
+            self.assertEqual(r["totals"]["frames"], 10)
+            self.assertEqual(r["kept_from"], T0 + 6)  # "All" starts at the oldest frame kept
+            self.assertTrue(r["kept_full"])
+            self.assertEqual(r["since"], T0 + 6)
+
+    def test_no_age_limit(self):                      # CR103: only the count limits
+        feed(self.st, T0 - 40 * 86400, "OE3OLD", [], [], b">old")
+        self.st.since = T0 - 41 * 86400
+        feed(self.st, T0, "OE3NEW", [], [], b">new")
+        self.assertEqual(self.st.report(0, now=T0 + 10)["totals"]["frames"], 2)
+
+    def test_kept_span(self):                         # CR103: for the label "last ... days"
+        feed(self.st, T0 + 5, "OE3ABC", [], [], b">x")
+        for r in (self.st.report(0, now=T0 + 400), self.st.graph(0, now=T0 + 400),
+                  self.st.station("OE3ABC", 0, now=T0 + 400)):
+            self.assertEqual(r["kept_from"], T0 - 1)   # limit not reached: since the reset
+            self.assertFalse(r["kept_full"])
+            self.assertEqual(r["kept_max"], 250_000)
 
     def test_graph(self):                        # CR79: the network graph
         for i in range(3):

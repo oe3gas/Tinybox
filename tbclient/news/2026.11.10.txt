@@ -1,0 +1,3 @@
+- APRS statistics: keeps the newest 250000 frames, no day limit.
+  "All" shows how long that is, e.g. "Last 6.9 days".
+- Statistics no longer stall the client while they are counted.

@@ -1951,7 +1951,7 @@ vertraut, erkennt den User damit ebenfalls (CR93).
 4. CR91 (Dictionary) · 5. CR89, CR90 (Forwarding) · 6. CR95, CR96 · 7. CR97 · 8. CR92 ·
 9. CR98 (Audit) · 10. CR93, CR94, CR99 (Authentisierung, Konzept zuerst).
 
-## 30. APRS-Statistik bei viel Verkehr (Entwurf, 10.11.2026, CR103)
+## 30. APRS-Statistik bei viel Verkehr (entschieden und umgesetzt 10.11.2026, CR103)
 
 Anlass: Auf unserem Kanal kommen ≈ 12.000 APRS-Frames in 8 h (1.500/h, 36.000/Tag). Die Prüfung
 von `prcore/aprsstats.py` ergab keinen Überlauf, aber drei Schwächen (Details und Messwerte in
@@ -1970,7 +1970,9 @@ Vorgesehen (Reihenfolge):
 3. Danach entscheiden, ob `MAX_RECORDS` auf ≈ 260.000 steigt (7 Tage bei unserem Verkehr,
    ≈ 190 MB RAM).
 
-Offen (Gerhard): Ist „All“ = 7 Tage wichtig, oder reicht, was die Grenze hergibt?
+**Entscheidung (Gerhard, 10.11.2026):** fest 250.000 Frames, egal wie viele Tage das sind –
+keine Altersgrenze mehr. Der Zeitraum muss erkennbar sein: „All“ heißt jetzt „Last … days“
+(bei unserem Verkehr ≈ 6,9 Tage). Punkte 1 und 2 sind mit umgesetzt (Client 2026.11.10).
 
 ## Quellen
 

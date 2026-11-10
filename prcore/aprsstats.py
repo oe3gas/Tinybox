@@ -37,8 +37,8 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-KEEP_SEC = 7 * 86400          # records older than this are dropped
-MAX_RECORDS = 200_000
+MAX_RECORDS = 250_000         # CR103: the last 250,000 frames are kept, however many days that is
+TRIM_SLACK = 2_500            # CR103: trim only this far over the limit - no copy per frame
 PRUNE_SEC = 3600              # CR64: tidy the file this often while running
 GRAPH_MAX_STATIONS = 80       # CR79: the network graph shows the busiest senders only
 GRAPH_BUCKETS = 24            # CR79 stage 2: time axis of the graph, buckets over the window
@@ -145,10 +145,10 @@ class AprsStats:
             self._db.execute("CREATE TABLE IF NOT EXISTS rec (t REAL, j TEXT)")
             self._db.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)")
             self._db.execute("CREATE INDEX IF NOT EXISTS rec_t ON rec (t)")
-            cut = time.time() - KEEP_SEC
-            self._db.execute("DELETE FROM rec WHERE t < ?", (cut,))
+            self._prune(time.time())
             self._db.commit()
-            for (j,) in self._db.execute("SELECT j FROM rec ORDER BY t"):
+            for (j,) in self._db.execute("SELECT j FROM (SELECT t, j FROM rec ORDER BY t DESC LIMIT ?) ORDER BY t",
+                                         (MAX_RECORDS,)):
                 try:
                     self.recs.append(json.loads(j))
                 except ValueError:
@@ -174,14 +174,14 @@ class AprsStats:
             log.warning("APRS statistics: %s", exc)
 
     def _prune(self, now: float) -> None:
-        """Drop what is older than KEEP_SEC (and more than MAX_RECORDS) from the file."""
+        """CR103: keep only the newest MAX_RECORDS in the file (no age limit any more)."""
         self._pruned = now
-        self._db.execute("DELETE FROM rec WHERE t < ?", (now - KEEP_SEC,))
-        self._db.execute("DELETE FROM rec WHERE rowid NOT IN (SELECT rowid FROM rec ORDER BY t DESC LIMIT ?)",
-                         (MAX_RECORDS,))
+        row = self._db.execute("SELECT t FROM rec ORDER BY t DESC LIMIT 1 OFFSET ?", (MAX_RECORDS - 1,)).fetchone()
+        if row:                                      # the oldest record that stays
+            self._db.execute("DELETE FROM rec WHERE t < ?", (row[0],))
 
     def reset(self) -> None:
-        self.recs.clear()
+        self.recs = []                               # CR103: a running evaluation keeps its copy
         self.since = time.time()
         if self._db is not None:
             try:
@@ -218,18 +218,31 @@ class AprsStats:
                "req": req, "sym": aprs.get("symbol", ""),          # CR65: for the station page
                "spd": aprs.get("speed"), "alt": aprs.get("alt")}
         self.recs.append(rec)
-        cut = now - KEEP_SEC
-        if len(self.recs) > MAX_RECORDS or (self.recs and self.recs[0]["t"] < cut):
-            self.recs = [r for r in self.recs[-MAX_RECORDS:] if r["t"] >= cut]
+        if len(self.recs) > MAX_RECORDS + TRIM_SLACK:   # CR103: a new list, readers keep the old one
+            self.recs = self.recs[-MAX_RECORDS:]
         self._save(rec)
         return rec
+
+    def _snap(self) -> tuple[list[dict], float]:
+        """CR103: the records for one evaluation (it may run in a thread while add() goes on)
+        and the start of "everything kept": the last reset - or, once the limit has dropped
+        older frames, the oldest record still kept."""
+        recs = self.recs[-MAX_RECORDS:]                  # a copy; slicing is atomic
+        kept = max(self.since, recs[0]["t"]) if len(recs) >= MAX_RECORDS else self.since
+        return recs, kept
+
+    def _kept(self, recs: list[dict], kept: float) -> dict:
+        """CR103: what "All" covers, for the label "last ... days"."""
+        return {"kept_from": kept, "kept_frames": len(recs), "kept_max": MAX_RECORDS,
+                "kept_full": len(recs) >= MAX_RECORDS}
 
     # --- output -------------------------------------------------------------------
     def report(self, window: int = 0, now: float | None = None) -> dict:
         """Sums of the last window seconds (0 = everything kept)."""
         now = time.time() if now is None else now
-        start = max(self.since, now - window) if window else self.since
-        recs = [r for r in self.recs if r["t"] >= start]
+        snap, kept = self._snap()
+        start = max(kept, now - window) if window else kept
+        recs = [r for r in snap if r["t"] >= start]
         span = max(60.0, now - (recs[0]["t"] if recs and not window else start))
         n = len(recs)
         air = sum(airtime(r["nbytes"]) for r in recs)
@@ -320,7 +333,7 @@ class AprsStats:
                 tl[i] += 1
 
         return {
-            "window": window, "since": start, "now": now, "kept_since": self.since,
+            "window": window, "since": start, "now": now, "kept_since": self.since, **self._kept(snap, kept),
             "totals": {"frames": n, "stations": len(senders), "heard": len(heard),
                        "per_min": round(n / (span / 60), 2), "bytes": sum(r["nbytes"] for r in recs),
                        "air_sec": round(air), "busy_pct": round(100 * air / span, 1),
@@ -354,13 +367,14 @@ class AprsStats:
         channel did not need ("rep", from stations with unchanged repeats / too many beacons)."""
         now = time.time() if now is None else now
         me = (me or "ME").upper()
-        start = max(self.since, now - window) if window else self.since
-        recs = [r for r in self.recs if r["t"] >= start]
+        snap, kept = self._snap()
+        start = max(kept, now - window) if window else kept
+        recs = [r for r in snap if r["t"] >= start]
         bsec = max(1.0, (now - start) / GRAPH_BUCKETS)
         tbs: dict[tuple, list] = {}
         busiest = {c for c, _ in Counter(r["origin"] for r in recs).most_common(GRAPH_MAX_STATIONS)}
         pos: dict[str, tuple] = {}
-        for r in self.recs:                          # last known position, also outside the window
+        for r in snap:                               # last known position, also outside the window
             if r["lat"] is not None:
                 pos[r["origin"]] = (r["lat"], r["lon"])
         ways: Counter = Counter()
@@ -419,6 +433,7 @@ class AprsStats:
                 node["rep_calls"] = [x for x, _ in rep_from[c].most_common(5)]
             nodes.append(node)
         return {"window": window, "since": start, "now": now, "me": me, "have_home": bool(self.home),
+                **self._kept(snap, kept),
                 "buckets": GRAPH_BUCKETS, "bucket_sec": round(bsec, 1),
                 "nodes": nodes,
                 "ways": [{"chain": list(ch), "cat": cat, "dev": d, "inet": inet, "hop": hop, "n": k,
@@ -430,8 +445,9 @@ class AprsStats:
         """Everything about one call: as sender, as digipeater, as iGate."""
         now = time.time() if now is None else now
         call = call.upper().strip()
-        start = max(self.since, now - window) if window else self.since
-        allrecs = [r for r in self.recs if r["t"] >= start]
+        snap, kept = self._snap()
+        start = max(kept, now - window) if window else kept
+        allrecs = [r for r in snap if r["t"] >= start]
         n_all = len(allrecs)
         air_all = sum(airtime(r["nbytes"]) for r in allrecs) or 1
         own = [r for r in allrecs if r["origin"] == call]
@@ -440,7 +456,7 @@ class AprsStats:
         heard_as = sum(1 for r in allrecs if r["heard"] == call)
         span = max(60.0, now - (allrecs[0]["t"] if allrecs and not window else start))
 
-        out: dict = {"call": call, "window": window, "since": start, "now": now,
+        out: dict = {"call": call, "window": window, "since": start, "now": now, **self._kept(snap, kept),
                      "frames": len(own), "country": country(call), "have_home": bool(self.home),
                      "relayed": len(relayed), "gated": len(gated), "heard_as": heard_as}
         if own:
@@ -476,7 +492,7 @@ class AprsStats:
         out["timeline"] = {"slot": slot, "first": first, "counts": tl}
         # 3) activity pattern: weekday x hour (local time), always over everything kept
         grid = [[0] * 24 for _ in range(7)]
-        for r in self.recs:
+        for r in snap:
             if r["origin"] == call:
                 lt = time.localtime(r["t"])
                 grid[lt.tm_wday][lt.tm_hour] += 1
