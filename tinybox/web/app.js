@@ -127,8 +127,10 @@ async function refreshStatus() {
     fwdBox.title = st.forward.lines.join("\n");   // partners and last session on hover
   }
   $("nav-msgs").textContent = st.messages;
-  $("nav-ver").replaceChildren("TinyBox " + st.version, h("br"), st.web + " · local only",
-                               updateHint(st.update));
+  const ver = $("nav-ver");                          // CR108: foot of the side column
+  ver.replaceChildren(h("strong", { text: "TinyBox " + st.version }), h("br"), "by OE3GAS",
+                      updateHint(st.update));
+  ver.title = st.web + " · local only";
   document.title = "TinyBox " + st.mailbox;
   setShutdown(st.shutdown_in, st.restart_pending);
 }
@@ -968,9 +970,15 @@ function viewDashboard() {
   foldable(rub.card, "rubrics");
   foldable(mon.card, "monitor");
   msgs.card.classList.add("dash-msgs");
-  main().className = "two";
-  main().replaceChildren(h("div", { class: "col" }, msgs.card, conn.card, jlog.card),
-                         h("div", { class: "col" }, sess.card, ...(chan ? [chan.card] : []), rub.card, mon.card));
+  // CR108: row 1 Messages | Rubrics | Stations (JLOG) | Connected (+ channel in KISS mode),
+  // row 2 Connection log (three columns wide) | Live monitor
+  main().className = "dash";
+  main().replaceChildren(h("div", { class: "col" }, msgs.card),
+                         h("div", { class: "col" }, rub.card),
+                         h("div", { class: "col" }, jlog.card),
+                         h("div", { class: "col" }, sess.card, ...(chan ? [chan.card] : [])),
+                         h("div", { class: "col wide" }, conn.card),
+                         h("div", { class: "col" }, mon.card));
   // connection log and JLOG change only when a station connects or disconnects
   let calls = S.sessions.map((s) => s.call).join(" ");
   const updateSessions = () => {

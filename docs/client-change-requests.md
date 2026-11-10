@@ -3820,3 +3820,25 @@ Kommentar, Reaktion, Alarm, Avatar; dazu „lädt Bild hoch“ und die Authentis
   refused: other_key“); Abort wirkt beim Warten auf den Login sofort.
 - Tests: `tests/test_cr106.py` (freigegeben/wartend/anderer Schlüssel Ende-zu-Ende mit Login,
   kein Prompt beim Login, ältere Box, Abort beim Warten).
+
+## CR108 – TinyBox-Web-GUI: Seitenleiste als Buttons, Dashboard vierspaltig (✅ 10.11.2026)
+
+### Erfassung (OE3GAS, 10.11.2026)
+
+- Seitenleiste strukturieren: Dashboard, Messages, Monitor, Keys, Settings je ein Button;
+  Rubrics mit Rahmen rundherum. Am Fuß der Spalte „TinyBox + Version“ und „by OE3GAS“.
+- Breite der Fenster optimieren: nur „Connection log“ braucht annähernd die volle Breite,
+  „Messages“ und „Stations (JLOG)“ kommen mit rund 40 % der bisherigen Breite aus.
+- Dashboard vierspaltig: Messages | Rubrics | Stations (JLOG) | Connected; darunter
+  „Connection log“ über drei Spalten, rechts daneben einspaltig „Live monitor“.
+
+### Umsetzung (nur TinyBox-Web-GUI, `tinybox/web/app.js`, `app.css`)
+
+- Seitenleiste: jeder Menüpunkt ein Button mit Rahmen (aktiv = schwarz), Rubrics eine
+  gerahmte Gruppe mit den Rubriken darin. Fuß: „TinyBox <Version>“ / „by OE3GAS“ (darunter wie
+  bisher der Hinweis auf ein neues Release); die Web-Adresse steht jetzt im Tooltip.
+- Dashboard (`main.dash`): Raster mit vier Spalten im Verhältnis 1,6 : 1 : 1,2 : 1 und zwei
+  gleich hohen Zeilen über die Fensterhöhe; jede Karte füllt ihre Zelle und scrollt innen. Im
+  KISS-Mode steht die Kanal-Karte unter „Connected“. Zusammengeklappte Karten bleiben klein.
+- Unter 1600 px Breite zwei Spalten (Connection log über beide), unter 1100 px eine.
+- Geprüft im Browser (Playwright) bei 2560 und 1440 px, keine JS-Fehler; `tests/test_web.py` grün.

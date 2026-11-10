@@ -57,34 +57,63 @@ h1, h2 { margin: 0; }
 /* layout */
 .shell { flex-grow: 1; display: flex; min-height: 0; }
 .side { width: 208px; flex-shrink: 0; background: var(--paper); border-right: 2px solid var(--ink);
-        padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; }
-.side a { display: flex; justify-content: space-between; align-items: center; height: 44px; padding: 0 14px;
-          border-radius: 6px; color: var(--ink); font-weight: 600; text-decoration: none; }
-.side a:hover { background: var(--ground); }
-.side a.active { background: var(--ink); color: #FFFFFF; font-weight: 700; }
+        padding: 20px 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+/* CR108: every menu point a button with a frame, Rubrics a framed group */
+.side > a { display: flex; justify-content: space-between; align-items: center; height: 44px; padding: 0 14px;
+            border: 2px solid var(--ink); border-radius: 6px; background: var(--paper);
+            color: var(--ink); font-weight: 600; text-decoration: none; flex-shrink: 0; }
+.side > a:hover { background: var(--ground); }
+.side > a.active { background: var(--ink); color: #FFFFFF; font-weight: 700; }
 .side .count { font-family: var(--mono); font-size: 13px; }
 
 /* Rubrics: aufklappbarer Punkt, darunter je Rubrik eine Zeile (Klick = ihre Bulletins) */
-.side .navgroup { display: flex; flex-direction: column; }
-.side .navtop { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border: 0;
-                border-radius: 6px; background: none; font: inherit; font-weight: 600; color: var(--ink);
+.side .navgroup { display: flex; flex-direction: column; border: 2px solid var(--ink); border-radius: 6px;
+                  flex-shrink: 0; }
+.side .navtop { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 0;
+                border-radius: 4px; background: none; font: inherit; font-weight: 600; color: var(--ink);
                 cursor: pointer; text-align: left; }
 .side .navtop:hover { background: var(--ground); }
+.side .navtop[aria-expanded="true"] { border-bottom: 2px solid var(--rule); border-radius: 4px 4px 0 0; }
 .side .navtop .caret { font-size: 11px; width: 9px; flex-shrink: 0; }
-.side .sub { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px 23px; }
+.side .sub { display: flex; flex-direction: column; gap: 2px; padding: 6px 6px 6px 17px; }
 .side .sub[hidden] { display: none; }
-.side .sub a { height: 32px; padding: 0 10px; font: 600 13px var(--mono); gap: 8px; }
+.side .sub a { display: flex; justify-content: space-between; align-items: center; height: 32px; padding: 0 10px;
+               border-radius: 4px; color: var(--ink); text-decoration: none; font: 600 13px var(--mono); gap: 8px; }
+.side .sub a:hover { background: var(--ground); }
+.side .sub a.active { background: var(--ink); color: #FFFFFF; font-weight: 700; }
 .side .sub a .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side .sub a .count { font-size: 12px; flex-shrink: 0; }
 .side .sub a.off .nm { color: #555555; text-decoration: line-through; }
 .side .sub a.active.off .nm { color: #CCCCCC; }
 .side .sub .none { color: #555555; font-size: 13px; padding: 0 10px; }
-.ver { font-size: 12px; color: #333333; line-height: 1.5; padding: 0 14px; }
+.ver { font-size: 12px; color: #333333; line-height: 1.5; padding: 10px 4px 0 4px; border-top: 2px solid var(--rule);
+        flex-shrink: 0; }
+.ver strong { font-family: var(--mono); font-size: 13px; color: var(--ink); }
 .ver .upd { color: #b45309; font-weight: 600; }
 
 main { flex-grow: 1; padding: 20px; min-width: 0; min-height: 0; overflow: auto; }
 main.two { display: grid; grid-template-columns: minmax(0, 1fr) 470px; gap: 20px; }
 main.two.wide-right { grid-template-columns: minmax(0, 1fr) 520px; }
+/* CR108: dashboard in four columns - Messages | Rubrics | Stations (JLOG) | Connected;
+   below: Connection log over three columns, Live monitor in the fourth */
+main.dash { display: grid; gap: 20px;
+            grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr);
+            grid-template-rows: minmax(340px, 1fr) minmax(320px, 1fr); }
+main.dash > .col { min-height: 0; }
+main.dash > .col.wide { grid-column: span 3; }
+main.dash > .col > .card { max-height: none !important; }
+main.dash > .col > .card:last-child { flex: 1 1 0 !important; }
+main.dash > .col > .card.folded:last-child { flex: 0 0 auto !important; }
+main.dash .card.dash-msgs { min-height: 0; }
+@media (max-width: 1600px) {
+  main.dash { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: none; }
+  main.dash > .col { min-height: 340px; }
+  main.dash > .col.wide { grid-column: span 2; }
+}
+@media (max-width: 1100px) {
+  main.dash { grid-template-columns: minmax(0, 1fr); }
+  main.dash > .col.wide { grid-column: auto; }
+}
 main.one { display: flex; flex-direction: column; gap: 20px; }
 /* CR51: message list on top, reader below */
 main.split { display: flex; flex-direction: column; gap: 20px; overflow: hidden; }
