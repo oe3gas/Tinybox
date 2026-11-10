@@ -84,6 +84,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 103 | APRS-Statistik bei viel Verkehr: fest 250.000 Frames, „All“ zeigt den Zeitraum, Auswertung im Thread | ✅ siehe unten, PLANUNG 30 |
 | 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, Log nach Connect-Zeit sortiert, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | ✅ siehe unten |
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
+| 107 | Client zu Client: alle Chatboard-Funktionen (Shoutout, Kommentar, Reaktion, Sticker, Links, Erwähnungs-Alarm) | offen, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3401,6 +3402,64 @@ mit Übergangsregel für ältere Gegenstellen – kostet etwa 10 Byte je Referen
 
 - Sofort: Löschen und Abgleich des lokalen Verlaufs nur nach Rückfrage beim User.
 - Danach mit CR93/CR94: Peer-Nachrichten signiert, Verlauf nur mit verifizierter Gegenstelle abgleichen.
+
+### Vorschlag Authentisierung Client ↔ Client (Claude, 10.11.2026, zu CR107)
+
+Beide Clients haben seit CR93 einen eigenen Schlüssel (je Gerät) und ggf. ein Zertifikat ihrer
+Heimat-BBS. Damit:
+
+1. **Gegenseitige Challenge:** `//TB?` und `//TB CLIENT` tragen je eine Zufallszahl `n=`. Jede
+   Seite antwortet `//PAUTH sig=<86> pub=<43> [cert=…]` – Signatur über
+   `TINYBOX-PEER1|<eigener Ruf>|<Ruf der Gegenseite>|<Zufallszahl der Gegenseite>` (≈ 140 Byte,
+   ≈ 300 mit Zertifikat, einmal je Verbindung).
+2. **Prüfung, zwei Stufen:**
+   - *Bekannt (TOFU, wie SSH):* beim ersten Kontakt merkt sich der Client den Schlüssel des
+     Peers; später muss er gleich sein (ein neues Gerät des Peers: Hinweis „neuer Schlüssel“,
+     bestätigen). Fingerabdruck in der Peer-Karte, zum Vergleichen im QSO.
+   - *Bestätigt:* das Zertifikat der Heimat-BBS des Peers. Der Client prüft es, wenn er dieser
+     BBS vertraut: der eigenen Heimat-BBS immer, anderen über deren `TRUST`-Liste (Abfrage
+     `//TRUST? <box>` an die eigene Heimat-BBS). Anzeige „✓ bestätigt durch OE3GAS-1“.
+3. **Was davon abhängt:** Verlauf abgleichen (`//HIST`, `//HM`), Verlauf löschen, Bilder und
+   Dateien vom Peer holen erst bei „bekannt“ oder „bestätigt“; bei abweichendem Schlüssel nichts
+   davon, nur Chat, mit Warnbalken (schließt TB-06).
+4. **Einzelne Zeilen** bleiben unsigniert (Byte-Kosten je Zeile; Rest-Risiko eingeschleuster
+   Zeilen wie im Chatboard, TB-07). Optional später: signiert nur, was etwas auslöst (Löschen).
+
+## CR107 – Client zu Client: alle Chatboard-Funktionen (offen, 10.11.2026)
+
+### Erfassung (OE3GAS, 10.11.2026)
+
+Bei der Kommunikation Client zu Client soll die gesamte Palette an Funktionen verfügbar sein, die
+es in den Chatboards schon gibt – Shoutout, Kommentar usw. Vorab prüfen, was fehlt. Dazu: wie die
+Authentisierung zwischen den beiden Teilnehmern gehen kann (→ CR99, Vorschlag oben).
+
+### Bestandsaufnahme (Claude, 10.11.2026)
+
+| Funktion | Chatboard | Client zu Client |
+|---|---|---|
+| Text, Emoticons/Emoji | ✓ | ✓ |
+| Bilder | ✓ (CR12) | ✓ (CR78) |
+| Dateien | ✗ (CR86) | ✓ (CR78) |
+| Zustellhaken | – | ✓ |
+| Ping, Speedtest, Schach, QSL, Heard there | – | ✓ |
+| **Shoutout** (`~!`, Sprechblase als Stern) | ✓ | ✗ – kommt als `~!Text` an, kein Knopf |
+| **Kommentar** mit Zitat (`~^4F`, CR31/CR84) | ✓ | ✗ |
+| **Reaktion** (Emoji auf eine Zeile, `*4F :+1`) | ✓ | ✗ |
+| **Sticker** (`[STK]CQ`, CR11) | ✓ | ✗ – kommt als `[STK]CQ` an, keine Auswahl |
+| **Links** anklickbar | ✓ | ✗ – nur Text |
+| **Erwähnungs-/Nachrichten-Alarm** (Popup, „BK“, CR85) | ✓ bei @CALL | ✗ |
+
+### Vorschlag (Claude)
+
+- Dieselbe Darstellung wie im Chatboard (Shoutout-Stern, Sticker, Links, Zitat-Block,
+  Reaktionen unter der Blase) und dieselben Knöpfe in der TBClient-Ansicht.
+- Bezug für Kommentar und Reaktion: im Chatboard die Ereignisnummer; zwischen zwei Clients die
+  Zeilennummer im Verlauf (`peerchat`, je Richtung): `~^m12` = meine Zeile 12, `~^y7` = deine
+  Zeile 7 (aus Sicht des Senders). Reaktion `//R m12 :+1`, nur im Verlauf gespeichert. Ältere
+  Clients sehen den Text bzw. ignorieren `//R`.
+- Alarm: jede neue Zeile des Peers zählt (ein Gespräch zu zweit), wenn das Fenster nicht im
+  Vordergrund ist – mit denselben Einstellungen wie CR85.
+- Fähigkeit `CHAT2` in `//TB?` / `//TB CLIENT`; ohne sie bleibt alles wie bisher.
 
 ## CR100 – Client-Web-GUI: nur eigenes Netz, Schutz gegen DNS-Rebinding (✅ 09.11.2026)
 
