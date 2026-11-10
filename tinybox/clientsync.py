@@ -133,7 +133,7 @@ def _ids(parts: list[str]) -> list[int] | None:
     return [int(p) for p in parts]
 
 
-def handle(s: Session, cmd: str, parts: list[str]) -> None:
+def handle(s: Session, cmd: str, parts: list[str], signed=None) -> None:
     if "SYNC" not in s.client.caps:
         s.out(f"//ERR {cmd} needs SYNC")
         return
@@ -141,9 +141,12 @@ def handle(s: Session, cmd: str, parts: list[str]) -> None:
         s.out(f"//ERR {cmd} needs SYNC2")
         return
     started = time.monotonic()
-    {"MLIST": _mlist, "RUBRICS": _rubrics, "BLIST": _blist, "GET": _get, "PART": _part,
-     "SEND": _send, "KILL": _kill, "READ": _read, "SYNC": _sync, "BSYNC": _bsync,
-     "HAVE": _have}[cmd](s, parts)
+    if cmd == "SEND":
+        _send(s, parts, signed)
+    else:
+        {"MLIST": _mlist, "RUBRICS": _rubrics, "BLIST": _blist, "GET": _get, "PART": _part,
+         "KILL": _kill, "READ": _read, "SYNC": _sync, "BSYNC": _bsync,
+         "HAVE": _have}[cmd](s, parts)
     slow = logsetup.ms_if_slow(started)
     if slow:
         log.debug("//%s took %s", cmd, slow)
@@ -292,7 +295,7 @@ def _get(s: Session, parts: list[str]) -> None:
     log.info("> //GET %s: %d bytes text, %d on air", ids, plain, comp)
 
 
-def _send(s: Session, parts: list[str]) -> None:
+def _send(s: Session, parts: list[str], signed=None) -> None:
     from .commands import SEND_RE
     args = {k.lower(): v for k, _, v in (p.partition("=") for p in parts[3:]) if v}
     n = int(parts[2]) if len(parts) >= 3 and isnum(parts[2]) else -1
@@ -302,6 +305,10 @@ def _send(s: Session, parts: list[str]) -> None:
     kind, target = parts[0].upper(), parts[1]
 
     def done(lines: list[str]) -> None:
+        reason = signed(lines) if signed else None       # CR93 stage 2
+        if reason:
+            s.out(f"//ERR send {reason}")
+            return
         m = SEND_RE.match(target + (f" ${args['bid']}" if args.get("bid") else ""))
         mid = args.get("mid", "")
         if m is None or (mid and not MID_RE.match(mid)):

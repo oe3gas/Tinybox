@@ -92,7 +92,7 @@ class Profiles:
         self.core._save_settings()
 
     def _send_mine(self) -> None:
-        self.core._send(f"//PROF {pf.encode(self.mine)}")
+        self.core._send(self.core.signed(f"//PROF {pf.encode(self.mine)}"))   # CR93 stage 2
 
     # --- protocol --------------------------------------------------------------------
 

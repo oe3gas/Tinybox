@@ -760,6 +760,15 @@ Terminal-Benutzer ohne Client sind nicht betroffen.
   Schlüssel (`other_key`) und mit einem widerrufenen (`revoked`). Eine abgehörte Antwort nützt
   nichts: sie gilt nur für diese Zufallszahl, diese Box und dieses Rufzeichen.
 - An einer **fremden** TinyBox gibt es den Client-Modus erst mit Stufe 3 (Zertifikat der Heimat-BBS).
+- **Signierte Befehle (Stufe 2):** AX.25 prüft keine Absender – jemand könnte einen Frame in eine
+  laufende Verbindung einschleusen. Deshalb unterschreibt der Client nach dem Login jeden
+  kritischen Befehl einzeln: Post und Bulletins senden (samt Betreff und Text), Post löschen, das
+  Profil speichern. Jede Unterschrift gilt nur für diesen Login und nur einmal (laufende Nummer).
+  Lesen, Chat und Abgleich ohne Löschen sind nicht signiert. Fehlt die Unterschrift oder stimmt sie
+  nicht, weist die Box ab (`sig_missing`, `sig_bad`, `sig_replay`) und schreibt eine Warnung ins Log.
+- Im Client-Modus nimmt die Box die **Terminal-Befehle zum Schreiben und Löschen** (`S`, `SP`,
+  `SB`, `K`, `KM`, `E`, `N`, `NH`, `NL`) nicht an: „Not in client mode …“ – das macht der Client,
+  signiert. In einer normalen Terminal-Verbindung gilt alles wie bisher.
 
 ### 3.8 AXUDP: Client und TinyBox am selben PC (PLANUNG 25)
 

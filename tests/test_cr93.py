@@ -1,4 +1,5 @@
-"""CR93 stage 1: the client logs in with the key of its user (Ed25519)."""
+"""CR93: the client logs in with the key of its user (Ed25519, stage 1) and signs
+the critical commands (stage 2)."""
 
 from __future__ import annotations
 
@@ -183,6 +184,129 @@ class ClientSide(unittest.TestCase):
             core._on_line("//OK TB1 caps=CHAT")
             self.assertEqual(core.auth["state"], "ok")
             self.assertTrue((Path(tmp) / "identity.key").is_file())
+
+
+class SignedCommands(unittest.TestCase):
+    """Stage 2: after the login //SEND, //KILL, //SYNC k= and //PROF come signed."""
+
+    def setUp(self):
+        p = mock.patch.object(clientproto, "REQUIRE_AUTH", True)
+        p.start()
+        self.addCleanup(p.stop)
+        self.app = make_app()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.key = auth.Identity(Path(self.tmp.name) / "identity.key")
+        self.box = self.app.cfg.station.mailbox_call
+        self.app.store.key_put("OE3ABC", self.key.pub, "active")
+        self.s, self.t = login(self.app, "OE3ABC-7")
+        self.n = self.logon()
+        self.ctr = 0
+
+    def logon(self) -> str:
+        type_lines(self.s, "//CLIENT TB1 v=2026.11.10 caps=CHAT,SYNC,SYNC2,PROF")
+        out = self.t.take()
+        n = out.split("//AUTH? n=", 1)[1].split()[0]
+        type_lines(self.s, f"//AUTH sig={self.key.sign_login(self.box, 'OE3ABC-7', n)} "
+                           f"pub={self.key.pub}")
+        self.assertIn("//OK TB1", self.t.take())
+        return n
+
+    def signed(self, line, payload=(), key=None, ctr=None):
+        if ctr is None:
+            self.ctr += 1
+            ctr = self.ctr
+        sig = (key or self.key).sign_command(self.box, "OE3ABC", self.n, ctr, line, payload)
+        return f"{line} c={ctr} sig={sig}"
+
+    def mail(self) -> int:
+        return self.app.service.create(from_call="OE3ABC", to_call="OE1XYZ", type="P",
+                                       subject="x", body="y", origin="telnet")
+
+    def test_kill(self):
+        m = self.mail()
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            type_lines(self.s, f"//KILL {m}")                       # injected: no signature
+        self.assertIn("//ERR kill sig_missing\r//KEND", self.t.take())
+        self.assertIsNotNone(self.app.store.get(m))
+        line = self.signed(f"//KILL {m}")
+        type_lines(self.s, line)
+        self.assertIn(f"//K {m} ok", self.t.take())
+        self.assertIsNone(self.app.store.get(m))
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            type_lines(self.s, line)                                 # recorded and sent again
+        self.assertIn("sig_replay", self.t.take())
+        other = auth.Identity(Path(self.tmp.name) / "other.key")
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            type_lines(self.s, self.signed(f"//KILL {self.mail()}", key=other))
+        self.assertIn("//ERR kill sig_bad", self.t.take())
+
+    def test_send_covers_the_text(self):
+        line = "//SEND B ALL 2 mid=abcdefgh12"
+        type_lines(self.s, self.signed(line, ["Subject", "line 1", "line 2"]),
+                   "Subject", "line 1", "line 2")
+        self.assertIn("//SENT ", self.t.take())
+        before = len(self.app.store.list_messages())
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            type_lines(self.s, self.signed("//SEND B ALL 2 mid=abcdefgh13",
+                                           ["Subject", "line 1", "line 2"]),
+                       "Subject", "K 1", "line 2")                  # text changed on the way
+        out = self.t.take()
+        self.assertIn("//ERR send sig_bad", out)
+        self.assertNotIn("Unknown", out)                            # the text ran as nothing
+        self.assertEqual(len(self.app.store.list_messages()), before)
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            type_lines(self.s, "//SEND P OE1XYZ 1", "s", "//KILL 1")    # unsigned
+        self.assertIn("//ERR send sig_missing", self.t.take())
+
+    def test_profile_and_sync(self):
+        type_lines(self.s, "//PROF ?")                              # reading: not signed
+        self.assertIn("//PROF -", self.t.take())
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            type_lines(self.s, "//PROF t=1 loc=JN88 home= name=Fake")
+        self.assertIn("//PROF ERR sig_missing", self.t.take())
+        type_lines(self.s, self.signed("//PROF t=1 loc=JN88 home= name=Gerhard"))
+        self.assertIn("//PROF OK", self.t.take())
+        type_lines(self.s, "//SYNC seq=0 max=2000")                 # no k=: not signed
+        self.assertIn("//SYNCEND", self.t.take())
+        with self.assertLogs("tinybox.clientproto", "WARNING"):
+            type_lines(self.s, f"//SYNC seq=0 k={self.mail()} max=2000")
+        self.assertIn("//ERR sync sig_missing", self.t.take())
+
+    def test_terminal_writes_refused_in_client_mode(self):
+        type_lines(self.s, f"K {self.mail()}")
+        self.assertIn("Not in client mode", self.t.take())
+        type_lines(self.s, "L")                                     # reading stays
+        self.assertNotIn("Not in client mode", self.t.take())
+        s, t = login(self.app, "OE3ABC-2")                          # a plain terminal: as before
+        type_lines(s, f"K {self.mail()}")
+        self.assertNotIn("Not in client mode", t.take())
+
+    def test_client_again_means_a_new_login(self):
+        type_lines(self.s, "//CLIENT TB1 v=2026.11.10 caps=CHAT,SYNC")
+        out = self.t.take()
+        self.assertIn("//AUTH? n=", out)
+        self.assertNotIn(self.n, out)
+        self.assertFalse(self.s.auth)
+
+
+class ClientSigns(unittest.TestCase):
+    def test_signed_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = ClientCore(client_cfg(tmp))
+            core._send = lambda line: None
+            self.assertEqual(core.signed("//KILL 5"), "//KILL 5")       # no login: as before
+            core._on_line("//AUTH? n=xyz123 box=OE3XTC-1")
+            pub = core.identity.public
+            for n in (1, 2):
+                line = core.signed("//SEND P OE1XYZ 1 mid=abcdefgh", ["subj", "text"])
+                plain, ctr, sig = clientproto.split_signature(line)
+                self.assertEqual((plain, ctr), ("//SEND P OE1XYZ 1 mid=abcdefgh", n))
+                msg = auth.command_message("OE3XTC-1", "OE3GAS", "xyz123", n, plain,
+                                           ["subj", "text"])
+                self.assertTrue(auth.verify(pub, msg, auth.b64d(sig, 64)))
+            core._clear_chat()
+            self.assertEqual(core.signed("//KILL 5"), "//KILL 5")
 
 
 if __name__ == "__main__":

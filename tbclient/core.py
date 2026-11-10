@@ -136,6 +136,8 @@ class ClientCore:
         # CR93: the key of the user - one per call, the same file on every PC
         self.identity = auth.Identity(cfg.data_dir / "identity.key")
         self.auth: dict = {"state": "", "fp": self.identity.fp, "reason": "", "box": ""}
+        self._login: tuple[str, str] | None = None    # (mailbox, challenge) of the login
+        self._cmd_ctr = 0
         # CR75: a station connected to us - the GUI switches to its terminal
         self.focus = {"n": 0, "seq": 0}
         self.direct_at: dict[str, float] = {}     # call -> last frame heard directly
@@ -359,6 +361,7 @@ class ClientCore:
         self.handshake_done = False
         self.caps = set()
         self.auth.update(state="", reason="")
+        self._login = None
         if self.target != self.settings.get("target"):
             self.settings["target"] = self.target
             self._save_settings()
@@ -754,6 +757,7 @@ class ClientCore:
         self.handshake_done = False
         self.caps = set()
         self.auth.update(state="", reason="")
+        self._login = None
         self._clear_board()
         self.pending.clear()
         self.sync.link_lost()
@@ -902,6 +906,18 @@ class ClientCore:
 
     # --- protocol lines -------------------------------------------------------------
 
+    def signed(self, line: str, payload: list[str] | tuple[str, ...] = ()) -> str:
+        """CR93 stage 2: a critical command (//SEND, //KILL, //SYNC k=, //PROF) with
+        its number and signature - bound to this login, so an injected or recorded
+        frame is refused. payload = the lines that follow (subject and text)."""
+        if self._login is None:
+            return line                       # no login with a key (older TinyBox)
+        self._cmd_ctr += 1
+        box, nonce = self._login
+        sig = self.identity.sign_command(box, self.cfg.mycall, nonce, self._cmd_ctr, line,
+                                         payload)
+        return f"{line} c={self._cmd_ctr} sig={sig}"
+
     def _control(self, line: str) -> None:
         cmd, _, rest = line[2:].partition(" ")
         if cmd == "AUTH?":                       # CR93: log in with the user's key
@@ -910,6 +926,8 @@ class ClientCore:
             if not nonce or len(nonce) > 64:
                 return
             self.auth.update(state="asking", box=box, reason="")
+            self._login = (box, nonce)            # stage 2: signed commands of this login
+            self._cmd_ctr = 0
             self._send(f"//AUTH sig={self.identity.sign_login(box, self.cfg.mycall, nonce)} "
                        f"pub={self.identity.pub}")
             return

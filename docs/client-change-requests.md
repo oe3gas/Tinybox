@@ -71,7 +71,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 90 | Interlink-Authentisierung (TB-02): Stufe 1 Doppel-Rufzeichen erkennen ✅, Stufe 2 HMAC offen | Stufe 1 ✅, siehe unten |
 | 91 | Dictionary-Integrität: voller Vergleich, keine automatische Weiterverbreitung (TB-04) | ✅ siehe unten (Signatur mit CR94) |
 | 92 | Rollen und Rechte: Sysop-Inhalte, Rubrik-Rechte, nicht authentifizierte User (TB-08, 14, 15, 21) | offen, siehe unten |
-| 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | Stufe 1 ✅, Stufe 2/3 offen, siehe unten |
+| 93 | User-Authentisierung tbclient ↔ Heimat-BBS (Schlüsselpaar, Vertrauenskette) | Stufe 1 ✅, Stufe 2 ✅, Stufe 3 offen, siehe unten |
 | 94 | Admin-Protokoll mit Signatur (Funk), Standards übers Internet | offen (Konzept), siehe unten |
 | 95 | Zeichensatz-Policy und Ausgabe-Maskierung `prcore/text.py` (TB-11, 12, 22) | ✅ siehe unten (Abstufung nach Rolle mit CR92) |
 | 96 | Datei- und Bildempfang absichern: Hash, Typprüfung, Abbruch (TB-05, TB-16) | ✅ Stufe 1, siehe unten (längerer Hash mit CR86) |
@@ -3023,7 +3023,7 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   Rubriknamen; bei Kollision Rechte nur über die Rolle, nie über den Namen.
 - Grenzen für die Zahl der brocast-Seiten je Quelle (TB-21).
 
-## CR93 – User-Authentisierung tbclient ↔ Heimat-BBS (Stufe 1 ✅ 09.11.2026)
+## CR93 – User-Authentisierung tbclient ↔ Heimat-BBS (Stufe 1 ✅ 09.11.2026, Stufe 2 ✅ 10.11.2026)
 
 ### Erfassung (OE3GAS, 09.11.2026)
 
@@ -3070,9 +3070,31 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   (`tests/__init__.py` schaltet `clientproto.REQUIRE_AUTH` nur dort ab).
 - Doku: MANUAL 3.7a.
 
+### Umsetzung Stufe 2 (TinyBox, Client 2026.11.10.2 – 10.11.2026) ✅
+
+- Signiert werden nach dem Login `//SEND` (mit Betreff und Textzeilen), `//KILL`, `//SYNC` mit `k=`
+  (Löschen) und `//PROF` beim Speichern. Nicht signiert: Lesen (`//GET`, `//SYNC` ohne `k=`,
+  `//BSYNC`, `//PROF ?`, `//READ`, `r=`), Chat, Bilder.
+- Format: an die Befehlszeile hängt der Client ` c=<n> sig=<86>`. Signiert wird
+  `TINYBOX-CMD1|<Box>|<Rufzeichen>|<Login-Challenge>|<n>|<Befehlszeile ohne c=/sig=>`, bei `//SEND`
+  danach `\n` + Betreff und Textzeilen (`prcore/auth.command_message`). `n` steigt je Login; die Box
+  nimmt nur ein größeres `n` als das letzte → kein Wiederholen, kein Umsortieren. rund 95 Byte mehr je
+  kritischem Befehl.
+- Abgewiesen: `//ERR send|kill|sync sig_missing|sig_bad|sig_replay`, `//PROF ERR sig_…`; Warnung im
+  Log. Der Text eines abgewiesenen `//SEND` wird trotzdem gelesen und verworfen (er läuft nie als
+  Befehl).
+- In einer Client-Sitzung mit Login weist die Box die Terminal-Befehle zum Schreiben/Löschen ab
+  (`S`, `SP`, `SB`, `K`, `KM`, `E`, `N`, `NH`, `NL`, Text `CLIENT_SIGNS`) – sonst ginge ein
+  eingeschleustes `SB ALL` an der Signatur vorbei.
+- Ein neues `//CLIENT` auf derselben Verbindung (Client neu gestartet, Link blieb stehen) bedeutet
+  einen neuen Login mit neuer Challenge.
+- Grenze: eine **neue Terminal-Verbindung** unter dem Rufzeichen des Users kann weiterhin schreiben
+  wie jeder nicht authentifizierte User – das regelt CR92 (Rechte nach Rolle, PLANUNG 29.7).
+  Chatzeilen bleiben unsigniert (Aufwand je Zeile).
+- Tests `tests/test_cr93.py` (`SignedCommands`, `ClientSigns`).
+
 ### Offen
 
-- **Stufe 2:** kritische Befehle signiert (Bulletin senden, löschen, Profil ändern, später Sysop).
 - **Stufe 3:** Zertifikat der Heimat-BBS für fremde Boxen (mit CR94). Bis dahin gibt es an einer
   fremden TinyBox keinen Client-Modus.
 - Sysop-Web-GUI: Schlüssel anzeigen und freigeben (bisher nur Konsole).

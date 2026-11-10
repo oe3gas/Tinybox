@@ -397,6 +397,9 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
 }
 
 
+SIGNED_IN_CLIENT = {"S", "SP", "SB", "K", "KM", "E", "N", "NH", "NL"}
+
+
 def dispatch(s: Session, line: str) -> None:
     if not line.strip():
         return
@@ -408,8 +411,15 @@ def dispatch(s: Session, line: str) -> None:
     if not m:
         s.out(texts.UNKNOWN_CMD)
         return
-    handler = COMMANDS.get(m.group(1).upper())
+    word = m.group(1).upper()
+    handler = COMMANDS.get(word)
     if handler is None:
         s.out(texts.UNKNOWN_CMD)
+        return
+    if word in SIGNED_IN_CLIENT and s.client is not None and s.auth:
+        # CR93 stage 2: in a client session logged in with a key, writing and
+        # deleting come signed from the client - an unsigned line may be a frame
+        # slipped into the link by somebody else
+        s.out(texts.CLIENT_SIGNS)
         return
     handler(s, m.group(2))

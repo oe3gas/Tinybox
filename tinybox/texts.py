@@ -66,6 +66,8 @@ ABORTED = "Output aborted."
 UNKNOWN_CMD = "Unknown command. Type H for help."
 NO_SUCH_MSG = "No such message: {id}"
 NOT_ALLOWED = "Not allowed."
+CLIENT_SIGNS = ("Not in client mode: write, delete and change the profile in the client "
+                "(signed with your key).")
 INVALID_CALL = "Invalid callsign: {call}"
 INVALID_VALUE = "Invalid value: {value}"
 TOO_LARGE = "Message too long (max {max} bytes), discarded."

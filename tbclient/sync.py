@@ -664,7 +664,7 @@ class Syncer:
         kills = st.todo("kill")
         for i in range(0, len(kills), CHUNK):
             self._set(step="deleting")
-            await self._send("//KILL " + " ".join(map(str, kills[i:i + CHUNK])))
+            await self._send(self.core.signed("//KILL " + " ".join(map(str, kills[i:i + CHUNK]))))
             done = []
             for line in await self._lines_until("//KEND"):
                 p = line.split()
@@ -780,7 +780,7 @@ class Syncer:
             req += f" max={self.core.cfg.sync_chunk} {self._texts_arg()}"
             _no_loop(asked, req)
             self._set(step="mail changes" if seq else "mail list")
-            await self._send(req)
+            await self._send(self.core.signed(req) if kills else req)   # deleting: signed
             try:
                 end = await self._delta_answer("//SYNCEND", content=True)
             except SyncError as exc:
@@ -993,8 +993,9 @@ class Syncer:
         if lines == [""]:
             lines = []
         subject = " ".join(item["subject"].split()) or "(no subject)"
-        await self._send(f"//SEND {item['type']} {to} {len(lines)} mid={item['mid']}", subject,
-                         *lines)
+        cmd = self.core.signed(f"//SEND {item['type']} {to} {len(lines)} mid={item['mid']}",
+                               [subject, *lines])          # CR93 stage 2
+        await self._send(cmd, subject, *lines)
         while True:
             entry = await self._next()
             if entry[0] != "line":

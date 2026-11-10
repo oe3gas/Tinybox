@@ -2,6 +2,14 @@
 
 ## Unveröffentlicht
 
+- **Signierte Befehle CR93 Stufe 2** (MANUAL 3.7a): nach dem Login mit Schlüssel kommen `//SEND`
+  (samt Betreff und Text), `//KILL`, `//SYNC k=` und `//PROF` (Speichern) einzeln signiert, mit
+  aufsteigender Nummer und an die Login-Challenge gebunden. Unsigniert, falsch oder wiederholt →
+  abgewiesen, der Text eines abgewiesenen `//SEND` läuft nie als Befehl. In so einer Client-Sitzung
+  weist die Box die Terminal-Befehle zum Schreiben und Löschen ab (`S`, `SP`, `SB`, `K`, `KM`, `E`,
+  `N`, `NH`, `NL`). Ein neues `//CLIENT` auf derselben Verbindung bedeutet einen neuen Login.
+  Client 2026.11.10.2 signiert; **Clients bis 2026.11.10 können an einer neuen Box nicht mehr
+  senden, löschen oder das Profil ändern** – alle Clients aktualisieren.
 - Client 2026.11.10: **APRS-Statistik bei viel Verkehr (CR103)** – fest die neuesten 250.000 Frames
   statt 7 Tage, der Knopf „All“ zeigt den Zeitraum („Last 6.9 days“). Die Auswertung läuft in einem
   Thread und wird 10 s zwischengespeichert; der Client steht dabei nicht mehr still.

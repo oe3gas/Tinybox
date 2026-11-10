@@ -1,0 +1,2 @@
+- Senden, Loeschen und Profil gehen signiert zur
+  Heimat-BBS (eingeschleuste Frames wirken nicht).

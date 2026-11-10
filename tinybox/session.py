@@ -75,6 +75,11 @@ class Session:
         self.auth = False   # CR93: logged in with the user's key (client mode)
         self._client_wait = None   # //CLIENT seen, //AUTH not yet
         self._auth_nonce: str | None = None
+        # CR93 stage 2: the login this session holds - critical commands are signed
+        # with this key, bound to the login challenge, numbered upwards
+        self.auth_pub: bytes | None = None
+        self.auth_nonce: str | None = None
+        self.auth_ctr = 0
         self.ui_rx = None   # linkq.RxWindow while a UI client is in a chat board
         # message being composed
         self._to = ""

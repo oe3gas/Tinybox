@@ -1,4 +1,4 @@
-"""Signatures for TinyBox (CR93, later CR90/CR94): Ed25519 (RFC 8032).
+"""Signatures for TinyBox (CR93 login and signed commands, later CR90/CR94): Ed25519 (RFC 8032).
 
 Authentication, not encryption - what is signed stays readable, as amateur
 radio requires. Keys and signatures travel as base64url without padding:
@@ -200,6 +200,18 @@ def login_message(box: str, call: str, nonce: str) -> bytes:
     return f"TINYBOX-AUTH1|{base(box)}|{base(call)}|{nonce}".encode("ascii")
 
 
+def command_message(box: str, call: str, nonce: str, counter: int, line: str,
+                    payload: list[str] | tuple[str, ...] = ()) -> bytes:
+    """What a client signs for a critical command (CR93 stage 2): the command line
+    (spaces as one), its number in this login and the lines that follow it (subject
+    and text of //SEND) - bound to the login challenge, the mailbox and the call."""
+    text = (f"TINYBOX-CMD1|{base(box)}|{base(call)}|{nonce}|{counter}|"
+            + " ".join(line.split()))
+    if payload:
+        text += "\n" + "\n".join(payload)
+    return text.encode("utf-8")
+
+
 def base(call: str) -> str:
     return call.strip().upper().split("-", 1)[0]
 
@@ -250,3 +262,7 @@ class Identity:
 
     def sign_login(self, box: str, call: str, nonce: str) -> str:
         return b64e(sign(self.secret, login_message(box, call, nonce)))
+
+    def sign_command(self, box: str, call: str, nonce: str, counter: int, line: str,
+                     payload: list[str] | tuple[str, ...] = ()) -> str:
+        return b64e(sign(self.secret, command_message(box, call, nonce, counter, line, payload)))

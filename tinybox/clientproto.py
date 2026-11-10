@@ -15,6 +15,22 @@ and only with a released key the mailbox answers with the features both sides kn
 
     //OK TB1 caps=CHAT,UI
 
+CR93 stage 2: after the login the critical commands come signed, each one on
+its own - AX.25 checks no sender, a frame can be slipped into a running link:
+
+    //SEND ... c=<n> sig=<signature>     (also covers subject and text lines)
+    //KILL ... c=<n> sig=..
+    //SYNC ... k=.. ... c=<n> sig=..     (only with k=, deleting)
+    //PROF t=.. ... c=<n> sig=..         (storing; //PROF ? is not signed)
+
+signed: auth.command_message() - the command line without c= and sig=, n, the
+login challenge, mailbox and call; n goes up with every signed command of the
+login. Unsigned, wrong or an old n: refused (//ERR send sig_missing|sig_bad|
+sig_replay, //ERR kill sig_.., //ERR sync sig_.., //PROF ERR sig_..), the text
+of a //SEND is read anyway so it never runs as commands. In such a session the
+terminal commands that write or delete (S, SP, SB, K, KM, E, N, NH, NL) are
+refused: the client does that, signed.
+
 v = client version (date). If the client in this repository is newer, the
 answer also has cur=<newest version> and news=<number of the feature bulletin
 in the rubric TBNEWS>, see clientnews.py.
@@ -145,12 +161,78 @@ def _parse_args(parts: list[str]) -> dict[str, str]:
     return args
 
 
+# --- CR93 stage 2: signed commands ------------------------------------------------
+
+SIG_RE = re.compile(r"^c=(\d{1,12})$")
+
+
+def split_signature(line: str) -> tuple[str, int | None, str | None]:
+    """'//KILL 5 c=3 sig=..' -> ('//KILL 5', 3, '..'); without them (line, None, None)."""
+    words = line.split()
+    if len(words) >= 3 and words[-1].startswith("sig=") and (m := SIG_RE.match(words[-2])):
+        return " ".join(words[:-2]), int(m.group(1)), words[-1][4:]
+    return line, None, None
+
+
+def critical(cmd: str, parts: list[str]) -> bool:
+    """The commands that need a signature after the login (see module doc)."""
+    if cmd in ("SEND", "KILL"):
+        return True
+    if cmd == "PROF":
+        return parts[1:] != ["?"]
+    if cmd == "SYNC":
+        return any(p.lower().startswith("k=") for p in parts[1:])
+    return False
+
+
+def check_signed(s: Session, plain: str, counter: int | None, sig: str | None,
+                 payload: list[str] | tuple[str, ...] = ()) -> str | None:
+    """None if the command may run, else the reason. Only sessions logged in with
+    a key are checked (without REQUIRE_AUTH - tests - there is none)."""
+    if not s.auth or s.auth_pub is None:
+        return None
+    if sig is None or counter is None:
+        reason = "sig_missing"
+    else:
+        try:
+            raw = auth.b64d(sig, 64)
+        except auth.AuthError:
+            raw = None
+        msg = auth.command_message(s.cfg.station.mailbox_call, s.call, s.auth_nonce or "",
+                                   counter, plain, payload)
+        if raw is None or not auth.verify(s.auth_pub, msg, raw):
+            reason = "sig_bad"
+        elif counter <= s.auth_ctr:
+            reason = "sig_replay"
+        else:
+            s.auth_ctr = counter
+            return None
+    log.warning("%s: %s refused (%s)", s.call, plain.split()[0][:12], reason)
+    return reason
+
+
+def _refuse(s: Session, cmd: str, reason: str) -> None:
+    if cmd == "KILL":
+        s.out(f"//ERR kill {reason}", "//KEND")
+    elif cmd == "PROF":
+        s.out(f"//PROF ERR {reason}")
+    else:
+        s.out(f"//ERR {cmd.lower()} {reason}")
+
+
 def handle(s: Session, line: str) -> None:
     """One line starting with '//' (in the mailbox or inside a board)."""
-    parts = line.strip()[2:].split()
+    line, counter, sig = split_signature(line.strip())
+    parts = line[2:].split()
     if not parts:
         return
     cmd = parts[0].upper()
+    if s.client is not None and critical(cmd, parts) and cmd != "SEND":
+        # //SEND is checked when its text is in: the lines must be read anyway
+        reason = check_signed(s, line, counter, sig)
+        if reason:
+            _refuse(s, cmd, reason)
+            return
     if cmd == "TB?":
         tb_probe(s)
     elif cmd == "CLIENT":
@@ -172,9 +254,12 @@ def handle(s: Session, line: str) -> None:
     elif cmd == "MOTD":
         _motd(s)
     elif cmd == "PROF":
-        _profile(s, line.strip()[2:][4:].strip())
+        _profile(s, line[2:][4:].strip())
     elif cmd == "WHOIS":
         _whois(s, parts[1:])
+    elif cmd == "SEND" and "SYNC" in s.client.caps:
+        clientsync.handle(s, cmd, parts[1:],
+                          signed=lambda lines: check_signed(s, line, counter, sig, lines))
     elif cmd in clientsync.COMMANDS:
         clientsync.handle(s, cmd, parts[1:])
     elif cmd in IMG_COMMANDS:
@@ -212,11 +297,14 @@ def _client(s: Session, parts: list[str]) -> None:
     symbol = args.get("sym", "")
     info = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "",
                       args.get("v", "")[:20])
-    if s.auth or not REQUIRE_AUTH:    # restarted on a link that stayed up / tests
+    if not REQUIRE_AUTH:              # tests about something else
         _client_ok(s, info)
         return
-    # CR93: client mode only after the login with the user's key
+    # CR93: client mode only after the login with the user's key - also when the
+    # client restarted on a link that stayed up: it needs a fresh challenge for
+    # its signed commands (stage 2)
     s.client = None
+    s.auth, s.auth_pub, s.auth_nonce, s.auth_ctr = False, None, None, 0
     s._client_wait = info
     s._auth_nonce = auth.new_nonce()
     s.out("", f"//AUTH? n={s._auth_nonce} box={s.cfg.station.mailbox_call}")
@@ -256,7 +344,7 @@ def _auth(s: Session, parts: list[str]) -> None:
                         s.call, fp)
             s.out("//ERR auth other_key")
             return
-        s.auth = True
+        s.auth, s.auth_pub, s.auth_nonce, s.auth_ctr = True, pub, nonce, 0
         s._client_wait = None
         log.info("%s: client login, key %s", s.call, fp)
         _client_ok(s, info)
