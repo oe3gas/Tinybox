@@ -324,11 +324,11 @@ def _client(s: Session, parts: list[str]) -> None:
 
 
 MAX_KEYS = 5                     # keys per call (devices) that are not revoked
-DEVICE_RE = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
+DEVICE_RE = re.compile(r"^[0-9A-F]{8}$")      # keyed hash of the PC name (auth.Identity.device)
 
 
 def _auth(s: Session, parts: list[str]) -> None:
-    """//AUTH sig=<86> pub=<43> [dev=<device>] [cert=<certificate>]: the answer to
+    """//AUTH sig=<86> pub=<43> [dev=<8 hex>] [cert=<certificate>]: the answer to
     //AUTH? (CR93).
 
     One key per device (OE3GAS, 10.11.2026): every key of a call is released on

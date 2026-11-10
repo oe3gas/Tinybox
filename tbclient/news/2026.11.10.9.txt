@@ -1,0 +1,2 @@
+- Geraet: statt des PC-Namens geht nur noch ein
+  8-stelliges Kennzeichen (Hash) zur Box.

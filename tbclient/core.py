@@ -38,13 +38,6 @@ from .sync import Syncer
 log = logging.getLogger(__name__)
 
 
-def device_name() -> str:
-    """CR93: the name of this PC for the sysop's key list (one key per device)."""
-    import socket
-    name = "".join(c for c in socket.gethostname().split(".")[0]
-                   if c.isascii() and (c.isalnum() or c in "-_"))[:16]
-    return name or "pc"
-
 PROTO = "TB1"
 HANDSHAKE_FALLBACK_SEC = 6
 LOGIN_SYNC_SEC = 1.5      # CR40: the sync after the login starts this much after //OK
@@ -145,7 +138,8 @@ class ClientCore:
         self.sysmsg: dict | None = None           # system message (shutdown) from the TinyBox
         # CR93: the key of the user - one per call, the same file on every PC
         self.identity = auth.Identity(cfg.data_dir / "identity.key")
-        self.auth: dict = {"state": "", "fp": self.identity.fp, "reason": "", "box": ""}
+        self.auth: dict = {"state": "", "fp": self.identity.fp, "dev": self.identity.device,
+                           "reason": "", "box": ""}
         self._login: tuple[str, str] | None = None    # (mailbox, challenge) of the login
         self.adm_log: deque = deque(maxlen=300)       # CR94: sysop console over the radio
         self._adm_refresh = ""
@@ -1018,7 +1012,7 @@ class ClientCore:
             self._cmd_ctr = 0
             cert = self._cert_for(box)
             self._send(f"//AUTH sig={self.identity.sign_login(box, self.cfg.mycall, nonce)} "
-                       f"pub={self.identity.pub} dev={device_name()}"
+                       f"pub={self.identity.pub} dev={self.identity.device}"
                        + (f" cert={cert}" if cert else ""))
             return
         if cmd in ("ADM>", "ADMEND"):            # CR94: answer of an admin command

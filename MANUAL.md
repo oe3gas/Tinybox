@@ -741,8 +741,11 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
 - **Der Schlüssel** entsteht beim ersten Start des Clients: `data/tbclient/identity.key`. **Jedes
   Gerät hat seinen eigenen** (OE3GAS, 10.11.2026): ein zweiter PC – etwa zu Hause statt am
   Box-PC – meldet sich mit seinem Schlüssel an und wartet auf die Freigabe wie ein neuer; die
-  anderen Geräte laufen weiter. Höchstens 5 Schlüssel je Rufzeichen. Der Client nennt der Box
-  dabei den Namen des PCs (`dev=`), den der Sysop in der Liste sieht. Geht ein Gerät verloren: nur
+  anderen Geräte laufen weiter. Höchstens 5 Schlüssel je Rufzeichen. Der Client schickt dabei
+  ein **Gerätekennzeichen** (`dev=`, z. B. `3F9A21C0`): ein Hash des Rechnernamens mit dem
+  geheimen Schlüssel – der Name selbst geht nie über Funk und lässt sich auch nicht durch
+  Probieren herausfinden. Der Client zeigt es im Startblock („Your key … device …“) und in den
+  Settings; der Sysop sieht es in `USER` und unter „Keys“. Geht ein Gerät verloren: nur
   dessen Schlüssel widerrufen. Den
   **Fingerabdruck** (z. B. `7F3A-91C2-44E0`) zeigt der Client im Startblock („Your key“).
 - **Erster Login:** die TinyBox schickt eine Zufallszahl, der Client antwortet mit Signatur und

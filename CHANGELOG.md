@@ -6,7 +6,8 @@
   gibt jeden einzeln frei; ein neues Gerät stört die anderen nicht mehr (vorher `other_key`).
   Höchstens 5 je Rufzeichen. Box: Schema 14 (`client_keys`, die bisherigen Schlüssel werden
   übernommen); Konsole `USER OK|REVOKE|DEL call [fingerprint]`, Web-GUI „Keys“ mit Gerät und Knöpfen
-  je Schlüssel. Client 2026.11.10.8 nennt den PC-Namen (`dev=`).
+  je Schlüssel. Client 2026.11.10.9 schickt ein Gerätekennzeichen (`dev=`, 8 Hex-Zeichen: Hash des
+  Rechnernamens mit dem geheimen Schlüssel – der Name geht nicht über Funk).
 - **Bulletins verschieben und kopieren (CR21)** – nur der Sysop: Konsole `MOVE n[,n] RUBRIK`,
   `COPY n[,n] RUBRIK`, `KILL n[,n]`; Sysop-Web-GUI: „Move / copy“ im Leser; Client (Sysop mit
   Schlüssel, Client 2026.11.10.7): Knopf „Sysop ▾“ im Leser – in der TinyBox löschen, verschieben,

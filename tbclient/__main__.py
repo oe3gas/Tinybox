@@ -72,7 +72,8 @@ def _key_fp(cfg: config.Config) -> str:
     if data_dir is None:
         return "(none)"
     try:
-        return auth.Identity(data_dir / "identity.key").fp
+        ident = auth.Identity(data_dir / "identity.key")
+        return f"{ident.fp}  device {ident.device}"
     except (OSError, auth.AuthError) as exc:
         return f"(no key: {exc})"
 

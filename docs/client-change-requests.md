@@ -3171,7 +3171,9 @@ Kanal 10 nur per Klick (Alt+0 bleibt der Monitor).
   je (Rufzeichen, Schlüssel) ein Eintrag mit Status und Gerätename. Ein unbekannter Schlüssel
   wartet auf `USER OK`, die anderen Geräte laufen weiter; `other_key` gibt es nicht mehr.
   Höchstens 5 nicht widerrufene Schlüssel je Rufzeichen (`too_many_keys`).
-- Client schickt `dev=<PC-Name>` (Hostname, ASCII, max. 16 Zeichen) in `//AUTH`.
+- Client schickt `dev=<8 Hex>` in `//AUTH`: HMAC-SHA256 des Rechnernamens mit dem geheimen
+  Schlüssel (`auth.Identity.device`) – der Name geht nicht über Funk (OE3GAS) und lässt sich nicht
+  durch Probieren üblicher Namen finden. Anzeige im Startblock und in den Settings.
 - Konsole: `USER OK|REVOKE|DEL call [fp]` – fp nur nötig, wenn mehrere passen; Web-GUI „Keys“:
   Knöpfe je Schlüssel, Spalte Gerät. Zertifikat, signierte Befehle und Sysop-Konsole gelten je
   Schlüssel (der des Logins).

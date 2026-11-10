@@ -427,7 +427,7 @@ function renderAuthInfo() {
                 wait: "key waits for approval by the sysop",
                 refused: `login refused${h.reason || a.reason ? ` (${a.reason || h.reason})` : ""}` };
   $("auth-info").textContent = `Home BBS ${S.home}: ${TXT[st] || "no login with the key yet"}${st ? when : ""}. ` +
-    `Own key of this client, fingerprint ${a.fp || "-"}. Client mode only with the home BBS.`;
+    `Own key of this client, fingerprint ${a.fp || "-"}, device ${a.dev || "-"}. Client mode only with the home BBS.`;
 }
 // CR94: the sysop console over the radio (only when the TinyBox grants ADM)
 function renderAdmin() {

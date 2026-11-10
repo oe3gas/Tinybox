@@ -62,6 +62,16 @@ class Ed25519(unittest.TestCase):
         self.assertEqual(len(auth.b64e(b"\x00" * 64)), 86)
         self.assertRegex(auth.fingerprint(pk), r"^[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$")
 
+    def test_device_mark(self):
+        import socket
+        with tempfile.TemporaryDirectory() as d:
+            a = auth.Identity(Path(d) / "a.key")
+            b = auth.Identity(Path(d) / "b.key")
+            self.assertRegex(a.device, r"^[0-9A-F]{8}$")
+            self.assertEqual(a.device, auth.Identity(Path(d) / "a.key").device)   # stable
+            self.assertNotEqual(a.device, b.device)          # keyed: not just the name
+            self.assertNotIn(socket.gethostname().upper()[:8], a.device)
+
     def test_identity_file(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "x" / "identity.key"
@@ -139,10 +149,10 @@ class BoxLogin(unittest.TestCase):
         s, t, n = self.hello()
         with self.assertLogs("tinybox.clientproto", "WARNING"):
             type_lines(s, f"//AUTH sig={home.sign_login(self.box, 'OE3ABC', n)} pub={home.pub} "
-                          "dev=SHACK-PC")
+                          f"dev={home.device}")
         self.assertIn(f"//AUTHWAIT fp={home.fp}", t.take())
         row = self.app.store.key_get("OE3ABC", home.pub)
-        self.assertEqual((row["status"], row["device"]), ("pending", "SHACK-PC"))
+        self.assertEqual((row["status"], row["device"]), ("pending", home.device))
         s, t, n = self.hello()                                       # the first one still works
         self.answer(s, n)
         self.assertIn("//OK TB1", t.take())
@@ -180,12 +190,12 @@ class BoxLogin(unittest.TestCase):
 
     def test_user_console(self):
         self.app.store.key_put("OE3ABC", self.key.pub, "pending", note="from OE3ABC-7",
-                               device="PC2")
+                               device="3F9A21C0")
         out = []
         c = SysopConsole(self.app, MonitorFilter(True), out.append)
         c.handle_line("USER")
         self.assertIn(self.key.fp, "".join(out))
-        self.assertIn("PC2", "".join(out))
+        self.assertIn("3F9A21C0", "".join(out))
         c.handle_line("USER REVOKE OE3ABC")
         self.assertEqual(self.app.store.key_get("OE3ABC", self.key.pub)["status"], "revoked")
         c.handle_line("USER DEL OE3ABC")
@@ -219,7 +229,8 @@ class ClientSide(unittest.TestCase):
             core._on_line("//AUTH? n=abcDEF123 box=OE3XTC-1")
             [line] = sent
             args = dict(x.split("=", 1) for x in line.split()[1:])
-            self.assertTrue(args["dev"])
+            self.assertRegex(args["dev"], r"^[0-9A-F]{8}$")
+            self.assertEqual(args["dev"], core.identity.device)
             pub, sig = auth.b64d(args["pub"], 32), auth.b64d(args["sig"], 64)
             self.assertTrue(auth.verify(pub, auth.login_message("OE3XTC-1", "OE3GAS", "abcDEF123"),
                                         sig))

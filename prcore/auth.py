@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import os
 from pathlib import Path
 
@@ -309,6 +310,16 @@ class Identity:
     @property
     def fp(self) -> str:
         return fingerprint(self.public)
+
+    @property
+    def device(self) -> str:
+        """A short mark of this PC for the sysop's key list (one key per device):
+        8 hex characters, keyed hash of the computer name with the secret key - the
+        name itself never goes on air and cannot be found out by trying names."""
+        import socket
+        name = socket.gethostname().encode("utf-8", "replace")
+        return hmac.new(self.secret, b"TINYBOX-DEV1|" + name,
+                        hashlib.sha256).hexdigest()[:8].upper()
 
     def sign_login(self, box: str, call: str, nonce: str) -> str:
         return b64e(sign(self.secret, login_message(box, call, nonce)))
