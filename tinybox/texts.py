@@ -243,6 +243,8 @@ HELP_CONSOLE = [
     "  TRUST          Key of this box, other TinyBoxen whose certificates count here",
     "  TRUST ADD box key  Trust box (compare its fingerprint with its sysop first!)",
     "  TRUST DEL box  No longer",
+    "  KILL n[,n]     Delete messages and bulletins",
+    "  MOVE n[,n] RUB Move bulletins into another rubric (new number) / COPY n[,n] RUB: copy",
 ]
 UPDATE_ASKING = "Asking GitHub for the newest release ..."
 UPDATE_UNKNOWN = "Update: no answer from GitHub (offline?)."
@@ -309,6 +311,9 @@ FWQ_HEADER = "Partner  Msg#  State  Since (UTC)"
 FWQ_ROW = "{partner:<8} {id:>4}  {state:<6} {changed}"
 USAGE_HOLD = "Usage: HOLD n  /  REL n"
 USAGE_USER = "Usage: USER [LIST]  /  USER OK|REVOKE|DEL|SHOW call"
+USAGE_MOVE = "Usage: MOVE n[,n...] RUBRIC   (bulletins into another rubric, new number)"
+USAGE_COPY = "Usage: COPY n[,n...] RUBRIC   (a copy in another rubric)"
+USAGE_KILL = "Usage: KILL n[,n...]   (delete messages and bulletins)"
 USAGE_TRUST = "Usage: TRUST  /  TRUST ADD box key  /  TRUST DEL box"
 HELD = "Msg {id} held."
 RELEASED = {"$": "Msg {id} released, queued for forwarding.",

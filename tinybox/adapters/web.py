@@ -424,6 +424,10 @@ class WebServer:
             if len(parts) == 3 and parts[0] == "messages" and parts[2] == "kill":
                 svc.delete(self._int(parts[1]), sysop, sysop=True)
                 return {"ok": True}
+            if len(parts) == 3 and parts[0] == "messages" and parts[2] in ("move", "copy"):
+                rubric = str(data.get("rubric", "")).strip().upper()     # CR21
+                fn = svc.move_bulletin if parts[2] == "move" else svc.copy_bulletin
+                return {"id": fn(self._int(parts[1]), rubric, sysop), "rubric": rubric}
             if len(parts) == 3 and parts[0] == "messages" and parts[2] == "edit":
                 m = svc.edit(self._int(parts[1]), str(data.get("field", "")),
                              str(data.get("value", "")), sysop, sysop=True)

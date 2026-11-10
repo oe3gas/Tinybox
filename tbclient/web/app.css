@@ -840,3 +840,7 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .adm-out { max-height: 14em; min-height: 3em; overflow: auto; margin: 6px 0; padding: 6px 8px;
            background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font-size: 12px;
            white-space: pre-wrap; word-break: break-word; }
+.adm-quick { flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.rd-sysbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 12px;
+             border-bottom: 1px solid var(--line); }
+.rd-sysbar.hidden { display: none; }

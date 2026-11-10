@@ -314,9 +314,14 @@ def _send(s: Session, parts: list[str], signed=None) -> None:
         if m is None or (mid and not MID_RE.match(mid)):
             s.out("//ERR send invalid_value")
             return
+        from .clientproto import admin_allowed       # (cycle)
+        # CR94: the sysop with his own key writes as the sysop - e.g. a bulletin to
+        # WARN becomes a warning page in brocast (TB-14), any rubric is open to him
+        sysop = admin_allowed(s)
+        role, origin = (rights.SYSOP, "sysop") if sysop else (rights.role_of(s), s.origin)
         ids = []
         try:
-            tos = s.service.check_send_list(s.call, m.group("to"), kind, False, m.group("bid"))
+            tos = s.service.check_send_list(s.call, m.group("to"), kind, sysop, m.group("bid"))
             body = s.service.multi_to_line(tos) + "\n".join(lines[1:])
             for to in tos:
                 # the same mid sent again answers with the old numbers (see above);
@@ -324,8 +329,8 @@ def _send(s: Session, parts: list[str], signed=None) -> None:
                 msgid = (f"tbc-{mid}" if len(tos) == 1 else f"tbc-{mid}-{to}") if mid else None
                 ids.append(s.service.create(
                     from_call=s.call, to_call=to, type=kind, subject=lines[0],
-                    body=body, origin=s.origin, at_addr=m.group("at") or "",
-                    bid=m.group("bid"), msgid=msgid, role=rights.role_of(s)))
+                    body=body, origin=origin, sysop=sysop, at_addr=m.group("at") or "",
+                    bid=m.group("bid"), msgid=msgid, role=role))
         except ServiceError as exc:
             if not ids:
                 s.out(f"//ERR send {exc.code} {exc}".rstrip())

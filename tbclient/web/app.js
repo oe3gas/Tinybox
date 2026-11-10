@@ -1796,6 +1796,8 @@ function showReader() {
   $("rd-none").classList.toggle("hidden", reading || !!draft);
   $("rd-reply").classList.toggle("hidden", !reading);
   $("rd-delete").classList.toggle("hidden", !reading);
+  $("rd-sysop").classList.toggle("hidden", !reading || !S.adm);       // CR94
+  if (!reading || !S.adm) $("rd-sysbar").classList.add("hidden");
   if (!reading) return;
   const m = cur;
   $("rd-av").replaceChildren(avatar(m.from_call, symOf(m.from_call)));
@@ -1975,6 +1977,38 @@ async function discardCompose() {
   renderItems();
 }
 
+// CR94/CR21: the sysop works on the message in the TinyBox - signed console commands
+function openSysbar() {
+  const bar = $("rd-sysbar");
+  if (!bar.classList.toggle("hidden") && cur) {
+    const bull = cur.type === "B";
+    $("rd-sys-rub").classList.toggle("hidden", !bull);
+    const sel = $("rd-sys-target");
+    sel.replaceChildren(...((S.mailbox || {}).rubrics || [])
+      .filter((r) => r.name !== cur.to_call && r.name !== "TBNEWS")
+      .map((r) => { const o = el("option", "", r.name); o.value = r.name; return o; }));
+    if (!sel.options.length) sel.append(el("option", "", "no other rubric known"));
+    $("rd-sys-move").disabled = $("rd-sys-copy").disabled = !sel.value || sel.value.includes(" ");
+  }
+}
+async function sysopDo(what) {
+  if (!cur) return;
+  const m = cur, rub = $("rd-sys-target").value;
+  const scope = m.type === "B" ? "bulletins" : "mail";
+  let line;
+  if (what === "kill") {
+    if (!window.confirm(`Delete #${m.id} in the TinyBox - for everybody?`)) return;
+    line = `KILL ${m.id}`;
+  } else {
+    if (!rub) return;
+    line = `${what === "move" ? "MOVE" : "COPY"} ${m.id} ${rub}`;
+  }
+  if (await api("adm", { line, refresh: scope })) {
+    $("rd-sysbar").classList.add("hidden");
+    if (what !== "copy") { cur = null; selId = null; setLevel("list"); showReader(); }
+  }
+}
+
 async function deleteCurrent() {
   if (!cur) return;
   await api("mail/delete", { id: cur.id });
@@ -2007,6 +2041,10 @@ function initMail() {
   $("mb-sync").onclick = () => { api("mail/sync", { scope: "mail" }); openFolder("inbox"); };
   $("rd-reply").onclick = reply;
   $("rd-delete").onclick = deleteCurrent;
+  $("rd-sysop").onclick = openSysbar;                         // CR94
+  $("rd-sys-move").onclick = () => sysopDo("move");
+  $("rd-sys-copy").onclick = () => sysopDo("copy");
+  $("rd-sys-kill").onclick = () => sysopDo("kill");
   $("cp-p").onclick = () => setType("P");
   $("cp-b").onclick = () => setType("B");
   $("cp-subj").oninput = composeInfo;
@@ -3298,6 +3336,7 @@ async function start() {
   $("pb-later").onclick = () => api("profile/later");
   $("prof-edit").onclick = openProfile;
   $("adm-send").onclick = sendAdmin;                          // CR94
+  document.querySelectorAll("[data-adm]").forEach((b) => { b.onclick = () => api("adm", { line: b.dataset.adm }); });
   $("adm-line").onkeydown = (e) => { if (e.key === "Enter") sendAdmin(); };
   $("prof-form").onsubmit = saveProfile;
   $("prof-cancel").onclick = () => $("profdlg").classList.add("hidden");

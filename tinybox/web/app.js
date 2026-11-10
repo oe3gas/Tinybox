@@ -1077,12 +1077,38 @@ function renderReader(article, m, onReply) {
     value.focus();
   };
 
+  // CR21: a bulletin into another rubric (new number) or a copy there
+  const toggleMove = () => {
+    if (editSlot.firstChild) { editSlot.replaceChildren(); return; }
+    const list = h("datalist", { id: "rub-list" }, ...(S.rubrics || [])
+      .filter((r) => r.name !== m.to && r.status !== "system" && r.status !== "refused")
+      .map((r) => h("option", { value: r.name })));
+    const rub = h("input", { type: "text", list: "rub-list", placeholder: "WX", size: 8, class: "mono" });
+    const err = h("span", { class: "error" });
+    const go = async (what) => {
+      try {
+        const r = await api("messages/" + m.id + "/" + what, { rubric: rub.value });
+        toast(what === "move" ? `Moved to ${r.rubric}, now #${r.id}.` : `Copied to ${r.rubric} as #${r.id}.`);
+        await refreshMessages(); await refreshRubrics();
+        location.hash = "#/message/" + r.id;
+      } catch (ex) { err.textContent = ex.message; }
+    };
+    editSlot.replaceChildren(h("form", { class: "editbar", onsubmit: (e) => { e.preventDefault(); go("move"); } },
+      h("label", { class: "field" }, h("span", { class: "label", text: "Rubric" }), rub), list,
+      h("button", { class: "btn primary", type: "submit" }, "Move"),
+      h("button", { class: "btn", type: "button", onclick: () => go("copy") }, "Copy"),
+      h("span", { class: "muted", text: "Move: same text, author, date and BID, new number. Only here, not forwarded again." }),
+      err));
+    rub.focus();
+  };
+
   article.replaceChildren(
     h("div", { class: "card-head" },
       h("div", { class: "crumb grow" }, h("a", { href: "#/messages", text: "Messages" }), "›",
         h("span", { class: "mono", text: "#" + m.id })),
       h("button", { class: "btn sm", type: "button", onclick: reply }, "Reply"),
       h("button", { class: "btn sm", type: "button", onclick: toggleEdit }, "Edit header"),
+      ...(m.type === "B" ? [h("button", { class: "btn sm", type: "button", onclick: toggleMove }, "Move / copy")] : []),
       h("button", { class: "btn sm danger", type: "button", onclick: kill }, "Kill")),
     editSlot,
     h("div", { class: "scroll" },

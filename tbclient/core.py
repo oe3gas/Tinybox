@@ -140,6 +140,7 @@ class ClientCore:
         self.auth: dict = {"state": "", "fp": self.identity.fp, "reason": "", "box": ""}
         self._login: tuple[str, str] | None = None    # (mailbox, challenge) of the login
         self.adm_log: deque = deque(maxlen=300)       # CR94: sysop console over the radio
+        self._adm_refresh = ""
         self._cmd_ctr = 0
         # CR75: a station connected to us - the GUI switches to its terminal
         self.focus = {"n": 0, "seq": 0}
@@ -911,12 +912,16 @@ class ClientCore:
 
     # --- protocol lines -------------------------------------------------------------
 
-    def admin(self, command: str) -> bool:
+    def admin(self, command: str, refresh: str = "") -> bool:
         """CR94 (Variante B): one sysop console command at the TinyBox, signed. Only
-        if the box granted ADM (the sysop, logged in with his released key)."""
+        if the box granted ADM (the sysop, logged in with his released key).
+        refresh: 'mail' or 'bulletins' changed (KILL, MOVE, COPY) - sync that
+        when the answer is in."""
         command = " ".join(command.split())[:200]
         if "ADM" not in self.caps or not command or self.state != "online":
             return False
+        if refresh in ("mail", "bulletins"):
+            self._adm_refresh = refresh
         self.adm_log.append({"k": "cmd", "x": command, "t": int(time.time())})
         self._send(self.signed("//ADM " + command))
         self._touch()
@@ -1010,6 +1015,9 @@ class ClientCore:
         if cmd in ("ADM>", "ADMEND"):            # CR94: answer of an admin command
             k = "out" if cmd == "ADM>" else "end"
             self.adm_log.append({"k": k, "x": rest, "t": int(time.time())})
+            if k == "end" and self._adm_refresh:
+                scope, self._adm_refresh = self._adm_refresh, ""
+                self.sync.start(scope)
             self._touch()
             return
         if cmd == "CERT":                        # stage 3: from the home BBS

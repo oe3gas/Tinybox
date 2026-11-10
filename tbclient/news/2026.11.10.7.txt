@@ -1,0 +1,3 @@
+- Sysop: im Leser Nachrichten in der TinyBox
+  loeschen, Bulletins verschieben/kopieren.
+- Sysop-Konsole mit Schnellknoepfen.

@@ -21,6 +21,7 @@ from .. import VERSION, commands, config, logsetup, texts
 from ..app import App
 from ..config import base_call, normalize_call
 from ..session import Session, State
+from ..service import ServiceError
 
 log = logging.getLogger(__name__)
 
@@ -472,6 +473,53 @@ class SysopConsole:
         except keys.KeysError as exc:
             self.out(str(exc))
 
+    def _numbers_and_rubric(self, arg: str, usage: str) -> tuple[list[int], str] | None:
+        words = arg.replace(",", " ").split()
+        if len(words) < 2 or not all(isnum(w) for w in words[:-1]) or len(words) > 21:
+            self.out(usage)
+            return None
+        return [int(w) for w in words[:-1]], words[-1].upper()
+
+    def cmd_move(self, arg: str) -> None:
+        """CR21: MOVE n[,n...] RUBRIC - bulletins into another rubric (new number)."""
+        self._move_copy(arg, move=True)
+
+    def cmd_copy(self, arg: str) -> None:
+        """CR21: COPY n[,n...] RUBRIC - a copy in another rubric."""
+        self._move_copy(arg, move=False)
+
+    def _move_copy(self, arg: str, move: bool) -> None:
+        got = self._numbers_and_rubric(arg, texts.USAGE_MOVE if move else texts.USAGE_COPY)
+        if got is None:
+            return
+        svc, by = self.app.service, self.app.cfg.station.sysop_call
+        ids, rubric = got
+        for msg_id in ids:
+            try:
+                if move:
+                    new = svc.move_bulletin(msg_id, rubric, by)
+                    self.out(f"#{msg_id} moved to {rubric}, now #{new}.")
+                else:
+                    new = svc.copy_bulletin(msg_id, rubric, by)
+                    self.out(f"#{msg_id} copied to {rubric} as #{new}.")
+            except ServiceError as exc:
+                why = {"not_found": "no bulletin", "bad_rubric": "not an accepted rubric"}
+                self.out(f"#{msg_id}: {why.get(exc.code, str(exc))}.")
+
+    def cmd_kill(self, arg: str) -> None:
+        """KILL n[,n...]: delete messages and bulletins (the sysop may delete all)."""
+        words = arg.replace(",", " ").split()
+        if not words or not all(isnum(w) for w in words) or len(words) > 20:
+            self.out(texts.USAGE_KILL)
+            return
+        svc, by = self.app.service, self.app.cfg.station.sysop_call
+        for msg_id in map(int, words):
+            try:
+                svc.delete(msg_id, by, True)
+                self.out(texts.KILLED.format(id=msg_id))
+            except ServiceError:
+                self.out(texts.NO_SUCH_MSG.format(id=msg_id))
+
     def cmd_trust(self, arg: str) -> None:
         """CR93 stage 3: TRUST | TRUST ADD <box> <key> | TRUST DEL <box>"""
         from .. import keys
@@ -500,7 +548,8 @@ class SysopConsole:
     # signed, one command at a time. Not: WEB (the login link), MON and LOG (live
     # output to this window), B (closes the console), UPDATE (answers later).
     REMOTE = ("H", "?", "HELP", "INFO", "W", "WHO", "STATUS", "DISC", "BEACON", "FWD", "FWQ",
-              "HOLD", "REL", "SHUTDOWN", "RESTART", "RELOAD", "USER", "TRUST")
+              "HOLD", "REL", "SHUTDOWN", "RESTART", "RELOAD", "USER", "TRUST",
+              "KILL", "MOVE", "COPY")
 
     def remote(self, line: str) -> bool:
         """One console command from the admin channel; False if not allowed there."""
@@ -531,4 +580,7 @@ class SysopConsole:
         "RELOAD": cmd_reload,
         "USER": cmd_user,
         "TRUST": cmd_trust,
+        "KILL": cmd_kill,
+        "MOVE": cmd_move,
+        "COPY": cmd_copy,
     }

@@ -129,7 +129,13 @@
     </div>
     <div id="mv-read" class="mv-pane mv-read">
       <div class="mv-bar mv-bar-read"><button id="mv-back-list" class="icon-btn back" aria-label="Back">‹</button><span class="sp"></span>
-        <button id="rd-reply" class="sm">↩ Reply</button><button id="rd-delete" class="sm danger">Delete</button></div>
+        <button id="rd-reply" class="sm">↩ Reply</button><button id="rd-sysop" class="sm hidden" title="Sysop: delete in the TinyBox, move or copy (signed)">Sysop ▾</button><button id="rd-delete" class="sm danger">Delete</button></div>
+      <div id="rd-sysbar" class="rd-sysbar hidden">
+        <span class="muted small">Sysop, in the TinyBox:</span>
+        <span id="rd-sys-rub"><select id="rd-sys-target" aria-label="Rubric"></select>
+        <button id="rd-sys-move" class="sm">Move</button><button id="rd-sys-copy" class="sm">Copy</button></span>
+        <button id="rd-sys-kill" class="sm danger">Delete for everybody</button>
+      </div>
       <div id="rd-none" class="muted center pad big-pad">Select a message</div>
       <article id="rd-msg" class="rd hidden">
         <div class="rd-head"><div id="rd-av"></div><div class="rd-meta">
@@ -283,6 +289,11 @@
         <h3>Sysop console</h3>
         <p class="muted small">Console commands at your TinyBox over this connection, each one signed with your key (STATUS, WHO, FWQ, REL n, USER, TRUST, RESTART …).</p>
         <pre id="adm-out" class="adm-out"></pre>
+        <div class="row adm-quick">
+          <button class="sm" data-adm="STATUS">Status</button><button class="sm" data-adm="WHO">Who</button>
+          <button class="sm" data-adm="USER">Keys</button><button class="sm" data-adm="FWQ">Forward queue</button>
+          <button class="sm" data-adm="TRUST">Trust</button><button class="sm" data-adm="H">Help</button>
+        </div>
         <div class="row"><input id="adm-line" class="grow" placeholder="STATUS" autocomplete="off"><button id="adm-send" class="sm">Send</button></div>
       </section>
       <section class="set-card">

@@ -824,6 +824,15 @@ Rufzeichen verwenden. Deshalb unterscheidet die TinyBox:
 
   Jeder Befehl steht als Warnung im Log der Box. Wer nur ein Zertifikat einer anderen Box hat
   (Stufe 3), bekommt die Sysop-Konsole nie.
+- **Im Client als Sysop:** Schnellknöpfe in der Sysop-Konsole (Status, Who, Keys, Forward queue,
+  Trust, Help). Im Leser einer Nachricht der Knopf **Sysop ▾**: *Delete for everybody* (in der
+  TinyBox löschen), bei Bulletins *Move* / *Copy* in eine andere Rubrik. Danach gleicht der Client
+  ab. Ein Bulletin, das der Sysop im Client schreibt, gilt als vom Sysop (an `WARN` → Warnseite).
+- **Bulletins verschieben und kopieren (CR21):** Konsole `MOVE n[,n] RUBRIK`, `COPY n[,n] RUBRIK`,
+  `KILL n[,n]`; Sysop-Web-GUI: Knopf „Move / copy“ im Leser. Verschieben behält Text, Absender,
+  Datum und BID, das Bulletin bekommt eine **neue Nummer** (so sehen es alle Clients); Kopieren
+  bekommt eine eigene BID und vorne „(copied from ALL #12)“. Ziel nur eine angenommene Rubrik;
+  wirkt nur lokal, nichts wird erneut weitergeleitet.
 - Forward-Partner bleiben wie bisher (eigene Anmeldung im Forwarding).
 
 ### 3.8 AXUDP: Client und TinyBox am selben PC (PLANUNG 25)

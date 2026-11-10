@@ -1,6 +1,6 @@
 # Testanleitung – Signieren (CR93), Rollen (CR92), Sysop über Funk (CR94)
 
-Stand 10.11.2026 · TinyBox mit Schema 13 · Client 2026.11.10.6
+Stand 10.11.2026 · TinyBox mit Schema 13 · Client 2026.11.10.7
 
 Vorgehen: Schritt für Schritt, jeweils **Erwartung** prüfen und ✔/✘ in die letzte Spalte.
 Bei ✘ bitte die Zeile aus der TinyBox-Konsole bzw. die Meldung im Client notieren.
@@ -18,7 +18,7 @@ die Gast-Tests ein anderes Rufzeichen nehmen, z. B. `OE1TST`.
 | # | Schritt | Erwartung | ✔/✘ |
 |---|---|---|---|
 | 0.1 | PC2: Datenbank `data\…db` sicherheitshalber wegkopieren. Dann `git pull`, TinyBox neu starten. | Start ohne Fehler. Datenbank auf Schema 13 (läuft automatisch). | |
-| 0.2 | PC1: `git pull`, Client neu starten. | Startblock zeigt Version **2026.11.10.6** und „Your key … Fingerabdruck“. Fingerabdruck notieren: ________ | |
+| 0.2 | PC1: `git pull`, Client neu starten. | Startblock zeigt Version **2026.11.10.7** und „Your key … Fingerabdruck“. Fingerabdruck notieren: ________ | |
 | 0.3 | Sysop-Web-GUI öffnen. | Links neuer Menüpunkt **Keys**. | |
 
 ## 1. Login mit Schlüssel (Stufe 1) und Freigabe in der Web-GUI
@@ -119,6 +119,19 @@ Am besten über Funk (Client auf PC1, TinyBox auf PC2), mit dem Rufzeichen `OE3G
 | 6a.5 | Konsole am PC2 ansehen. | Je Befehl eine Warnung „OE3GAS-…: admin command over radio: …“. | |
 | 6a.6 | Mit einem anderen Rufzeichen (zweiter Client oder OE3TEC) verbinden, Settings. | Keine Sysop-Konsole. | |
 | 6a.7 | (Optional) `RESTART` | TinyBox startet nach der Vorwarnung neu; der Client verbindet sich danach wieder. | |
+
+## 6b. Sysop im Client: löschen, verschieben, kopieren (CR21)
+
+| # | Schritt | Erwartung | ✔/✘ |
+|---|---|---|---|
+| 6b.1 | Settings → Sysop console: Knopf **Status**, dann **Keys**. | Antworten wie bei getippten Befehlen. | |
+| 6b.2 | Bulletins → eine Rubrik, ein Bulletin öffnen, **Sysop ▾**. | Leiste „Sysop, in the TinyBox:“ mit Rubrik-Auswahl, Move, Copy, Delete for everybody. | |
+| 6b.3 | Rubrik wählen, **Copy**. | Nach dem Abgleich: Kopie in der Ziel-Rubrik (abonniert?), Text beginnt mit „(copied from …)“. | |
+| 6b.4 | Original öffnen, andere Rubrik, **Move**. | Verschwindet aus der alten Rubrik, erscheint in der neuen mit neuer Nummer; Web-GUI zeigt dieselbe BID. | |
+| 6b.5 | Die Kopie öffnen, **Delete for everybody**, bestätigen. | In der TinyBox gelöscht (Web-GUI), im Client nach dem Abgleich weg. | |
+| 6b.6 | Im Client ein Bulletin an `WARN` schreiben (nur mit brocast). | Wird zur Warnseite – vom Sysop. (Ein normaler User: keine Warnseite, Schritt 4.1.) | |
+| 6b.7 | Sysop-Web-GUI: ein Bulletin öffnen, **Move / copy**. | Rubrik eingeben, Move bzw. Copy; die neue Nummer öffnet sich. | |
+| 6b.8 | Konsole: `MOVE <n> <Rubrik>`, `COPY <n> <Rubrik>`, `KILL <n>`. | „moved to … now #…“, „copied to … as #…“, „Msg … killed.“ | |
 
 ## 7. Was nicht getestet werden muss (automatische Tests)
 

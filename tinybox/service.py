@@ -526,6 +526,57 @@ class MessageService:
     _EDIT_FIELDS = {"TO": "to_call", "FROM": "from_call", "TYPE": "type",
                     "STATUS": "status", "SUBJ": "subject", "AT": "at_addr"}
 
+    # --- CR21: the sysop moves and copies bulletins between rubrics -----------------
+
+    def _bulletin_for_sysop(self, msg_id: int, rubric: str) -> tuple[Message, str]:
+        msg = self.store.get(msg_id)
+        if msg is None or msg.type != "B":
+            raise ServiceError("not_found", str(msg_id))
+        rubric = normalize_call(rubric)
+        if not DEST_RE.match(rubric) or self.rubric_state(rubric) != "accepted" \
+                or rubric == NEWS_RUBRIC:
+            raise ServiceError("bad_rubric", rubric)
+        if rubric == msg.to_call:
+            raise ServiceError("invalid_value", f"#{msg_id} is in {rubric} already")
+        return msg, rubric
+
+    def _add_bulletin(self, msg: Message, rubric: str, body: str, bid: str | None) -> int:
+        """A local bulletin with the content of msg (no forward state: CR21 acts
+        only here, nothing goes to partner mailboxes again)."""
+        new_id = self.store.add_message(
+            msgid=str(uuid.uuid4()), type="B", to_call=rubric, from_call=msg.from_call,
+            subject=msg.subject, body=body, origin="sysop", created=msg.created,
+            expires=msg.expires, brocast=msg.brocast, at_addr=msg.at_addr, bid=None)
+        bid = bid or self.new_bid(new_id)
+        self.store.bid_add(bid, "sysop")
+        self.store.set_forward_fields(new_id, bid=bid, fwd="", note="", bid_kind="B")
+        return new_id
+
+    def move_bulletin(self, msg_id: int, rubric: str, by: str) -> int:
+        """Into another rubric. Text, author, date and BID stay; the bulletin gets a
+        new number, so every client sees it like a new one in the new rubric and
+        the old number as deleted - also clients that know nothing of moving, and
+        the text is not sent again with it (headers only, CR40). Returns the new
+        number."""
+        msg, rubric = self._bulletin_for_sysop(msg_id, rubric)
+        old_bid = msg.bid
+        self.store.delete(msg_id)               # first: its BID is free again
+        self.bus.publish("message.deleted", message=msg, by=by)
+        new_id = self._add_bulletin(msg, rubric, msg.body, old_bid)
+        log.info("%s moved bulletin #%d %s -> %s (now #%d)", by, msg_id, msg.to_call, rubric,
+                 new_id)
+        self.bus.publish("message.created", message=self.store.get(new_id))
+        return new_id
+
+    def copy_bulletin(self, msg_id: int, rubric: str, by: str) -> int:
+        """A copy in another rubric: own number and BID, first line 'copied from'."""
+        msg, rubric = self._bulletin_for_sysop(msg_id, rubric)
+        body = f"(copied from {msg.to_call} #{msg.id})\n" + msg.body
+        new_id = self._add_bulletin(msg, rubric, body, None)
+        log.info("%s copied bulletin #%d %s -> %s (#%d)", by, msg_id, msg.to_call, rubric, new_id)
+        self.bus.publish("message.created", message=self.store.get(new_id))
+        return new_id
+
     def edit(self, msg_id: int, field: str, value: str, call: str, sysop: bool) -> Message:
         if not sysop:
             raise ServiceError("not_allowed")

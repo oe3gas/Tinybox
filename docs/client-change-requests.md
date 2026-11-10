@@ -27,7 +27,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 18 | Versionskontrolle: Client prüft, ob er aktuell ist; User wird informiert und aufgefordert, die neue Version zu holen | ✅ siehe unten |
 | 19 | Rubriken sind Sysop-Sache: feste Rubrikenliste, User schreiben Bulletins nur an ALL und diese Rubriken (Auswahl im Composer), Forwarding nimmt nur diese Rubriken an | ✅ siehe unten |
 | 20 | Verbindungsqualität: 1–5 Balken neben jeder Station im Board, Meldung bei Verbindungsabbruch, Befehl `STAT` | ✅ siehe unten |
-| 21 | Bulletins zwischen Rubriken verschieben und kopieren | Entschieden: nur Sysop, nur Sysop-Konsole und Sysop-Weboberfläche – noch nicht umgesetzt |
+| 21 | Bulletins zwischen Rubriken verschieben und kopieren | ✅ 10.11.2026 (Konsole, Sysop-Web-GUI, Client des Sysops über CR94) |
 | 22 | Sysop-Konsole: Befehl RESTART (Neustart, z. B. nach Änderung in tinybox.conf) | ✅ siehe unten |
 | 23 | BUG – Emoji-Picker: Schnellauswahl-Leiste verdeckt die Gesamtauswahl | ✅ siehe unten |
 | 24 | BUG – Schnellauswahl-Leiste ragt in der PC-Ansicht rechts aus der Chat-Spalte | ✅ siehe unten |
@@ -355,7 +355,7 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 - Terminal: `STAT` (eigene Verbindung) und `STAT ALL` (alle) als Text.
 - Client-Version 2026.10.11.4.
 
-## CR21 – Bulletins verschieben und kopieren (Vorschlag 11.10.2026, noch nicht umgesetzt)
+## CR21 – Bulletins verschieben und kopieren (✅ 10.11.2026)
 
 **Heute:** Der Sysop kann mit `E <Nr> TO <Rubrik>` (Terminal) bzw. „edit“ in der Sysop-Weboberfläche den Empfänger eines Bulletins ändern – das ist ein Verschieben, aber: die Nummer bleibt gleich, deshalb merken die Clients nichts davon (ihr Abgleich holt nur Nummern, die größer sind als die höchste bekannte der Rubrik). Kopieren gibt es nicht.
 
@@ -375,6 +375,19 @@ Konzept und Entscheidungen: PLANUNG.md Abschnitt 14. Commits 6b379e8 (Abfrage, B
 1. Nur der Sysop, nicht der Autor.
 2. Wo: **nur in der Sysop-Konsole (Terminal am TinyBox-PC) und in der Sysop-Weboberfläche** – **keine Sysop-Rechte über Funk und keine im Client** (Entscheidung Gerhard, 11.10.2026).
 3. Eine Kopie übernimmt die Ablaufzeit des Originals.
+
+**Umsetzung (10.11.2026) ✅:**
+- `service.move_bulletin` / `copy_bulletin`; Konsole `MOVE n[,n] RUBRIK`, `COPY n[,n] RUBRIK`, dazu
+  `KILL n[,n]`; Sysop-Web-GUI: „Move / copy“ im Leser (`POST /api/messages/<n>/move|copy`); Client
+  des Sysops: „Sysop ▾“ im Leser (signierte `//ADM`-Befehle, CR94), danach Abgleich.
+- **Abweichung vom Vorschlag:** Verschieben gibt eine **neue Nummer** statt eines eigenen
+  `//MV`-Protokolls. Das alte Exemplar wird gelöscht (Clients bekommen `//D`), das neue erscheint
+  in der Ziel-Rubrik wie ein neues Bulletin (nur der Kopf, Text bei Bedarf, CR40). So verstehen es
+  auch ältere Clients, und der Text geht nicht noch einmal über Funk. Text, Absender, Datum, BID
+  und Ablauf bleiben.
+- Kopie: eigene Nummer und BID, erste Zeile „(copied from <Rubrik> #<Nr>)“. Beides ohne
+  Forward-Status. Ziel: eine angenommene Rubrik, nicht TBNEWS, nicht dieselbe. Log „… moved
+  bulletin #12 ALL -> WX (now #57)“. Tests `tests/test_cr94.py` (`MoveCopy`).
 
 **Geändert 10.11.2026 (OE3GAS, CR94):** Sysop über Funk gibt es jetzt – nur mit dem Client, Login
 mit dem Schlüssel des Sysops und jeder Konsolenbefehl einzeln signiert. Verschieben/Kopieren

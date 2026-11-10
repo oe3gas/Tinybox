@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- **Bulletins verschieben und kopieren (CR21)** – nur der Sysop: Konsole `MOVE n[,n] RUBRIK`,
+  `COPY n[,n] RUBRIK`, `KILL n[,n]`; Sysop-Web-GUI: „Move / copy“ im Leser; Client (Sysop mit
+  Schlüssel, Client 2026.11.10.7): Knopf „Sysop ▾“ im Leser – in der TinyBox löschen, verschieben,
+  kopieren, danach Abgleich. Verschieben behält Text, Absender, Datum und BID und gibt eine neue
+  Nummer (alle Clients sehen es ohne neues Protokoll), Kopieren bekommt eine eigene BID und
+  „(copied from …)“; beides nur lokal, kein erneutes Forwarding. Ein Bulletin des Sysops aus dem
+  Client gilt als vom Sysop (an `WARN` → Warnseite). Sysop-Konsole im Client mit Schnellknöpfen.
 - **Sysop über Funk mit dem Client (CR94, Variante B):** meldet sich der Sysop mit seinem hier
   freigegebenen Schlüssel an, bekommt der Client die Fähigkeit `ADM` und in den Settings eine
   **Sysop console**. Jeder Konsolenbefehl geht einzeln signiert (`//ADM <Befehl> c= sig=`), die
