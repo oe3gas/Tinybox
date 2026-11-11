@@ -19,7 +19,7 @@ from prcore.ax25.frame import ui_frame as ax25_ui_frame
 from prcore import auth
 from prcore.text import isnum
 
-from . import VERSION, proto
+from . import VERSION, activity, proto
 from . import target as tgt
 from .config import CALL_RE, Config
 from .images import Images, ImageStore
@@ -145,6 +145,8 @@ class ClientCore:
         self.adm_log: deque = deque(maxlen=300)       # CR94: sysop console over the radio
         self._adm_refresh = ""
         self._cmd_ctr = 0
+        self.asking: dict[str, float] = {}        # CR110: cert | trust | adm -> sent at
+        self.rx_at = self.tx_at = 0.0             # CR110: last frame heard from others / own
         # CR75: a station connected to us - the GUI switches to its terminal
         self.focus = {"n": 0, "seq": 0}
         self.direct_at: dict[str, float] = {}     # call -> last frame heard directly
@@ -777,6 +779,7 @@ class ClientCore:
         self.caps = set()
         self.auth.update(state="", reason="")
         self._login = None
+        self.asking.clear()
         self._clear_board()
         self.pending.clear()
         self.sync.link_lost()
@@ -872,6 +875,10 @@ class ClientCore:
             elif guess is False:
                 self._mod128.discard(pair)
         self.monitor_n += 1
+        if f.src == self.cfg.mycall:             # CR110: TX/RX in the top bar
+            self.tx_at = time.time()
+        else:
+            self.rx_at = time.time()
         entry = monitor_entry(f, pair in self._mod128,
                               frozenset([self.home, *self.settings.get("tinyboxes", [])]),
                               self.aprs_memory, self.aprs_home)
@@ -939,6 +946,7 @@ class ClientCore:
         if refresh in ("mail", "bulletins"):
             self._adm_refresh = refresh
         self.adm_log.append({"k": "cmd", "x": command, "t": int(time.time())})
+        self.asking["adm"] = time.time()
         self._send(self.signed("//ADM " + command))
         self._touch()
         return True
@@ -1071,15 +1079,19 @@ class ClientCore:
         if cmd in ("ADM>", "ADMEND"):            # CR94: answer of an admin command
             k = "out" if cmd == "ADM>" else "end"
             self.adm_log.append({"k": k, "x": rest, "t": int(time.time())})
+            if k == "end":
+                self.asking.pop("adm", None)
             if k == "end" and self._adm_refresh:
                 scope, self._adm_refresh = self._adm_refresh, ""
                 self.sync.start(scope)
             self._touch()
             return
         if cmd == "TRUST":                       # CR99: keys the home BBS trusts
+            self.asking.pop("trust", None)
             self._store_trust(rest)
             return
         if cmd == "CERT":                        # stage 3: from the home BBS
+            self.asking.pop("cert", None)
             self._store_cert(rest.strip())
             return
         if cmd == "AUTHWAIT":
@@ -1100,8 +1112,10 @@ class ClientCore:
             self.auth.update(state="ok", reason="")
             self._note_home_auth("ok")
             if self._cert_due():
+                self.asking["cert"] = time.time()
                 self._send("//CERT?")            # stage 3: for logins at other TinyBoxen
             if self._trust_due():
+                self.asking["trust"] = time.time()
                 self._send("//TRUST?")           # CR99: whose certificates count
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
@@ -1462,6 +1476,7 @@ class ClientCore:
             "bfiles": self.bfiles.status(self._board_file_refs()),           # CR86
             "img": {"rate": self.cfg.img_rate, "target": self.cfg.img_target},
             **self.profiles.snapshot(calls),                            # CR73
+            "activity": activity.build(self),                           # CR110: status bar
         }
 
     def _image_refs(self, ch: int | None = None) -> set[str]:

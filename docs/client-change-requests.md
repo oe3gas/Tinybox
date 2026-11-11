@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106)
+Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -85,6 +85,7 @@ Stand: 10.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 104 | Settings-Seite: Karten, zweispaltig, „Connection Status“ mit Mailbox und Auth-Hinweis, „In/Out bytes“, „2h 41m“, Log nach Connect-Zeit sortiert, CW-Tempo für Erwähnungs-Alarm, „by OE3GAS“ | ✅ siehe unten |
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
 | 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | ✅ 10.11.2026 (Teil 1 Client↔Client, Teil 2 Chatboard mit CR86) – siehe unten |
+| 110 | Statusleiste: Phasen und Verkehr Client↔Box und Client↔Client in Echtzeit als Chips, Modem/TX/RX in der Kopfzeile, ein-/ausblendbar | ✅ 11.11.2026 – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -3940,3 +3941,52 @@ dann Zonen im Radar und Streifen in der Map, zuletzt das Feintuning von Force.
   12,5/25/50 %, gleiche Abstände 25/50/75 %).
 
 Damit sind alle Punkte entschieden, CR109 ist bereit zur Umsetzung.
+
+## CR110 – Statusleiste: Phasen und Verkehr in Echtzeit (✅ 11.11.2026, Client 2026.11.11)
+
+### Wunsch (OE3GAS, 11.11.2026)
+
+Eine Echtzeit-Anzeige, welche Phase gerade läuft und welcher Verkehr zwischen Client und Box bzw.
+Client und Client läuft – als Status-Chips. Entscheidungen:
+
+- **Client↔Box, Phase:** Connecting (SABM bis UA) · Signing in (`//CLIENT` über `//AUTH` bis
+  `//OK`) · Wait 4 sysop (`//AUTHWAIT`) · Disconnecting; Aktivität und Leitung wie vorgeschlagen.
+- **Client↔Client:** Connecting wie oben, sonst die Vorschläge.
+- **Fertig:** grün, über 5 Sekunden verblassen. **Alle Chips.**
+- **Position:** ganz oben über dem Arbeitsbereich – über der Board-Zeile, über den Mail-Ordnern,
+  über „TBClient – connected to …“, über der Monitor-Zeile. Im Monitor eine Zeile je Kanal.
+- **Ein/aus:** Knopf in der Kopfzeile zwischen Mail und ☰, zusätzlich in den Settings. Aus = die
+  Leiste verschwindet, der Inhalt rückt nach oben.
+
+### Umsetzung
+
+- **`tbclient/activity.py`** baut aus dem Zustand, den der Core ohnehin hat, je Kanal drei Gruppen
+  (Snapshot `activity.chans`), keine Zeile mehr auf Funk:
+  - **Phase:** Connecting · Connected · Signing in · Wait 4 sysop · Login refused · Client mode ·
+    In board · Disconnecting · Offline/Not reached; mit einem TBClient: Probing (`//TB?` offen) ·
+    Checking key · ✓ Verified by … · ✓ Known key · First contact · Other key (rot) · Wrong
+    signature (rot) · Older client; sonst Terminal.
+  - **Aktivität Box:** Mail-/Bulletin-Sync mit Schritt und Fortschritt (Fehler 30 s rot), History
+    laden, Bild/Datei ↑ und ↓ mit Balken, Bild eines anderen, Zeilen zurückgehalten (gelb),
+    Profile (`//PROF`, `//WHOIS`), Zertifikat (`//CERT?`), vertraute Boxen (`//TRUST?`),
+    Sysop-Befehl (`//ADM` bis `//ADMEND`).
+  - **Aktivität Client↔Client:** History compare (`//HIST` bis zur Antwort), Delivering n (noch
+    nicht bestätigte Zeilen), Bild/Datei ↓, Serving (Bild, Datei, Speedtest auf Anfrage – bis
+    Direwolf nichts mehr ausstehend hat), Ping, Speedtest (Ergebnis 5 s grün), Schach (am Zug),
+    Heard there.
+  - **Leitung:** Queue n (ausstehende Frames, ab 7 gelb), Chat via UI / I-frames, Link-Balken der
+    eigenen Station, AXUDP/Telnet; mit TBClient: „Budget: answers slowed“ (CR97 hat in den letzten
+    10 min eine Antwort zurückgehalten) und Qualität ↑ ↓.
+- **Fertig → grün:** `activity.Tracker` merkt sich die Chips des letzten Snapshots; verschwindet
+  ein Job (`fin`) bei stehender Verbindung, kommt er 5 s als `done` mit `age`. Die GUI blendet ihn
+  per CSS aus (`animation-delay: -age`, so bleibt das Verblassen über neue Snapshots im Takt).
+  Bricht die Verbindung ab, wird nichts grün.
+- **Kopfzeile:** Direwolf/KISS/Telnet ✓/✗, TX (rot) und RX (grün) leuchten 2 s nach dem letzten
+  eigenen bzw. fremden Frame oder Byte; TX auch, solange Direwolf Frames ausstehend hat.
+- **GUI:** `#actbar` oben im neuen Container `#work` (Chat, Mail, Terminal/TBClient, Monitor,
+  Statistik); Knopf `#btn-actbar`, Settings-Karte „Status bar“ (Leiste, Modem-Chips), gespeichert
+  im Browser. Am Handy ohne Modem-Chips.
+- Hooks: `sync.status.ended`, `profiles.busy_at`, `core.asking`, `core.rx_at/tx_at`,
+  `peer.hist_wait/heard_wait/serving`, `peerfun.pong_at`, `budget.refused/slowed()`.
+- Tests: `tests/test_activity.py`.
+

@@ -140,6 +140,7 @@ class PeerImages:
             self.peer._send(f"//NOIMG {h}")
             return
         # the line and the bytes in one go - nothing can come in between
+        self.peer.serve("picture", len(data) - off)          # CR110: status bar
         self.peer._send(f"//I {h} {off} {len(data)}")
         self.peer.ch.link.send_bytes(data[off:])
         log.info("image %s to %s (%d bytes from %d)", h, self.peer.call, len(data), off)

@@ -42,6 +42,7 @@ class Profiles:
         self._asked: set[str] = set()         # //WHOIS sent in this connection
         self._queue: list[str] = []           # calls for the next //WHOIS
         self._flush_planned = False
+        self.busy_at = 0.0                    # CR110: waiting for //PROF or //WIEND since
 
     # --- own profile ----------------------------------------------------------------
 
@@ -92,6 +93,7 @@ class Profiles:
         self.core._save_settings()
 
     def _send_mine(self) -> None:
+        self.busy_at = time.time()
         self.core._send(self.core.signed(f"//PROF {pf.encode(self.mine)}"))   # CR93 stage 2
 
     # --- protocol --------------------------------------------------------------------
@@ -111,11 +113,13 @@ class Profiles:
             if not pf.empty(mine) and self.core.settings.get("profile") is not None:
                 self._send_mine()             # only what the user really entered
         else:
+            self.busy_at = time.time()
             self.core._send("//PROF ?")       # who is newer? the answer has t=
 
     def on_line(self, rest: str) -> None:
         """//PROF OK <crc> | ERR <field> | = <crc> t=.. loc=.. | -"""
         word, _, more = rest.partition(" ")
+        self.busy_at = 0.0
         if word == "OK":
             self.box_crc, self.error = more.strip(), ""
             self.core.console.append("*** profile stored at the TinyBox")
@@ -158,6 +162,7 @@ class Profiles:
                 del cache[old]
 
     def on_whois_end(self) -> None:
+        self.busy_at = 0.0
         self.core._save_settings()
         self.core._touch()
 
@@ -189,12 +194,14 @@ class Profiles:
             self._asked.difference_update(queue)
             return
         for i in range(0, len(queue), WHOIS_MAX):
+            self.busy_at = time.time()
             self.core._send("//WHOIS " + ",".join(queue[i:i + WHOIS_MAX]))
 
     def link_lost(self) -> None:
         self._asked.clear()
         self._queue = []
         self.box_crc = None
+        self.busy_at = 0.0
 
     # --- for the GUI ------------------------------------------------------------------
 

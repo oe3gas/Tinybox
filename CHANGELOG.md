@@ -2,6 +2,14 @@
 
 ## Unveröffentlicht
 
+- **Statusleiste im Client (CR110):** über Chat, Mail, TBClient-Ansicht und Monitor zeigen Chips je
+  Kanal die Phase (Connecting, Signing in, Wait 4 sysop, In board, Disconnecting; mit einem TBClient
+  Probing, Checking key, Verified …), die laufenden Jobs (Sync, Bilder, Dateien, History, Profile,
+  Zertifikat, Sysop-Befehl; History compare, Delivering, Serving, Ping, Speedtest …) und die Leitung
+  (Queue, UI/I-Frames, Qualität, Budget). Fertige Jobs werden grün und verblassen in 5 s. Im Monitor
+  eine Zeile je Kanal; in der Kopfzeile Direwolf/KISS, TX und RX. Ein/aus mit dem neuen Knopf oben
+  und in den Settings. Client 2026.11.11.
+
 - **Chatboard wie Client zu Client (CR107 Teil 2):** Karte der Teilnehmer aus ihren Locatoren
   (rechte Spalte), ✓ an der eigenen Zeile, sobald die TinyBox sie hat, Knopf ⇄ am Teilnehmer:
   Direktverbindung in einem freien Kanal – dort Ping, Speedtest, Heard there, Schach, QSL (wenn der

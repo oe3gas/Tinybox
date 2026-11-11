@@ -502,6 +502,7 @@ class Syncer:
             self._fetch_q.clear()
             self.status["running"] = False
             self.status["aborting"] = False
+            self.status["ended"] = time.time()      # CR110: the status bar shows the end
             self.core._touch()
         if self.send_again and self.status["step"] == "done":
             self.send_again = False               # CR47: written meanwhile - out it goes,

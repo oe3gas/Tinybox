@@ -41,6 +41,7 @@ class PeerFun:
         self.pings: list[float] = []
         self._ping: tuple[str, float] | None = None
         self.st: dict | None = None            # speed test: {"state", "out", "in", "at"}
+        self.pong_at = 0.0                     # CR110: last answer to our ping
 
     @property
     def ch(self):
@@ -65,6 +66,7 @@ class PeerFun:
         if self._ping and self._ping[0] == token:
             self.pings = (self.pings + [round(time.monotonic() - self._ping[1], 3)])[-5:]
             self._ping = None
+            self.pong_at = time.time()
             self._remember("ping", [self.pings[-1], int(time.time())])
             self.core._touch()
 
@@ -95,6 +97,7 @@ class PeerFun:
                 b = budget.of(self.core)
                 if not b.often(self.peer.call, "ST", 1, 600) and \
                         b.allow(self.peer.call, n, "speed test"):
+                    self.peer.serve("speed test", n)
                     self._send_block(n, "back")
             elif self.st:                     # the way back of our own test
                 self.st["in"] = round(n * 1000 / ms)
@@ -110,6 +113,7 @@ class PeerFun:
     def _finish(self) -> None:
         if self.st and self.st["out"] is not None and self.st["in"] is not None:
             self.st["state"] = "done"
+            self.st["end"] = time.time()
             self._remember("st", [self.st["out"], self.st["in"], int(time.time())])
             self.ch.term_line("sys", f"*** speed test: to {self.ch.target} {self.st['out']} B/s, "
                                      f"from {self.ch.target} {self.st['in']} B/s")

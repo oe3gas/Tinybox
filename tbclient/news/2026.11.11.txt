@@ -1,0 +1,3 @@
+- Statusleiste ueber Chat, Mail, Monitor: Phase,
+  Aktivitaet, Leitung je Kanal; fertig = gruen.
+- Kopfzeile: Modem, TX, RX. Ein/aus: Knopf oben, Settings.

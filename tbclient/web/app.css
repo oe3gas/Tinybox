@@ -768,6 +768,50 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .st-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .st-btns button { border-radius: 19px; padding: 8px 18px; font-weight: 600; }
 
+/* CR110: status bar above the work area, modem chips in the top bar */
+.work { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.work > .main-col, .work > .mailview, .work > .termview, .work > .statsview { min-height: 0; }
+.actbar { display: flex; flex-direction: column; gap: 4px; padding: 5px 12px; flex: none;
+  background: var(--surface); border-bottom: 1px solid var(--line); font-size: 12px; }
+.actbar .ag { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-height: 22px; }
+.actbar .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  min-width: 62px; }
+.actbar .chn { font: 600 11px ui-monospace, monospace; background: var(--bg); border-radius: 4px;
+  padding: 2px 6px; min-width: 88px; }
+.actbar .sep { width: 1px; height: 16px; background: var(--line); margin: 0 3px; }
+.ac { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ac.ph { font-weight: 600; }
+.ac.blue { background: #e8f1fd; border-color: #9cc3f5; color: #1655a8; }
+.ac.amber { background: #fff4dd; border-color: #f0c96a; color: #7a5200; }
+.ac.red { background: #fdeaea; border-color: #f0a3a3; color: #9b1c1c; }
+.ac.grey { background: #eef0f3; border-color: #d4d9df; color: #4a5562; }
+.ac.done { background: #e7f6ec; border-color: #97d5aa; color: #1d6b35; animation: ac-fade 5s linear forwards; }
+@keyframes ac-fade { from { opacity: 1; } 30% { opacity: 1; } to { opacity: 0; } }
+.ac .pb { width: 46px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.12); overflow: hidden; flex: none; }
+.ac .pb i { display: block; height: 100%; background: currentColor; }
+.ac .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none;
+  animation: ac-pulse 1s ease-in-out infinite; }
+@keyframes ac-pulse { 50% { opacity: .25; } }
+@media (prefers-color-scheme: dark) {
+  .ac.blue { background: #16304f; border-color: #2f5f96; color: #b9d6ff; }
+  .ac.amber { background: #3d2e0c; border-color: #8a6a1e; color: #ffd98a; }
+  .ac.red { background: #45191b; border-color: #93393c; color: #ffb9b9; }
+  .ac.grey { background: #262d35; border-color: #3a434d; color: #c3cbd3; }
+  .ac.done { background: #173a24; border-color: #2f7a48; color: #a8e6bd; }
+  .ac .pb { background: rgba(255,255,255,.15); }
+}
+@media (prefers-reduced-motion: reduce) { .ac .dot { animation: none; } }
+.modem-chips { display: inline-flex; gap: 5px; margin-left: 12px; flex: none; }
+.modem-chips .mc { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.25);
+  color: rgba(255,255,255,.8); background: rgba(255,255,255,.06); }
+.modem-chips .mc.up { background: #1f7a3d; border-color: #2fa356; color: #fff; }
+.modem-chips .mc.down { background: #8f2a24; border-color: #c4433b; color: #fff; }
+.modem-chips .mc.tx { background: #c4302a; border-color: #e0524b; color: #fff; }
+.modem-chips .mc.rx { background: #1f7a3d; border-color: #2fa356; color: #fff; }
+.top #btn-actbar.on { background: rgba(255,255,255,.2); color: var(--top-text); }
+@media (max-width: 699px) { .modem-chips { display: none; } .actbar .lbl { min-width: 0; } }
+
 /* --- layout by window width (must stay at the end) ------------------------ */
 @media (min-width: 700px) {
   #app { max-width: 1400px; }

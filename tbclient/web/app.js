@@ -254,6 +254,8 @@ function render() {
   $("me-avatar").replaceChildren(avatar(S.mycall, S.my_symbol, true));
   renderTop();
   renderViewBtns();
+  renderActbar();                                   // CR110
+  renderModem();
   renderFreq();
   autoTerm();
   renderTerm();
@@ -3661,6 +3663,104 @@ function initNotify() {
   renderNotify();
 }
 
+// ---------------------------------------------------------------- status bar (CR110)
+// Per channel: phase · activity · link (tbclient/activity.py). Above the work
+// area (chat, mail, terminal, monitor); in the monitor one row per channel.
+// A finished job comes as "done": green, fading out over 5 s. On/off: the
+// button in the top bar and the settings, saved in this browser.
+let actOn = true, modemOn = true, modemTimer = null;
+try {
+  actOn = localStorage.getItem("tbc-actbar") !== "0";
+  modemOn = localStorage.getItem("tbc-modem") !== "0";
+} catch (e) { /* no storage */ }
+
+function initActbar() {
+  $("btn-actbar").onclick = () => setActbar(!actOn);
+  $("set-actbar").onchange = (e) => setActbar(e.target.checked);
+  $("set-modem").onchange = (e) => {
+    modemOn = e.target.checked;
+    try { localStorage.setItem("tbc-modem", modemOn ? "1" : "0"); } catch (err) { /* none */ }
+    renderModem();
+  };
+}
+function setActbar(on) {
+  actOn = on;
+  try { localStorage.setItem("tbc-actbar", on ? "1" : "0"); } catch (e) { /* no storage */ }
+  renderActbar();
+}
+function actChip(c, isPhase) {
+  const s = el("span", `ac ${c.c}` + (isPhase ? " ph" : ""));
+  if (c.busy) s.append(el("span", "dot"));
+  s.append(c.t);
+  if (typeof c.p === "number") {
+    const b = el("span", "pb"), i = el("i");
+    i.style.width = c.p + "%";
+    b.append(i); s.append(b);
+  }
+  if (c.c === "done") {                      // fades out; the age keeps it in step
+    s.style.animationDelay = `-${Math.min(5, c.age || 0)}s`;
+    s.addEventListener("animationend", (e) => { if (e.animationName === "ac-fade") s.remove(); });
+  }
+  return s;
+}
+function actGroup(label, chips, isPhase) {
+  const g = el("div", "ag");
+  g.append(el("span", "lbl", label), ...chips.map((c) => actChip(c, isPhase)));
+  return g;
+}
+function actChannels() {
+  // which channels the bar shows: the monitor and the statistics all, else the one at work
+  const all = (S.activity && S.activity.chans) || [];
+  if (view === "stats" || (view === "term" && activeCh === 0)) return { rows: true, list: all.filter((c) => c.state !== "offline") };
+  const n = view === "chat" || view === "mail" ? (S.chat_ch || activeCh) : activeCh;
+  return { rows: false, list: all.filter((c) => c.n === n) };
+}
+function renderActbar() {
+  const bar = $("actbar"), on = actOn && !!S && !!S.activity;
+  $("btn-actbar").classList.toggle("on", actOn);
+  $("btn-actbar").setAttribute("aria-pressed", actOn ? "true" : "false");
+  $("set-actbar").checked = actOn;
+  bar.classList.toggle("hidden", !on);
+  if (!on) { bar.replaceChildren(); return; }
+  const { rows, list } = actChannels();
+  if (rows) {                                  // monitor: one row per channel
+    bar.className = "actbar rows";
+    if (!list.length) { bar.replaceChildren(el("div", "ag", "No connection")); return; }
+    bar.replaceChildren(...list.map((c) => {
+      const r = el("div", "ag");
+      r.append(el("span", "chn", `${c.n} ${c.label}`), actChip(c.phase, true), ...c.act.map((x) => actChip(x)));
+      if (c.link.length) r.append(el("span", "sep"), ...c.link.map((x) => actChip(x)));
+      return r;
+    }));
+    return;
+  }
+  bar.className = "actbar";
+  const c = list[0];
+  if (!c) { bar.replaceChildren(actGroup("Phase", [{ t: "Offline", c: "grey" }], true)); return; }
+  const parts = [actGroup("Phase", [c.phase], true)];
+  if (c.act.length) parts.push(actGroup("Activity", c.act));
+  if (c.link.length) parts.push(actGroup("Link", c.link));
+  bar.replaceChildren(...parts);
+}
+function renderModem() {
+  const box = $("modem-chips"), m = S && S.activity && S.activity.modem;
+  $("set-modem").checked = modemOn;
+  box.classList.toggle("hidden", !modemOn || !m);
+  if (modemTimer) { clearTimeout(modemTimer); modemTimer = null; }
+  if (!modemOn || !m) { box.replaceChildren(); return; }
+  const name = { agw: "Direwolf", kiss: "KISS", telnet: "Telnet" }[m.via] || m.via || "Modem";
+  const up = el("span", "mc " + (m.up ? "up" : "down"), name + (m.up ? " ✓" : " ✗"));
+  up.title = m.up ? `${name} reachable` : `${name} not reachable`;
+  // TX/RX stay lit for m.io seconds after the last frame or byte
+  const age = (x) => (x === null || x === undefined ? Infinity : x + (performance.now() - stateRecv) / 1000);
+  const tx = age(m.tx) < m.io, rx = age(m.rx) < m.io;
+  box.replaceChildren(up, el("span", "mc" + (tx ? " tx" : ""), "TX"), el("span", "mc" + (rx ? " rx" : ""), "RX"));
+  if (tx || rx) {
+    const left = Math.min(tx ? m.io - age(m.tx) : 9, rx ? m.io - age(m.rx) : 9);
+    modemTimer = setTimeout(renderModem, Math.max(100, left * 1000 + 50));
+  }
+}
+
 // ---------------------------------------------------------------- polling
 async function poll() {
   let since = -1;
@@ -3789,6 +3889,7 @@ async function start() {
     if (focus) $(focus).scrollIntoView({ block: "start" });
   };
   $("btn-menu").onclick = () => openSheet();
+  initActbar();                                               // CR110: status bar
   $("nav-settings").onclick = () => openSheet();
   $("nav-monitor").onclick = () => switchCh(0);              // CR50: the monitor channel
   AprsStatsView.attach($("statsview"));                       // CR61: APRS statistics

@@ -33,10 +33,12 @@
     </form>
     <span id="tb-call" class="tcall">-</span>
     <span class="top-status"><span id="status-dot" class="dot"></span><button id="status-text" class="link-btn" aria-label="Who is here">offline</button></span>
+    <span id="modem-chips" class="modem-chips" aria-label="Modem"></span>
     <span class="sp"></span>
     <button id="btn-disc" class="tb-btn hidden" aria-label="Disconnect" title="Disconnect"><img src="/conn/disconnect.png" alt="" width="22" height="22"></button>
     <button id="btn-chat" class="icon-btn view-btn" aria-label="Chat" title="Chat"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
     <button id="btn-view" class="icon-btn view-btn" aria-label="Mailbox" title="Mailbox"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span id="view-cnt" class="cnt hidden"></span></button>
+    <button id="btn-actbar" class="icon-btn view-btn" aria-label="Status bar on/off" title="Status bar on/off" aria-pressed="true"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M6.5 6.5h3M12 6.5h3"/></svg></button>
     <button id="btn-menu" class="icon-btn" aria-label="Settings">☰</button>
   </header>
   <nav id="chstrip" class="chstrip" aria-label="Channels"></nav>
@@ -63,6 +65,8 @@
     </section>
   </aside>
 
+  <div id="work" class="work">
+  <div id="actbar" class="actbar hidden" role="status" aria-label="Status bar"></div>
   <div class="main-col">
   <nav id="boards" class="boards" aria-label="Chat boards"></nav>
   <div id="board-head" class="board-head hidden">
@@ -214,6 +218,7 @@
       <button type="submit" class="send" aria-label="Send">➤</button>
     </form>
   </section>
+  </div>
 
   <aside id="peer-side" class="peer-side" aria-label="With the other TBClient (CR80)"></aside>
   <dialog id="st-dlg" class="st-dlg" aria-labelledby="st-h">
@@ -286,6 +291,12 @@
 
     <div class="set-cols">
       <div class="set-col">
+      <section class="set-card">
+        <h3>Status bar</h3>
+        <div class="row"><label><input type="checkbox" id="set-actbar"> Show the status bar (phase · activity · link) above chat, mail and monitor</label></div>
+        <div class="row"><label><input type="checkbox" id="set-modem"> Modem chips in the top bar (Direwolf · TX · RX)</label></div>
+        <p class="muted small">Also with the button in the top bar. Saved in this browser.</p>
+      </section>
       <section class="set-card">
         <h3>Connection status</h3>
         <p id="conn-info" class="muted"></p>

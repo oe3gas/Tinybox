@@ -192,6 +192,7 @@ class PeerFiles:
                 not b.allow(self.peer.call, len(body), f"file {h}"):
             self.peer._send(f"//NOFILE {h}")
             return
+        self.peer.serve("file", len(body))                 # CR110: status bar
         self.peer._send(f"//F {h} {how} {len(body)}")      # line and bytes together
         self.peer.ch.link.send_bytes(body)
         log.info("file %s to %s (%d bytes, %d on air)", h, self.peer.call, len(data), len(body))

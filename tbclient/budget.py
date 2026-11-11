@@ -52,6 +52,7 @@ class SendBudget:
         self.calls: dict[str, Bucket] = {}
         self.all = Bucket(ALL_BYTES, REFILL_SEC, clock)
         self._seen: dict[tuple[str, str], list[float]] = {}
+        self.refused: dict[str, float] = {}      # CR110: base call -> last answer held back
 
     def allow(self, call: str, nbytes: int, what: str = "") -> bool:
         """May we send nbytes because call asked? Takes them if yes."""
@@ -63,10 +64,21 @@ class SendBudget:
         if not (b.can(nbytes) and self.all.can(nbytes)):
             log.warning("%s: %s not sent - too much asked for (%d bytes)", call, what or "answer",
                         nbytes)
+            self._refuse(call)
             return False
         b.take(nbytes)
         self.all.take(nbytes)
         return True
+
+    def _refuse(self, call: str) -> None:
+        if len(self.refused) >= MAX_KEYS:
+            self.refused.clear()
+        self.refused[_base(call)] = self.clock()
+
+    def slowed(self, call: str, window_sec: float = 600) -> bool:
+        """CR110: an answer to call was held back within window_sec."""
+        t = self.refused.get(_base(call))
+        return t is not None and self.clock() - t < window_sec
 
     def often(self, call: str, key: str, times: int, window_sec: float) -> bool:
         """True if call asked for key `times` times within window_sec already
@@ -77,6 +89,7 @@ class SendBudget:
         if len(hits) >= times:
             log.warning("%s: %s asked for too often - not answered", call, key)
             self._seen[k] = hits
+            self._refuse(call)
             return True
         if len(self._seen) >= MAX_KEYS:
             self._seen.clear()

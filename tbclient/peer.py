@@ -122,6 +122,10 @@ class Peer:
         self.files = PeerFiles(self)         # files, LZHUF (peerfile.py)
         self.fun = PeerFun(self)             # ping, speed test, chess (peerfun.py)
         self.pending: list[int] = []         # sent lines (numbers) not acknowledged yet
+        # CR110 (status bar): what is under way with the other client
+        self.hist_wait = False               # //HIST sent, theirs not here yet
+        self.heard_wait = 0.0                # //HEARD? sent at (0 = answered)
+        self.serving: dict | None = None     # {"what", "bytes", "at"}: sent on their request
         their = a.get("n", "")
         self.auth = PeerAuth(self, my_nonce, their if 8 <= len(their) <= 32 and
                              their.replace("-", "").replace("_", "").isalnum() else "")
@@ -151,6 +155,7 @@ class Peer:
         """CR99: the other one's key is good - now the history is compared."""
         if self.hist:
             self._snap = self.store.state(self.call)["tx"]
+            self.hist_wait = True
             self._send(self.store.hist_line(self.call))
 
     @property
@@ -182,10 +187,17 @@ class Peer:
     def outstanding(self, waiting: int | None) -> None:
         """From the core's poll: nothing waiting any more = every line sent on
         this connection has arrived (AX.25 acknowledged it)."""
+        if waiting == 0 and self.serving and time.monotonic() - self.serving["at"] > 2:
+            self.serving = None                  # CR110: all of it is over there
+            self.ch.core._touch()
         if waiting == 0 and self.pending and self.hist:
             self.store.delivered(self.call, self.pending)
             self.pending = []
             self.ch.core._touch()
+
+    def serve(self, what: str, nbytes: int) -> None:
+        """CR110: bytes go out because the other one asked (picture, file, speed test)."""
+        self.serving = {"what": what, "bytes": nbytes, "at": time.monotonic()}
 
     def clear_history(self) -> None:
         """The button: delete here, the other side deletes too (now or at the next connect)."""
@@ -200,6 +212,8 @@ class Peer:
         word, _, more = rest.partition(" ")
         a = _args(rest)
         gen = a.get("g", "")
+        if word.upper() not in ("CLR", "DEL"):
+            self.hist_wait = False
         if not self.hist or not gen:
             return
         if word.upper() in ("CLR", "DEL"):
@@ -351,6 +365,7 @@ class Peer:
         if "HEARD" not in self.caps or self.ch.state != "online":
             return False
         self.asked = True
+        self.heard_wait = time.time()
         self._send("//HEARD?")
         self.ch.term_line("sys", f"*** asking {self.ch.target} who it hears ...")
         self.ch.core._touch()
@@ -373,6 +388,7 @@ class Peer:
             if eq and isnum(mins):
                 heard.append((call.upper()[:9], int(mins)))
         self.heard, self.heard_at = heard, int(time.time())
+        self.heard_wait = 0.0
         if heard:
             self.ch.term_line("sys", f"*** {self.ch.target} hears: " + ", ".join(
                 f"{c} ({m} min)" if m else f"{c} (now)" for c, m in heard))
