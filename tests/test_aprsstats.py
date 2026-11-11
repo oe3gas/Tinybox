@@ -176,6 +176,32 @@ class StatsTests(unittest.TestCase):
         self.assertEqual(digi["rep_calls"], ["OE3ABC"])
         self.assertAlmostEqual(digi["rep"], 0.86)
 
+    def test_objects_are_not_the_senders_position(self):
+        """CR116: an iGate sending repeater objects is not mobile at 3000 km/h."""
+        for i in range(10):
+            feed(self.st, T0 + 60 * i, "OE3MZC-2", ["WIDE2-2"], [0], b"!4825.00N/01615.00E#iGate")
+            feed(self.st, T0 + 60 * i + 30, "OE3MZC-2", ["WIDE2-2"], [0],
+                 b";OE3XWR   *111111z4815.00N/01600.00Er145.650MHz T088 -060")
+        s = self.st.station("OE3MZC-2", 0, now=T0 + 700)
+        self.assertEqual(s["move"]["km"], 0.0)
+        self.assertEqual(s["move"]["max_kmh"], 0)
+        self.assertIn("fixed station", s["roles"])
+        self.assertNotIn("mobile", s["roles"])
+        self.assertAlmostEqual(s["pos"]["lat"], 48.41667, places=4)     # the iGate, not the repeater
+        n = next(n for n in self.st.graph(0, now=T0 + 700)["nodes"] if n["call"] == "OE3MZC-2")
+        self.assertFalse(n["moving"])
+        self.assertAlmostEqual(n["lat"], 48.41667, places=4)
+
+    def test_wrong_fix_is_no_top_speed(self):
+        """CR116: one bad GPS fix (15 km away for 20 s) does not give 2700 km/h."""
+        fixes = [(0, "4825.00N", "01615.00E"), (60, "4825.20N", "01615.00E"), (80, "4833.20N", "01615.00E"),
+                 (100, "4825.40N", "01615.00E"), (160, "4825.60N", "01615.00E")]
+        for dt, la, lo in fixes:
+            feed(self.st, T0 + dt, "OE3ABC-9", ["WIDE1-1"], [0], f"!{la}/{lo}>car".encode())
+        m = self.st.station("OE3ABC-9", 0, now=T0 + 200)["move"]
+        self.assertLess(m["max_kmh"], 100)
+        self.assertLess(m["km"], 2)
+
     def test_country(self):
         self.assertEqual(country("OE3GAS-1"), "Austria")
         self.assertEqual(country("OK1KZE-1"), "Czechia")

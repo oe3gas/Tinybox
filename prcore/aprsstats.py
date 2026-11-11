@@ -114,6 +114,9 @@ def _fmt_interval(sec: float) -> str:
     return f"{sec:.0f} s" if sec < 120 else f"{sec / 60:.0f} min"
 
 
+MAX_KMH = 1000.0      # CR116: a jump between two positions faster than this is a wrong fix
+
+
 def _dist(a, b) -> float:
     la1, lo1, la2, lo2 = map(math.radians, (a[0], a[1], b[0], b[1]))
     return 2 * 6371.0 * math.asin(math.sqrt(math.sin((la2 - la1) / 2) ** 2 +
@@ -197,6 +200,12 @@ class AprsStats:
             self._db = None
 
     # --- input --------------------------------------------------------------------
+    @staticmethod
+    def _at(r: dict) -> bool:
+        """CR116: the frame tells where the station itself is. Objects and items carry the place
+        of something else (a repeater, an event) - not a position of the sender."""
+        return r["lat"] is not None and r["cat"] != "object"
+
     def add(self, src: str, path: list[str], repeated: list[bool], info: bytes, nbytes: int,
             aprs: dict, now: float | None = None) -> dict:
         """One APRS frame heard (aprs = prcore.aprs.decode() of it)."""
@@ -265,7 +274,7 @@ class AprsStats:
             s["dev"] = r["dev"] or s["dev"]
             if r["gate"]:
                 s["inet"] += 1
-            if self.home and r["lat"] is not None:
+            if self.home and self._at(r):
                 s["dist"] = round(_dist(self.home, (r["lat"], r["lon"])))
         times = defaultdict(list)
         for r in recs:
@@ -304,7 +313,7 @@ class AprsStats:
             edges = [25, 50, 100, 200, 400]
             seen_d: dict[str, float] = {}
             for r in recs:
-                if r["lat"] is None:
+                if not self._at(r):
                     continue
                 d = _dist(self.home, (r["lat"], r["lon"]))
                 seen_d[r["origin"]] = d
@@ -375,7 +384,7 @@ class AprsStats:
         busiest = {c for c, _ in Counter(r["origin"] for r in recs).most_common(GRAPH_MAX_STATIONS)}
         pos: dict[str, tuple] = {}
         for r in snap:                               # last known position, also outside the window
-            if r["lat"] is not None:
+            if self._at(r):
                 pos[r["origin"]] = (r["lat"], r["lon"])
         ways: Counter = Counter()
         digis, gates, own = set(), set(), Counter()
@@ -404,7 +413,7 @@ class AprsStats:
             own[r["origin"]] += 1
             if r["dev"]:
                 dev[r["origin"]] = r["dev"]
-            if r["lat"] is not None:
+            if self._at(r):
                 spots[r["origin"]].append((r["lat"], r["lon"]))
         calls = {c for (ch, *_rest) in ways for c in ch}
         # channel health: frames through a digipeater from stations that repeat unchanged
@@ -465,7 +474,7 @@ class AprsStats:
                 if any(r["dev"] for r in own) else ""
             out["symbol"] = next((r.get("sym") for r in reversed(own) if r.get("sym")), "")
         # last position, distance and direction
-        pos = [r for r in own if r["lat"] is not None]
+        pos = [r for r in own if self._at(r)]
         if pos:
             lp = pos[-1]
             out["pos"] = {"lat": lp["lat"], "lon": lp["lon"], "t": lp["t"]}
@@ -532,10 +541,12 @@ class AprsStats:
             for a_, b_ in zip(pos, pos[1:]):
                 d = _dist((a_["lat"], a_["lon"]), (b_["lat"], b_["lon"]))
                 dt = b_["t"] - a_["t"]
-                if 0.1 <= d < 50:                       # < 100 m: GPS jitter; > 50 km: a wrong fix
+                v = d / (dt / 3600) if dt > 0 else float("inf")
+                # < 100 m: GPS jitter; > 50 km or faster than 1000 km/h: a wrong fix (CR116)
+                if 0.1 <= d < 50 and v <= MAX_KMH:
                     km += d
                     if dt >= 20:
-                        fast = max(fast, d / (dt / 3600))
+                        fast = max(fast, v)
             spd = [r["spd"] for r in pos if r.get("spd") is not None]
             alts = [r["alt"] for r in pos if r.get("alt") is not None]
             out["move"] = {"km": round(km, 1), "max_kmh": round(max(spd)) if spd else round(fast),

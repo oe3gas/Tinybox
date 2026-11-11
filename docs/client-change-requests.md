@@ -4235,3 +4235,40 @@ Einen User in der TinyBox komplett entfernen können. Entschieden:
   „Banned stations“ (Ban, Purge mit Rückfrage samt Anzahl, Unban). Jede Aktion als Warnung im Log.
 - Tests `tests/test_cr115.py`.
 
+## CR116 – APRS-Bewegung: 3000 km/h bei einer festen iGate-Station (✅ 11.11.2026)
+
+### Erfassung (OE3GAS, 11.11.2026)
+
+OE3MZC-2 (fester iGate, Microsat WX3in1, sendet Objekte für Repeater/Events) zeigt auf der
+Stationsseite „Moving: about 1140.2 km covered, up to 3019 km/h“ und die Rolle „mobile“. Woher
+kommt die Fehlberechnung?
+
+### Ursache (Claude)
+
+- `AprsStats` nahm **jede** Position eines Frames als Position des Absenders, auch die von
+  **Objekten und Items** (`;OE3XWR *…` – Lage des Repeaters, nicht der Station). OE3MZC-2 sendet
+  zu ≈ 40 % Objekte; die „Spur“ sprang also im Takt zwischen iGate und Repeater-Standorten hin
+  und her. Jeder Sprung (< 50 km, also nicht als Fehlfix verworfen) zählte als gefahrene
+  Strecke, und z. B. 17 km in 20 s ergeben ≈ 3000 km/h. Da die Station dabei „mehr als 1 km
+  vom ersten Punkt“ war, wurde sie zudem als „mobile“ eingestuft.
+- Betroffen waren auch: Entfernung/Richtung im Kopf der Stationsseite (konnte auf ein Objekt
+  zeigen), km in „Senders“, die Reichweite („Range“, auch „Farthest heard“), Lage und
+  „moving“-Kennzeichen im Netzgraphen.
+- Nachgestellt mit Position + Repeater-Objekt im 30-s-Takt: 497 km, 3141 km/h, „mobile“.
+
+### Umsetzung (Client 2026.11.11.11, `prcore/aprsstats.py`)
+
+- Neu `AprsStats._at(r)`: ein Frame zeigt nur dann den Ort des Absenders, wenn er eine Position
+  hat **und kein Objekt/Item** ist. Verwendet für Senders-km, Range, Graph (Lage, „moving“) und
+  die Stationsseite (letzte Position, Entfernung, Bewegung, Rolle). Die Sins-Prüfung nahm schon
+  bisher nur Position/Mic-E/Wetter.
+- Zusätzlich: ein Sprung zwischen zwei Positionen, der schneller als 1000 km/h wäre
+  (`MAX_KMH`), gilt als Fehlfix – zählt weder zur Strecke noch zur Höchstgeschwindigkeit. Sonst
+  macht ein einzelner GPS-Ausreißer auch bei echten Mobilen absurde Spitzen.
+- Unverändert: Wird im Paket eine Geschwindigkeit mitgesendet (Course/Speed, Mic-E), zeigt
+  „up to“ weiterhin deren Höchstwert.
+- Tests: `test_objects_are_not_the_senders_position`, `test_wrong_fix_is_no_top_speed`; ganze
+  Testsuite grün (1129).
+- Hinweis: Die Statistik wird aus den gespeicherten Frames neu berechnet – nach dem Update
+  stimmt die Anzeige auch für die bereits gehörten Frames.
+

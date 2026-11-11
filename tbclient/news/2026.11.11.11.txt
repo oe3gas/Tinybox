@@ -1,0 +1,3 @@
+- APRS-Statistik: Objekte zaehlen nicht als
+  eigene Position (kein falsches mobile,
+  km/h, Entfernung); GPS-Ausreisser raus.
