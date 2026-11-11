@@ -1,0 +1,2 @@
+- Settings: eigenen Schluessel mit dem LoTW-Zertifikat
+  (.p12 von TQSL) bestaetigen. Nur am PC selbst.

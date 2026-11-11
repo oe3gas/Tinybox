@@ -107,6 +107,7 @@ CALL_AT_RE = re.compile(r"^[A-Z0-9]{1,6}(-\d{1,2})?(,[A-Z0-9]{1,6}(-\d{1,2})?){0
                         r"(@[A-Z0-9#.-]{1,40})?$")      # CR27: up to 10 recipients
 RUBRIC_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 MAX_BODY = 131072        # a message for the outbox can be long
+PEER = object()          # CR113: key for the address of the browser in headers
 POLL_SEC = 25
 APRS_CACHE_SEC = 10      # CR103: one evaluation serves all tabs for this long
 
@@ -199,6 +200,8 @@ class WebServer:
                                                             headers.get("host")):
             await self._send(writer, 403, {"error": "foreign origin"})
             return False
+        peer = writer.get_extra_info("peername")
+        headers[PEER] = peer[0] if peer else ""          # CR113: who asks (not a header)
         res = await self._route(method, url.path, parse_qs(url.query), headers, body)
         status, payload, ctype = res[:3]
         await self._send(writer, status, payload, ctype, res[3] if len(res) > 3 else None)
@@ -346,6 +349,22 @@ class WebServer:
                     return 400, {"error": "bad data"}, None
                 h = core.send_board_file(str(data.get("name", "")), raw, str(data.get("quote", "")))
                 return (200, {"ok": True, "hash": h}, None) if h else (400, {"ok": False}, None)
+            elif path == "/api/lotw":              # CR113: {"data" .p12 base64, "password"}
+                # only from this PC: the .p12 and its password never cross the network
+                if headers.get(PEER) not in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+                    return 403, {"ok": False, "error": "only in the browser on this PC "
+                                                       "(http://127.0.0.1:7744/)"}, None
+                from prcore import lotw
+                try:
+                    raw = base64.b64decode(str(data.get("data", "")), validate=True)
+                    st = core.lotw_sign(raw, str(data.get("password", "")))
+                except lotw.LotwError as exc:      # (a ValueError too - first)
+                    return 400, {"ok": False, "error": str(exc)}, None
+                except (ValueError, TypeError):
+                    return 400, {"ok": False, "error": "bad data"}, None
+                return 200, {"ok": True, "lotw": st}, None
+            elif path == "/api/lotw/forget":
+                core.lotw_forget()
             elif path == "/api/bfile/get":         # CR86: {"hash", "name"}
                 ok = core.fetch_board_file(str(data.get("hash", "")), str(data.get("name", "")))
             elif path == "/api/bfile/retry":

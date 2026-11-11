@@ -1076,6 +1076,59 @@ class ClientCore:
         except auth.AuthError:
             return None
 
+    # --- CR113: LoTW as anchor of trust -------------------------------------------------
+
+    @property
+    def _lotw_path(self):
+        return self.cfg.data_dir / "lotw.json"
+
+    def lotw_proof(self) -> dict | None:
+        """The kept LoTW proof for the current key (None = none, or for another key)."""
+        import json
+        try:
+            proof = json.loads(self._lotw_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(proof, dict) or proof.get("pub") != self.identity.pub:
+            return None
+        return proof
+
+    def lotw_status(self) -> dict:
+        from prcore import lotw
+        out = {"available": lotw.available(), "call": auth.base(self.cfg.mycall)}
+        proof = self.lotw_proof()
+        if proof:
+            try:
+                info = lotw.verify(proof, roots=None)
+                out.update(state="ok", until=info["until"], dxcc=info["dxcc"], fp=info["fp"],
+                           issuer=info["issuer"], date=proof.get("date", ""))
+            except lotw.LotwError as exc:
+                out.update(state="invalid", error=str(exc), until=proof.get("until", ""))
+        else:
+            out["state"] = "none"
+        return out
+
+    def lotw_sign(self, p12: bytes, password: str) -> dict:
+        """Confirm the own key with the LoTW certificate: sign once, keep the proof.
+        The .p12 and the password are only used here and not kept."""
+        import json
+        from prcore import lotw
+        proof = lotw.sign_binding(p12, password, auth.base(self.cfg.mycall), self.identity.pub)
+        tmp = self._lotw_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(proof, indent=1), encoding="utf-8")
+        tmp.replace(self._lotw_path)
+        log.info("LoTW: key %s confirmed with the LoTW certificate of %s (until %s)",
+                 self.identity.fp, proof["call"], proof["until"])
+        self._touch()
+        return self.lotw_status()
+
+    def lotw_forget(self) -> None:
+        try:
+            self._lotw_path.unlink()
+        except FileNotFoundError:
+            pass
+        self._touch()
+
     def own_cert(self) -> str:
         """The certificate of the home BBS for this key (for other TBClients, CR99)."""
         return self._cert_for("")
@@ -1498,6 +1551,7 @@ class ClientCore:
             "mail": self.mail,
             "sysmsg": self.sysmsg,
             "auth": self.auth,
+            "lotw": self.lotw_status(),                                 # CR113
             "adm": "ADM" in self.caps,
             "adm_log": list(self.adm_log)[-120:],
             "auth_home": self.settings.get("auth_home") or {},          # CR104

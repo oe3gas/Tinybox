@@ -256,6 +256,7 @@ function render() {
   renderViewBtns();
   renderActbar();                                   // CR110
   renderModem();
+  renderLotw();                                     // CR113
   renderFreq();
   autoTerm();
   renderTerm();
@@ -3768,6 +3769,53 @@ function renderModem() {
   }
 }
 
+// ---------------------------------------------------------------- LoTW (CR113)
+// Confirm the own key with the LoTW certificate (.p12 of TQSL). Only in the browser
+// on this PC (the client refuses it from the network); the file and the password go
+// to the local client once and are not kept.
+const LOCAL_HOSTS = ["127.0.0.1", "localhost", "[::1]"];
+function initLotw() {
+  $("lotw-sign").onclick = async () => {
+    const f = $("lotw-file").files[0], note = $("lotw-note");
+    if (!f) { note.textContent = "Choose the .p12 file first."; return; }
+    if (f.size > 65536) { note.textContent = "That is not a .p12 file of TQSL (too large)."; return; }
+    note.textContent = "Signing …";
+    const buf = new Uint8Array(await f.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+    const r = await postJson("lotw", { data: btoa(bin), password: $("lotw-pw").value });
+    $("lotw-pw").value = "";
+    $("lotw-file").value = "";
+    note.textContent = r.ok ? "Done – your key is confirmed with LoTW." : (r.data && r.data.error) || "Failed.";
+  };
+}
+function renderLotw() {
+  const st = S && S.lotw;
+  if (!st) return;
+  const box = $("lotw-state"), form = $("lotw-form");
+  const local = LOCAL_HOSTS.includes(location.hostname);
+  box.replaceChildren();
+  if (!st.available) {
+    box.textContent = "Needs the Python package “cryptography” on this PC: py -3 -m pip install cryptography";
+    form.classList.add("hidden");
+    return;
+  }
+  if (st.state === "ok") {
+    box.append(el("b", "lotw-ok", `✓ LoTW: ${st.call}`), ` – certificate valid until ${st.until}` +
+      (st.dxcc ? ` · DXCC ${st.dxcc}` : "") + ` · signed ${st.date.slice(0, 4)}-${st.date.slice(4, 6)}-${st.date.slice(6)}`);
+    const again = el("button", "sm", "Forget");
+    again.title = "Delete the LoTW confirmation of this key";
+    again.onclick = () => api("lotw/forget", {});
+    box.append(" ", again);
+  } else if (st.state === "invalid") {
+    box.append(el("b", "lotw-bad", "LoTW confirmation not valid any more"), `: ${st.error}`);
+  } else {
+    box.textContent = `Not confirmed yet (${st.call}).`;
+  }
+  form.classList.toggle("hidden", st.state === "ok" || !local);
+  if (!local && st.state !== "ok") $("lotw-note").textContent = "Open the client on this PC (http://127.0.0.1:7744/) to sign – the .p12 does not go over the network.";
+}
+
 // ---------------------------------------------------------------- polling
 async function poll() {
   let since = -1;
@@ -3897,6 +3945,7 @@ async function start() {
   };
   $("btn-menu").onclick = () => openSheet();
   initActbar();                                               // CR110: status bar
+  initLotw();                                                 // CR113: LoTW confirmation
   $("nav-settings").onclick = () => openSheet();
   $("nav-monitor").onclick = () => switchCh(0);              // CR50: the monitor channel
   AprsStatsView.attach($("statsview"));                       // CR61: APRS statistics

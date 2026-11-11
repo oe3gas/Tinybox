@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **LoTW als Vertrauensanker, Stufe 1 (CR113):** der Client bestätigt den eigenen Schlüssel einmal mit dem
+  LoTW-Zertifikat (`.p12` von TQSL, Settings „LoTW confirmation“, nur auf 127.0.0.1); `.p12` und Passwort
+  werden nicht gespeichert, der Nachweis liegt in `data/tbclient/lotw.json`. Gemeinsames Modul
+  `prcore/lotw.py` (braucht `cryptography`). Prüfung in der Box und Anzeige folgen. Client 2026.11.11.5.
+
 - **Direwolf-Fork 2026.11.11 und Client (CR112):** Fork: `Q` v=3 (N2, Modulo, k, N1, SREJ, Kanalauslastung,
   auch während des Aufbaus), AGW `E` (PTT, DCD, Verbindungszustand/Retries, Pegel je Frame), AGW `F`
   (Fork-Version, Features). Client: „Connecting · SABM 3/10“, „Retry 8/10“, „v2.2 · k=32“, „Channel 45 %“,

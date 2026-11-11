@@ -32,6 +32,9 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- LoTW-Bestaetigung (CR113): in den Settings den eigenen Schluessel mit
+  dem LoTW-Zertifikat (.p12 von TQSL) einmal unterschreiben - hoechstes
+  Vertrauen. Nur am PC selbst; .p12 und Passwort werden nicht gespeichert.
 - Mit dem Direwolf-Fork ab 2026.11.11 (CR112): Statusleiste zeigt die
   SABM-Versuche ("Connecting - SABM 3/10"), Retry bei stehender
   Verbindung, AX.25-Version und Fenster, Kanalauslastung; TX/RX folgen

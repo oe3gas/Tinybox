@@ -826,6 +826,10 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .top #btn-actbar.on { background: rgba(255,255,255,.2); color: var(--top-text); }
 @media (max-width: 699px) { .modem-chips { display: none; } .actbar .lbl { min-width: 0; } }
 
+.lotw-ok { color: #1d6b35; }
+.lotw-bad { color: #b3261e; }
+#lotw-form input[type=password] { flex: 1; min-width: 160px; }
+
 /* --- layout by window width (must stay at the end) ------------------------ */
 @media (min-width: 700px) {
   #app { max-width: 1400px; }

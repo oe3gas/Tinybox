@@ -280,8 +280,10 @@ def new_nonce() -> str:
 # --- the key of a station: one file, the same on every device -------------------
 
 class Identity:
-    """data/<program>/identity.key - 32 random bytes as base64url, one line. The
-    key belongs to the call, not to the PC: copy the file to use it elsewhere."""
+    """data/<program>/identity.key - 32 random bytes of the operating system
+    (os.urandom) as base64url, one line - no seed to choose: a chosen seed would be
+    weaker and could be found again. One key per device (CR93): another PC makes its
+    own; a copy of this file is the backup of this device's key."""
 
     def __init__(self, path: Path) -> None:
         self.path = path

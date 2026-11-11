@@ -303,6 +303,17 @@
         <p id="auth-info" class="muted small"></p>
         <p id="mb-info" class="muted small"></p>
       </section>
+      <section class="set-card" id="lotw-card">
+        <h3>LoTW confirmation</h3>
+        <p class="muted small">Confirm your key with your LoTW callsign certificate (TQSL: “Save Callsign Certificate”, a .p12 file) – the highest trust at TinyBoxen. Done once on this PC: the .p12 and its password are used only for this signature and not kept.</p>
+        <p id="lotw-state" class="small"></p>
+        <div class="row" id="lotw-form">
+          <input type="file" id="lotw-file" accept=".p12,.pfx,application/x-pkcs12">
+          <input type="password" id="lotw-pw" placeholder="Password of the .p12 (if any)" autocomplete="off">
+          <button id="lotw-sign" class="sm">Sign</button>
+        </div>
+        <p id="lotw-note" class="muted small"></p>
+      </section>
       <section class="set-card">
         <h3>My profile</h3>
         <p class="muted small"><span id="prof-now">-</span> <button id="prof-edit" class="sm">Edit</button></p>

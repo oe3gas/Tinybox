@@ -86,6 +86,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
 | 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | ✅ 10.11.2026 (Teil 1 Client↔Client, Teil 2 Chatboard mit CR86) – siehe unten |
 | 110 | Statusleiste: Phasen und Verkehr Client↔Box und Client↔Client in Echtzeit als Chips, Modem/TX/RX in der Kopfzeile, ein-/ausblendbar | ✅ 11.11.2026 – siehe unten |
+| 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert mit der .p12) ✅ 11.11.2026; Stufe 2 Prüfung in der Box, Stufe 3 Anzeige offen – siehe unten |
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
@@ -4073,4 +4074,55 @@ Windows-Programm mit MinGW-w64 gebaut. **Funktest mit Funk offen.**
   mussten), in der APRS-Statistik bei der Station „Audio level“.
 - `prcore/linkq.py` versteht `v=3` – **erst das Tinybox-Repo aktualisieren, dann die neue `direwolf.exe`**.
 - Tests: `tests/test_cr111.py`.
+
+## CR113 – LoTW als Vertrauensanker (Stufe 1 ✅ 11.11.2026, Client 2026.11.11.5)
+
+### Entscheidungen (OE3GAS, 11.11.2026)
+
+- Wer seinen Schlüssel mit einem **LoTW-Zertifikat** bestätigt, genießt in unserer Kette das **höchste
+  Vertrauen**. Wer keins hat, erzeugt seinen Schlüssel wie bisher selbst (Freigabe durch den Sysop, CR93).
+- Ob ein LoTW-bestätigter Schlüssel an der Heimat-BBS **ohne Sysop-Freigabe** gilt, ist **konfigurierbar,
+  Vorgabe „nein“** (der Sysop gibt frei und sieht dabei „✓ LoTW“).
+- Hintergrund und Abwägung (jede Box / gemeinsamer Herausgeber / LoTW) in CR94.
+
+### Grundlagen
+
+- LoTW-Zertifikate sind X.509, von der ARRL ausgestellt (Kette Root → Production CA → Callsign-Zertifikat).
+  Das Rufzeichen steht im Subject als Attribut **AROcallsign, OID 1.3.6.1.4.1.12348.1.1** (tqsllib),
+  DXCC als 1.3.6.1.4.1.12348.1.4. Fälschen hieße den CA-Schlüssel der ARRL haben; die echten Risiken sind
+  eine gestohlene `.p12` (Passwort in TQSL optional) und ein Widerruf durch die ARRL, den offline niemand
+  sieht → die Bestätigung gilt nur bis zum Ende des LoTW-Zertifikats.
+- **Gegenzeichnen, nicht ableiten:** der Ed25519-Schlüssel entsteht wie bisher aus 32 Zufallsbytes des
+  Betriebssystems (`os.urandom`, kein Seed zu wählen); der LoTW-Schlüssel unterschreibt einmal
+  `TINYBOX-LOTW1|<Basis-Call>|<Ed25519-Schlüssel>|<JJJJMMTT>` (RSA-PKCS#1-v1.5/SHA-256, EC auch).
+- Die ARRL-Stammzertifikate sind nicht öffentlich abrufbar: der Sysop nimmt sie aus einer `.p12` und
+  vergleicht den Fingerprint (wie es auch andere Projekte machen).
+
+### Stufe 1: Client signiert (✅ 11.11.2026)
+
+- `prcore/lotw.py` (gemeinsam für Client und Box): `load_p12`, `sign_binding`, `verify(proof, roots)`
+  (Unterschrift, Rufzeichen = Basis-Call, Gültigkeit, Kette in sich, mit `roots` bis zur ARRL),
+  `describe`. Braucht `cryptography` (RSA, PKCS#12 auch mit alter 3DES/SHA1-Verschlüsselung von TQSL).
+- Client: Settings-Karte **„LoTW confirmation“** – `.p12` wählen, Passwort, „Sign“. Der Nachweis
+  (`data/tbclient/lotw.json`, ≈ 2 KB: Call, Schlüssel, Datum, Unterschrift, Zertifikate, gültig bis) gehört
+  zum aktuellen Schlüssel; die `.p12` und das Passwort werden nur für die Unterschrift benutzt und **nicht
+  gespeichert**. „Forget“ löscht den Nachweis.
+- **Nur am PC selbst:** `/api/lotw` nimmt die Datei nur von 127.0.0.1/::1 an (über das LAN liefe die
+  `.p12` unverschlüsselt durchs Netz); die GUI blendet das Formular sonst aus und sagt es.
+- Abgelehnt: anderes Rufzeichen im Zertifikat als der Client, abgelaufenes Zertifikat, falsches Passwort,
+  `.p12` ohne privaten Schlüssel (in TQSL „Save Callsign Certificate“).
+- Tests `tests/test_cr113.py` (nachgebaute LoTW-Kette).
+
+### Stufe 2: Prüfung in der Box (offen)
+
+- Client schickt den Nachweis einmal an die Heimat-BBS (signiert wie CR93 Stufe 2, z. B. `//LOTW` in
+  Teilen, oder über AXUDP).
+- Box: vertraute ARRL-Zertifikate im Datenordner, Sysop trägt sie mit Fingerprint ein (Konsole/Web wie
+  `TRUST`); `verify()` gegen diese; Merkmal „✓ LoTW“ am Schlüssel (`USER`, Web Keys).
+- Einstellung `[auth] lotw_release = no` (Vorgabe): `yes` = LoTW-bestätigter Schlüssel gilt ohne Freigabe.
+- Box-Zertifikat (TBC1) mit Stufe `lotw`, damit andere Boxen und Clients sie ohne X.509 sehen.
+
+### Stufe 3: Anzeige (offen)
+
+- „✓ LoTW“ bei Client↔Client (CR99) und im Chatboard bei Mitgliedern mit LoTW-Stufe.
 
