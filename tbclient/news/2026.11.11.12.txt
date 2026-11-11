@@ -1,0 +1,3 @@
+- Bild-Upload: Balken folgt dem Senden, springt nicht
+  mehr sofort ans Ende. TX leuchtet, solange Frames
+  warten.

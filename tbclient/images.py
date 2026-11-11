@@ -103,6 +103,7 @@ class Images:
         self._partial: dict[str, bytearray] = {}         # broken downloads, to go on
         self._jobs: list[dict] = []
         self.current: str | None = None                  # CR96: the image asked for now
+        self._air = 0                                    # CR117: own bytes on air (upload)
 
     @property
     def busy(self) -> bool:
@@ -337,6 +338,7 @@ class Images:
         to the end at once."""
         link = self.core.link
         total = len(data)
+        self._air = 0                       # CR117: own I-frame bytes heard going out
         link.send_bytes(data[offset:])
         self.core.say(line)                 # held, like anything typed meanwhile ...
         self.core.hold_lines(False)         # ... and out now, in order, behind the bytes
@@ -345,24 +347,41 @@ class Images:
         self.core._touch()
         start = [await link.outstanding()]   # frames still to go = nothing sent yet
         last = [offset]
+        log.info("image %s: %d bytes handed over, %d frame(s) waiting", job_hash(line),
+                 total - offset, start[0])
 
         async def progress() -> bool:
-            """Ask Direwolf what is still waiting; True if something went out."""
+            """Ask Direwolf what is still waiting; True if something went out.
+
+            CR117: a first answer of 0 no longer means "all of it is over there" -
+            the bar jumped to the end at once and stood there for minutes. As long
+            as no answer was above 0, the own I-frames (Direwolf fork 'O', KISS)
+            show what went on the air, capped at 95 % until the TinyBox has it."""
             if self.core.state != "online":
                 raise ConnectionError("connection lost")
             waiting = await link.outstanding()
             if waiting > start[0]:          # the first answer came too early
                 start[0] = waiting
-            sent = offset + (total - offset) * (start[0] - waiting) // start[0] \
-                if start[0] > 0 else total
+            rest = total - offset
+            sent = offset + rest * (start[0] - waiting) // start[0] if start[0] > 0 else offset
+            sent = max(sent, offset + min(self._air, rest * 95 // 100))
             sent = max(last[0], min(total, sent))
             moved = sent > last[0]
+            log.debug("image upload: %d waiting (start %d), %d on air, %d/%d", waiting,
+                      start[0], self._air, sent, total)
             last[0] = sent
             if up and moved:
                 up["sent"] = sent
                 self.core._touch()
-            return moved
+            return moved or waiting > 0
         return progress
+
+    def own_frame(self, nbytes: int) -> None:
+        """CR117: an own I-frame to the TinyBox went on the air while an upload
+        runs (Direwolf fork 'O', KISS) - counted for the progress bar."""
+        up = self.upload
+        if up and up.get("state") == "sending" and self.busy:
+            self._air += nbytes
 
     async def _download(self, job: dict) -> None:
         h = job["hash"]
@@ -407,6 +426,12 @@ class Images:
         self.loading.pop(h, None)
         log.info("image %s fetched (%d bytes)", h, len(data))
         self.core._touch()
+
+
+def job_hash(line: str) -> str:
+    """The hash out of a chat line with a picture reference (for the log)."""
+    i = line.find("~#")
+    return line[i + 2:i + 18] if i >= 0 else "?"
 
 
 def _reason(line: str) -> str:

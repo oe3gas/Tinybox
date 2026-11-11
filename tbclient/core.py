@@ -48,6 +48,8 @@ MAX_GAP = 32
 RECENT_MAX = 10           # CR42: targets remembered for the "Connect to" field
 MONITOR_MAX = 500         # CR45: frames kept for the monitor (channel 0)
 OUTSTANDING_SEC = 3       # CR45: how often the send queues of the channels are asked
+OUTSTANDING_BUSY_SEC = 1  # CR117: ... while frames are waiting (TX in the top bar)
+IO_TOUCH_SEC = 0.5        # CR117: a frame on the air pushes a snapshot at most this often
 PEER_Q_SEC = 30           # CR78: how often the link counters of a TBClient channel are read
 INCOMING_IDLE_SEC = 30 * 60   # CR97 (TB-17): a station that called us and says nothing - gone
 # CR93: an older TinyBox writes its prompt in front of //AUTHWAIT and //ERR auth
@@ -153,6 +155,7 @@ class ClientCore:
         self.asking: dict[str, float] = {}        # CR110: cert | trust | adm -> sent at
         self.lotw_box: dict = {}                  # CR113: does the TinyBox know our LoTW
         self.rx_at = self.tx_at = 0.0             # CR110: last frame heard from others / own
+        self._io_touch = 0.0                      # CR117: last snapshot pushed for TX/RX
         # CR75: a station connected to us - the GUI switches to its terminal
         self.focus = {"n": 0, "seq": 0}
         self.direct_at: dict[str, float] = {}     # call -> last frame heard directly
@@ -619,8 +622,10 @@ class ClientCore:
     async def _poll_outstanding(self) -> None:
         """CR45: frames waiting in Direwolf per channel - all channels share the
         frequency, a picture on one slows the others down (shown in the monitor)."""
+        busy = False
         while True:
-            await asyncio.sleep(OUTSTANDING_SEC)
+            await asyncio.sleep(OUTSTANDING_BUSY_SEC if busy else OUTSTANDING_SEC)
+            busy = False
             for c in list(self.channels.values()):       # CR112: SABM/DISC tries, recovery
                 if c.n and c.state != "offline":
                     ask = getattr(c.link, "ask_l2", None)
@@ -632,10 +637,14 @@ class ClientCore:
                         self._touch()
             for c in list(self.channels.values()):
                 if c.state == "online" and c.link.kind != "telnet" and c.n:
+                    before = c.outstanding
                     try:
                         c.outstanding = await c.link.outstanding()
                     except Exception:
                         c.outstanding = None
+                    busy = busy or bool(c.outstanding)
+                    if c.outstanding != before:     # CR117: queue chip and TX follow at once
+                        self._touch()
                     if c.peer is not None:
                         c.peer.outstanding(c.outstanding)       # CR78: the delivery tick
 
@@ -924,8 +933,14 @@ class ClientCore:
         self.monitor_n += 1
         if f.src == self.cfg.mycall:             # CR110: TX/RX in the top bar
             self.tx_at = time.time()
+            if f.is_i and f.info and f.dest == self.target:   # CR117: upload progress
+                self.images.own_frame(len(f.info))
+                self.bfiles.own_frame(len(f.info))
         else:
             self.rx_at = time.time()
+        if time.monotonic() - self._io_touch >= IO_TOUCH_SEC:   # CR117: TX/RX reach the GUI
+            self._io_touch = time.monotonic()
+            self._touch()
         entry = monitor_entry(f, pair in self._mod128,
                               frozenset([self.home, *self.settings.get("tinyboxes", [])]),
                               self.aprs_memory, self.aprs_home)

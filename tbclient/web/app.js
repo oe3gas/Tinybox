@@ -3761,10 +3761,14 @@ function renderModem() {
     (typeof m.load === "number" ? ` · channel ${m.load} % busy (own ${m.load_tx} %) in the last minute` : "");
   // TX/RX stay lit for m.io seconds after the last frame or byte
   const age = (x) => (x === null || x === undefined ? Infinity : x + (performance.now() - stateRecv) / 1000);
-  const tx = age(m.tx) < m.io, rx = age(m.rx) < m.io;
-  box.replaceChildren(up, el("span", "mc" + (tx ? " tx" : ""), "TX"), el("span", "mc" + (rx ? " rx" : ""), "RX"));
+  // CR117: TX also stays lit while frames are waiting to go out (txq)
+  const tx = age(m.tx) < m.io || m.txq > 0, rx = age(m.rx) < m.io;
+  const txc = el("span", "mc" + (tx ? " tx" : ""), "TX");
+  if (m.txq > 0) txc.title = `${m.txq} frame(s) waiting to go out`;
+  box.replaceChildren(up, txc, el("span", "mc" + (rx ? " rx" : ""), "RX"));
   if (tx || rx) {
-    const left = Math.min(tx ? m.io - age(m.tx) : 9, rx ? m.io - age(m.rx) : 9);
+    const txLeft = m.txq > 0 ? 9 : m.io - age(m.tx);
+    const left = Math.min(tx ? txLeft : 9, rx ? m.io - age(m.rx) : 9);
     modemTimer = setTimeout(renderModem, Math.max(100, left * 1000 + 50));
   }
 }

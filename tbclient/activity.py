@@ -19,7 +19,8 @@ the channel is still up, the Tracker keeps it for FADE_SEC as "done" (green):
 the GUI lets it fade out over that time (age = seconds since it ended).
 
 The modem chips in the top bar (Direwolf/KISS up, TX, RX) come from the same
-snapshot: seconds since the last own and the last other frame or byte.
+snapshot: seconds since the last own and the last other frame or byte; TX also
+stays lit while frames wait to go out (txq, CR117).
 """
 
 from __future__ import annotations
@@ -187,8 +188,11 @@ def _peer_activity(core: "ClientCore", c: "Channel", now: float, mono: float) ->
                                 busy=True, p=_pct(ld.get("done", 0), ld.get("total", 0)), fin=True,
                                 done=f"{word} ↓ ✓"))
     if p.serving:
-        out.append(chip("serve", f"Serving {p.serving['what']} to {c.target} "
-                                 f"({p.serving['bytes']} B)", busy=True, fin=True,
+        sv = p.serving                                     # CR117: progress from AGW 'Y'
+        done = sv.get("done", 0)
+        out.append(chip("serve", f"Serving {sv['what']} to {c.target} "
+                                 f"({_bytes(done, sv['bytes']) if done else str(sv['bytes']) + ' B'})",
+                        busy=True, p=_pct(done, sv["bytes"]) if sv.get("start") else None, fin=True,
                         done=f"{p.serving['what'].capitalize()} sent ✓"))
     f = p.fun
     if f._ping is not None:
@@ -314,6 +318,7 @@ def build(core: "ClientCore") -> dict:
     tr = tracker_of(core)
     chans = []
     rx_at, tx_at = core.rx_at, core.tx_at
+    txq = 0                                   # CR117: frames still to go out, all channels
     for n, c in sorted(core.channels.items()):
         if not n:
             continue
@@ -330,6 +335,7 @@ def build(core: "ClientCore") -> dict:
         rx_at, tx_at = max(rx_at, r), max(tx_at, t)
         if c.outstanding:
             tx_at = now
+            txq += c.outstanding
         chans.append({"n": n, "label": c.label or c.target, "state": c.state,
                       "kind": "box" if core.chan is c and c.mode == "tinybox"
                       else "peer" if c.peer is not None else "term",
@@ -347,6 +353,7 @@ def build(core: "ClientCore") -> dict:
             "modem": {"via": rs.get("via", ""), "up": rs.get("up"),
                       "rx": round(now - rx_at, 1) if rx_at else None,
                       "tx": round(now - tx_at, 1) if tx_at else None, "io": IO_SEC,
+                      "txq": txq,
                       "fork": fork.get("version", ""), "features": fork.get("features", []),
                       "events": bool(getattr(port, "events", False)),
                       "load": ld.get("load"), "load_tx": ld.get("tx")}}

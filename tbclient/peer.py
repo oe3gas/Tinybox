@@ -187,6 +187,13 @@ class Peer:
     def outstanding(self, waiting: int | None) -> None:
         """From the core's poll: nothing waiting any more = every line sent on
         this connection has arrived (AX.25 acknowledged it)."""
+        sv = self.serving
+        if sv and waiting:                       # CR117: progress of what we serve
+            sv["start"] = max(sv.get("start", 0), waiting)
+            done = sv["bytes"] * (sv["start"] - waiting) // sv["start"]
+            if done > sv.get("done", 0):
+                sv["done"] = done
+                self.ch.core._touch()
         if waiting == 0 and self.serving and time.monotonic() - self.serving["at"] > 2:
             self.serving = None                  # CR110: all of it is over there
             self.ch.core._touch()

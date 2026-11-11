@@ -89,6 +89,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 115 | TinyBox: Station sperren (BAN/UNBAN) und entfernen (PURGE = löschen + sperren) | ✅ 11.11.2026 – siehe unten |
 | 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert) ✅, Stufe 2 (Prüfung in der Box) ✅ 11.11.2026; Stufe 3 Anzeige und „Gerät bürgt für Gerät“ offen – siehe unten |
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
+| 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4271,4 +4272,37 @@ kommt die Fehlberechnung?
   Testsuite grün (1129).
 - Hinweis: Die Statistik wird aus den gespeicherten Frames neu berechnet – nach dem Update
   stimmt die Anzeige auch für die bereits gehörten Frames.
+
+## CR117 – Bild-Upload: Fortschritt und TX passen nicht zum Senden (✅ 11.11.2026, Client 2026.11.11.12, Funktest offen)
+
+### Meldung (OE3GAS, 11.11.2026)
+
+Beim Senden eines Bildes bewegt sich der Fortschrittsbalken gar nicht, der TX-Chip oben in der
+Aktionsleiste leuchtet nicht, obwohl gesendet wird.
+
+### Befund
+
+- **TX:** eigene I-Frames (Fork `O`, KISS) setzten zwar die TX-Zeit, schickten aber keinen
+  Snapshot an die GUI; die Abfrage der wartenden Frames (AGW `Y`, alle 3 s) auch nicht. Die GUI
+  sah die TX-Zeit nur, wenn zufällig etwas anderes einen Snapshot auslöste – und löschte TX nach
+  2 s wieder. Ohne Fork-PTT blieb TX während des ganzen Uploads praktisch dunkel.
+- **Balken:** der Balken lebt nur von AGW `Y`. War die erste Antwort 0 (Antwort zu früh oder
+  `Y` nicht nutzbar), rechnete der Client „alles drüben“ – der Balken sprang sofort ans Ende und
+  stand dort minutenlang. Bewegte sich `Y` nicht, kam auch kein Snapshot.
+
+### Umsetzung
+
+- Ein Frame auf der Frequenz (eigen oder fremd) schickt höchstens alle 0,5 s einen Snapshot – TX/RX
+  in der Kopfzeile folgen den Frames.
+- Die `Y`-Abfrage meldet jede Änderung sofort (Queue-Chip, TX) und fragt jede Sekunde, solange
+  Frames warten. Der Snapshot trägt `txq` (wartende Frames aller Kanäle): TX leuchtet, solange
+  etwas wartet; Tooltip „n frame(s) waiting to go out“.
+- Upload-Fortschritt: eine 0 am Anfang heißt nicht mehr „fertig“. Solange `Y` nichts über 0 sagt,
+  zählen die eigenen I-Frames an die TinyBox (Fork `O`, KISS) als „on air“, höchstens 95 % bis
+  `//IMGOK` (Wiederholungen zählen sonst doppelt). Gilt auch für Dateien im Chatboard (CR86).
+  Wartende Frames gelten als lebendige Übertragung (AX.25 gibt selbst nach N2 auf).
+- Client↔Client: „Serving picture to …“ zeigt jetzt Bytes und Balken aus `Y`.
+- Log: „image …: n bytes handed over, m frame(s) waiting“ (INFO), jede Abfrage als DEBUG – damit
+  lässt sich beim Funktest sehen, was Direwolf auf `Y` antwortet.
+- Tests `tests/test_cr117.py`.
 

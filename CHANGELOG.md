@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+- **Bild-Upload: Fortschritt und TX (CR117):** der Balken springt bei einer ersten `Y`-Antwort 0 nicht mehr ans
+  Ende, eigene I-Frames zählen mit (max. 95 % bis `//IMGOK`); TX leuchtet, solange Frames warten, und folgt
+  den eigenen Frames. Client 2026.11.11.12.
+
 - **Web-GUI „User management“** (statt „Keys“): Karte „Users“ mit jeder bekannten Station (Name, Locator,
   Heimat-BBS, letzter Login, SSIDs, Ban/Purge) und darunter ihren Schlüsseln (Release/Revoke/Delete, ✓ LoTW);
   wartende Schlüssel zuerst und gelb, ihre Zahl in der Seitenleiste. Zwei Spalten: Users | Banned stations,
