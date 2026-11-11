@@ -331,19 +331,18 @@ def build(core: "ClientCore") -> dict:
         fading = [x for x in act if x["c"] == "done"]
         act = [x for x in act if x["c"] != "done"]
         act += tr.step(n, act, alive, now) + fading
-        r, t = tr.bytes_moved(n, c.link.rx_bytes, c.link.tx_bytes, now)
-        rx_at, tx_at = max(rx_at, r), max(tx_at, t)
+        r, _t = tr.bytes_moved(n, c.link.rx_bytes, c.link.tx_bytes, now)
+        rx_at = max(rx_at, r)
+        # CR117: bytes handed over or frames waiting are not TX - that is the queue
+        # chip; TX is the PTT (fork) or, without it, an own frame on the air
         if c.outstanding:
-            tx_at = now
             txq += c.outstanding
         chans.append({"n": n, "label": c.label or c.target, "state": c.state,
                       "kind": "box" if core.chan is c and c.mode == "tinybox"
                       else "peer" if c.peer is not None else "term",
                       "phase": phase(core, c, mono), "act": act, "link": _link(core, c, mono)})
     tr.forget(set(core.channels))
-    if core.ptt_on:                                        # CR112: the fork's PTT/DCD
-        tx_at = now
-    if core.dcd_on:
+    if core.dcd_on:                                        # CR112: the fork's DCD
         rx_at = now
     rs = core.radio_state()
     port = core.port
@@ -354,6 +353,8 @@ def build(core: "ClientCore") -> dict:
                       "rx": round(now - rx_at, 1) if rx_at else None,
                       "tx": round(now - tx_at, 1) if tx_at else None, "io": IO_SEC,
                       "txq": txq,
+                      # CR117: the PTT itself (fork events) - None: no PTT signal known
+                      "ptt": bool(core.ptt_on) if getattr(port, "events", False) else None,
                       "fork": fork.get("version", ""), "features": fork.get("features", []),
                       "events": bool(getattr(port, "events", False)),
                       "load": ld.get("load"), "load_tx": ld.get("tx")}}

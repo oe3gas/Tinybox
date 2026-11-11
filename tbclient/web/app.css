@@ -837,6 +837,7 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .modem-chips .mc.down { background: #8f2a24; border-color: #c4433b; color: #fff; }
 .modem-chips .mc.tx { background: #c4302a; border-color: #e0524b; color: #fff; }
 .modem-chips .mc.rx { background: #1f7a3d; border-color: #2fa356; color: #fff; }
+.modem-chips .mc.q { background: #8a6d1a; border-color: #c49a2a; color: #fff; }   /* CR117: frames waiting */
 .top #btn-actbar.on { background: rgba(255,255,255,.2); color: var(--top-text); }
 @media (max-width: 699px) { .modem-chips { display: none; } .actbar .lbl { min-width: 0; } }
 

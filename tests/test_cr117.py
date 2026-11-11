@@ -97,12 +97,17 @@ class TxChipTests(unittest.TestCase):
                 core._on_frame(RawFrame(src="OE3GAS", dest="OE3GAS-1", control=0x00, info=b"x"))
                 self.assertGreater(core.version, v)
                 self.assertGreater(core.tx_at, 0)
+                core._io_touch = 0.0
                 v = core.version
-                core._on_frame(RawFrame(src="OE3GAS", dest="OE3GAS-1", control=0x02, info=b"x"))
-                self.assertEqual(core.version, v)                     # at most every 0.5 s
+                core._on_frame(RawFrame(src="OE1ABC", dest="OE3GAS-1", control=0x02, info=b"x"))
+                core._on_frame(RawFrame(src="OE1ABC", dest="OE3GAS-1", control=0x04, info=b"x"))
+                self.assertEqual(core.version, v + 1)                 # others: at most every 0.5 s
+                core._on_frame(RawFrame(src="OE3GAS", dest="OE3GAS-1", control=0x06, info=b"x"))
+                self.assertEqual(core.version, v + 2)                 # own: always at once
         asyncio.run(scenario())
 
-    def test_waiting_frames_keep_tx_lit(self):
+    def test_waiting_frames_are_the_queue_not_tx(self):
+        """Follow-up 11.11.2026: TX only with the PTT; waiting frames are a chip of their own."""
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 core = ClientCore(client_cfg(tmp))
@@ -111,7 +116,13 @@ class TxChipTests(unittest.TestCase):
                 c.outstanding = 7
                 m = activity.build(core)["modem"]
                 self.assertEqual(m["txq"], 7)
-                self.assertEqual(m["tx"], 0.0)
+                self.assertIsNone(m["tx"])                            # nothing on the air yet
+                self.assertIsNone(m["ptt"])                           # no fork: no PTT signal
+                core.port.events = True                               # fork with events
+                core.ptt_on = True
+                self.assertTrue(activity.build(core)["modem"]["ptt"])
+                core.ptt_on = False
+                self.assertFalse(activity.build(core)["modem"]["ptt"])
         asyncio.run(scenario())
 
 

@@ -1,0 +1,2 @@
+- TX nur bei PTT (Direwolf-Fork); wartende Frames
+  eigener Chip "Queue n" in der Kopfzeile.

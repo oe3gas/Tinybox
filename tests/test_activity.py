@@ -188,7 +188,10 @@ class Modem(Base):
         self.ch.state, self.ch.outstanding = "online", 2
         m = activity.build(self.core)["modem"]
         self.assertLess(m["rx"], 2)
-        self.assertLess(m["tx"], 0.5)          # frames waiting = sending
+        self.assertIsNone(m["tx"])             # CR117: frames waiting are not TX ...
+        self.assertEqual(m["txq"], 2)          # ... but the queue chip
+        self.core.tx_at = time.time()          # an own frame on the air
+        self.assertLess(activity.build(self.core)["modem"]["tx"], 0.5)
 
     def test_in_the_snapshot(self):
         self.assertIn("activity", self.core.snapshot())

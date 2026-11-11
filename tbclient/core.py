@@ -933,14 +933,15 @@ class ClientCore:
         self.monitor_n += 1
         if f.src == self.cfg.mycall:             # CR110: TX/RX in the top bar
             self.tx_at = time.time()
+            self._touch()                        # CR117: TX at once, not rate-limited
             if f.is_i and f.info and f.dest == self.target:   # CR117: upload progress
                 self.images.own_frame(len(f.info))
                 self.bfiles.own_frame(len(f.info))
         else:
             self.rx_at = time.time()
-        if time.monotonic() - self._io_touch >= IO_TOUCH_SEC:   # CR117: TX/RX reach the GUI
-            self._io_touch = time.monotonic()
-            self._touch()
+            if time.monotonic() - self._io_touch >= IO_TOUCH_SEC:   # CR117: RX reaches the GUI
+                self._io_touch = time.monotonic()
+                self._touch()
         entry = monitor_entry(f, pair in self._mod128,
                               frozenset([self.home, *self.settings.get("tinyboxes", [])]),
                               self.aprs_memory, self.aprs_home)

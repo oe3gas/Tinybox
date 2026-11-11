@@ -89,7 +89,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 115 | TinyBox: Station sperren (BAN/UNBAN) und entfernen (PURGE = löschen + sperren) | ✅ 11.11.2026 – siehe unten |
 | 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert) ✅, Stufe 2 (Prüfung in der Box) ✅ 11.11.2026; Stufe 3 Anzeige und „Gerät bürgt für Gerät“ offen – siehe unten |
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
-| 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Funktest offen) – siehe unten |
+| 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Nachtrag .13: TX nur PTT, Queue-Chip; Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4305,4 +4305,18 @@ Aktionsleiste leuchtet nicht, obwohl gesendet wird.
 - Log: „image …: n bytes handed over, m frame(s) waiting“ (INFO), jede Abfrage als DEBUG – damit
   lässt sich beim Funktest sehen, was Direwolf auf `Y` antwortet.
 - Tests `tests/test_cr117.py`.
+
+### Nachtrag (OE3GAS, 11.11.2026, Client 2026.11.11.13)
+
+„TX reagiert zu langsam; hängt es mit den wartenden Frames zusammen, braucht es eine eigene
+Anzeige. TX nur, wenn die PTT aktiv ist.“ Umgesetzt:
+
+- **TX = PTT:** mit Direwolf-Fork (Ereignisse `E`) leuchtet TX genau solange `ptt on=1` – kein
+  Nachleuchten, keine wartenden Frames. Der Snapshot trägt `ptt` (true/false, `null` = kein
+  PTT-Signal bekannt). Ohne Fork (Original-Direwolf, KISS): TX 2 s nach einem eigenen Frame auf der
+  Luft (Fork `O`, KISS, Original-Direwolf nur eigene UI-Frames über `T`). Übergebene Bytes zählen
+  nicht mehr als TX. Tooltip sagt, woher TX kommt.
+- **Queue n:** eigener Chip (gelb) in der Kopfzeile neben TX/RX, solange Frames warten oder auf
+  die Bestätigung warten (AGW `Y`, Summe aller Kanäle).
+- Ein eigenes Frame schickt den Snapshot sofort (fremde Frames weiter höchstens alle 0,5 s).
 

@@ -3759,16 +3759,24 @@ function renderModem() {
   up.title = (m.up ? `${name} reachable` : `${name} not reachable`) +
     (m.fork ? ` · TinyBox fork ${m.fork} (${(m.features || []).join(", ")})` : "") +
     (typeof m.load === "number" ? ` · channel ${m.load} % busy (own ${m.load_tx} %) in the last minute` : "");
-  // TX/RX stay lit for m.io seconds after the last frame or byte
+  // CR117: TX = the PTT (Direwolf fork); without a PTT signal: lit for m.io seconds
+  // after an own frame on the air. RX stays lit for m.io seconds after the last frame.
+  // Frames waiting to go out are their own chip ("Queue n"), not TX.
   const age = (x) => (x === null || x === undefined ? Infinity : x + (performance.now() - stateRecv) / 1000);
-  // CR117: TX also stays lit while frames are waiting to go out (txq)
-  const tx = age(m.tx) < m.io || m.txq > 0, rx = age(m.rx) < m.io;
+  const hasPtt = m.ptt === true || m.ptt === false;
+  const tx = hasPtt ? m.ptt : age(m.tx) < m.io, rx = age(m.rx) < m.io;
   const txc = el("span", "mc" + (tx ? " tx" : ""), "TX");
-  if (m.txq > 0) txc.title = `${m.txq} frame(s) waiting to go out`;
-  box.replaceChildren(up, txc, el("span", "mc" + (rx ? " rx" : ""), "RX"));
-  if (tx || rx) {
-    const txLeft = m.txq > 0 ? 9 : m.io - age(m.tx);
-    const left = Math.min(tx ? txLeft : 9, rx ? m.io - age(m.rx) : 9);
+  txc.title = hasPtt ? "PTT of the transmitter (Direwolf fork)" : "own frame on the air (no PTT signal)";
+  const parts = [up, txc, el("span", "mc" + (rx ? " rx" : ""), "RX")];
+  if (typeof m.txq === "number" && m.txq > 0) {
+    const q = el("span", "mc q", `Queue ${m.txq}`);
+    q.title = `${m.txq} frame(s) waiting to go out or for the acknowledgement`;
+    parts.push(q);
+  }
+  box.replaceChildren(...parts);
+  const txTimed = !hasPtt && tx;
+  if (txTimed || rx) {
+    const left = Math.min(txTimed ? m.io - age(m.tx) : 9, rx ? m.io - age(m.rx) : 9);
     modemTimer = setTimeout(renderModem, Math.max(100, left * 1000 + 50));
   }
 }
