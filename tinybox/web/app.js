@@ -1421,6 +1421,18 @@ function viewSettings() {
 function viewKeys() {
   const users = h("tbody"), trusted = h("tbody"), me = h("div", { class: "card-body note" });
   const bans = h("tbody");                                  // CR115
+  const lroots = h("tbody"), lnote = h("div", { class: "card-body note" });   // CR113
+  const lfile = h("input", { type: "file", accept: ".p12,.pfx,.pem,.der,.cer,.crt" });
+  const lpw = h("input", { type: "password", placeholder: "password of the .p12 (if any)", autocomplete: "off" });
+  async function lotwAdd() {
+    const f = lfile.files[0];
+    if (!f) { toast("Choose the file first.", true); return; }
+    const buf = new Uint8Array(await f.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+    await act("lotw_add", { data: btoa(bin), password: lpw.value });
+    lpw.value = ""; lfile.value = "";
+  }
   const banCall = h("input", { class: "mono", placeholder: "OE1ABC", size: 10 });
   const banWhy = h("input", { class: "grow", placeholder: "reason (only for you, optional)" });
   async function purge() {
@@ -1452,7 +1464,9 @@ function viewKeys() {
     users.replaceChildren(...(d.users.length ? d.users.map((u) => h("tr", {},
       h("td", { class: "mono", text: u.call }), h("td", { class: "mono", text: u.device || "-" }),
       h("td", { class: u.status === "pending" ? "warn" : "", text: statusText[u.status] || u.status }),
-      h("td", { class: "mono", text: u.fp }), h("td", { class: "mono", text: fullDate(u.changed) }),
+      h("td", { class: "mono", text: u.fp }),
+      h("td", { class: u.lotw ? "ok" : "", text: u.lotw ? "✓ until " + u.lotw : "" }),
+      h("td", { class: "mono", text: fullDate(u.changed) }),
       h("td", { text: u.note }),
       h("td", {}, ...(u.status !== "active" ? [h("button", { class: "btn sm primary", type: "button",
           text: "Release", onclick: () => act("user", { id: u.id, action: "OK" },
@@ -1461,7 +1475,17 @@ function viewKeys() {
           onclick: () => act("user", { id: u.id, action: "REVOKE" }, `Revoke the key ${u.fp} of ${u.call}${u.device ? " (" + u.device + ")" : ""}? The other keys of ${u.call} stay.`) })] : []),
         h("button", { class: "btn sm danger", type: "button", text: "Delete",
           onclick: () => act("user", { id: u.id, action: "DEL" }, `Forget the key ${u.fp} of ${u.call}?`) }))))
-      : [h("tr", {}, h("td", { colspan: 7, text: "No client keys yet." }))]));
+      : [h("tr", {}, h("td", { colspan: 8, text: "No client keys yet." }))]));
+    const L = d.lotw || { roots: [] };
+    lnote.textContent = !L.available ? "This box cannot check LoTW: the Python package “cryptography” is missing (py -3 -m pip install cryptography)." :
+      "Keys confirmed with the LoTW certificate of the ARRL are marked ✓ in Client keys. Trust the ARRL certificates " +
+      "here - from your own .p12 of TQSL (only its CA certificates are taken) - and compare the fingerprint. " +
+      `[client] lotw_release = ${L.release ? "yes: a new key confirmed with LoTW counts at once" : "no: you still release new keys"}.`;
+    lroots.replaceChildren(...(L.roots.length ? L.roots.map((r) => h("tr", {},
+      h("td", { text: r.subject }), h("td", { class: "mono", text: r.fpp }), h("td", { class: "mono", text: fullDate(r.added) }),
+      h("td", {}, h("button", { class: "btn sm danger", type: "button", text: "Remove",
+        onclick: () => act("lotw_del", { fp: r.fp }, `No longer trust\n${r.subject}?`) }))))
+      : [h("tr", {}, h("td", { colspan: 4, text: "No ARRL certificate trusted yet." }))]));
     bans.replaceChildren(...((d.banned || []).length ? d.banned.map((b) => h("tr", {},
       h("td", { class: "mono", text: b.base }), h("td", { class: b.purged ? "warn" : "", text: b.purged ? "purged" : "banned" }),
       h("td", { class: "mono", text: fullDate(b.since) }), h("td", { text: b.reason }),
@@ -1484,7 +1508,7 @@ function viewKeys() {
         text: "One key per device. Release a key only after comparing its fingerprint with the user - " +
               "by phone, in a QSO or on paper, never over the same connection." }),
       h("div", { class: "scroll" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Call", "Device", "Status", "Fingerprint", "Changed (UTC)", "Note", ""]
+        h("thead", {}, h("tr", {}, ["Call", "Device", "Status", "Fingerprint", "LoTW", "Changed (UTC)", "Note", ""]
           .map((x) => h("th", { text: x })))), users))),
     h("section", { class: "card" },
       h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Trusted TinyBoxen" })), me,
@@ -1496,6 +1520,13 @@ function viewKeys() {
           onclick: () => act("trust", { box: boxIn.value, pub: pubIn.value },
             `Trust ${boxIn.value.toUpperCase()}? Its users then log in here with their certificate.\n` +
             "Fingerprint compared with its sysop?") }))),
+    h("section", { class: "card" },
+      h("div", { class: "card-head" }, h("h2", { class: "grow", text: "LoTW (ARRL certificates)" })), lnote,
+      h("div", { class: "scroll" }, h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Certificate", "Fingerprint (SHA-256, start)", "Since (UTC)", ""].map((x) => h("th", { text: x })))),
+        lroots)),
+      h("div", { class: "card-body row" }, lfile, lpw,
+        h("button", { class: "btn sm primary", type: "button", text: "Add", onclick: lotwAdd }))),
     h("section", { class: "card" },
       h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Banned stations" })),
       h("div", { class: "card-body note",

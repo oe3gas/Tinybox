@@ -87,7 +87,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | ✅ 10.11.2026 (Teil 1 Client↔Client, Teil 2 Chatboard mit CR86) – siehe unten |
 | 110 | Statusleiste: Phasen und Verkehr Client↔Box und Client↔Client in Echtzeit als Chips, Modem/TX/RX in der Kopfzeile, ein-/ausblendbar | ✅ 11.11.2026 – siehe unten |
 | 115 | TinyBox: Station sperren (BAN/UNBAN) und entfernen (PURGE = löschen + sperren) | ✅ 11.11.2026 – siehe unten |
-| 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert mit der .p12) ✅ 11.11.2026; Stufe 2 Prüfung in der Box, Stufe 3 Anzeige offen – siehe unten |
+| 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert) ✅, Stufe 2 (Prüfung in der Box) ✅ 11.11.2026; Stufe 3 Anzeige und „Gerät bürgt für Gerät“ offen – siehe unten |
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
@@ -4076,7 +4076,7 @@ Windows-Programm mit MinGW-w64 gebaut. **Funktest mit Funk offen.**
 - `prcore/linkq.py` versteht `v=3` – **erst das Tinybox-Repo aktualisieren, dann die neue `direwolf.exe`**.
 - Tests: `tests/test_cr111.py`.
 
-## CR113 – LoTW als Vertrauensanker (Stufe 1 ✅ 11.11.2026, Client 2026.11.11.5)
+## CR113 – LoTW als Vertrauensanker (Stufe 1 + 2 ✅ 11.11.2026, Client 2026.11.11.5 / .9, Schema 17)
 
 ### Entscheidungen (OE3GAS, 11.11.2026)
 
@@ -4114,14 +4114,37 @@ Windows-Programm mit MinGW-w64 gebaut. **Funktest mit Funk offen.**
   `.p12` ohne privaten Schlüssel (in TQSL „Save Callsign Certificate“).
 - Tests `tests/test_cr113.py` (nachgebaute LoTW-Kette).
 
-### Stufe 2: Prüfung in der Box (offen)
+### Stufe 2: Prüfung in der Box (✅ 11.11.2026)
 
-- Client schickt den Nachweis einmal an die Heimat-BBS (signiert wie CR93 Stufe 2, z. B. `//LOTW` in
-  Teilen, oder über AXUDP).
-- Box: vertraute ARRL-Zertifikate im Datenordner, Sysop trägt sie mit Fingerprint ein (Konsole/Web wie
-  `TRUST`); `verify()` gegen diese; Merkmal „✓ LoTW“ am Schlüssel (`USER`, Web Keys).
-- Einstellung `[auth] lotw_release = no` (Vorgabe): `yes` = LoTW-bestätigter Schlüssel gilt ohne Freigabe.
-- Box-Zertifikat (TBC1) mit Stufe `lotw`, damit andere Boxen und Clients sie ohne X.509 sehen.
+Frage OE3GAS: Ein schon vom Sysop freigegebener Schlüssel, später mit LoTW signiert – erkennt die Box das?
+Jetzt ja: die Freigabe bleibt, der Schlüssel bekommt den Vermerk „LoTW bis …“.
+
+- **Protokoll** (`tinybox/lotwbox.py`, Fähigkeit `LOTW`, im Client-Modus und während der Schlüssel auf den
+  Sysop wartet): `//LOTW?` → `//LOTW until=JJJJ-MM-TT` | `-` | `off`; `//LOTWP i/n <Stück>` (der Nachweis als
+  kompaktes JSON, base64url, Stücke ≤ 200 Zeichen, höchstens 64) → `//LOTW ok until=…` | `//LOTW err <Grund>`.
+  Der Nachweis ist an den eingeloggten Schlüssel gebunden (Call und Ed25519-Schlüssel darin, mit LoTW
+  unterschrieben) – für einen anderen Schlüssel taugt er nicht, das Hochladen braucht daher keine eigene
+  Signatur. Über Funk einmalig ≈ 3–6 KB, danach bei jedem Login nur `//LOTW?`.
+- **Client:** fragt nach dem `//OK` (und während `//AUTHWAIT`) einmal je Verbindung, schickt den Nachweis nur,
+  wenn die Box ihn nicht oder älter hat; danach `//CERT?` für das Zertifikat mit Stufe. Settings-Karte:
+  „✓ OE3XBS knows it“, „cannot check LoTW yet“, „did not take it: …“.
+- **Box:** prüft mit `prcore.lotw.verify` gegen die **vertrauten ARRL-Zertifikate** (Tabelle `lotw_roots`):
+  Konsole `LOTW`, `LOTW ADD <Datei> [Passwort]` (.p12 von TQSL – nur deren CA-Zertifikate werden übernommen –,
+  .pem, .der, .cer), `LOTW DEL <Fingerprint>`; Web-GUI „Keys“, Karte „LoTW (ARRL certificates)“. Nicht über
+  `//ADM` (das Passwort stünde im Klartext auf Funk). Vermerk `client_keys.lotw` (bis), in `USER`, `USER SHOW`
+  und der Spalte „LoTW“ der Web-GUI; nach Ablauf verschwindet er.
+- **`[client] lotw_release`** (Vorgabe `no`, wie entschieden): `yes` = ein **neuer** LoTW-bestätigter Schlüssel
+  gilt sofort, der Client ist ohne `USER OK` im Client-Modus. Ein widerrufener Schlüssel bleibt widerrufen.
+- **Zertifikat TBC2:** `TBC2:call:pub:issuer:until:lotw:sig`, die Stufe ist mit unterschrieben, Laufzeit
+  höchstens bis zum Ende des LoTW-Zertifikats. Ohne LoTW bleibt es TBC1 – ältere Clients und Boxen kennen nur
+  TBC1 und nehmen ein TBC2 nicht an (betrifft nur LoTW-bestätigte Schlüssel).
+- Tests `tests/test_cr113_box.py`, Client-Teil in `tests/test_cr113.py`.
+
+### Gerät bürgt für Gerät (offen, besprochen 11.11.2026)
+
+Ein neues Gerät desselben Calls ist nicht automatisch LoTW-bestätigt (die Bestätigung gilt einem Schlüssel,
+nicht dem Rufzeichen). Heute: auf jedem Gerät einmal signieren. Später möglich: ein LoTW-bestätigtes Gerät
+unterschreibt den Schlüssel des neuen (`TINYBOX-DEV1|call|neuer Schlüssel`), Widerruf nimmt die verbürgten mit.
 
 ### Stufe 3: Anzeige (offen)
 

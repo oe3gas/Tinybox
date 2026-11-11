@@ -145,7 +145,7 @@ REQUIRE_AUTH = True
 
 PROTO = "TB1"
 KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
-              "HSEQ", "ADM", "BFILE")
+              "HSEQ", "ADM", "BFILE", "LOTW")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 FILE_COMMANDS = ("FPUT", "FGET")          # CR86: files in a board
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
@@ -253,6 +253,9 @@ def handle(s: Session, line: str) -> None:
         _client(s, parts[1:])
     elif cmd == "AUTH":
         _auth(s, parts[1:])
+    elif cmd in ("LOTW?", "LOTWP") and (s.client is not None
+                                        or getattr(s, "_wait_pub", None) is not None):
+        _lotw(s, cmd, parts[1:])            # CR113: also while the key waits for the sysop
     elif s.client is None:
         s.out("//ERR not a client session")
     elif cmd == "CERT?":
@@ -401,10 +404,25 @@ def _auth(s: Session, parts: list[str]) -> None:
         log.warning("%s: new client key %s%s - waits for the sysop (USER OK %s %s)", s.call, fp,
                     f" ({dev})" if dev else "", call, fp[:4])
         s.service.key_waiting(call, fp, s.call, dev)
+    s._wait_pub, s._wait_nonce = pub, nonce      # CR113: LoTW may still release it
     s.out("", f"//AUTHWAIT fp={fp}")
 
 
+def _lotw(s: Session, cmd: str, args: list[str]) -> None:
+    """CR113 stage 2: //LOTW? and //LOTWP (tinybox/lotwbox.py)."""
+    from . import lotwbox
+    if cmd == "LOTW?":
+        lotwbox.ask(s)
+        return
+    if lotwbox.part(s, args) and s.client is None:     # released by LoTW: log in now
+        info, pub, nonce = getattr(s, "_client_wait", None), s._wait_pub, s._wait_nonce
+        s._wait_pub = s._wait_nonce = None
+        if info is not None:
+            _logged_in(s, info, pub, nonce, "")
+
+
 def _logged_in(s: Session, info: ClientInfo, pub: bytes, nonce: str, issuer: str) -> None:
+    s._wait_pub = None
     s.auth, s.auth_pub, s.auth_nonce, s.auth_ctr = True, pub, nonce, 0
     s.auth_cert = issuer
     s._client_wait = None
@@ -492,8 +510,14 @@ def _cert(s: Session) -> None:
         return
     until = (datetime.now(timezone.utc) + timedelta(days=auth.CERT_DAYS)).strftime("%Y%m%d")
     box = s.cfg.station.mailbox_call.upper()
-    s.out("//CERT " + auth.make_cert(s.service.box_identity(), s.call, row["pub"], box, until))
-    log.info("%s: certificate issued, valid until %s", s.call, until)
+    level = ""
+    lw = (row.get("lotw") or "").replace("-", "")         # CR113: confirmed with LoTW
+    if lw and lw >= datetime.now(timezone.utc).strftime("%Y%m%d"):
+        level, until = "lotw", min(until, lw)              # not longer than the LoTW one
+    s.out("//CERT " + auth.make_cert(s.service.box_identity(), s.call, row["pub"], box, until,
+                                     level))
+    log.info("%s: certificate issued, valid until %s%s", s.call, until,
+             ", LoTW" if level else "")
 
 
 def _client_ok(s: Session, info: ClientInfo) -> None:

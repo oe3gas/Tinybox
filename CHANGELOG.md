@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **LoTW, Stufe 2 (CR113):** die TinyBox prüft die LoTW-Bestätigung eines Client-Schlüssels (`//LOTW?`,
+  `//LOTWP`) gegen die vom Sysop vertrauten ARRL-Zertifikate (`LOTW ADD`, Web-GUI „Keys“), vermerkt „LoTW bis“
+  am Schlüssel und stellt Zertifikate `TBC2` mit Stufe `lotw` aus. `[client] lotw_release` (Vorgabe `no`).
+  Schema 17. Client 2026.11.11.9.
+
 - **TinyBox: BAN, UNBAN, PURGE (CR115):** Station sperren (alle SSIDs, Daten bleiben, `UNBAN` lässt
   sie wieder) oder entfernen (`PURGE` = Schlüssel, Profil, Logins, Chatzeilen, Board-Dateien löschen
   und sperren; Post, Bulletins, Verbindungsprotokoll bleiben). Konsole, `//ADM`, Web-GUI „Keys“.

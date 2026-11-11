@@ -453,8 +453,9 @@ class SysopConsole:
             if not rows:
                 self.out("No client keys yet.")
             for r in rows:
+                lw = f"LoTW {r['lotw']}" if r["lotw"] else ""
                 self.out(f"{r['call']:<8} {r['status']:<8} {r['fp']}  {r['device'] or '-':<16} "
-                         f"{r['changed'][:16]}  {r['note']}")
+                         f"{r['changed'][:16]}  {lw:<15} {r['note']}")
             return
         if len(words) < 2 or word not in (*keys.USER_ACTIONS, "SHOW"):
             self.out(texts.USAGE_USER)
@@ -468,11 +469,48 @@ class SysopConsole:
                     self.out(f"{auth.base(call)}: no client key.")
                 for r in rows:
                     self.out(f"{r['call']}: {r['status']}, fingerprint {r['fp']}, device "
-                             f"{r['device'] or '-'}, since {r['changed'][:16]}  {r['note']}")
+                             f"{r['device'] or '-'}, since {r['changed'][:16]}"
+                             + (f", LoTW until {r['lotw']}" if r["lotw"] else "") + f"  {r['note']}")
                 return
             self.out(keys.user_action(svc, word, call, sel))
         except keys.KeysError as exc:
             self.out(str(exc))
+
+    def cmd_lotw(self, arg: str) -> None:
+        """CR113: LOTW - trusted ARRL certificates; LOTW ADD <file> [password];
+        LOTW DEL <fingerprint start>."""
+        from prcore import lotw
+        from .. import lotwbox
+        store = self.app.store
+        words = arg.strip().split(" ", 2)
+        word = words[0].upper() if words and words[0] else ""
+        if not lotw.available():
+            self.out("LoTW needs the Python package 'cryptography': py -3 -m pip install cryptography")
+            return
+        if word == "":
+            rows = store.lotw_roots()
+            if not rows:
+                self.out("No ARRL certificate trusted yet - LOTW ADD <file> (.p12 of TQSL, "
+                         ".pem, .der, .cer). Keys confirmed with LoTW cannot be checked.")
+            for r in rows:
+                self.out(f"{r['subject']}", f"   fingerprint {lotwbox.fp_pretty(r['fp'])}, "
+                                            f"since {r['added'][:16]}")
+            self.out(f"lotw_release = {'yes' if self.app.cfg.client.lotw_release else 'no'} "
+                     "([client] in tinybox.conf)")
+            return
+        if word == "ADD" and len(words) >= 2:
+            try:
+                self.out(*lotwbox.add_file(store, words[1], words[2] if len(words) > 2 else ""))
+            except lotwbox.LotwBoxError as exc:
+                self.out(str(exc))
+                return
+            self.out("Compare the fingerprint with your own TQSL installation before you rely on it.")
+            return
+        if word == "DEL" and len(words) == 2:
+            n = store.lotw_root_delete(words[1].replace(" ", ""))
+            self.out(f"{n} certificate(s) removed." if n else "No such certificate.")
+            return
+        self.out(texts.USAGE_LOTW)
 
     def cmd_ban(self, arg: str) -> None:
         """CR115: BAN = shut out, data stays. BAN alone: the list."""
@@ -660,6 +698,7 @@ class SysopConsole:
         "FILES": cmd_files,
         "MOVE": cmd_move,
         "COPY": cmd_copy,
+        "LOTW": cmd_lotw,
         "BAN": cmd_ban,
         "UNBAN": cmd_unban,
         "PURGE": cmd_purge,

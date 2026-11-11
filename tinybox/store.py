@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 16  # 16: banned (CR115); 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 17  # 17: LoTW (CR113); 16: banned (CR115); 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
                      # 9: profiles (name, locator, home BBS of a station, CR73)
@@ -64,7 +64,14 @@ CREATE TABLE IF NOT EXISTS client_keys (              -- CR93: keys of client us
     created  TEXT NOT NULL,
     changed  TEXT NOT NULL,
     note     TEXT NOT NULL DEFAULT '',
+    lotw     TEXT NOT NULL DEFAULT '',                 -- CR113: LoTW-confirmed until YYYY-MM-DD
     UNIQUE (call, pub)
+);
+CREATE TABLE IF NOT EXISTS lotw_roots (               -- CR113: ARRL certificates the sysop trusts
+    fp       TEXT PRIMARY KEY,                         -- SHA-256 of the DER, hex
+    subject  TEXT NOT NULL,
+    der      BLOB NOT NULL,
+    added    TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS trusted_boxes (            -- CR93 stage 3: whose certificates count
     box      TEXT PRIMARY KEY,                         -- mailbox call of the issuing TinyBox
@@ -271,6 +278,9 @@ class Store:
         self._db.execute("UPDATE messages SET seq = id, cseq = id WHERE seq = 0")
         self._db.execute("INSERT OR IGNORE INTO sync_seq (k, v) VALUES (1, "
                          "COALESCE((SELECT MAX(id) FROM messages), 0))")
+        # 16 -> 17: LoTW confirmation of a key (CR113)
+        if "lotw" not in {r["name"] for r in self._db.execute("PRAGMA table_info(client_keys)")}:
+            self._db.execute("ALTER TABLE client_keys ADD COLUMN lotw TEXT NOT NULL DEFAULT ''")
         # 13 -> 14: one key per call became one key per device (OE3GAS, 10.11.2026)
         if self._db.execute("SELECT 1 FROM sqlite_master WHERE name = 'user_keys'").fetchone():
             self._db.execute("INSERT OR IGNORE INTO client_keys (call, pub, status, created, changed,"
@@ -638,6 +648,26 @@ class Store:
             cur = self._db.execute("UPDATE client_keys SET status = ?, changed = ? WHERE id = ?",
                                    (status, utc_now(), key_id))
         return cur.rowcount > 0
+
+    def key_lotw(self, key_id: int, until: str) -> None:
+        """CR113: the key is confirmed with LoTW until YYYY-MM-DD ('' = no longer)."""
+        with self._db:
+            self._db.execute("UPDATE client_keys SET lotw = ?, changed = ? WHERE id = ?",
+                             (until, utc_now(), key_id))
+
+    def lotw_roots(self) -> list[dict]:
+        return [dict(r) for r in self._db.execute("SELECT * FROM lotw_roots ORDER BY added")]
+
+    def lotw_root_put(self, fp: str, subject: str, der: bytes) -> bool:
+        with self._db:
+            return self._db.execute(
+                "INSERT OR IGNORE INTO lotw_roots (fp, subject, der, added) VALUES (?, ?, ?, ?)",
+                (fp, subject, der, utc_now())).rowcount > 0
+
+    def lotw_root_delete(self, fp_prefix: str) -> int:
+        with self._db:
+            return self._db.execute("DELETE FROM lotw_roots WHERE fp LIKE ?",
+                                    (fp_prefix.upper().replace(":", "") + "%",)).rowcount
 
     def key_delete(self, key_id: int) -> bool:
         with self._db:

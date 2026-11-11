@@ -1,0 +1,2 @@
+- LoTW-Bestaetigung geht einmal an die TinyBox; die
+  Settings zeigen, ob sie sie kennt.

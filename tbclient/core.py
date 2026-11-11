@@ -151,6 +151,7 @@ class ClientCore:
         self._adm_refresh = ""
         self._cmd_ctr = 0
         self.asking: dict[str, float] = {}        # CR110: cert | trust | adm -> sent at
+        self.lotw_box: dict = {}                  # CR113: does the TinyBox know our LoTW
         self.rx_at = self.tx_at = 0.0             # CR110: last frame heard from others / own
         # CR75: a station connected to us - the GUI switches to its terminal
         self.focus = {"n": 0, "seq": 0}
@@ -825,6 +826,7 @@ class ClientCore:
         self.auth.update(state="", reason="")
         self._login = None
         self.asking.clear()
+        self.lotw_box = {}
         self._clear_board()
         self.pending.clear()
         self.sync.link_lost()
@@ -875,7 +877,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -1095,7 +1097,8 @@ class ClientCore:
 
     def lotw_status(self) -> dict:
         from prcore import lotw
-        out = {"available": lotw.available(), "call": auth.base(self.cfg.mycall)}
+        out = {"available": lotw.available(), "call": auth.base(self.cfg.mycall),
+               "box": {k: v for k, v in self.lotw_box.items() if k != "asked"}}
         proof = self.lotw_proof()
         if proof:
             try:
@@ -1119,8 +1122,53 @@ class ClientCore:
         tmp.replace(self._lotw_path)
         log.info("LoTW: key %s confirmed with the LoTW certificate of %s (until %s)",
                  self.identity.fp, proof["call"], proof["until"])
+        if "LOTW" in self.caps and self.state == "online":
+            self.lotw_box = {}
+            self._lotw_ask()                         # the TinyBox learns it now
         self._touch()
         return self.lotw_status()
+
+    # CR113 stage 2: the TinyBox learns it - once per key, then only //LOTW? at a login
+
+    def _lotw_ask(self) -> None:
+        if self.lotw_proof() is not None and self.lotw_box.get("asked") != self.target:
+            self.lotw_box = {"asked": self.target, "state": "asking"}
+            self._send("//LOTW?")
+
+    def _lotw_answer(self, rest: str) -> None:
+        proof = self.lotw_proof()
+        word = rest.split(" ", 1)[0]
+        box = self.auth.get("box") or self.target
+        if rest.startswith("until=") and proof and rest[6:] >= proof.get("until", ""):
+            self.lotw_box.update(state="ok", until=rest[6:], box=box)
+        elif (rest == "-" or rest.startswith("until=")) and proof:
+            self._lotw_send(proof)
+        elif word == "off":
+            self.lotw_box.update(state="off", box=box)
+        elif word == "ok":
+            until = rest.split("until=", 1)[1].split()[0] if "until=" in rest else ""
+            self.lotw_box.update(state="ok", until=until, box=box)
+            self.console.append(f"*** {box} knows now: your key is confirmed with LoTW (until {until})")
+            if self.auth.get("state") == "ok":
+                self.asking["cert"] = time.time()
+                self._send("//CERT?")            # the certificate with the LoTW level
+        elif word == "err":
+            why = rest[4:].strip()
+            self.lotw_box.update(state="err", error=why, box=box)
+            self.console.append(f"*** {box} did not take your LoTW confirmation: {why}")
+        self._touch()
+
+    def _lotw_send(self, proof: dict) -> None:
+        import base64
+        import json
+        text = base64.urlsafe_b64encode(json.dumps(proof, separators=(",", ":")).encode()
+                                        ).decode().rstrip("=")
+        parts = [text[i:i + 200] for i in range(0, len(text), 200)]
+        self.lotw_box["state"] = "sending"
+        log.info("LoTW: sending the confirmation to %s (%d bytes, %d lines)", self.target,
+                 len(text), len(parts))
+        for i, chunk in enumerate(parts, 1):
+            self._send(f"//LOTWP {i}/{len(parts)} {chunk}")
 
     def lotw_forget(self) -> None:
         try:
@@ -1197,7 +1245,11 @@ class ClientCore:
             self._note_home_auth("wait")
             self.console.append(f"*** your key ({self.identity.fp}) waits for the sysop of "
                                 f"{self.auth['box'] or self.target} - tell him the fingerprint")
+            self._lotw_ask()                     # CR113: LoTW may release it
             self._touch()
+            return
+        if cmd == "LOTW":                        # CR113 stage 2
+            self._lotw_answer(rest.strip())
             return
         if cmd == "ERR" and rest.startswith("auth"):
             why = rest[4:].strip() or "refused"
@@ -1218,6 +1270,8 @@ class ClientCore:
             m = re.search(r"caps=(\S*)", rest)
             self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
             self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
+            if "LOTW" in self.caps and self.lotw_box.get("state") != "ok":
+                self._lotw_ask()
             known = self.settings.setdefault("tinyboxes", [])
             if self.target != self.home and self.target not in known:
                 known.append(self.target)          # CR43: next time no terminal guess

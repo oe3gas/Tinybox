@@ -230,19 +230,33 @@ CERT_DAYS = 180              # valid this long
 CERT_RENEW_DAYS = 60         # the client fetches a new one at home when fewer are left
 
 
-def cert_message(call: str, pub: str, issuer: str, until: str) -> bytes:
+LEVELS = ("lotw",)          # CR113: TBC2 carries a level - "lotw" = confirmed with LoTW
+
+
+def cert_message(call: str, pub: str, issuer: str, until: str, level: str = "") -> bytes:
+    if level:                                       # TBC2 (CR113)
+        return f"TINYBOX-CERT2|{base(call)}|{pub}|{issuer.upper()}|{until}|{level}".encode("ascii")
     return f"TINYBOX-CERT1|{base(call)}|{pub}|{issuer.upper()}|{until}".encode("ascii")
 
 
-def make_cert(issuer_key: Identity, call: str, pub: str, issuer: str, until: str) -> str:
-    sig = b64e(sign(issuer_key.secret, cert_message(call, pub, issuer, until)))
+def make_cert(issuer_key: Identity, call: str, pub: str, issuer: str, until: str,
+              level: str = "") -> str:
+    """TBC1 - or TBC2 with a level (CR113: "lotw"); older parsers know only TBC1."""
+    sig = b64e(sign(issuer_key.secret, cert_message(call, pub, issuer, until, level)))
+    if level:
+        return f"TBC2:{base(call)}:{pub}:{issuer.upper()}:{until}:{level}:{sig}"
     return f"TBC1:{base(call)}:{pub}:{issuer.upper()}:{until}:{sig}"
 
 
 def parse_cert(text: str) -> dict:
     """The fields of a certificate (not checked against any key), or AuthError."""
     parts = text.strip().split(":")
-    if len(parts) != 6 or parts[0] != "TBC1":
+    if len(parts) == 7 and parts[0] == "TBC2" and parts[5] in LEVELS:
+        level = parts[5]
+        del parts[5]
+    elif len(parts) == 6 and parts[0] == "TBC1":
+        level = ""
+    else:
         raise AuthError("not a certificate")
     _, call, pub, issuer, until, sig = parts
     b64d(pub, 32)
@@ -253,14 +267,14 @@ def parse_cert(text: str) -> dict:
                     and issuer.replace("-", "").isalnum()):
         raise AuthError("not a certificate")
     return {"call": call.upper(), "pub": pub, "issuer": issuer.upper(), "until": until,
-            "sig": raw}
+            "sig": raw, "level": level}
 
 
 def check_cert(cert: dict, issuer_pub: bytes, today: str) -> bool:
     """Signature of the issuer right and not expired (today = YYYYMMDD)."""
     return cert["until"] >= today and verify(
-        issuer_pub, cert_message(cert["call"], cert["pub"], cert["issuer"], cert["until"]),
-        cert["sig"])
+        issuer_pub, cert_message(cert["call"], cert["pub"], cert["issuer"], cert["until"],
+                                 cert.get("level", "")), cert["sig"])
 
 
 def peer_message(signer: str, other: str, nonce: str) -> bytes:

@@ -246,6 +246,9 @@ HELP_CONSOLE = [
     "  KILL n[,n]     Delete messages and bulletins",
     "  FILES [DEL h]  Files in the chat boards (CR86) / delete one",
     "  MOVE n[,n] RUB Move bulletins into another rubric (new number) / COPY n[,n] RUB: copy",
+    "  LOTW           ARRL certificates for keys confirmed with LoTW (CR113)",
+    "  LOTW ADD file [pw]  Trust the CA certificates of a .p12 of TQSL / .pem / .der / .cer",
+    "  LOTW DEL fp    No longer",
     "  BAN            Banned stations / BAN call [reason]: shut call out (all SSIDs), data stays",
     "  UNBAN call     Let call back in (he behaved)",
     "  PURGE call [reason]  Ban AND delete his keys, profile, logins, chat lines, board",
@@ -324,6 +327,7 @@ USAGE_KILL = "Usage: KILL n[,n...]   (delete messages and bulletins)"
 USAGE_TRUST = "Usage: TRUST  /  TRUST ADD box key  /  TRUST DEL box"
 # CR115: ban and purge
 BANNED = "*** {call}: no access to this TinyBox - ask the sysop."
+USAGE_LOTW = "Usage: LOTW  /  LOTW ADD file [password]  /  LOTW DEL fingerprint"
 USAGE_BAN = "Usage: BAN  /  BAN call [reason]  /  UNBAN call  /  PURGE call [reason]"
 HELD = "Msg {id} held."
 RELEASED = {"$": "Msg {id} released, queued for forwarding.",

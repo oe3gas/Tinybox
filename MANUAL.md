@@ -786,6 +786,17 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   | `TRUST` | Schlüssel dieser Box, vertraute Boxen |
   | `TRUST ADD box key` | den Zertifikaten von `box` (z. B. `OE5XBL-1`) vertrauen |
   | `TRUST DEL box` | nicht mehr |
+- **LoTW (CR113):** Schlüssel, die der User mit seinem LoTW-Zertifikat bestätigt hat, bekommen in `USER` den
+  Vermerk „LoTW bis …“, die Box stellt dafür ein Zertifikat mit Stufe `lotw` aus. Dafür braucht die Box die
+  ARRL-Zertifikate und das Paket `cryptography`:
+
+  | Befehl | Wirkung |
+  |---|---|
+  | `LOTW` | vertraute ARRL-Zertifikate, Stand von `lotw_release` |
+  | `LOTW ADD datei [passwort]` | die CA-Zertifikate einer `.p12` von TQSL (oder `.pem`/`.der`/`.cer`) vertrauen – Fingerprint mit der eigenen TQSL-Installation vergleichen |
+  | `LOTW DEL fingerprint` | nicht mehr |
+
+  `[client] lotw_release = yes` lässt einen neuen LoTW-bestätigten Schlüssel ohne `USER OK` gelten (Vorgabe `no`).
 - **Station sperren und entfernen (CR115)** – Konsole, signiert aus dem Client, Web-GUI „Keys“:
 
   | Befehl | Wirkung |

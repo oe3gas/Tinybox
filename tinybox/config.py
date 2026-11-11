@@ -325,6 +325,7 @@ class ChatBoard:
 @dataclass
 class ClientCfg:
     mail_notify: bool = True    # UI frame to TBMAIL when private mail arrives (PLANUNG 12, C1)
+    lotw_release: bool = False  # CR113: a new key confirmed with LoTW counts without the sysop
 
 
 @dataclass
@@ -864,7 +865,8 @@ def load(path: str | Path) -> Config:
                   mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp), rubrics=_load_rubrics(cp),
                   forward=forward, radio=radio, kiss=kiss, ax25=ax25,
                   sources=rad.sources, hints=rad.hints, kiss_fixed=kiss_fixed,
-                  client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool)),
+                  client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool),
+                                   lotw_release=_get(cp, "client", "lotw_release", False, bool)),
                   beacon=_load_beacon(cp), update=_load_update(cp), axudp=axudp)
 
 

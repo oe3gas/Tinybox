@@ -159,6 +159,9 @@ announce = yes                 # yes: ONE bulletin per new release in TBNEWS (li
 [client]
 mail_notify   = yes            # TinyBox clients: a UI frame to TBMAIL ("OE3ABC 2 new")
                                # tells the addressee about new private mail, without connecting
+lotw_release  = no             # yes: a NEW client key confirmed with LoTW (CR113) counts at
+                               # once, without USER OK; no: the sysop releases it and sees
+                               # "LoTW" in the key list. Needs ARRL certificates (LOTW ADD)
 
 [chat]
 enabled       = yes            # command C: chat boards for logged-in users

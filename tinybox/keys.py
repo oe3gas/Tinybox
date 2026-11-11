@@ -38,8 +38,11 @@ def _fp(pub64: str) -> str:
 
 
 def users(svc: MessageService) -> list[dict]:
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return [{"id": r["id"], "call": r["call"], "status": r["status"], "fp": _fp(r["pub"]),
-             "device": r["device"], "changed": r["changed"], "note": r["note"]}
+             "device": r["device"], "changed": r["changed"], "note": r["note"],
+             "lotw": r["lotw"] if r.get("lotw") and r["lotw"] >= today else ""}   # CR113
             for r in svc.store.key_list()]
 
 

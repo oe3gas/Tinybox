@@ -3803,6 +3803,11 @@ function renderLotw() {
   if (st.state === "ok") {
     box.append(el("b", "lotw-ok", `✓ LoTW: ${st.call}`), ` – certificate valid until ${st.until}` +
       (st.dxcc ? ` · DXCC ${st.dxcc}` : "") + ` · signed ${st.date.slice(0, 4)}-${st.date.slice(4, 6)}-${st.date.slice(6)}`);
+    const b = st.box || {};                            // stage 2: does the TinyBox know it
+    const boxText = { ok: `✓ ${b.box || "the TinyBox"} knows it`, sending: "sending it to the TinyBox …",
+      asking: "asking the TinyBox …", off: `${b.box || "the TinyBox"} cannot check LoTW yet (its sysop: LOTW ADD)`,
+      err: `${b.box || "the TinyBox"} did not take it: ${b.error || ""}` }[b.state];
+    if (boxText) box.append(el("br"), el("span", b.state === "ok" ? "lotw-ok" : b.state === "err" ? "lotw-bad" : "muted", boxText));
     const again = el("button", "sm", "Forget");
     again.title = "Delete the LoTW confirmation of this key";
     again.onclick = () => api("lotw/forget", {});

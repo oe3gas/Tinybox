@@ -409,7 +409,8 @@ class WebServer:
             if parts == ["keys"]:                                # CR93: client keys, trust
                 from .. import keys
                 return {"users": keys.users(svc), "box": keys.this_box(svc),
-                        "trusted": keys.trusted(svc), "banned": app.store.ban_list()}
+                        "trusted": keys.trusted(svc), "banned": app.store.ban_list(),
+                        "lotw": self._lotw_info()}
         else:
             if parts and parts[0] == "keys":
                 return self._keys(parts[1:], data)
@@ -470,6 +471,15 @@ class WebServer:
                 return {"ok": app.shutdown.cancel()}
         raise HttpError(404)
 
+    def _lotw_info(self) -> dict:
+        """CR113: trusted ARRL certificates, lotw_release, can this box check LoTW."""
+        from prcore import lotw
+        from .. import lotwbox
+        return {"available": lotw.available(), "release": self.app.cfg.client.lotw_release,
+                "roots": [{"fp": r["fp"], "fpp": lotwbox.fp_pretty(r["fp"]),
+                           "subject": r["subject"], "added": r["added"]}
+                          for r in self.app.store.lotw_roots()]}
+
     def _keys(self, parts: list[str], data: dict) -> dict:
         """CR93: POST keys/user {id, action OK|REVOKE|DEL}, keys/trust {box, pub},
         keys/untrust {box} - the same as USER and TRUST at the console."""
@@ -495,6 +505,29 @@ class WebServer:
             if parts == ["unban"]:
                 return {"text": f"{call}: may connect again." if svc.unban(call)
                         else f"{call}: not banned."}
+            if parts == ["lotw_add"]:              # CR113: {data base64 of the file, password}
+                import base64
+                import binascii
+                from .. import lotwbox
+                try:
+                    raw = base64.b64decode(str(data.get("data", "")), validate=True)
+                except (ValueError, binascii.Error):
+                    raise HttpError(400, "bad data") from None
+                if len(raw) > lotwbox.MAX_FILE:
+                    raise HttpError(400, "too large for a certificate file")
+                try:
+                    import tempfile
+                    from pathlib import Path
+                    with tempfile.TemporaryDirectory() as d:
+                        f = Path(d) / "upload"
+                        f.write_bytes(raw)
+                        lines = lotwbox.add_file(self.app.store, str(f), str(data.get("password", "")))
+                except lotwbox.LotwBoxError as exc:
+                    raise HttpError(400, str(exc)) from None
+                return {"text": " ".join(lines)}
+            if parts == ["lotw_del"]:
+                n = self.app.store.lotw_root_delete(str(data.get("fp", "")))
+                return {"text": f"{n} certificate(s) removed."}
             if parts == ["purge"]:
                 from prcore import auth
                 if not data.get("confirm"):

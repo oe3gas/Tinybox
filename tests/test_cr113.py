@@ -152,6 +152,23 @@ class Client(unittest.TestCase):
         c.lotw_forget()
         self.assertEqual(c.lotw_status()["state"], "none")
 
+    def test_tells_the_tinybox_once(self):
+        c = self.core
+        sent = []
+        c._send = sent.append
+        c.lotw_sign(self.p12, "geheim")
+        c._lotw_ask()
+        c._lotw_ask()                                    # once per connection
+        self.assertEqual(sent, ["//LOTW?"])
+        c._lotw_answer("-")                              # the box does not know it
+        lines = [x for x in sent if x.startswith("//LOTWP ")]
+        self.assertTrue(lines and lines[-1].startswith(f"//LOTWP {len(lines)}/{len(lines)} "))
+        self.assertTrue(all(len(x) <= 220 for x in lines))
+        c._lotw_answer("ok until=2028-01-01")
+        self.assertEqual(c.lotw_status()["box"]["state"], "ok")
+        c._lotw_answer("err the chain does not end at a trusted ARRL certificate")
+        self.assertIn("trusted ARRL", c.lotw_status()["box"]["error"])
+
     def test_web_only_from_this_pc(self):
         from tbclient.web import PEER, WebServer
         srv = WebServer(self.core)
