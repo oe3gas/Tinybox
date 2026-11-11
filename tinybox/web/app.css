@@ -432,6 +432,10 @@ table.data td .btn.sm + .btn.sm { margin-left: 6px; }
 
 /* User management (CR113/CR115): two columns, Users | Banned, Trusted | LoTW */
 main.um-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+main.um-grid > .card { margin: 0; }
+main.um-grid > .card:nth-child(-n+2) { align-self: stretch; display: flex; flex-direction: column; }   /* Banned as high as Users */
+main.um-grid .um-fill { flex: 1; }
+main.um-grid .um-entry { border-top: 1px solid var(--line, #ddd); border-bottom: 1px solid var(--line, #ddd); }
 @media (max-width: 1100px) { main.um-grid { grid-template-columns: minmax(0, 1fr); } }
 .um-list { max-height: 70vh; overflow-y: auto; }
 .um-person { border-top: 1px solid var(--line, #ddd); padding: 10px 16px; }

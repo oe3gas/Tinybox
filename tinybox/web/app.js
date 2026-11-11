@@ -1551,13 +1551,13 @@ function viewKeys() {
         text: "Ban: the station (all SSIDs) cannot connect any more, its data stays - Unban lets it back. " +
               "Purge: ban AND delete its keys, profile, logins, chat lines and board files; " +
               "mail, bulletins and the connection log stay." }),
-      h("div", { class: "scroll" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Call", "", "Since (UTC)", "Reason", ""].map((x) => h("th", { text: x })))), bans)),
-      h("div", { class: "card-body row" }, banCall, banWhy,
+      h("div", { class: "card-body row um-entry" }, banCall, banWhy,
         h("button", { class: "btn sm", type: "button", text: "Ban",
           onclick: () => act("ban", { call: banCall.value, reason: banWhy.value },
             `Ban ${banCall.value.toUpperCase()} (all SSIDs)? Running sessions end now; the data stays.`) }),
-        h("button", { class: "btn sm danger", type: "button", text: "Purge", onclick: () => purge(banCall.value, banWhy.value) }))),
+        h("button", { class: "btn sm danger", type: "button", text: "Purge", onclick: () => purge(banCall.value, banWhy.value) })),
+      h("div", { class: "scroll um-fill" }, h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Call", "", "Since (UTC)", "Reason", ""].map((x) => h("th", { text: x })))), bans))),
     card("Trusted TinyBoxen", me,
       h("div", { class: "scroll" }, h("table", { class: "data" },
         h("thead", {}, h("tr", {}, ["Box", "Fingerprint", "Since (UTC)", ""].map((x) => h("th", { text: x })))), trusted)),
