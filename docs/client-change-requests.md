@@ -92,7 +92,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Nachtrag .13: TX nur PTT, Queue-Chip; .14: Queue in Echtzeit; Funktest offen) – siehe unten |
 | 118 | TinyBox-Begrüßungsdialog: Gruß nach dem Namen (zufällig aus 8), Home-BBS mit Rufzeichen-Plausibilität, „S SYSOP“ mitten in den Fragen; Nachtrag: dieselbe Prüfung für Empfänger und @-Mailbox bei S | ✅ 11.11.2026 (Client 2026.11.11.15) – siehe unten |
 | 119 | TinyBox-Terminal: `SB` nicht mehr in der Hilfe für nicht authentifizierte User | ✅ 11.11.2026 – siehe unten |
-| 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (sieht/schreibt nicht alles) | offen – Variante wählen, siehe unten |
+| 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (Pille „terminal“) und beim Betreten eine Systemmeldung an alle | offen – entschieden (Variante A + Systemmeldung), Umsetzung ab 12.11.2026 – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4392,7 +4392,7 @@ authentifizierte User schreiben (CR92), ein Gast am Terminal kann es ohnehin nic
 - Der Befehl selbst war schon gesperrt (CR92), daran ändert sich nichts.
 - Tests `tests/test_cr119.py`.
 
-## CR120 – Terminal-User in der User-Ansicht kennzeichnen (offen, erfasst 11.11.2026)
+## CR120 – Terminal-User in der User-Ansicht kennzeichnen (offen, entschieden 11.11.2026)
 
 ### Wunsch (OE3GAS, 11.11.2026)
 
@@ -4427,4 +4427,21 @@ In allen Varianten zusätzlich ein Tooltip mit dieser Erklärung.
 - **Client:** Kennung aus `//WHO`/Join merken, in der User-Ansicht nach gewählter Variante zeigen;
   evtl. auch im Profil-Popup des Users.
 - Offen: auch „Client ohne Login mit Schlüssel“ (Gast im Client, falls es das gibt) kennzeichnen?
+
+### Entscheidung (OE3GAS, 11.11.2026)
+
+1. **Variante A:** kleine gelbe Pille `terminal` neben dem Call in „In this board“, dazu der Tooltip
+   „Terminal user, sees chat as text only, no pictures, files, reactions“.
+2. **Systemmeldung beim Betreten:** kommt ein Terminal-User in den Chat, sehen alle im Board eine
+   kurze Systemzeile:
+
+   `OE3NIX enters chat. Terminal user, sees chat as text only, no pictures, files, reactions.`
+
+   Hinweise für die Umsetzung:
+   - Die Box erzeugt die Zeile (dann sehen sie auch andere Terminal-User und ältere Clients) oder
+     der Client erzeugt sie aus der neuen Kennung im Join-Ereignis (kostet keine Bytes über Funk).
+     Zu klären: Bytes zählen – der Client-Weg spart die Zeile auf der Frequenz; Terminal-User
+     bräuchten den Hinweis über andere Terminal-User eher nicht.
+   - Im Client als Systemzeile wie „joined/left“ (grau, ohne Bubble), nur einmal je Betreten,
+     nicht beim Laden der History wiederholen.
 
