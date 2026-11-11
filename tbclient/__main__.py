@@ -73,7 +73,7 @@ def _key_fp(cfg: config.Config) -> str:
         return "(none)"
     try:
         ident = auth.Identity(data_dir / "identity.key")
-        return f"{ident.fp}  device {ident.device}"
+        return ident.fp
     except (OSError, auth.AuthError) as exc:
         return f"(no key: {exc})"
 
@@ -87,7 +87,7 @@ def start_block(log: logging.Logger, cfg: config.Config, details: bool = False,
     termcolor.kv_block(log, termcolor.wrap_items(TAG, [
         ("Your call", cfg.mycall),
         ("Your locator", cfg.locator or "(not set)"),
-        ("Your key", _key_fp(cfg), "fingerprint - the sysop compares it (CR93)"),
+        ("Your fingerprint", _key_fp(cfg), "the sysop compares it before release"),
         None,
         ("Your preferred TinyBox", cfg.tinybox_call),
         ("Autoconnect to", cfg.tinybox_call if cfg.auto_connect else "off"),

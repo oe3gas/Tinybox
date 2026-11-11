@@ -842,7 +842,9 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 
 .lotw-ok { color: #1d6b35; }
 .lotw-bad { color: #b3261e; }
-#lotw-form input[type=password] { flex: 1; min-width: 160px; }
+.lotw-form { display: flex; flex-direction: column; gap: 8px; }
+.lotw-form label { display: flex; flex-direction: column; gap: 4px; }
+.lotw-form input { width: 100%; box-sizing: border-box; }
 
 /* --- layout by window width (must stay at the end) ------------------------ */
 @media (min-width: 700px) {
