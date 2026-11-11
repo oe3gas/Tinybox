@@ -11,6 +11,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from prcore.profile import plausible_station
 from prcore.text import clean_text, defuse_lines
 
 from . import addressing, rights
@@ -30,6 +31,7 @@ from .store import Message, Store, utc_now
 log = logging.getLogger(__name__)
 
 ORIGINS = {"radio", "axudp", "telnet", "sysop", "mqtt", "inbox", "forward"}
+USER_ORIGINS = {"radio", "axudp", "telnet"}      # CR118: a user types the address
 MAX_SUBJECT = 60          # what local users may type
 MAX_SUBJECT_FWD = 80      # what partner mailboxes may send (FBB limit)
 FWD_STATES = {"", "$", "F", "H"}
@@ -313,6 +315,8 @@ class MessageService:
         out: list[str] = []
         for p in parts:
             call = self.check_send(from_call, p, type, sysop)
+            if type == "P" and not plausible_station(call):
+                raise ServiceError("invalid_call", call)     # CR118: typed by a user
             if call not in out:
                 out.append(call)
         return out
@@ -331,6 +335,14 @@ class MessageService:
             at_addr = addressing.normalize(at_addr, self.cfg.forward.aliases)
         except AddressError as exc:
             raise ServiceError("invalid_address", str(exc)) from None
+        if type.upper() == "P" and origin in USER_ORIGINS and at_addr:
+            # CR118: the mailbox in "@ OE3XSR.#NOE.AUT.EU" checked like a call - not
+            # for mail from partners, scripts or the sysop console; an area (#NOE, AUT,
+            # EU) in front stays as it is
+            first = at_addr.split(".", 1)[0]
+            if not first.startswith("#") and first not in addressing.CONTINENT \
+                    and first not in addressing.CONTINENTS and not plausible_station(first):
+                raise ServiceError("invalid_address", at_addr)
         if (origin != "forward" and type.upper() == "P" and not self.cfg.forward.enabled
                 and not addressing.is_local(at_addr, self.cfg.station.mailbox_call)):
             raise ServiceError("no_forward", at_addr)

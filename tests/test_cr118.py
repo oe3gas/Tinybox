@@ -72,3 +72,45 @@ class WelcomeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SendCheckTests(unittest.TestCase):
+    """CR118 follow-up: the recipient of S and the mailbox after @ are checked
+    like a call - for users only, not for mail from partners."""
+
+    def setUp(self):
+        self.app = make_app()
+        self.svc = self.app.service
+
+    def test_recipient(self):
+        from tinybox.service import ServiceError
+        self.assertEqual(self.svc.check_send_list("OE3ABC", "oe1xyz-7,sysop", "P", False),
+                         ["OE1XYZ-7", self.svc.check_send("OE3ABC", "SYSOP", "P", False)])
+        for bad in ("JN77SS", "70CM", "QO100", "123AB"):
+            with self.assertRaises(ServiceError, msg=bad):
+                self.svc.check_send_list("OE3ABC", bad, "P", False)
+        self.assertEqual(self.svc.check_send_list("OE3ABC", "70CM", "B", True), ["70CM"])
+
+    def test_mailbox_after_at(self):
+        from tinybox.service import ServiceError
+        for bad in ("JN77SS", "JN77SS.#NOE.AUT.EU", "70CM.AUT"):
+            with self.assertRaises(ServiceError, msg=bad):
+                self.svc.check_address("P", bad, None, "radio")
+        for ok in ("#NOE.AUT", "AUT.EU"):          # an area in front: as before
+            try:
+                self.svc.check_address("P", ok, None, "radio")
+            except ServiceError as exc:
+                self.assertNotEqual(exc.code, "invalid_address", ok)
+        # a partner forwards whatever it got: not refused for its form
+        try:
+            self.svc.check_address("P", "JN77SS", None, "forward")
+        except ServiceError as exc:
+            self.assertNotEqual(exc.code, "invalid_address")
+
+    def test_terminal_s(self):
+        s, t = login(self.app, "OE3ABC-7")
+        t.take()
+        type_lines(s, "S JN77SS")
+        self.assertEqual(s.state, State.COMMAND)
+        type_lines(s, "S OE1XYZ")
+        self.assertEqual(s.state, State.SEND_SUBJECT)

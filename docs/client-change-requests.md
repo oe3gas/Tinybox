@@ -90,7 +90,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert) ✅, Stufe 2 (Prüfung in der Box) ✅ 11.11.2026; Stufe 3 Anzeige und „Gerät bürgt für Gerät“ offen – siehe unten |
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
 | 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Nachtrag .13: TX nur PTT, Queue-Chip; .14: Queue in Echtzeit; Funktest offen) – siehe unten |
-| 118 | TinyBox-Begrüßungsdialog: Gruß nach dem Namen (zufällig aus 8), Home-BBS mit Rufzeichen-Plausibilität, „S SYSOP“ mitten in den Fragen | ✅ 11.11.2026 (Client 2026.11.11.15) – siehe unten |
+| 118 | TinyBox-Begrüßungsdialog: Gruß nach dem Namen (zufällig aus 8), Home-BBS mit Rufzeichen-Plausibilität, „S SYSOP“ mitten in den Fragen; Nachtrag: dieselbe Prüfung für Empfänger und @-Mailbox bei S | ✅ 11.11.2026 (Client 2026.11.11.15) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4367,3 +4367,12 @@ Beim Begrüßungsdialog (Fragen nach dem Login, CR73):
   Gäste dürfen das wie bisher (Post an den Sysop geht immer).
 - Tests `tests/test_cr118.py`.
 
+### Nachtrag (OE3GAS, 11.11.2026): dieselbe Prüfung beim Senden
+
+- **Empfänger bei `S`/`SP`** (Terminal und `//SEND` des Clients, `check_send_list`): Rufzeichen
+  plausibel (`prcore.profile.plausible_station` = CR92-Struktur, kein Locator; SSID egal). `SYSOP`
+  bleibt erlaubt. Bulletins (`SB 70CM`, `SB ALL`) wie bisher.
+- **`@` bei persönlicher Mail**, nur bei Eingabe durch einen User (Funk, AXUDP, Telnet): das erste
+  Element (die Mailbox) wird genauso geprüft. Steht vorne ein Gebiet (`#NOE`, `AUT`, `EU`), bleibt es
+  bei der Formprüfung. Fehler `invalid_address`.
+- **Nicht geprüft:** Post von Forward-Partnern, Inbox/MQTT-Skripte, Sysop-Konsole und Web-GUI.

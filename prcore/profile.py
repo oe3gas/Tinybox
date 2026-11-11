@@ -69,9 +69,17 @@ def check_home(text: str) -> str:
     # CR118: the same plausibility as for a connecting station (CR92: prefix with a
     # letter, digits, suffix - no rubric name like 70CM or QO100), and no locator
     # (JN77SS looks like a call but is a square)
-    if not plausible_call(call) or LOCATOR_RE.match(call):
+    if not plausible_station(call):
         raise ProfileError("home")
     return home
+
+
+def plausible_station(call: str) -> bool:
+    """CR118: a station or mailbox call typed by a user - the plausibility of a
+    connecting station (CR92: prefix with a letter, digits, suffix; no 70CM, QO100)
+    and no locator (JN77SS looks like a call but is a square). The SSID is ignored."""
+    base = call.strip().upper().split("-", 1)[0]
+    return plausible_call(base) and not LOCATOR_RE.match(base)
 
 
 def check(name: str = "", loc: str = "", home: str = "") -> dict[str, str]:
