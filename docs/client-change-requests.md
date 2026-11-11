@@ -4172,3 +4172,6 @@ Windows-Programm mit MinGW-w64 gebaut. **Funktest mit Funk offen.**
 - Geprüft im Browser (Playwright) mit Testdaten aus `AprsStats` (6000 Frames, 140 Stationen):
   Karten gleich hoch, Zuklappen bleibt nach dem Neuladen, WIDE2, sin load, Suche mit
   Neuzeichnen dazwischen; keine JS-Fehler. `tests/test_web.py`, `tests/test_aprsstats.py` grün.
+- Nachtrag (OE3GAS, 11.11.2026): Suche nur für den Graphen, nicht für die Tabellen. Die Zeile
+  heißt jetzt „Show in graph“ statt „Show“, damit klar ist, dass Auswahl und Suche nur den
+  Graphen betreffen (Client 2026.11.11.7).

@@ -383,7 +383,7 @@ const AprsGraph = (() => {
     });
     const nHit = q ? [...nodes.keys()].filter(hit).length : 0;
     const fc = el("span", "gr-fc", q ? (nHit ? nHit + (nHit === 1 ? " match" : " matches") : "no match") : "");
-    ctl2.append(el("span", "gr-tlab", "Show"), seg(ROLES, () => role, (v) => { role = v; redraw(); }),
+    ctl2.append(el("span", "gr-tlab", "Show in graph"), seg(ROLES, () => role, (v) => { role = v; redraw(); }),
                 seg(PATHS, () => role, (v) => { role = v; redraw(); }), find, fc);
     box.append(ctl2);
     if (refocus) requestAnimationFrame(() => { find.focus(); find.setSelectionRange(caret, caret); });
