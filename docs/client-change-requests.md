@@ -3929,8 +3929,17 @@ SVG (`viewBox`) verändern.
 **Reihenfolge (Vorschlag):** zuerst Fläche und Zoom (bringt in allen drei Ansichten am meisten),
 dann Zonen im Radar und Streifen in der Map, zuletzt das Feintuning von Force.
 
-**Offen zur Entscheidung (OE3GAS):**
+**Entscheidungen (OE3GAS, 11.11.2026):**
 
-- Radar: Zonenregel für **alle** Hop-Stufen (Vorschlag) oder nur für 2 Hops?
-- Map: Aufteilung des Radius (0–50 km größer) und Umgang mit Stationen über 400 km.
-- Fläche: Höhe ans Fenster anpassen mit Infos seitlich, oder „Vollbild“-Knopf?
+- Fläche: **Vollbild-Knopf** für die Zeichnung (statt Höhe ans Fenster anpassen).
+- Radar: Zonenregel für **alle** Hop-Stufen.
+- Map: Stationen über 400 km knapp außerhalb des 400-km-Rings anordnen.
+
+**Noch offen:** Lage der Ringe in der Map, d. h. wie viel vom Radius die Scheibe 0–50 km bekommt
+(Rest teilen sich 50–100, 100–200, 200–400 gleich). Beispiele bei Außenradius 100 %:
+
+| Variante | 50 km | 100 km | 200 km | 400 km | Fläche 0–50 km |
+|---|---|---|---|---|---|
+| maßstäblich (linear) | 12,5 % | 25 % | 50 % | 100 % | ≈ 1,5 % |
+| gleiche Abstände | 25 % | 50 % | 75 % | 100 % | ≈ 6 % |
+| Vorschlag Claude | 35 % | 57 % | 78 % | 100 % | ≈ 12 % |
