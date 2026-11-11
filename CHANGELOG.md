@@ -5,7 +5,8 @@
 - **Bild-Upload: Fortschritt und TX (CR117):** der Balken springt bei einer ersten `Y`-Antwort 0 nicht mehr ans
   Ende, eigene I-Frames zählen mit (max. 95 % bis `//IMGOK`); TX leuchtet, solange Frames warten, und folgt
   den eigenen Frames. Client 2026.11.11.12. Nachtrag 2026.11.11.13: TX nur noch bei PTT (Fork), wartende
-  Frames als eigener Chip „Queue n“ in der Kopfzeile.
+  Frames als eigener Chip „Queue n“ in der Kopfzeile. 2026.11.11.14: Queue zählt in Echtzeit mit den
+  Frames auf der Luft („Queue n · ack m“, aus N(S)/N(R) im Monitor).
 
 - **Web-GUI „User management“** (statt „Keys“): Karte „Users“ mit jeder bekannten Station (Name, Locator,
   Heimat-BBS, letzter Login, SSIDs, Ban/Purge) und darunter ihren Schlüsseln (Release/Revoke/Delete, ✓ LoTW);

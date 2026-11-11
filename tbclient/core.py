@@ -19,7 +19,7 @@ from prcore.ax25.frame import ui_frame as ax25_ui_frame
 from prcore import auth
 from prcore.text import isnum
 
-from . import VERSION, activity, proto
+from . import VERSION, activity, airq, proto
 from . import target as tgt
 from .config import CALL_RE, Config
 from .images import Images, ImageStore
@@ -48,7 +48,7 @@ MAX_GAP = 32
 RECENT_MAX = 10           # CR42: targets remembered for the "Connect to" field
 MONITOR_MAX = 500         # CR45: frames kept for the monitor (channel 0)
 OUTSTANDING_SEC = 3       # CR45: how often the send queues of the channels are asked
-OUTSTANDING_BUSY_SEC = 1  # CR117: ... while frames are waiting (TX in the top bar)
+OUTSTANDING_BUSY_SEC = 0.5  # CR117: ... while frames are waiting (TX in the top bar)
 IO_TOUCH_SEC = 0.5        # CR117: a frame on the air pushes a snapshot at most this often
 PEER_Q_SEC = 30           # CR78: how often the link counters of a TBClient channel are read
 INCOMING_IDLE_SEC = 30 * 60   # CR97 (TB-17): a station that called us and says nothing - gone
@@ -619,6 +619,29 @@ class ClientCore:
                 if entry.get("src") == cfrom and "lvl" not in entry:
                     entry["lvl"], entry["fix"] = lvl["lvl"], lvl["fix"]
 
+    def _air_count(self, f: RawFrame, pair: frozenset) -> None:
+        """CR117: own I-frames on the air and the acknowledgements of the other side
+        move the queue of the connection at once, not only at the next 'Y'."""
+        me = self.cfg.mycall
+        if me not in (f.src, f.dest) or f.src == f.dest:
+            return
+        other = f.dest if f.src == me else f.src
+        c = next((c for c in self.channels.values()
+                  if c.n and c.state == "online" and c.target == other), None)
+        if c is None:
+            return
+        mod128 = pair in self._mod128
+        kind, ns, nr = airq.seq(f.rest, mod128)
+        mod = 128 if mod128 else 8
+        q = c.airq
+        if f.src == me:
+            if kind == "I" and ns is not None:
+                q.own_i(ns, mod)
+            return
+        if kind in ("I", "S") and nr is not None and q.ack(nr, mod):
+            c.outstanding = q.y
+            self._touch()
+
     async def _poll_outstanding(self) -> None:
         """CR45: frames waiting in Direwolf per channel - all channels share the
         frequency, a picture on one slows the others down (shown in the monitor)."""
@@ -642,6 +665,7 @@ class ClientCore:
                         c.outstanding = await c.link.outstanding()
                     except Exception:
                         c.outstanding = None
+                    c.airq.poll(c.outstanding)
                     busy = busy or bool(c.outstanding)
                     if c.outstanding != before:     # CR117: queue chip and TX follow at once
                         self._touch()
@@ -931,6 +955,7 @@ class ClientCore:
             elif guess is False:
                 self._mod128.discard(pair)
         self.monitor_n += 1
+        self._air_count(f, pair)                 # CR117: queue / ack in real time
         if f.src == self.cfg.mycall:             # CR110: TX/RX in the top bar
             self.tx_at = time.time()
             self._touch()                        # CR117: TX at once, not rate-limited

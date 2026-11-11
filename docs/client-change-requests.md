@@ -89,7 +89,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 115 | TinyBox: Station sperren (BAN/UNBAN) und entfernen (PURGE = löschen + sperren) | ✅ 11.11.2026 – siehe unten |
 | 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert) ✅, Stufe 2 (Prüfung in der Box) ✅ 11.11.2026; Stufe 3 Anzeige und „Gerät bürgt für Gerät“ offen – siehe unten |
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
-| 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Nachtrag .13: TX nur PTT, Queue-Chip; Funktest offen) – siehe unten |
+| 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Nachtrag .13: TX nur PTT, Queue-Chip; .14: Queue in Echtzeit; Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4319,4 +4319,23 @@ Anzeige. TX nur, wenn die PTT aktiv ist.“ Umgesetzt:
 - **Queue n:** eigener Chip (gelb) in der Kopfzeile neben TX/RX, solange Frames warten oder auf
   die Bestätigung warten (AGW `Y`, Summe aller Kanäle).
 - Ein eigenes Frame schickt den Snapshot sofort (fremde Frames weiter höchstens alle 0,5 s).
+
+### Nachtrag 2 (OE3GAS, 11.11.2026, Client 2026.11.11.14)
+
+„Die Queue zählt nicht runter: sie zeigt die Anzahl Frames, TX leuchtet, nach einiger Zeit sind die
+Frames weg. Bitte mehr Echtzeit.“
+
+**Ursache:** AGW `Y` zählt gesendete, aber noch unbestätigte Frames mit. Mit großem Fenster (v2.2,
+k=32) geht ein ganzes Bild in einem Durchgang hinaus und bleibt bis zur Bestätigung „wartend“ – die
+Zahl steht und fällt dann auf einmal auf 0.
+
+**Umsetzung** (`tbclient/airq.py`): der Monitor hört beide Richtungen. Eigene I-Frames auf der Luft
+(Fork `O`, KISS) schieben V(S), N(R) der I-/S-Frames der Gegenstelle schiebt V(A).
+
+- **Queue n** = noch nicht gesendet (`Y` − auf der Luft) – zählt mit jedem eigenen Frame herunter;
+  **ack m** = gesendet, Bestätigung ausständig – fällt mit jedem RR/I-Frame der Gegenstelle.
+- Eine Bestätigung senkt die Zahl sofort, `Y` korrigiert bei jeder Abfrage (alle 0,5 s, solange
+  etwas wartet). Wiederholungen (N(S) schon gesehen) zählen nicht. Modulo 8 und 128.
+- Kopfzeile „Queue n · ack m“, ebenso der Queue-Chip im Kanal.
+- Ohne Fork (Original-Direwolf) sieht der Client die eigenen I-Frames nicht: dann bleibt es bei `Y`.
 

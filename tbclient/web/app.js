@@ -3768,9 +3768,11 @@ function renderModem() {
   const txc = el("span", "mc" + (tx ? " tx" : ""), "TX");
   txc.title = hasPtt ? "PTT of the transmitter (Direwolf fork)" : "own frame on the air (no PTT signal)";
   const parts = [up, txc, el("span", "mc" + (rx ? " rx" : ""), "RX")];
-  if (typeof m.txq === "number" && m.txq > 0) {
-    const q = el("span", "mc q", `Queue ${m.txq}`);
-    q.title = `${m.txq} frame(s) waiting to go out or for the acknowledgement`;
+  if (typeof m.txq === "number" && (m.txq > 0 || m.txack > 0)) {
+    // CR117: counts down with every own frame on the air; "ack" = sent, not yet confirmed
+    const q = el("span", "mc q", `Queue ${m.txq}` + (m.txack > 0 ? ` · ack ${m.txack}` : ""));
+    q.title = `${m.txq} frame(s) still to go out` +
+      (m.txack > 0 ? `, ${m.txack} on the air waiting for the acknowledgement` : "");
     parts.push(q);
   }
   box.replaceChildren(...parts);

@@ -1,0 +1,2 @@
+- Queue zaehlt mit jedem gesendeten Frame herunter;
+  "ack n" = gesendet, noch nicht bestaetigt.

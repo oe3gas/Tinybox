@@ -226,8 +226,11 @@ def _link(core: "ClientCore", c: "Channel", mono: float) -> list[dict]:
         out.append(chip("via", "AXUDP", "grey"))
     elif kind == "telnet":
         out.append(chip("via", "Telnet test port", "grey"))
-    if c.outstanding is not None:
-        out.append(chip("queue", f"Queue {c.outstanding}", "amber" if c.outstanding >= 7 else "grey"))
+    if c.outstanding is not None:                          # CR117: to send · on air, no ack
+        air = min(c.airq.on_air, c.outstanding)
+        q = c.outstanding - air
+        out.append(chip("queue", f"Queue {q}" + (f" · ack {air}" if air else ""),
+                        "amber" if q >= 7 else "grey"))
     l2 = c.link.l2()                                       # CR112: retries, version, window
     if l2 and l2.get("phase") == "recovery":
         rc, n2 = l2.get("rc", 0), l2.get("n2", 0)
@@ -318,7 +321,7 @@ def build(core: "ClientCore") -> dict:
     tr = tracker_of(core)
     chans = []
     rx_at, tx_at = core.rx_at, core.tx_at
-    txq = 0                                   # CR117: frames still to go out, all channels
+    txq = txack = 0                           # CR117: frames to go out / on the air without ack
     for n, c in sorted(core.channels.items()):
         if not n:
             continue
@@ -336,7 +339,9 @@ def build(core: "ClientCore") -> dict:
         # CR117: bytes handed over or frames waiting are not TX - that is the queue
         # chip; TX is the PTT (fork) or, without it, an own frame on the air
         if c.outstanding:
-            txq += c.outstanding
+            air = min(c.airq.on_air, c.outstanding)
+            txq += c.outstanding - air
+            txack += air
         chans.append({"n": n, "label": c.label or c.target, "state": c.state,
                       "kind": "box" if core.chan is c and c.mode == "tinybox"
                       else "peer" if c.peer is not None else "term",
@@ -352,7 +357,7 @@ def build(core: "ClientCore") -> dict:
             "modem": {"via": rs.get("via", ""), "up": rs.get("up"),
                       "rx": round(now - rx_at, 1) if rx_at else None,
                       "tx": round(now - tx_at, 1) if tx_at else None, "io": IO_SEC,
-                      "txq": txq,
+                      "txq": txq, "txack": txack,
                       # CR117: the PTT itself (fork events) - None: no PTT signal known
                       "ptt": bool(core.ptt_on) if getattr(port, "events", False) else None,
                       "fork": fork.get("version", ""), "features": fork.get("features", []),

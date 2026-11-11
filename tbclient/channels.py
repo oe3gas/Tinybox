@@ -16,6 +16,7 @@ from prcore import auth
 from prcore.text import clean_text
 
 from . import peer as peer_mod
+from .airq import AirQueue
 from .target import label as target_label
 
 if TYPE_CHECKING:
@@ -57,6 +58,7 @@ class Channel:
         self.incoming = False                     # the other station connected to us (CR46)
         self.last_io = time.time()                # CR97: last line in or out (idle check)
         self.outstanding: int | None = None       # frames waiting in Direwolf (AGW 'Y')
+        self.airq = AirQueue()                    # CR117: the same in real time from the monitor
         self._user_disc = False
         self._disc_timer: asyncio.TimerHandle | None = None
         self._detect_task: asyncio.Task | None = None
@@ -158,6 +160,7 @@ class Channel:
             self.ended = {"kind": kind, "at": int(time.time()), "call": self.target}
             self._user_disc = False
             self.outstanding = None
+            self.airq.reset()
             if self.peer is not None:
                 self.peer.img.link_lost()           # CR78: a picture on its way
                 self.peer.files.link_lost()

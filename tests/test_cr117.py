@@ -128,3 +128,46 @@ class TxChipTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AirQueueTests(unittest.TestCase):
+    """Follow-up 11.11.2026: the queue stood still and fell to 0 at once (window k
+    holds the whole burst unacknowledged) - now it counts with the frames."""
+
+    def test_counts_down_with_the_frames(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                core = ClientCore(client_cfg(tmp))
+                c = core.chan
+                c.state, c.target = "online", "OE3GAS-1"
+                c.outstanding = 7
+                c.airq.poll(7)                                        # 'Y': 7 frames
+
+                def modem():
+                    m = activity.build(core)["modem"]
+                    return m["txq"], m["txack"]
+                self.assertEqual(modem(), (7, 0))
+                for ns in range(7):                                   # the burst goes out
+                    ctl = bytes([(ns << 1)])
+                    core._on_frame(RawFrame(src="OE3GAS", dest="OE3GAS-1", control=ctl[0],
+                                            rest=ctl + b"\xf0x", info=b"x"))
+                    self.assertEqual(modem(), (6 - ns, ns + 1))
+                ctl = bytes([0])                                      # a retry of N(S)=0
+                core._on_frame(RawFrame(src="OE3GAS", dest="OE3GAS-1", control=0,
+                                        rest=ctl + b"\xf0x", info=b"x"))
+                self.assertEqual(modem(), (0, 7))
+                rr = bytes([0x01 | (4 << 5)])                         # RR N(R)=4
+                core._on_frame(RawFrame(src="OE3GAS-1", dest="OE3GAS", control=rr[0], rest=rr))
+                self.assertEqual(c.outstanding, 3)
+                self.assertEqual(modem(), (0, 3))
+                rr = bytes([0x01 | (7 << 5)])                         # RR N(R)=7: all of it
+                core._on_frame(RawFrame(src="OE3GAS-1", dest="OE3GAS", control=rr[0], rest=rr))
+                self.assertEqual(modem(), (0, 0))
+                self.assertEqual(c.outstanding, 0)
+        asyncio.run(scenario())
+
+    def test_seq_modulo_128(self):
+        from tbclient.airq import seq
+        self.assertEqual(seq(bytes([5 << 1, 9 << 1]), True), ("I", 5, 9))
+        self.assertEqual(seq(bytes([0x01, 100 << 1]), True), ("S", None, 100))
+        self.assertEqual(seq(bytes([0x2F]), False), ("U", None, None))
