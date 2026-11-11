@@ -752,9 +752,11 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   öffentlichem Schlüssel. Ein neuer Schlüssel wartet auf den Sysop; der Client zeigt
   „Your key waits for the sysop … fingerprint …“, der Sysop bekommt eine persönliche Nachricht.
 - **Web-GUI „User management“** (früher „Keys“): vier Karten in zwei Spalten – **Users** (jede Station mit
-  Name, Locator, Heimat-BBS, letztem Login, Ban/Purge; darunter ihre Schlüssel mit Release/Revoke/Delete und
+  Name, Locator, Heimat-BBS, erstem/letztem Connect und Zahl der Connects aus dem JLOG, Ban/Purge; darunter ihre Schlüssel mit Release/Revoke/Delete und
   „✓ LoTW“) und **Banned stations**, darunter **Trusted TinyBoxen** und **LoTW**. **Neue Schlüssel** stehen
   oben in „Users“, gelb markiert („waits for you“, Knopf **Release**); die Seitenleiste zeigt ihre Zahl.
+  Ein Klick auf ein Rufzeichen im **JLOG** oder im **Connection log** (Dashboard) öffnet „User management“
+  mit diesem Rufzeichen im Suchfeld.
 - **Freigabe (Sysop-Konsole oder Web-GUI „User management“):** den Fingerabdruck mit dem Benutzer vergleichen – am Telefon, im
   QSO, auf Papier, **nicht** über dieselbe Verbindung –, dann:
 

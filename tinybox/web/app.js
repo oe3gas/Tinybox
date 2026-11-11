@@ -1325,25 +1325,30 @@ function viewMonitor() {
 
 // Stations (JLOG) and the connection log are dashboard cards (no menu entries of their
 // own any more). They reload when a station connects or disconnects.
+// A call in the JLOG or the connection log opens User management with it (all its data).
+function callCell(call) {
+  return h("td", { class: "mono" }, h("a", { href: "#/keys/" + encodeURIComponent(call.split("-")[0]),
+    text: call, title: "Show in User management" }));
+}
 function jlogCard() {
-  const tbody = h("tbody", {}, h("tr", {}, h("td", { colspan: 7, text: "Loading ..." })));
+  const tbody = h("tbody", {}, h("tr", {}, h("td", { colspan: 6, text: "Loading ..." })));
   const count = h("span", { class: "mono", style: "font-weight: 700" });
   async function update() {
     let rows;
     try { rows = await api("jlog"); }
-    catch (e) { tbody.replaceChildren(h("tr", {}, h("td", { colspan: 7, text: e.message }))); return; }
+    catch (e) { tbody.replaceChildren(h("tr", {}, h("td", { colspan: 6, text: e.message }))); return; }
     count.textContent = String(rows.length);
     tbody.replaceChildren(...(rows.length ? rows.map((r) => h("tr", {},
-      h("td", { class: "mono", text: r.call }), h("td", { text: r.name || "" }),
+      callCell(r.call), h("td", { text: r.name || "" }),
       h("td", { class: "mono", text: r.loc || "" }), h("td", { class: "mono", text: r.home || "" }),
-      h("td", { class: "mono", text: fullDate(r.first_seen) }),
-      h("td", { class: "mono", text: fullDate(r.last_seen) }), h("td", { class: "mono subject", text: r.count })))
-      : [h("tr", {}, h("td", { colspan: 7, text: "No stations logged yet." }))]));
+      h("td", { class: "mono", text: r.count }),
+      h("td", { class: "mono", text: fullDate(r.last_seen) })))
+      : [h("tr", {}, h("td", { colspan: 6, text: "No stations logged yet." }))]));
   }
   const card = h("section", { class: "card", style: "flex-shrink: 0; max-height: 40vh" },
     h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Stations (JLOG)" }), count),
     h("div", { class: "scroll" }, h("table", { class: "data" },
-      h("thead", {}, h("tr", {}, ["Call", "Name", "Locator", "Home BBS", "First seen (UTC)", "Last seen (UTC)", "Connects"].map((t) => h("th", { text: t })))),
+      h("thead", {}, h("tr", {}, ["Call", "Name", "Loc", "Home BBS", "Connects", "Last seen (UTC)"].map((t) => h("th", { text: t })))),
       tbody)));
   update();
   return { card, update };
@@ -1374,9 +1379,9 @@ function connlogCard() {
     tbody.replaceChildren(...(list.length ? list.map((r) => h("tr", {},
       h("td", { class: "mono", text: fullDate(r.start) }),
       h("td", { class: "mono", text: fullDate(r.end) }),
-      h("td", { class: "mono", text: fmtDur(r.secs) }),
-      h("td", { class: "mono", text: r.call }),
+      callCell(r.call),
       h("td", { text: r.via }),
+      h("td", { class: "mono", text: fmtDur(r.secs) }),
       h("td", { class: "mono", text: fmtBytes(r.rx) + " / " + fmtBytes(r.tx) }),
       h("td", { class: "mono", title: "bytes sent on the air incl. repeats / received (Direwolf with TinyBox extension)",
                 text: r.air_tx === null ? "-" : fmtBytes(r.air_tx) + " / " + fmtBytes(r.air_rx) }),
@@ -1391,7 +1396,7 @@ function connlogCard() {
   const card = h("section", { class: "card", style: "flex-shrink: 0; max-height: 40vh" },
     h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Connection log" }), filter, csv, adi),
     h("div", { class: "scroll" }, h("table", { class: "data" },
-      h("thead", {}, h("tr", {}, ["Connect (UTC)", "Disconnect (UTC)", "Duration", "Call", "Via",
+      h("thead", {}, h("tr", {}, ["Connect (UTC)", "Disconnect (UTC)", "Call", "Via", "Duration",
         "Bytes in / out", "On air out / in", "Ended"].map((t) => h("th", { text: t })))),
       tbody)));
   update();
@@ -1421,7 +1426,7 @@ function viewSettings() {
 // User management (was "Keys", OE3GAS 11.11.2026): every station the box knows with its
 // profile, keys (CR93), LoTW mark (CR113) and ban (CR115); trusted TinyBoxen, ARRL
 // certificates. Two columns: Users | Banned stations, Trusted TinyBoxen | LoTW.
-function viewKeys() {
+function viewKeys(find) {
   const people = h("div", { class: "um-list" }), waitNote = h("div", { class: "card-body note" });
   const trusted = h("tbody"), me = h("div", { class: "card-body note" });
   const filter = h("input", { type: "search", placeholder: "Find a call or name", class: "grow" });
@@ -1484,7 +1489,9 @@ function viewKeys() {
       h("span", { text: p.name || "–" }),
       h("span", { class: "mono", text: p.loc || "" }),
       h("span", { class: "mono", text: p.home ? "home " + p.home : "" }),
+      ...(p.first ? [h("span", { class: "muted", text: "first " + fullDate(p.first) })] : []),
       h("span", { class: "muted", text: p.last ? "last " + fullDate(p.last) : "never logged in" }),
+      ...(p.connects ? [h("span", { class: "muted", text: p.connects + " connect" + (p.connects > 1 ? "s" : "") })] : []),
       h("span", { class: p.waiting ? "warn" : p.keys.length ? "" : "muted",
         text: p.waiting ? `${p.waiting} key waiting` : p.keys.length ? `${p.keys.length} key(s)` + (p.lotw ? " · ✓ LoTW" : "") : "no key" }),
       h("span", { class: "um-btns" }, ...(p.sysop ? [h("span", { class: "muted", text: "sysop" })] : p.ban
@@ -1541,6 +1548,7 @@ function viewKeys() {
       : [h("tr", {}, h("td", { colspan: 4, text: "No ARRL certificate trusted yet." }))]));
   }
   filter.oninput = renderPeople;
+  if (find) filter.value = find;                  // from a call in the JLOG / connection log
   const card = (title, ...body) => h("section", { class: "card" },
     h("div", { class: "card-head" }, h("h2", { class: "grow", text: title })), ...body);
   main().className = "um-grid";
@@ -1593,6 +1601,7 @@ function route() {
     S.view = viewMessage(Number(parts[1]));
   }
   else if (name === "user" && parts[1]) S.view = viewUser(decodeURIComponent(parts[1]));
+  else if (name === "keys" && parts[1]) S.view = viewKeys(decodeURIComponent(parts[1]));
   else S.view = (views[name] || viewDashboard)();
   main().scrollTop = 0;
 }

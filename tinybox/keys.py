@@ -48,7 +48,8 @@ def users(svc: MessageService) -> list[dict]:
 
 def people(svc: MessageService) -> list[dict]:
     """The User management page: everybody the box knows (logins, profiles, keys,
-    bans) per base call - name, locator, home BBS, last login, SSIDs, keys, ban.
+    bans, JLOG) per base call - name, locator, home BBS, first/last seen, connects,
+    SSIDs, keys, ban.
     Stations with a key waiting for the sysop first."""
     from .addressing import base_call
     st = svc.store
@@ -60,15 +61,21 @@ def people(svc: MessageService) -> list[dict]:
     logins: dict[str, list[dict]] = {}
     for u in st.user_list():
         logins.setdefault(base_call(u["call"]), []).append(u)
+    seen: dict[str, list] = {}                # JLOG: first/last seen, connects
+    for j in st.jlog_list(-1):
+        seen.setdefault(base_call(j.call), []).append(j)
     out = []
-    for base in set(keys_by) | set(profs) | set(bans) | set(logins):
+    for base in set(keys_by) | set(profs) | set(bans) | set(logins) | set(seen):
         p = profs.get(base) or {}
         ls = logins.get(base, [])
         ks = keys_by.get(base, [])
+        js = seen.get(base, [])
         out.append({"call": base, "name": p.get("name", ""), "loc": p.get("loc", ""),
                     "home": p.get("home", ""),
-                    "last": max((u["last_login"] for u in ls), default=""),
-                    "ssids": sorted(u["call"] for u in ls), "keys": ks,
+                    "last": max([u["last_login"] for u in ls] + [j.last_seen for j in js], default=""),
+                    "first": min((j.first_seen for j in js), default=""),
+                    "connects": sum(j.count for j in js),
+                    "ssids": sorted({u["call"] for u in ls} | {j.call for j in js}), "keys": ks,
                     "waiting": sum(1 for k in ks if k["status"] == "pending"),
                     "lotw": any(k["lotw"] for k in ks),
                     "ban": bans.get(base), "sysop": svc.is_sysop_call(base)})

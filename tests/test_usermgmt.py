@@ -51,11 +51,15 @@ class People(unittest.TestCase):
         st.profile_set("OE1ABC", "Quintus", "JN88BN", "OE3GAS-1", 1)
         st.user_login("OE1ABC-7")
         st.user_login("OE3TEC")
+        st.jlog_touch("OE1ABC-7")
+        st.jlog_touch("OE1ABC-8")
         app.service.ban("OE1KBC", "x")
         rows = keys.people(app.service)
         self.assertEqual([r["call"] for r in rows], ["OE1ABC", "OE1KBC", "OE3GAS", "OE3TEC"])
         first = rows[0]
-        self.assertEqual((first["name"], first["waiting"], first["ssids"]), ("Quintus", 1, ["OE1ABC-7"]))
+        self.assertEqual((first["name"], first["waiting"], first["ssids"]), ("Quintus", 1, ["OE1ABC-7", "OE1ABC-8"]))
+        self.assertEqual(first["connects"], 2)                 # JLOG: all SSIDs together
+        self.assertTrue(first["first"] and first["last"])
         self.assertTrue(rows[1]["ban"])
         self.assertEqual(len(rows[2]["keys"]), 1)
 

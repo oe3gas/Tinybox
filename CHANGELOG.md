@@ -9,7 +9,10 @@
 - **Web-GUI „User management“** (statt „Keys“): Karte „Users“ mit jeder bekannten Station (Name, Locator,
   Heimat-BBS, letzter Login, SSIDs, Ban/Purge) und darunter ihren Schlüsseln (Release/Revoke/Delete, ✓ LoTW);
   wartende Schlüssel zuerst und gelb, ihre Zahl in der Seitenleiste. Zwei Spalten: Users | Banned stations,
-  Trusted TinyBoxen | LoTW.
+  Trusted TinyBoxen | LoTW. Erster/letzter Connect und Connects aus dem JLOG je Station.
+- **Dashboard:** JLOG nur noch Call, Name, Loc, Home BBS, Connects, Last seen; Connection log in der
+  Reihenfolge Connect, Disconnect, Call, Via, Duration, Bytes, On air, Ended. Klick auf ein Rufzeichen
+  öffnet „User management“ mit diesem Rufzeichen.
 - **Vorstellung:** wer die Box als Heimat-BBS angibt (auch mit `NH`), bekommt „Thank you for choosing
   OE3GAS-1 as your home!“.
 
