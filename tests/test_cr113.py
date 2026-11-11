@@ -164,6 +164,12 @@ class Client(unittest.TestCase):
         lines = [x for x in sent if x.startswith("//LOTWP ")]
         self.assertTrue(lines and lines[-1].startswith(f"//LOTWP {len(lines)}/{len(lines)} "))
         self.assertTrue(all(len(x) <= 220 for x in lines))
+        n_short = len(lines)
+        c._lotw_answer("more")                           # the box lacks an ARRL certificate
+        full = [x for x in sent if x.startswith("//LOTWP ")][n_short:]
+        self.assertGreater(len(full), n_short)
+        c._lotw_answer("more")                           # only once
+        self.assertEqual(len([x for x in sent if x.startswith("//LOTWP ")]), n_short + len(full))
         c._lotw_answer("ok until=2028-01-01")
         self.assertEqual(c.lotw_status()["box"]["state"], "ok")
         c._lotw_answer("err the chain does not end at a trusted ARRL certificate")

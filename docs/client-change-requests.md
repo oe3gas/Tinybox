@@ -4140,6 +4140,14 @@ Jetzt ja: die Freigabe bleibt, der Schlüssel bekommt den Vermerk „LoTW bis �
   TBC1 und nehmen ein TBC2 nicht an (betrifft nur LoTW-bestätigte Schlüssel).
 - Tests `tests/test_cr113_box.py`, Client-Teil in `tests/test_cr113.py`.
 
+**Live über Funk (OE3GAS, 11.11.2026):** die erste Form (JSON in base64url, ganze Kette: Callsign-
+Zertifikat ≈ 1,2 KB, Production CA ≈ 1,6 KB, Root CA mit 4096-Bit-Schlüssel ≈ 1,9 KB, alles doppelt kodiert)
+brauchte 45 Zeilen, ≈ 9,4 KB, ≈ 75 s bei 1200 Bd – geprüft und angenommen. **Seit Client 2026.11.11.10 kompakt**
+(`prcore.lotw.wire_encode`): `2.<call>.<key>.<datum>.<alg>.<sig>.<bis>.<zertifikate>`, jedes binäre Feld einmal
+base64url, und **nur das Callsign-Zertifikat** – die ARRL-Zertifikate hat die Box aus `LOTW ADD`. Kann sie die
+Kette damit nicht schließen, antwortet sie `//LOTW more` und der Client schickt einmal alle. Erwartet ≈ 11 Zeilen,
+≈ 2,2 KB, ≈ 18 s. Die Box versteht beide Formen.
+
 ### Gerät bürgt für Gerät (offen, besprochen 11.11.2026)
 
 Ein neues Gerät desselben Calls ist nicht automatisch LoTW-bestätigt (die Bestätigung gilt einem Schlüssel,

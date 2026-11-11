@@ -1,0 +1,2 @@
+- LoTW an die TinyBox: nur das eigene Zertifikat,
+  etwa 2 statt 9 KB auf Funk.

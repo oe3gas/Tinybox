@@ -6,10 +6,19 @@ Protocol (cap LOTW, in client mode or while the key waits for the sysop):
     //LOTW?                     -> //LOTW until=<YYYY-MM-DD>   this key is confirmed
                                    //LOTW -                    not (yet)
                                    //LOTW off                  this box cannot check LoTW
-    //LOTWP <i>/<n> <chunk>     the proof: compact JSON, base64url, in n lines of at
-                                most CHUNK characters (i = 1..n); after the last one
+    //LOTWP <i>/<n> <chunk>     the proof (prcore.lotw.wire_encode: normally only the
+                                callsign certificate, every binary field base64url
+                                once) in n lines of at most CHUNK characters; after
+                                the last one
                              -> //LOTW ok until=<YYYY-MM-DD>
+                                //LOTW more                 chain not closed with the
+                                                            ARRL certificates here: send
+                                                            all certificates
                                 //LOTW err <reason>
+
+Live over the air (OE3GAS, 11.11.2026) the first form - JSON in base64url with the
+whole chain - took 45 lines, 9.4 KB, 75 s at 1200 Bd; the compact one with only
+the callsign certificate about 11 lines, 2.2 KB.
 
 The proof is bound to the key the client logged in with (call and Ed25519 key in
 it, signed with the LoTW key) - nobody can use it for another key, so the upload
@@ -189,8 +198,11 @@ def _check(s: Session, text: str) -> bool:
         s.out("//LOTW off")
         return False
     try:
-        proof = json.loads(base64.urlsafe_b64decode(text + "=" * (-len(text) % 4)))
-    except (ValueError, binascii.Error):
+        if text.startswith(lotw.WIRE_V + "."):          # compact, since 2026.11.11.10
+            proof = lotw.wire_decode(text)
+        else:                                            # the first form: JSON, base64url
+            proof = json.loads(base64.urlsafe_b64decode(text + "=" * (-len(text) % 4)))
+    except (ValueError, binascii.Error):                 # LotwError is a ValueError too
         s.out("//LOTW err damaged")
         return False
     if not isinstance(proof, dict) or proof.get("pub") != row["pub"] \
@@ -201,6 +213,9 @@ def _check(s: Session, text: str) -> bool:
     try:
         info = lotw.verify(proof, roots(store))
     except lotw.LotwError as exc:
+        if "trusted ARRL" in str(exc) and len(proof.get("certs", [])) == 1:
+            s.out("//LOTW more")                         # only the callsign one came
+            return False
         log.warning("%s: LoTW proof refused - %s", s.call, exc)
         s.out(f"//LOTW err {exc}")
         return False

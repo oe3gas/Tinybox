@@ -1143,6 +1143,9 @@ class ClientCore:
             self.lotw_box.update(state="ok", until=rest[6:], box=box)
         elif (rest == "-" or rest.startswith("until=")) and proof:
             self._lotw_send(proof)
+        elif word == "more" and proof and not self.lotw_box.get("full"):
+            self.lotw_box["full"] = True             # the box lacks an ARRL certificate
+            self._lotw_send(proof, full=True)
         elif word == "off":
             self.lotw_box.update(state="off", box=box)
         elif word == "ok":
@@ -1158,11 +1161,10 @@ class ClientCore:
             self.console.append(f"*** {box} did not take your LoTW confirmation: {why}")
         self._touch()
 
-    def _lotw_send(self, proof: dict) -> None:
-        import base64
-        import json
-        text = base64.urlsafe_b64encode(json.dumps(proof, separators=(",", ":")).encode()
-                                        ).decode().rstrip("=")
+    def _lotw_send(self, proof: dict, full: bool = False) -> None:
+        """Normally only the callsign certificate (the box has the ARRL ones)."""
+        from prcore import lotw
+        text = lotw.wire_encode(proof, full)
         parts = [text[i:i + 200] for i in range(0, len(text), 200)]
         self.lotw_box["state"] = "sending"
         log.info("LoTW: sending the confirmation to %s (%d bytes, %d lines)", self.target,

@@ -78,6 +78,34 @@ class BoxLotw(unittest.TestCase):
         from tinybox import keys
         self.assertTrue(keys.users(self.app.service)[0]["lotw"])
 
+    def test_compact_only_the_callsign_certificate(self):
+        s, t = self.logon()
+        t.take()
+        text = lotw.wire_encode(self.proof)
+        parts = [text[i:i + 200] for i in range(0, len(text), 200)]
+        self.assertLess(len(parts), len(chunks(self.proof)) / 2)          # much less on air
+        with self.assertLogs("tinybox.lotwbox", "WARNING"):
+            type_lines(s, *[f"//LOTWP {i}/{len(parts)} {c}" for i, c in enumerate(parts, 1)])
+        self.assertIn("//LOTW ok", t.take())
+
+    def test_more_when_the_box_lacks_the_intermediate(self):
+        from cryptography.hazmat.primitives import serialization
+        store = self.app.store
+        inter_fp = lotwbox.fp_of(self.inter.public_bytes(serialization.Encoding.DER))
+        self.assertEqual(store.lotw_root_delete(inter_fp), 1)            # only the root left
+        s, t = self.logon()
+        t.take()
+
+        def send(full):
+            text = lotw.wire_encode(self.proof, full)
+            parts = [text[i:i + 200] for i in range(0, len(text), 200)]
+            type_lines(s, *[f"//LOTWP {i}/{len(parts)} {c}" for i, c in enumerate(parts, 1)])
+        send(False)
+        self.assertIn("//LOTW more", t.take())
+        with self.assertLogs("tinybox.lotwbox", "WARNING"):
+            send(True)
+        self.assertIn("//LOTW ok", t.take())
+
     def test_waiting_key_stays_waiting_by_default(self):
         with self.assertLogs("tinybox", "WARNING"):
             s, t = self.logon(status="")

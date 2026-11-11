@@ -224,3 +224,43 @@ def verify(proof: dict, roots: list | None, now: _dt.datetime | None = None) -> 
             raise LotwError("the chain does not end at a trusted ARRL certificate")
     info["chain"] = [describe(c)["subject"] for c in chain[1:]]
     return info
+
+
+# --- over the air (CR113): compact, each binary field base64url once ---------------
+#
+#   2.<call>.<Ed25519 key>.<YYYYMMDD>.<alg>.<sig>.<until>.<cert>[,<cert> ...]
+#
+# Normally only the callsign certificate: the TinyBox has the ARRL ones (LOTW ADD
+# from the same kind of .p12). It answers "more" if it cannot close the chain -
+# then the client sends all of them (full=True).
+
+WIRE_V = "2"
+
+
+def _u(text: str) -> str:
+    return base64.urlsafe_b64encode(base64.b64decode(text)).decode().rstrip("=")
+
+
+def _s(text: str) -> str:
+    return base64.b64encode(base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))).decode()
+
+
+def wire_encode(proof: dict, full: bool = False) -> str:
+    certs = proof.get("certs", [])
+    certs = certs if full else certs[:1]
+    return ".".join([WIRE_V, proof["call"], proof["pub"], proof["date"], proof["alg"],
+                     _u(proof["sig"]), proof.get("until", ""), ",".join(_u(c) for c in certs)])
+
+
+def wire_decode(text: str) -> dict:
+    """The proof dict (as kept by the client) from the over-the-air form."""
+    parts = text.split(".")
+    if len(parts) != 8 or parts[0] != WIRE_V:
+        raise LotwError("not a LoTW proof")
+    _, call, pub, date, alg, sig, until, certs = parts
+    try:
+        return {"v": 1, "call": call, "pub": pub, "date": date, "alg": alg, "sig": _s(sig),
+                "until": until, "certs": [_s(c) for c in certs.split(",") if c][:MAX_CERTS]}
+    except (ValueError, TypeError):
+        raise LotwError("the proof is damaged") from None
+
