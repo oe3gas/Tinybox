@@ -408,7 +408,8 @@ class WebServer:
                 return self._channel()
             if parts == ["keys"]:                                # CR93: client keys, trust
                 from .. import keys
-                return {"users": keys.users(svc), "box": keys.this_box(svc),
+                return {"users": keys.users(svc), "people": keys.people(svc),
+                        "box": keys.this_box(svc),
                         "trusted": keys.trusted(svc), "banned": app.store.ban_list(),
                         "lotw": self._lotw_info()}
         else:
@@ -631,6 +632,7 @@ class WebServer:
             # KISS mode (CR41): kisshub and the TNC behind it
             "radio": agw.radio_state() if agw is not None and hasattr(agw, "radio_state") else None,
             "users": len(self.app.registry), "max_users": cfg.mailbox.max_users,
+            "keys_waiting": sum(1 for k in self.app.store.key_list() if k["status"] == "pending"),
             "messages": len(msgs), "private": sum(m.type == "P" for m in msgs),
             "bulletins": sum(m.type == "B" for m in msgs),
             "unread": sum(m.status == "N" for m in msgs),

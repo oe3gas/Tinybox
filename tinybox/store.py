@@ -863,6 +863,12 @@ class Store:
                 "INSERT INTO profiles (base, asked) VALUES (?, ?)"
                 " ON CONFLICT(base) DO UPDATE SET asked = excluded.asked", (base, utc_now()))
 
+    def user_list(self) -> list[dict]:
+        return [dict(r) for r in self._db.execute("SELECT * FROM users ORDER BY call")]
+
+    def profile_list(self) -> dict[str, dict]:
+        return {r["base"]: self._profile(r) for r in self._db.execute("SELECT * FROM profiles")}
+
     def user_login(self, call: str) -> None:
         with self._db:
             self._db.execute(

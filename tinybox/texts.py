@@ -119,6 +119,7 @@ PROFILE_BAD = {"name": "Name: up to 12 letters, please.",
                "loc": "Locator: 4 or 6 characters, e.g. JN88 or JN88EP.",
                "home": "Home BBS: a mailbox call, e.g. OE3XSR or OE3XSR.#NOE.AUT.EU."}
 PROFILE_THANKS = "Thank you. Change it any time with N, NL and NH."
+PROFILE_HOME_HERE = "Thank you for choosing {box} as your home!"
 PROFILE_LATER = "OK. Set it later with N name, NL locator, NH home BBS."
 PROFILE_SHOW = "{call}: name {name}, locator {loc}, home BBS {home}"
 PROFILE_NONE = "No profile for {call}."

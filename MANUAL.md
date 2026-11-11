@@ -745,13 +745,17 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   ein **Gerätekennzeichen** (`dev=`, z. B. `3F9A21C0`): ein Hash des Rechnernamens mit dem
   geheimen Schlüssel – der Name selbst geht nie über Funk und lässt sich auch nicht durch
   Probieren herausfinden. Der Client zeigt es im Startblock („Your key … device …“) und in den
-  Settings; der Sysop sieht es in `USER` und unter „Keys“. Geht ein Gerät verloren: nur
+  Settings; der Sysop sieht es in `USER` und unter „User management“. Geht ein Gerät verloren: nur
   dessen Schlüssel widerrufen. Den
   **Fingerabdruck** (z. B. `7F3A-91C2-44E0`) zeigt der Client im Startblock („Your key“).
 - **Erster Login:** die TinyBox schickt eine Zufallszahl, der Client antwortet mit Signatur und
   öffentlichem Schlüssel. Ein neuer Schlüssel wartet auf den Sysop; der Client zeigt
   „Your key waits for the sysop … fingerprint …“, der Sysop bekommt eine persönliche Nachricht.
-- **Freigabe (Sysop-Konsole oder Web-GUI „Keys“):** den Fingerabdruck mit dem Benutzer vergleichen – am Telefon, im
+- **Web-GUI „User management“** (früher „Keys“): vier Karten in zwei Spalten – **Users** (jede Station mit
+  Name, Locator, Heimat-BBS, letztem Login, Ban/Purge; darunter ihre Schlüssel mit Release/Revoke/Delete und
+  „✓ LoTW“) und **Banned stations**, darunter **Trusted TinyBoxen** und **LoTW**. **Neue Schlüssel** stehen
+  oben in „Users“, gelb markiert („waits for you“, Knopf **Release**); die Seitenleiste zeigt ihre Zahl.
+- **Freigabe (Sysop-Konsole oder Web-GUI „User management“):** den Fingerabdruck mit dem Benutzer vergleichen – am Telefon, im
   QSO, auf Papier, **nicht** über dieselbe Verbindung –, dann:
 
   | Befehl | |
@@ -776,7 +780,7 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   der Schlüssel dort wie ein neuer auf `USER OK`. Was der Sysop dort entscheidet, gilt vor dem
   Zertifikat: `USER REVOKE` sperrt auch mit gültigem Zertifikat. Ein an der Heimat-BBS
   widerrufener Schlüssel gilt woanders bis zum Ablauf seines Zertifikats.
-- **Einer anderen TinyBox vertrauen** (Sysop-Konsole oder Web-GUI „Keys“, Karte „Trusted
+- **Einer anderen TinyBox vertrauen** (Sysop-Konsole oder Web-GUI „User management“, Karte „Trusted
   TinyBoxen“): `TRUST` zeigt Mailbox-Ruf, öffentlichen Schlüssel und Fingerabdruck **dieser** Box –
   das gibt man dem anderen Sysop. Der trägt es bei sich ein und vergleicht den Fingerabdruck mit
   dir (Telefon, QSO), umgekehrt genauso:
@@ -797,7 +801,7 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   | `LOTW DEL fingerprint` | nicht mehr |
 
   `[client] lotw_release = yes` lässt einen neuen LoTW-bestätigten Schlüssel ohne `USER OK` gelten (Vorgabe `no`).
-- **Station sperren und entfernen (CR115)** – Konsole, signiert aus dem Client, Web-GUI „Keys“:
+- **Station sperren und entfernen (CR115)** – Konsole, signiert aus dem Client, Web-GUI „User management“:
 
   | Befehl | Wirkung |
   |---|---|

@@ -247,6 +247,8 @@ class Session:
         self.state = State.COMMAND
         if not quiet:
             self.out(texts.PROFILE_THANKS if answers else texts.PROFILE_LATER)
+            if profiles.home_is(answers.get("home", ""), self.cfg.station.mailbox_call):
+                self.out(texts.PROFILE_HOME_HERE.format(box=self.cfg.station.mailbox_call.upper()))
 
     def _on_profile(self, line: str) -> None:
         if CTRL_Z in line or line.strip().upper() == "/AB":

@@ -127,6 +127,7 @@ async function refreshStatus() {
     fwdBox.title = st.forward.lines.join("\n");   // partners and last session on hover
   }
   $("nav-msgs").textContent = st.messages;
+  $("nav-keys").textContent = st.keys_waiting || "";      // new keys waiting for the sysop
   const ver = $("nav-ver");                          // CR108: foot of the side column
   ver.replaceChildren(h("strong", { text: "TinyBox " + st.version }), h("br"), "by OE3GAS",
                       updateHint(st.update));
@@ -1417,13 +1418,37 @@ function viewSettings() {
   return {};
 }
 
-// CR93: client keys (USER at the console) and trusted TinyBoxen (TRUST)
+// User management (was "Keys", OE3GAS 11.11.2026): every station the box knows with its
+// profile, keys (CR93), LoTW mark (CR113) and ban (CR115); trusted TinyBoxen, ARRL
+// certificates. Two columns: Users | Banned stations, Trusted TinyBoxen | LoTW.
 function viewKeys() {
-  const users = h("tbody"), trusted = h("tbody"), me = h("div", { class: "card-body note" });
+  const people = h("div", { class: "um-list" }), waitNote = h("div", { class: "card-body note" });
+  const trusted = h("tbody"), me = h("div", { class: "card-body note" });
+  const filter = h("input", { type: "search", placeholder: "Find a call or name", class: "grow" });
+  const boxIn = h("input", { class: "mono", placeholder: "OE5XBL-1", size: 10 });
+  const pubIn = h("input", { class: "mono grow", placeholder: "public key of that box (43 characters)" });
   const bans = h("tbody");                                  // CR115
+  const banCall = h("input", { class: "mono", placeholder: "OE1ABC", size: 10 });
+  const banWhy = h("input", { class: "grow", placeholder: "reason (only for you, optional)" });
   const lroots = h("tbody"), lnote = h("div", { class: "card-body note" });   // CR113
   const lfile = h("input", { type: "file", accept: ".p12,.pfx,.pem,.der,.cer,.crt" });
   const lpw = h("input", { type: "password", placeholder: "password of the .p12 (if any)", autocomplete: "off" });
+  let data = null;
+  async function act(path, body, ask) {
+    if (ask && !confirm(ask)) return;
+    try { toast((await api("keys/" + path, body)).text); await update(); }
+    catch (e) { toast(e.message, true); }
+  }
+  async function purge(call, why) {
+    call = (call || "").trim().toUpperCase();
+    if (!call) return;
+    let d;
+    try { d = await api("keys/purge", { call }); } catch (e) { toast(e.message, true); return; }
+    const what = Object.entries(d.counts).map(([k, n]) => `${n} ${k}`).join(", ");
+    act("purge", { call, reason: why || "", confirm: true },
+      `PURGE ${call}?\nBans ${call} (all SSIDs) and deletes ${what}.\n` +
+      "Mail, bulletins and the connection log stay. This cannot be undone.");
+  }
   async function lotwAdd() {
     const f = lfile.files[0];
     if (!f) { toast("Choose the file first.", true); return; }
@@ -1433,59 +1458,63 @@ function viewKeys() {
     await act("lotw_add", { data: btoa(bin), password: lpw.value });
     lpw.value = ""; lfile.value = "";
   }
-  const banCall = h("input", { class: "mono", placeholder: "OE1ABC", size: 10 });
-  const banWhy = h("input", { class: "grow", placeholder: "reason (only for you, optional)" });
-  async function purge() {
-    const call = banCall.value.trim().toUpperCase();
-    if (!call) return;
-    let d;
-    try { d = await api("keys/purge", { call }); } catch (e) { toast(e.message, true); return; }
-    const what = Object.entries(d.counts).map(([k, n]) => `${n} ${k}`).join(", ");
-    act("purge", { call, reason: banWhy.value, confirm: true },
-      `PURGE ${call}?\nBans ${call} (all SSIDs) and deletes ${what}.\n` +
-      "Mail, bulletins and the connection log stay. This cannot be undone.");
-  }
-  const boxIn = h("input", { class: "mono", placeholder: "OE5XBL-1", size: 10 });
-  const pubIn = h("input", { class: "mono grow", placeholder: "public key of that box (43 characters)" });
-  async function act(path, body, ask) {
-    if (ask && !confirm(ask)) return;
-    try { toast((await api("keys/" + path, body)).text); await update(); }
-    catch (e) { toast(e.message, true); }
-  }
-  const statusText = { pending: "waits", active: "released", revoked: "revoked",
+  const statusText = { pending: "waits for you", active: "released", revoked: "revoked",
                        cert: "certificate" };
+  function keyRow(u) {
+    return h("div", { class: "um-key" + (u.status === "pending" ? " wait" : "") },
+      h("div", { class: "um-kmain" },
+        h("span", { class: "mono", text: "🔑 " + u.fp }),
+        h("span", { class: "mono muted", text: u.device ? "device " + u.device : "" }),
+        h("span", { class: u.status === "pending" ? "warn" : "", text: statusText[u.status] || u.status }),
+        ...(u.lotw ? [h("span", { class: "ok", text: "✓ LoTW until " + u.lotw })] : [])),
+      h("div", { class: "um-kmeta muted", text: `${fullDate(u.changed)}${u.note ? " · " + u.note : ""}` }),
+      h("span", { class: "um-btns" },
+        ...(u.status !== "active" ? [h("button", { class: "btn sm primary", type: "button",
+          text: "Release", onclick: () => act("user", { id: u.id, action: "OK" },
+            `Release the key of ${u.call}?\nFingerprint ${u.fp} - compared with ${u.call} (phone, QSO, paper)?` +
+            (u.lotw ? "\n(confirmed with LoTW)" : "")) })] : []),
+        ...(u.status !== "revoked" ? [h("button", { class: "btn sm", type: "button", text: "Revoke",
+          onclick: () => act("user", { id: u.id, action: "REVOKE" }, `Revoke the key ${u.fp} of ${u.call}${u.device ? " (" + u.device + ")" : ""}? The other keys of ${u.call} stay.`) })] : []),
+        h("button", { class: "btn sm danger", type: "button", text: "Delete",
+          onclick: () => act("user", { id: u.id, action: "DEL" }, `Forget the key ${u.fp} of ${u.call}?`) })));
+  }
+  function personCard(p) {
+    const head = h("div", { class: "um-head" },
+      h("strong", { class: "mono", text: p.call }),
+      h("span", { text: p.name || "–" }),
+      h("span", { class: "mono", text: p.loc || "" }),
+      h("span", { class: "mono", text: p.home ? "home " + p.home : "" }),
+      h("span", { class: "muted", text: p.last ? "last " + fullDate(p.last) : "never logged in" }),
+      h("span", { class: p.waiting ? "warn" : p.keys.length ? "" : "muted",
+        text: p.waiting ? `${p.waiting} key waiting` : p.keys.length ? `${p.keys.length} key(s)` + (p.lotw ? " · ✓ LoTW" : "") : "no key" }),
+      h("span", { class: "um-btns" }, ...(p.sysop ? [h("span", { class: "muted", text: "sysop" })] : p.ban
+        ? [h("span", { class: "warn", text: p.ban.purged ? "purged" : "banned" }),
+           h("button", { class: "btn sm", type: "button", text: "Unban",
+             onclick: () => act("unban", { call: p.call }, `Let ${p.call} back in?`) })]
+        : [h("button", { class: "btn sm", type: "button", text: "Ban",
+             onclick: () => act("ban", { call: p.call }, `Ban ${p.call} (all SSIDs)? Running sessions end now; the data stays.`) }),
+           h("button", { class: "btn sm danger", type: "button", text: "Purge", onclick: () => purge(p.call) })])));
+    return h("div", { class: "um-person" + (p.waiting ? " wait" : "") }, head,
+      ...(p.ssids.length > 1 ? [h("div", { class: "um-ssids muted mono", text: p.ssids.join(" · ") })] : []),
+      ...p.keys.map(keyRow));
+  }
+  function renderPeople() {
+    const q = filter.value.trim().toUpperCase();
+    const list = (data ? data.people : []).filter((p) => !q || p.call.includes(q) || (p.name || "").toUpperCase().includes(q));
+    people.replaceChildren(...(list.length ? list.map(personCard) : [h("div", { class: "card-body note", text: data && data.people.length ? "Nobody fits." : "No users yet." })]));
+    const wait = data ? data.people.reduce((n, p) => n + p.waiting, 0) : 0;
+    waitNote.replaceChildren(wait
+      ? h("span", { class: "warn", text: `${wait} new key(s) wait for your release - they are at the top. ` }) : "",
+      "Release a key only after comparing its fingerprint with the user - by phone, in a QSO or on paper, never over the same connection. One key per device.");
+  }
   async function update() {
-    let d;
-    try { d = await api("keys"); } catch (e) { toast(e.message, true); return; }
+    try { data = await api("keys"); } catch (e) { toast(e.message, true); return; }
+    const d = data;
+    renderPeople();
     me.replaceChildren("This box ", h("strong", { class: "mono", text: d.box.box }),
       " - fingerprint ", h("strong", { class: "mono", text: d.box.fp }), h("br"),
       "Public key ", h("span", { class: "mono", text: d.box.pub }),
       h("br"), "Give both to the sysop of another TinyBox; he enters them under Trusted TinyBoxen.");
-    users.replaceChildren(...(d.users.length ? d.users.map((u) => h("tr", {},
-      h("td", { class: "mono", text: u.call }), h("td", { class: "mono", text: u.device || "-" }),
-      h("td", { class: u.status === "pending" ? "warn" : "", text: statusText[u.status] || u.status }),
-      h("td", { class: "mono", text: u.fp }),
-      h("td", { class: u.lotw ? "ok" : "", text: u.lotw ? "✓ until " + u.lotw : "" }),
-      h("td", { class: "mono", text: fullDate(u.changed) }),
-      h("td", { text: u.note }),
-      h("td", {}, ...(u.status !== "active" ? [h("button", { class: "btn sm primary", type: "button",
-          text: "Release", onclick: () => act("user", { id: u.id, action: "OK" },
-            `Release the key of ${u.call}?\nFingerprint ${u.fp} - compared with ${u.call} (phone, QSO, paper)?`) })] : []),
-        ...(u.status !== "revoked" ? [h("button", { class: "btn sm", type: "button", text: "Revoke",
-          onclick: () => act("user", { id: u.id, action: "REVOKE" }, `Revoke the key ${u.fp} of ${u.call}${u.device ? " (" + u.device + ")" : ""}? The other keys of ${u.call} stay.`) })] : []),
-        h("button", { class: "btn sm danger", type: "button", text: "Delete",
-          onclick: () => act("user", { id: u.id, action: "DEL" }, `Forget the key ${u.fp} of ${u.call}?`) }))))
-      : [h("tr", {}, h("td", { colspan: 8, text: "No client keys yet." }))]));
-    const L = d.lotw || { roots: [] };
-    lnote.textContent = !L.available ? "This box cannot check LoTW: the Python package “cryptography” is missing (py -3 -m pip install cryptography)." :
-      "Keys confirmed with the LoTW certificate of the ARRL are marked ✓ in Client keys. Trust the ARRL certificates " +
-      "here - from your own .p12 of TQSL (only its CA certificates are taken) - and compare the fingerprint. " +
-      `[client] lotw_release = ${L.release ? "yes: a new key confirmed with LoTW counts at once" : "no: you still release new keys"}.`;
-    lroots.replaceChildren(...(L.roots.length ? L.roots.map((r) => h("tr", {},
-      h("td", { text: r.subject }), h("td", { class: "mono", text: r.fpp }), h("td", { class: "mono", text: fullDate(r.added) }),
-      h("td", {}, h("button", { class: "btn sm danger", type: "button", text: "Remove",
-        onclick: () => act("lotw_del", { fp: r.fp }, `No longer trust\n${r.subject}?`) }))))
-      : [h("tr", {}, h("td", { colspan: 4, text: "No ARRL certificate trusted yet." }))]));
     bans.replaceChildren(...((d.banned || []).length ? d.banned.map((b) => h("tr", {},
       h("td", { class: "mono", text: b.base }), h("td", { class: b.purged ? "warn" : "", text: b.purged ? "purged" : "banned" }),
       h("td", { class: "mono", text: fullDate(b.since) }), h("td", { text: b.reason }),
@@ -1499,48 +1528,49 @@ function viewKeys() {
       h("td", {}, h("button", { class: "btn sm danger", type: "button", text: "Remove",
         onclick: () => act("untrust", { box: b.box }, `No longer trust ${b.box}?`) }))))
       : [h("tr", {}, h("td", { colspan: 4, text: "No other TinyBox trusted yet." }))]));
+    const L = d.lotw || { roots: [] };
+    lnote.textContent = !L.available ? "This box cannot check LoTW: the Python package “cryptography” is missing (py -3 -m pip install cryptography)." :
+      "Keys confirmed with the LoTW certificate of the ARRL get ✓ LoTW. Trust the ARRL certificates here - from your own .p12 " +
+      "of TQSL (only its CA certificates are taken) - and compare the fingerprint. " +
+      `[client] lotw_release = ${L.release ? "yes: a new key confirmed with LoTW counts at once" : "no: you still release new keys"}.`;
+    lroots.replaceChildren(...(L.roots.length ? L.roots.map((r) => h("tr", {},
+      h("td", { text: r.subject.replace(/^.*CN=([^,]+).*$/, "$1"), title: r.subject }),
+      h("td", { class: "mono", text: r.fpp }), h("td", { class: "mono", text: fullDate(r.added) }),
+      h("td", {}, h("button", { class: "btn sm danger", type: "button", text: "Remove",
+        onclick: () => act("lotw_del", { fp: r.fp }, `No longer trust\n${r.subject}?`) }))))
+      : [h("tr", {}, h("td", { colspan: 4, text: "No ARRL certificate trusted yet." }))]));
   }
-  main().className = "one";
+  filter.oninput = renderPeople;
+  const card = (title, ...body) => h("section", { class: "card" },
+    h("div", { class: "card-head" }, h("h2", { class: "grow", text: title })), ...body);
+  main().className = "um-grid";
   main().replaceChildren(
-    h("section", { class: "card" },
-      h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Client keys" })),
-      h("div", { class: "card-body note",
-        text: "One key per device. Release a key only after comparing its fingerprint with the user - " +
-              "by phone, in a QSO or on paper, never over the same connection." }),
-      h("div", { class: "scroll" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Call", "Device", "Status", "Fingerprint", "LoTW", "Changed (UTC)", "Note", ""]
-          .map((x) => h("th", { text: x })))), users))),
-    h("section", { class: "card" },
-      h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Trusted TinyBoxen" })), me,
-      h("div", { class: "scroll" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Box", "Fingerprint", "Since (UTC)", ""].map((x) => h("th", { text: x })))),
-        trusted)),
-      h("div", { class: "card-body row" }, boxIn, pubIn,
-        h("button", { class: "btn primary sm", type: "button", text: "Trust",
-          onclick: () => act("trust", { box: boxIn.value, pub: pubIn.value },
-            `Trust ${boxIn.value.toUpperCase()}? Its users then log in here with their certificate.\n` +
-            "Fingerprint compared with its sysop?") }))),
-    h("section", { class: "card" },
-      h("div", { class: "card-head" }, h("h2", { class: "grow", text: "LoTW (ARRL certificates)" })), lnote,
-      h("div", { class: "scroll" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Certificate", "Fingerprint (SHA-256, start)", "Since (UTC)", ""].map((x) => h("th", { text: x })))),
-        lroots)),
-      h("div", { class: "card-body row" }, lfile, lpw,
-        h("button", { class: "btn sm primary", type: "button", text: "Add", onclick: lotwAdd }))),
-    h("section", { class: "card" },
-      h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Banned stations" })),
+    card("Users", waitNote, h("div", { class: "card-body row" }, filter), people),
+    card("Banned stations",
       h("div", { class: "card-body note",
         text: "Ban: the station (all SSIDs) cannot connect any more, its data stays - Unban lets it back. " +
               "Purge: ban AND delete its keys, profile, logins, chat lines and board files; " +
               "mail, bulletins and the connection log stay." }),
       h("div", { class: "scroll" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Call", "", "Since (UTC)", "Reason", ""].map((x) => h("th", { text: x })))),
-        bans)),
+        h("thead", {}, h("tr", {}, ["Call", "", "Since (UTC)", "Reason", ""].map((x) => h("th", { text: x })))), bans)),
       h("div", { class: "card-body row" }, banCall, banWhy,
         h("button", { class: "btn sm", type: "button", text: "Ban",
           onclick: () => act("ban", { call: banCall.value, reason: banWhy.value },
             `Ban ${banCall.value.toUpperCase()} (all SSIDs)? Running sessions end now; the data stays.`) }),
-        h("button", { class: "btn sm danger", type: "button", text: "Purge", onclick: purge }))));
+        h("button", { class: "btn sm danger", type: "button", text: "Purge", onclick: () => purge(banCall.value, banWhy.value) }))),
+    card("Trusted TinyBoxen", me,
+      h("div", { class: "scroll" }, h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Box", "Fingerprint", "Since (UTC)", ""].map((x) => h("th", { text: x })))), trusted)),
+      h("div", { class: "card-body row" }, boxIn, pubIn,
+        h("button", { class: "btn primary sm", type: "button", text: "Trust",
+          onclick: () => act("trust", { box: boxIn.value, pub: pubIn.value },
+            `Trust ${boxIn.value.toUpperCase()}? Its users then log in here with their certificate.\n` +
+            "Fingerprint compared with its sysop?") }))),
+    card("LoTW (ARRL certificates)", lnote,
+      h("div", { class: "scroll" }, h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Certificate", "Fingerprint (SHA-256, start)", "Since (UTC)", ""].map((x) => h("th", { text: x })))), lroots)),
+      h("div", { class: "card-body row" }, lfile, lpw,
+        h("button", { class: "btn sm primary", type: "button", text: "Add", onclick: lotwAdd }))));
   update();
   return {};
 }

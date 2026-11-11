@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- **Web-GUI „User management“** (statt „Keys“): Karte „Users“ mit jeder bekannten Station (Name, Locator,
+  Heimat-BBS, letzter Login, SSIDs, Ban/Purge) und darunter ihren Schlüsseln (Release/Revoke/Delete, ✓ LoTW);
+  wartende Schlüssel zuerst und gelb, ihre Zahl in der Seitenleiste. Zwei Spalten: Users | Banned stations,
+  Trusted TinyBoxen | LoTW.
+- **Vorstellung:** wer die Box als Heimat-BBS angibt (auch mit `NH`), bekommt „Thank you for choosing
+  OE3GAS-1 as your home!“.
+
 - **LoTW, Stufe 2 (CR113):** die TinyBox prüft die LoTW-Bestätigung eines Client-Schlüssels (`//LOTW?`,
   `//LOTWP`) gegen die vom Sysop vertrauten ARRL-Zertifikate (`LOTW ADD`, Web-GUI „Keys“), vermerkt „LoTW bis“
   am Schlüssel und stellt Zertifikate `TBC2` mit Stufe `lotw` aus. `[client] lotw_release` (Vorgabe `no`).

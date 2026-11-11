@@ -57,3 +57,10 @@ def ask_due(store, call: str) -> list[str]:
 def check_field(field: str, text: str) -> str:
     """One field checked (raises pf.ProfileError)."""
     return {"name": pf.check_name, "loc": pf.check_locator, "home": pf.check_home}[field](text)
+
+
+def home_is(home: str, mailbox_call: str) -> bool:
+    """The home BBS given (OE3GAS-1, OE3GAS or OE3GAS.#NOE.AUT.EU) is this box."""
+    first = home.strip().upper().split(".", 1)[0]
+    return bool(first) and base_call(first) == base_call(mailbox_call.upper())
+

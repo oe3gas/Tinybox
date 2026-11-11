@@ -338,6 +338,8 @@ def _set_profile(s: Session, field: str, arg: str) -> None:
         return
     profiles.save(s.service.store, s.call, {field: value})
     _show_profile(s, s.call)
+    if field == "home" and profiles.home_is(value, s.cfg.station.mailbox_call):
+        s.out(texts.PROFILE_HOME_HERE.format(box=s.cfg.station.mailbox_call.upper()))
 
 
 def cmd_name(s: Session, arg: str) -> None:

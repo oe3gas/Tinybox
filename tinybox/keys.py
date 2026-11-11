@@ -46,6 +46,36 @@ def users(svc: MessageService) -> list[dict]:
             for r in svc.store.key_list()]
 
 
+def people(svc: MessageService) -> list[dict]:
+    """The User management page: everybody the box knows (logins, profiles, keys,
+    bans) per base call - name, locator, home BBS, last login, SSIDs, keys, ban.
+    Stations with a key waiting for the sysop first."""
+    from .addressing import base_call
+    st = svc.store
+    keys_by: dict[str, list[dict]] = {}
+    for k in users(svc):
+        keys_by.setdefault(k["call"], []).append(k)
+    profs = st.profile_list()
+    bans = {b["base"]: b for b in st.ban_list()}
+    logins: dict[str, list[dict]] = {}
+    for u in st.user_list():
+        logins.setdefault(base_call(u["call"]), []).append(u)
+    out = []
+    for base in set(keys_by) | set(profs) | set(bans) | set(logins):
+        p = profs.get(base) or {}
+        ls = logins.get(base, [])
+        ks = keys_by.get(base, [])
+        out.append({"call": base, "name": p.get("name", ""), "loc": p.get("loc", ""),
+                    "home": p.get("home", ""),
+                    "last": max((u["last_login"] for u in ls), default=""),
+                    "ssids": sorted(u["call"] for u in ls), "keys": ks,
+                    "waiting": sum(1 for k in ks if k["status"] == "pending"),
+                    "lotw": any(k["lotw"] for k in ks),
+                    "ban": bans.get(base), "sysop": svc.is_sysop_call(base)})
+    out.sort(key=lambda r: (-r["waiting"], r["call"]))
+    return out
+
+
 def _norm_fp(text: str) -> str:
     return text.upper().replace("-", "")
 
