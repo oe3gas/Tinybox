@@ -338,6 +338,10 @@ const AprsStatsView = (() => {
       ? `${d.pos.km} km, ${d.pos.deg}° ${compass(d.pos.deg)}` : "no position");
     fact("First heard", d.first ? when(d.first) : "–");
     fact("Last heard", d.last ? when(d.last) : "–");
+    if (d.level && typeof d.level.lvl === "number") {          // CR112: Direwolf fork
+      fact("Audio level", `${d.level.lvl}` + (d.level.fix ? ", bits fixed" : "") +
+           (d.level.fec ? (d.level.fec === 1 ? ", FX.25" : ", IL2P") : "") + ` (${when(d.level.at)})`);
+    }
     head.append(facts);
     const acts = mk("div", "st-acts");
     const mon = mk("button", "sm", "Show in monitor");

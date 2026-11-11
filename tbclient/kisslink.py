@@ -234,6 +234,15 @@ class KissLink(BaseLink):
         """CR78: our own AX.25 counts - same names as the Direwolf fork's 'Q'."""
         return self.ax.counters(self.port.now()) if self.ax is not None and self.online else None
 
+    def l2(self) -> dict | None:
+        """CR112: our own AX.25 - the same as the Direwolf fork's link event."""
+        ax = self.ax
+        if ax is None or not self.active:
+            return None
+        from .links import l2_from
+        return l2_from({"state": int(ax.state), "rc": ax.rc, "n2": ax.cfg.n2,
+                        "mod": ax.modulo, "k": ax.k})
+
     async def outstanding(self) -> int:
         """Frames not yet acknowledged or not yet sent."""
         return (len(self.ax.queue) + self.ax.unacked) if self.ax else 0

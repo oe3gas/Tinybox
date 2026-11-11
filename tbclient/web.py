@@ -217,7 +217,9 @@ class WebServer:
                 call = (query.get("call") or [""])[0]
                 if not call:
                     return 400, {"error": "call"}, None
-                return 200, await self._aprs_eval("station", call.upper().strip(), int(win) if isnum(win) else 0), None
+                res = await self._aprs_eval("station", call.upper().strip(), int(win) if isnum(win) else 0)
+                lvl = core.levels.get(call.upper().strip())       # CR112: last audio level
+                return 200, ({**res, "level": lvl} if isinstance(res, dict) and lvl else res), None
             if method == "GET" and path == "/api/aprs/graph":       # CR79: network graph
                 win = (query.get("win") or ["0"])[0]
                 return 200, await self._aprs_eval("graph", int(win) if isnum(win) else 0, core.cfg.mycall), None

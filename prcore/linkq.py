@@ -33,9 +33,10 @@ from dataclasses import dataclass
 
 FIELDS_INT = ("state", "i_new", "i_retry", "bytes_new", "bytes_retry", "i_rx", "retry_rx",
               "rej_rx", "rej_tx", "t1_exp", "rnr_rx", "rc", "unack",
-              "bytes_rx", "tx_busy_ms", "baud")      # v=2 (throughput, missing in v=1 = 0)
+              "bytes_rx", "tx_busy_ms", "baud",      # v=2 (throughput, missing in v=1 = 0)
+              "n2", "mod", "k", "n1", "srej", "load", "load_tx")   # v=3 (fork 2026.11.11)
 FIELDS_FLOAT = ("srt", "t1v", "age")
-VERSIONS = ("1", "2")
+VERSIONS = ("1", "2", "3")
 
 
 def parse(text: str) -> dict | None:

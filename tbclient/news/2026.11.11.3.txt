@@ -1,0 +1,3 @@
+- Mit Direwolf-Fork 2026.11.11: SABM-Versuche, Retry,
+  echtes TX/RX, Kanal belegt, Pegel im Monitor.
+- Abbruch wegen Retry-out wird rot angezeigt.

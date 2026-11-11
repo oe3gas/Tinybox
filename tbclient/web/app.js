@@ -3286,6 +3286,11 @@ function monLine(e) {
     e.via.forEach((v, i) => { if (i) line.append(","); line.append(callSpan(v.replace(/\*$/, ""))); if (v.endsWith("*")) line.append("*"); });
   }
   line.append(el("span", "mty", ` <${e.typ}>`));
+  if (typeof e.lvl === "number") {               // CR112: audio level (Direwolf fork)
+    const lv = el("span", "mlv" + (e.fix ? " fix" : ""), ` lvl ${e.lvl}` + (e.fix ? " fixed" : ""));
+    lv.title = e.fix ? "Audio level; bits had to be fixed for a good checksum" : "Audio level of this frame";
+    line.append(lv);
+  }
   if (e.kind) line.append(el("span", "mk " + e.kind, e.kind));
   if (ap) return AprsView.card(e, line, "ml");
   if (e.text) line.append(": " + e.text);
@@ -3750,7 +3755,9 @@ function renderModem() {
   if (!modemOn || !m) { box.replaceChildren(); return; }
   const name = { agw: "Direwolf", kiss: "KISS", telnet: "Telnet" }[m.via] || m.via || "Modem";
   const up = el("span", "mc " + (m.up ? "up" : "down"), name + (m.up ? " ✓" : " ✗"));
-  up.title = m.up ? `${name} reachable` : `${name} not reachable`;
+  up.title = (m.up ? `${name} reachable` : `${name} not reachable`) +
+    (m.fork ? ` · TinyBox fork ${m.fork} (${(m.features || []).join(", ")})` : "") +
+    (typeof m.load === "number" ? ` · channel ${m.load} % busy (own ${m.load_tx} %) in the last minute` : "");
   // TX/RX stay lit for m.io seconds after the last frame or byte
   const age = (x) => (x === null || x === undefined ? Infinity : x + (performance.now() - stateRecv) / 1000);
   const tx = age(m.tx) < m.io, rx = age(m.rx) < m.io;

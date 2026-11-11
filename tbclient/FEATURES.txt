@@ -32,6 +32,11 @@ neu ist, steht kurz in tbclient/news/<Version>.txt - das geht als
 Bulletin in die Rubrik TBNEWS.)
 
 Zuletzt dazugekommen
+- Mit dem Direwolf-Fork ab 2026.11.11 (CR112): Statusleiste zeigt die
+  SABM-Versuche ("Connecting - SABM 3/10"), Retry bei stehender
+  Verbindung, AX.25-Version und Fenster, Kanalauslastung; TX/RX folgen
+  PTT und DCD; Monitor mit Pegel je Frame und den eigenen Frames;
+  Abbruch wegen Retry-out rot.
 - Statusleiste (CR110) ueber Chat, Mail, TBClient und Monitor: Phase
   (Connecting, Signing in, Wait 4 sysop, In board, Verified ...),
   Aktivitaet (Sync, Bilder, Dateien, History, Profile ...) und Leitung

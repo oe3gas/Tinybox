@@ -86,6 +86,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
 | 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | ✅ 10.11.2026 (Teil 1 Client↔Client, Teil 2 Chatboard mit CR86) – siehe unten |
 | 110 | Statusleiste: Phasen und Verkehr Client↔Box und Client↔Client in Echtzeit als Chips, Modem/TX/RX in der Kopfzeile, ein-/ausblendbar | ✅ 11.11.2026 – siehe unten |
+| 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4002,3 +4003,44 @@ terminal-like grün auf schwarz statt schwarz auf grau.
   jetzt eigene Karte in voller Breite direkt über „Connection log“.
 - `tbclient/web/app.css`: `.adm-out` schwarz mit Grün `#33ff66`, Monospace, Höhe bis 20 Zeilen;
   Eingabezeile `#adm-line` im selben Look (Cursor, Platzhalter grün).
+
+## CR112 – Direwolf-Fork für die Statusleiste (✅ 11.11.2026, Fork 2026.11.11, Client 2026.11.11.3, Funktest offen)
+
+### Anlass (11.11.2026)
+
+Beim Bau der Statusleiste (CR110) fehlte Direwolf über AGW einiges: keine SABM-Versuche, TX nur geschätzt,
+kein „Kanal belegt“. Claude hat aus der Arbeit hier die sinnvollen Erweiterungen des Forks
+`oe3gas/direwolf-tinybox` gesammelt; OE3GAS: **alle umsetzen** – außer dem Ablehnen gesperrter Stationen im
+Fork: „Die Entscheidung bleibt bei der Box. Die weiß, wen sie annimmt und wen nicht.“
+
+### Umsetzung im Fork (Zweig `tinybox`, Fork-Version 2026.11.11, Details in seiner `TINYBOX.md`)
+
+1. **`Q` v=3:** zusätzlich `n2`, `mod` (8/128), `k`, `n1`, `srej` (nach XID) und `load`/`load_tx` (Kanal belegt in
+   der letzten Minute, gesamt und eigenes PTT). Die Verbindung wird auch beim Aufbau und Abbau gefunden:
+   `state=1/5` mit `rc` = der wievielte SABM(E).
+2. **AGW `E` – Ereignisse** (Umschalter wie `k`): `ptt` und `dcd` (an/aus, mit Auslastung), `link` bei jeder
+   Änderung von Zustand oder Retry-Zähler (`state=4 rc=8 n2=10` = Vorwarnung vor dem Abbruch), `rx` nach jedem
+   `K` mit Audiopegel, korrigierten Bits und FEC.
+3. **AGW `F`:** `fork=2026.11.11 features=Q3,O,E,F,LVL,LOAD` – statt über einen Timeout zu raten.
+4. Werkzeug `tinybox-tools/agw_events.py` zeigt die Ereignisse live.
+
+Geprüft unter Linux mit zwei Instanzen über eine Audioschleife (auch der echte Client gegen den echten Fork:
+„Connecting · SABME 1/10“ → „Probing“ → „Terminal“, `v2.2 · k=32`, „Channel 6 %“, TX/RX, Pegel im Monitor).
+Windows-Programm mit MinGW-w64 gebaut. **Funktest mit Funk offen.**
+
+### Umsetzung im Client
+
+- `AgwPort` schickt nach dem Verbinden `F`, `E` und `O` (ein Original-Direwolf meldet je einmal „Unexpected
+  Command“). `O` ersetzt `T`: eigene Frames (auch SABM, I, RR …) im Monitor, TX-Zeit und Modulo-128-Erkennung
+  ohne Raten (Punkt 9).
+- **Statusleiste:** „Connecting · SABM 3/10“, „Disconnecting · DISC 2/10“; Leitung „Retry 8/10“ (ab N2−2 rot),
+  „v2.2 · k=32“, „Channel 45 %“ (ab 40 % gelb, ab 70 % rot); TX/RX in der Kopfzeile folgen PTT und DCD; der
+  Modem-Chip nennt im Tooltip Fork-Version, Features und Auslastung. Ohne Events, aber mit `Q`: der Client fragt
+  `Q` während des Aufbaus ab. Mit KISS/AXUDP kommen Phase und Versuche aus dem eigenen AX.25 (`KissLink.l2()`).
+- **Abbruchgrund (Punkt 8, ohne Fork):** `*** DISCONNECTED RETRYOUT …` im `d` → Grund „retry-out (no answer)“,
+  rote Phase „Retry-out (no answer)“. Die TinyBox wertet das schon aus (`lost=` beim Disconnect).
+- **Pegel (Punkt 5):** im Monitor hinter dem Frame-Typ „lvl 45“ (gelb mit „fixed“, wenn Bits korrigiert werden
+  mussten), in der APRS-Statistik bei der Station „Audio level“.
+- `prcore/linkq.py` versteht `v=3` – **erst das Tinybox-Repo aktualisieren, dann die neue `direwolf.exe`**.
+- Tests: `tests/test_cr111.py`.
+

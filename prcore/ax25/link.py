@@ -307,11 +307,14 @@ class Ax25Link:
         return not self.queue and not self.retx and self.unacked == 0
 
     def counters(self, now: float) -> dict:
-        """Link quality counters, same names as the Direwolf fork's 'Q' line (v=2)."""
-        return dict(v=2, state=int(self.state), **self.c, rc=self.rc, unack=self.unacked,
+        """Link quality counters, same names as the Direwolf fork's 'Q' line (v=3; no
+        channel load here - our modem side does not see DCD, so load = 0)."""
+        return dict(v=3, state=int(self.state), **self.c, rc=self.rc, unack=self.unacked,
                     srt=round(self.srt, 2), t1v=round(self.t1v, 2),
                     age=round(now - self.created, 1),
-                    tx_busy_ms=int(self.tx_busy * 1000), baud=self.cfg.air_baud)
+                    tx_busy_ms=int(self.tx_busy * 1000), baud=self.cfg.air_baud,
+                    n2=self.cfg.n2, mod=self.modulo, k=self.k, n1=self.n1,
+                    srej=2 if self.srej_on else 0, load=0, load_tx=0)
 
     # ======================================================================
     # receiving, per state

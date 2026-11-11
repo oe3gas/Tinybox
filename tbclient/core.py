@@ -96,6 +96,11 @@ class ClientCore:
         # PLANUNG 25: the home TinyBox over AXUDP, the radio for everything else
         self.udp = AxudpPort(cfg, lambda remote: self._incoming(remote, udp=True)) \
             if cfg.axudp_host and self.port is not None else None
+        if isinstance(self.port, AgwPort):
+            self.port.on_event = self._radio_event      # CR112: events of the Direwolf fork
+        self.ptt_on = self.dcd_on = False         # CR112: from the fork's 'E' (PTT, DCD)
+        self.load: dict = {}                      # CR112: channel load {load, load_tx, at}
+        self.levels: dict[str, dict] = {}         # CR112: call -> level of its last frame
         self.channels: dict[int, Channel] = {}
         self.nochat = Channel(self, 0, self._new_link())
         last = self.settings.get("target", "")
@@ -579,11 +584,51 @@ class ClientCore:
                  "," + ",".join(path) if path else "", len(info))
         return None
 
+    def _radio_event(self, cfrom: str, cto: str, text: str) -> None:
+        """CR112: an event of the Direwolf fork (AGW 'E'): ptt, dcd, link, rx."""
+        word, _, rest = text.partition(" ")
+        a = dict(w.split("=", 1) for w in rest.split() if "=" in w)
+        now = time.time()
+        if word in ("ptt", "dcd"):
+            on = a.get("on") == "1"
+            if word == "ptt":
+                self.ptt_on = on
+                self.tx_at = now
+            else:
+                self.dcd_on = on
+                self.rx_at = now
+            if isnum(a.get("load", "")):
+                self.load = {"load": int(a["load"]), "tx": int(a.get("load_tx", "0") or 0),
+                             "at": now}
+            self._touch()
+        elif word == "link":
+            self._touch()                     # the link has its l2 already (AgwPort)
+        elif word == "rx" and cfrom:
+            lvl = {"lvl": int(a["lvl"]) if isnum(a.get("lvl", "").lstrip("-")) else None,
+                   "fix": int(a["fix"]) if isnum(a.get("fix", "")) else 0,
+                   "fec": int(a["fec"]) if isnum(a.get("fec", "")) else 0, "at": int(now)}
+            self.levels[cfrom] = lvl
+            if len(self.levels) > 300:
+                del self.levels[min(self.levels, key=lambda c: self.levels[c]["at"])]
+            if self.monitor:                  # the 'K' of this frame came just before
+                n, entry = self.monitor[-1]
+                if entry.get("src") == cfrom and "lvl" not in entry:
+                    entry["lvl"], entry["fix"] = lvl["lvl"], lvl["fix"]
+
     async def _poll_outstanding(self) -> None:
         """CR45: frames waiting in Direwolf per channel - all channels share the
         frequency, a picture on one slows the others down (shown in the monitor)."""
         while True:
             await asyncio.sleep(OUTSTANDING_SEC)
+            for c in list(self.channels.values()):       # CR112: SABM/DISC tries, recovery
+                if c.n and c.state != "offline":
+                    ask = getattr(c.link, "ask_l2", None)
+                    if ask is not None and c.state != "online":
+                        await ask()
+                    l2 = c.link.l2()
+                    if l2 != getattr(c, "_l2_shown", None):
+                        c._l2_shown = l2
+                        self._touch()
             for c in list(self.channels.values()):
                 if c.state == "online" and c.link.kind != "telnet" and c.n:
                     try:

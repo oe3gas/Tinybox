@@ -1016,6 +1016,16 @@ Nichts davon ändert Protokollverhalten; ohne `Q`-Anfrage läuft der Fork wie da
 1. Auf PC2 `git pull` in `C:\direwolf-tinybox` (Zweig `tinybox`), dann mit MSYS2/MinGW + CMake bauen und die `.exe` in den Direwolf-Ordner kopieren, Direwolf neu starten.
 2. Soll die `.exe` ohne Bauen auf einen zweiten Rechner: als **GitHub-Release** im Fork-Repo anhängen (Tag = Direwolf-Version + Datum, z. B. `1.8.2-tb1`); privates Repo, Download mit `gh release download` oder im Browser nach Login. Entschieden 12.10.2026: kein Binary ins Tinybox-Repo (ein paar MB je Stand, wächst für immer), keine automatische Verteilung – ein Rechner, seltene Änderungen.
 
+**Erweiterung 11.11.2026 (Fork-Version 2026.11.11, Client CR112):** `Q` v=3 (zusätzlich `n2`, `mod`, `k`, `n1`,
+`srej`, Kanalauslastung `load`/`load_tx`; antwortet auch während Auf- und Abbau), AGW `E` (Umschalter: Ereignisse
+`ptt`, `dcd`, `link` bei jeder Änderung von Zustand oder Retry-Zähler, `rx` mit Audiopegel, korrigierten Bits und FEC
+nach jedem `K`), AGW `F` (Fork-Version und Feature-Liste). Weiterhin nur Zählen und Melden. Die Entscheidung, wen
+die Box annimmt, bleibt bei der TinyBox (kein Ablehnen per DM im Fork, entschieden 11.11.2026). Damit hat jetzt
+**auch der Client** Nutzen vom Fork (Statusleiste: SABM-Versuche, Retry, TX/RX echt, Kanal belegt, Pegel im Monitor
+und in der APRS-Statistik) – der Fork gehört also auch auf PC1. **Reihenfolge beim Update:** erst `git pull` im
+Tinybox-Repo (TinyBox und Client verstehen `v=3`), dann die neue `direwolf.exe` – ein älterer Stand lehnt `v=3` ab
+und zeigt keine Balken.
+
 ### 14.2 Messung in der TinyBox
 
 TinyBox fragt die Zähler per `Q` ab und rechnet selbst; Bewertung, Fenster und Formatierung liegen in der TinyBox, nicht im Fork.

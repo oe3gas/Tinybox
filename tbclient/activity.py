@@ -71,13 +71,24 @@ def bars(n: int | None) -> str:
 
 # --- phase --------------------------------------------------------------------------
 
+def _tries(c: "Channel", phases: tuple[str, ...]) -> str:
+    """CR112: " · SABM 3/10" while the link is in one of these phases (Direwolf fork
+    or our own AX.25), else ""."""
+    l2 = c.link.l2()
+    if not l2 or l2.get("phase") not in phases or not l2.get("rc"):
+        return ""
+    return f" · {l2['phase'].upper()} {l2['rc']}" + (f"/{l2['n2']}" if l2.get("n2") else "")
+
+
 def phase(core: "ClientCore", c: "Channel", mono: float) -> dict:
     st = c.state
     if st == "connecting":
-        return chip("phase", "Connecting …", busy=True)
+        return chip("phase", "Connecting" + (_tries(c, ("sabm", "sabme")) or " …"), busy=True)
     if st == "disconnecting":
-        return chip("phase", "Disconnecting …", "amber", busy=True)
+        return chip("phase", "Disconnecting" + (_tries(c, ("disc",)) or " …"), "amber", busy=True)
     if st == "offline":
+        if "retry-out" in (c.reason or "") or "no answer" in (c.reason or ""):   # CR112 (8)
+            return chip("phase", "Retry-out (no answer)", "red")
         failed = (c.ended or {}).get("kind") == "failed"
         return chip("phase", "Not reached" if failed else "Offline", "red" if failed else "grey")
     if core.chan is c and c.mode == "tinybox":
@@ -213,6 +224,18 @@ def _link(core: "ClientCore", c: "Channel", mono: float) -> list[dict]:
         out.append(chip("via", "Telnet test port", "grey"))
     if c.outstanding is not None:
         out.append(chip("queue", f"Queue {c.outstanding}", "amber" if c.outstanding >= 7 else "grey"))
+    l2 = c.link.l2()                                       # CR112: retries, version, window
+    if l2 and l2.get("phase") == "recovery":
+        rc, n2 = l2.get("rc", 0), l2.get("n2", 0)
+        out.append(chip("retry", f"Retry {rc}" + (f"/{n2}" if n2 else ""),
+                        "red" if n2 and rc >= n2 - 2 else "amber", busy=True))
+    if l2 and l2.get("mod") and kind not in ("telnet",):
+        out.append(chip("l2", ("v2.2" if l2["mod"] == 128 else "v2.0") +
+                        (f" · k={l2['k']}" if l2.get("k") else ""), "grey"))
+    ld = core.load
+    if ld and time.time() - ld.get("at", 0) < 120 and kind not in ("axudp", "telnet"):
+        out.append(chip("load", f"Channel {ld['load']} %",
+                        "red" if ld["load"] >= 70 else "amber" if ld["load"] >= 40 else "grey"))
     if core.chan is c and c.mode == "tinybox":
         if core.board and kind not in ("axudp", "telnet"):
             out.append(chip("chatvia", "Chat via UI" if "UI" in core.caps else "Chat via I-frames",
@@ -312,9 +335,19 @@ def build(core: "ClientCore") -> dict:
                       else "peer" if c.peer is not None else "term",
                       "phase": phase(core, c, mono), "act": act, "link": _link(core, c, mono)})
     tr.forget(set(core.channels))
+    if core.ptt_on:                                        # CR112: the fork's PTT/DCD
+        tx_at = now
+    if core.dcd_on:
+        rx_at = now
     rs = core.radio_state()
+    port = core.port
+    fork = getattr(port, "fork", None) or {}
+    ld = core.load if core.load and now - core.load.get("at", 0) < 120 else {}
     return {"chans": chans,
             "modem": {"via": rs.get("via", ""), "up": rs.get("up"),
                       "rx": round(now - rx_at, 1) if rx_at else None,
-                      "tx": round(now - tx_at, 1) if tx_at else None, "io": IO_SEC}}
+                      "tx": round(now - tx_at, 1) if tx_at else None, "io": IO_SEC,
+                      "fork": fork.get("version", ""), "features": fork.get("features", []),
+                      "events": bool(getattr(port, "events", False)),
+                      "load": ld.get("load"), "load_tx": ld.get("tx")}}
 

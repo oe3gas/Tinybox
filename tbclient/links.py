@@ -105,6 +105,40 @@ class LineSplitter:
                 self.buf.append(b)
 
 
+L2_PHASE = {0: "disconnected", 1: "sabm", 2: "disc", 3: "connected", 4: "recovery", 5: "sabme"}
+
+
+def l2_from(fields: dict) -> dict | None:
+    """CR112: state and retries of an AX.25 link, the same for Direwolf (fork: AGW 'E'
+    link event or 'Q') and our own AX.25 (KISS/AXUDP): phase, rc, n2, mod, k."""
+    st = fields.get("state")
+    if st is None:
+        return None
+    try:
+        st = int(st)
+    except (TypeError, ValueError):
+        return None
+    out = {"phase": L2_PHASE.get(st, str(st))}
+    for key in ("rc", "n2", "mod", "k"):
+        v = fields.get(key)
+        if v not in (None, ""):
+            try:
+                out[key] = int(v)
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def disc_reason(data: bytes) -> str:
+    """CR112 (8): Direwolf says why a link went in its 'd' text."""
+    text = data.decode("ascii", "replace").upper()
+    if "RETRYOUT" in text:
+        return "retry-out (no answer)"
+    if "BUSY" in text:
+        return "refused (busy)"
+    return "disconnected"
+
+
 class BaseLink:
     paclen = PACLEN                 # bytes per frame handed over (progress estimate)
 
@@ -136,6 +170,11 @@ class BaseLink:
     async def counters(self) -> dict | None:
         """CR78: AX.25 counters of this connection (names as prcore/linkq.py), None =
         not available (telnet, Direwolf without the TinyBox fork)."""
+        return None
+
+    def l2(self) -> dict | None:
+        """CR112: phase, retries (rc of n2), modulo and window of the AX.25 link right
+        now - None if not known (telnet, Direwolf without the fork)."""
         return None
 
     def drop(self, reason: str) -> None:
@@ -181,6 +220,11 @@ class AgwPort:
         self.links: dict[str, "AgwLink"] = {}      # remote call -> its connection
         # CR78: Direwolf answers 'Q' (TinyBox fork)? None = not known yet
         self.q_supported: bool | None = None
+        # CR112: the fork tells what it can ('F'), sends events ('E') and own frames ('O')
+        self.fork: dict = {}                      # {"version", "features"} from 'F'
+        self.events = False                       # 'E' switched on
+        self.own_frames = False                   # 'O' switched on: 'T' not needed
+        self.on_event = None                      # (call_from, call_to, text) -> None
 
     def send(self, kind: str, call_from: str = "", call_to: str = "",
              data: bytes = b"", pid: int = 0) -> None:
@@ -211,6 +255,12 @@ class AgwPort:
             self.send("k")
             self.send("m")          # monitor on: Direwolf reports our own UI frames as 'T'
             self.q_supported = None                 # maybe another Direwolf now
+            self.fork, self.events, self.own_frames = {}, False, False
+            # CR112: TinyBox fork - what it can, events, own frames raw. An original
+            # Direwolf logs "Unexpected Command" for each once and answers nothing.
+            self.send("F")
+            self.send("E")
+            self.send("O")
             self.agw_up.set()
             try:
                 while True:
@@ -236,7 +286,39 @@ class AgwPort:
             if frame is not None:
                 self.on_frame(frame)
             return
+        if kind == "O":                     # CR112: own frame, raw (fork), like 'K'
+            if not data:
+                self.own_frames = True
+                return
+            frame = radio.decode(data[1:]) if len(data) > 1 else None
+            if frame is not None:
+                self.on_frame(frame)
+            return
+        if kind == "F":                     # CR112: fork version and features
+            words = dict(w.split("=", 1) for w in data.decode("ascii", "replace").split() if "=" in w)
+            self.fork = {"version": words.get("fork", ""),
+                         "features": sorted(filter(None, words.get("features", "").split(",")))}
+            if any(f.startswith("Q") for f in self.fork["features"]):
+                self.q_supported = True
+            log.info("Direwolf TinyBox fork %s: %s", self.fork["version"],
+                     ",".join(self.fork["features"]))
+            return
+        if kind == "E":                     # CR112: events (PTT, DCD, link, rx level)
+            if not data:
+                self.events = True
+                return
+            text = data.decode("ascii", "replace").strip()
+            if text.startswith("link "):
+                remote = cto if cfrom == self.cfg.mycall else cfrom
+                link = self.links.get(remote)
+                if link is not None:
+                    link._l2 = l2_from(dict(w.split("=", 1) for w in text.split() if "=" in w))
+            if self.on_event is not None:
+                self.on_event(cfrom, cto, text)
+            return
         if kind == "T":                     # own UI frame, now on the air (Direwolf xmit)
+            if self.own_frames:             # CR112: 'O' has it already
+                return
             frame = own_ui(cfrom, cto, data)
             if frame is not None:
                 self.on_frame(frame)
@@ -274,6 +356,7 @@ class AgwLink(BaseLink):
         self._y_reply = asyncio.Event()
         self._q: dict | None = None
         self._q_reply = asyncio.Event()
+        self._l2: dict | None = None              # CR112: from the fork's events / 'Q'
 
     def _set(self, state: str, reason: str = "") -> None:
         if state == "offline" and self.port.links.get(self.target) is self:
@@ -292,12 +375,17 @@ class AgwLink(BaseLink):
             self._y_reply.set()
         elif kind == "Q":                         # CR78: TinyBox Direwolf fork
             self.port.q_supported = True
-            self._q = linkq.parse(data.decode("ascii", "replace"))
+            text = data.decode("ascii", "replace")
+            self._q = linkq.parse(text)
+            if not self.port.events:              # CR112: no events - 'Q' tells the phase
+                self._l2 = l2_from(dict(w.split("=", 1) for w in text.split() if "=" in w)) \
+                    or self._l2
             self._q_reply.set()
         elif kind == "d":
             self.connecting = False
+            self._l2 = None
             if self.active:
-                self._set("offline", "disconnected")
+                self._set("offline", disc_reason(data))     # CR112: retry-out ...
 
     async def connect(self) -> None:
         if not self.agw_up.is_set():
@@ -334,6 +422,14 @@ class AgwLink(BaseLink):
         except asyncio.TimeoutError:
             return 0
         return self._outstanding
+
+    def l2(self) -> dict | None:
+        return self._l2 if self.active else None
+
+    async def ask_l2(self) -> None:
+        """CR112: a fork without events: 'Q' while connecting/disconnecting (no wait)."""
+        if self.port.q_supported is not False and not self.port.events and self.active:
+            self.port.send("Q", self.cfg.mycall, self.target)
 
     async def counters(self) -> dict | None:
         """AGW 'Q' - only the TinyBox fork of Direwolf answers (direwolf-tinybox)."""

@@ -275,6 +275,8 @@ input { font: inherit; color: var(--text); background: var(--surface); border: 1
 .term-out .mt { color: #6f7b86; }
 .term-out .mc { font-weight: 600; }
 .term-out .mty { color: #8b959e; }
+.term-out .mlv { color: #6f9e7a; font-size: 11px; }        /* CR112: audio level */
+.term-out .mlv.fix { color: #d08a12; }
 .term-out .mk { font-size: 11px; padding: 0 5px; border-radius: 6px; margin-left: 4px;
   background: #26384a; color: #dfe6ec; }
 .term-out .mk.chat { background: #1c4a3a; } .term-out .mk.quality { background: #4a3a12; }

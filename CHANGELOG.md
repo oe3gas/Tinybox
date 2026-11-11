@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- **Direwolf-Fork 2026.11.11 und Client (CR112):** Fork: `Q` v=3 (N2, Modulo, k, N1, SREJ, Kanalauslastung,
+  auch während des Aufbaus), AGW `E` (PTT, DCD, Verbindungszustand/Retries, Pegel je Frame), AGW `F`
+  (Fork-Version, Features). Client: „Connecting · SABM 3/10“, „Retry 8/10“, „v2.2 · k=32“, „Channel 45 %“,
+  echtes TX/RX, eigene Frames (`O`) und Pegel im Monitor, Pegel in der APRS-Statistik, „Retry-out“ rot.
+  `prcore/linkq.py` versteht `v=3` – erst Repo aktualisieren, dann die neue `direwolf.exe`. Client 2026.11.11.3.
+
 - **Statusleiste im Client (CR110):** über Chat, Mail, TBClient-Ansicht und Monitor zeigen Chips je
   Kanal die Phase (Connecting, Signing in, Wait 4 sysop, In board, Disconnecting; mit einem TBClient
   Probing, Checking key, Verified …), die laufenden Jobs (Sync, Bilder, Dateien, History, Profile,
