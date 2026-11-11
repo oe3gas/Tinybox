@@ -402,6 +402,11 @@ class AgwAdapter:
             conn.write(texts.INVALID_CALL.format(call=remote) + "\r")
             conn.close()
             return
+        if self.app.service.ban_of(remote):            # CR115: shut out by the sysop
+            log.warning("%s: connect refused - banned", remote)
+            conn.write(texts.BANNED.format(call=remote) + "\r")
+            conn.close()
+            return
         other = self._connected_elsewhere(remote)
         if other:
             log.warning("%s: already connected via %s, connect refused", remote, other)

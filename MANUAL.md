@@ -786,6 +786,14 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   | `TRUST` | Schlüssel dieser Box, vertraute Boxen |
   | `TRUST ADD box key` | den Zertifikaten von `box` (z. B. `OE5XBL-1`) vertrauen |
   | `TRUST DEL box` | nicht mehr |
+- **Station sperren und entfernen (CR115)** – Konsole, signiert aus dem Client, Web-GUI „Keys“:
+
+  | Befehl | Wirkung |
+  |---|---|
+  | `BAN` | gesperrte Stationen |
+  | `BAN call [Grund]` | sperren (alle SSIDs): kein Connect mehr, laufende Sitzungen enden; Daten bleiben |
+  | `UNBAN call` | darf wieder |
+  | `PURGE call [Grund]` | zeigt, was gelöscht würde; `PURGE call CONFIRM [Grund]` löscht Schlüssel, Profil, Logins, Chatzeilen und Board-Dateien und sperrt. Post, Bulletins und Verbindungsprotokoll bleiben |
 - **Signierte Befehle (Stufe 2):** AX.25 prüft keine Absender – jemand könnte einen Frame in eine
   laufende Verbindung einschleusen. Deshalb unterschreibt der Client nach dem Login jeden
   kritischen Befehl einzeln: Post und Bulletins senden (samt Betreff und Text), Post löschen, das

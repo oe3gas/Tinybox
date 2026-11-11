@@ -474,6 +474,64 @@ class SysopConsole:
         except keys.KeysError as exc:
             self.out(str(exc))
 
+    def cmd_ban(self, arg: str) -> None:
+        """CR115: BAN = shut out, data stays. BAN alone: the list."""
+        from ..service import ServiceError
+        svc = self.app.service
+        call, _, reason = arg.strip().partition(" ")
+        if not call:
+            rows = svc.store.ban_list()
+            if not rows:
+                self.out("Nobody is banned.")
+            for r in rows:
+                self.out(f"{r['base']:<8} {'purged' if r['purged'] else 'banned':<7} "
+                         f"{r['since'][:16]}  {r['reason']}")
+            return
+        try:
+            res = svc.ban(call, reason)
+        except ServiceError as exc:
+            self.out(str(exc))
+            return
+        self.out(f"{res['base']}: banned (all SSIDs), his data stays - UNBAN {res['base']} "
+                 "lets him back." + (f" {res['sessions']} session(s) ended." if res["sessions"] else ""))
+
+    def cmd_unban(self, arg: str) -> None:
+        call = arg.strip().split(" ")[0]
+        if not call:
+            self.out(texts.USAGE_BAN)
+            return
+        ok = self.app.service.unban(call)
+        self.out(f"{call.upper()}: may connect again." if ok else f"{call.upper()}: not banned.")
+
+    def cmd_purge(self, arg: str) -> None:
+        """CR115: PURGE call [reason] shows what goes; PURGE call CONFIRM [reason] does it."""
+        from prcore import auth
+        from ..service import ServiceError
+        svc = self.app.service
+        words = arg.strip().split()
+        if not words:
+            self.out(texts.USAGE_BAN)
+            return
+        call = words[0]
+        confirm = len(words) > 1 and words[1].upper() == "CONFIRM"
+        reason = " ".join(words[2:] if confirm else words[1:])
+        base = auth.base(call.upper())
+        counts = svc.store.purge_counts(base)
+        what = ", ".join(f"{n} {k}" for k, n in counts.items())
+        if not confirm:
+            self.out(f"PURGE {base}: bans {base} (all SSIDs) and deletes {what}. Mail, "
+                     "bulletins and the connection log stay.",
+                     f"To do it: PURGE {base} CONFIRM" + (f" {reason}" if reason else ""))
+            return
+        try:
+            res = svc.ban(call, reason, purge=True)
+        except ServiceError as exc:
+            self.out(str(exc))
+            return
+        done = ", ".join(f"{n} {k}" for k, n in res["deleted"].items())
+        self.out(f"{res['base']}: purged - deleted {done}; banned." +
+                 (f" {res['sessions']} session(s) ended." if res["sessions"] else ""))
+
     def _numbers_and_rubric(self, arg: str, usage: str) -> tuple[list[int], str] | None:
         words = arg.replace(",", " ").split()
         if len(words) < 2 or not all(isnum(w) for w in words[:-1]) or len(words) > 21:
@@ -567,7 +625,7 @@ class SysopConsole:
     # output to this window), B (closes the console), UPDATE (answers later).
     REMOTE = ("H", "?", "HELP", "INFO", "W", "WHO", "STATUS", "DISC", "BEACON", "FWD", "FWQ",
               "HOLD", "REL", "SHUTDOWN", "RESTART", "RELOAD", "USER", "TRUST",
-              "KILL", "MOVE", "COPY", "FILES")
+              "KILL", "MOVE", "COPY", "FILES", "BAN", "UNBAN", "PURGE")
 
     def remote(self, line: str) -> bool:
         """One console command from the admin channel; False if not allowed there."""
@@ -602,4 +660,7 @@ class SysopConsole:
         "FILES": cmd_files,
         "MOVE": cmd_move,
         "COPY": cmd_copy,
+        "BAN": cmd_ban,
+        "UNBAN": cmd_unban,
+        "PURGE": cmd_purge,
     }

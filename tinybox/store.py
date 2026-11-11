@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 15  # 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 16  # 16: banned (CR115); 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
                      # 9: profiles (name, locator, home BBS of a station, CR73)
@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS trusted_boxes (            -- CR93 stage 3: whose cer
     pub      TEXT NOT NULL,                            -- its Ed25519 public key, base64url
     added    TEXT NOT NULL,
     note     TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS banned (                   -- CR115: stations the sysop shut out
+    base     TEXT PRIMARY KEY,                         -- base call: all SSIDs
+    since    TEXT NOT NULL,
+    reason   TEXT NOT NULL DEFAULT '',
+    purged   INTEGER NOT NULL DEFAULT 0                -- 1 = PURGE (data deleted), 0 = BAN
 );
 CREATE TABLE IF NOT EXISTS fwd_partial (              -- B1 restart: half received messages
     partner TEXT NOT NULL,
@@ -651,6 +657,50 @@ class Store:
                 "INSERT INTO trusted_boxes (box, pub, added, note) VALUES (?, ?, ?, ?)"
                 " ON CONFLICT (box) DO UPDATE SET pub = excluded.pub, added = excluded.added,"
                 " note = excluded.note", (box, pub, utc_now(), note))
+
+    # --- CR115: ban and purge ---------------------------------------------------
+
+    def ban_get(self, base: str) -> dict | None:
+        r = self._db.execute("SELECT * FROM banned WHERE base = ?", (base,)).fetchone()
+        return dict(r) if r else None
+
+    def ban_list(self) -> list[dict]:
+        return [dict(r) for r in self._db.execute("SELECT * FROM banned ORDER BY base")]
+
+    def ban_put(self, base: str, reason: str, purged: bool) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO banned (base, since, reason, purged) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT (base) DO UPDATE SET reason = excluded.reason,"
+                " purged = MAX(purged, excluded.purged)", (base, utc_now(), reason, int(purged)))
+
+    def ban_delete(self, base: str) -> bool:
+        with self._db:
+            return self._db.execute("DELETE FROM banned WHERE base = ?", (base,)).rowcount > 0
+
+    _PURGE = (("keys", "client_keys", "call = ?", False),
+              ("profile", "profiles", "base = ?", False),
+              ("logins", "users", "call = ? OR call LIKE ?", True),
+              ("chat lines", "chat_lines", "call = ? OR call LIKE ?", True),
+              ("files", "chat_files", "call = ? OR call LIKE ?", True))
+
+    def purge_counts(self, base: str) -> dict[str, int]:
+        """What PURGE would delete of base (all SSIDs). Mail, bulletins and the
+        connection log stay (OE3GAS, 11.11.2026)."""
+        out = {}
+        for name, table, where, ssid in self._PURGE:
+            args = (base, base + "-%") if ssid else (base,)
+            out[name] = self._db.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}",
+                                         args).fetchone()[0]
+        return out
+
+    def purge(self, base: str) -> dict[str, int]:
+        out = {}
+        with self._db:
+            for name, table, where, ssid in self._PURGE:
+                args = (base, base + "-%") if ssid else (base,)
+                out[name] = self._db.execute(f"DELETE FROM {table} WHERE {where}", args).rowcount
+        return out
 
     def trust_delete(self, box: str) -> bool:
         with self._db:

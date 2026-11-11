@@ -246,6 +246,11 @@ HELP_CONSOLE = [
     "  KILL n[,n]     Delete messages and bulletins",
     "  FILES [DEL h]  Files in the chat boards (CR86) / delete one",
     "  MOVE n[,n] RUB Move bulletins into another rubric (new number) / COPY n[,n] RUB: copy",
+    "  BAN            Banned stations / BAN call [reason]: shut call out (all SSIDs), data stays",
+    "  UNBAN call     Let call back in (he behaved)",
+    "  PURGE call [reason]  Ban AND delete his keys, profile, logins, chat lines, board",
+    "                 files (mail, bulletins, connection log stay) - shows first, then",
+    "                 PURGE call CONFIRM",
 ]
 UPDATE_ASKING = "Asking GitHub for the newest release ..."
 UPDATE_UNKNOWN = "Update: no answer from GitHub (offline?)."
@@ -317,6 +322,9 @@ USAGE_COPY = "Usage: COPY n[,n...] RUBRIC   (a copy in another rubric)"
 USAGE_FILES = "Usage: FILES  /  FILES DEL hash   (files in the chat boards)"
 USAGE_KILL = "Usage: KILL n[,n...]   (delete messages and bulletins)"
 USAGE_TRUST = "Usage: TRUST  /  TRUST ADD box key  /  TRUST DEL box"
+# CR115: ban and purge
+BANNED = "*** {call}: no access to this TinyBox - ask the sysop."
+USAGE_BAN = "Usage: BAN  /  BAN call [reason]  /  UNBAN call  /  PURGE call [reason]"
 HELD = "Msg {id} held."
 RELEASED = {"$": "Msg {id} released, queued for forwarding.",
             "": "Msg {id} released, local message.",

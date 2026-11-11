@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **TinyBox: BAN, UNBAN, PURGE (CR115):** Station sperren (alle SSIDs, Daten bleiben, `UNBAN` lässt
+  sie wieder) oder entfernen (`PURGE` = Schlüssel, Profil, Logins, Chatzeilen, Board-Dateien löschen
+  und sperren; Post, Bulletins, Verbindungsprotokoll bleiben). Konsole, `//ADM`, Web-GUI „Keys“.
+  Schema 16.
+
 - **LoTW als Vertrauensanker, Stufe 1 (CR113):** der Client bestätigt den eigenen Schlüssel einmal mit dem
   LoTW-Zertifikat (`.p12` von TQSL, Settings „LoTW confirmation“, nur auf 127.0.0.1); `.p12` und Passwort
   werden nicht gespeichert, der Nachweis liegt in `data/tbclient/lotw.json`. Gemeinsames Modul

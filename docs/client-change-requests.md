@@ -86,6 +86,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 105 | Eigenes Profilfoto (optional, rund), im Chatboard und bei Verbindung mit anderem Client links neben dem Call-Icon | offen, siehe unten |
 | 107 | Gleiche Funktionen Client↔Client und im Chatboard (Shoutout, Kommentar, Reaktion, Sticker, Links, Alarm – und umgekehrt Dateien, Karte, Haken …) | ✅ 10.11.2026 (Teil 1 Client↔Client, Teil 2 Chatboard mit CR86) – siehe unten |
 | 110 | Statusleiste: Phasen und Verkehr Client↔Box und Client↔Client in Echtzeit als Chips, Modem/TX/RX in der Kopfzeile, ein-/ausblendbar | ✅ 11.11.2026 – siehe unten |
+| 115 | TinyBox: Station sperren (BAN/UNBAN) und entfernen (PURGE = löschen + sperren) | ✅ 11.11.2026 – siehe unten |
 | 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert mit der .p12) ✅ 11.11.2026; Stufe 2 Prüfung in der Box, Stufe 3 Anzeige offen – siehe unten |
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
 
@@ -4175,3 +4176,31 @@ Windows-Programm mit MinGW-w64 gebaut. **Funktest mit Funk offen.**
 - Nachtrag (OE3GAS, 11.11.2026): Suche nur für den Graphen, nicht für die Tabellen. Die Zeile
   heißt jetzt „Show in graph“ statt „Show“, damit klar ist, dass Auswahl und Suche nur den
   Graphen betreffen (Client 2026.11.11.7).
+
+## CR115 – Station sperren und entfernen: BAN, UNBAN, PURGE (✅ 11.11.2026, Schema 16)
+
+### Wunsch und Entscheidungen (OE3GAS, 11.11.2026)
+
+Einen User in der TinyBox komplett entfernen können. Entschieden:
+
+- **Post und Bulletins bleiben** (gehören auch anderen, sind ggf. schon weitergeleitet).
+- **Verbindungsprotokoll bleibt**, nicht anonymisiert.
+- Zwei Optionen: **PURGE** = löschen **und** sperren; **BAN** = sperren, aber nicht löschen –
+  „wenn er brav ist, darf er wieder mitspielen“ (**UNBAN**).
+
+### Umsetzung
+
+- Tabelle `banned` (Basis-Call, also alle SSIDs; seit, Grund, purged), Schema 16.
+- **BAN call [Grund]:** die Station kann sich nicht mehr verbinden – Funk/KISS/AXUDP (`agw.py`
+  `_on_connect`, vor allem anderen nach der Call-Prüfung, auch für Forward-Partner) und Telnet (nach
+  dem Login): Text „*** CALL: no access to this TinyBox - ask the sysop.“, dann Trennen. Laufende
+  Sitzungen dieses Calls enden sofort. Daten bleiben. `BAN` allein: Liste.
+- **UNBAN call:** darf wieder. Nach einem PURGE beginnt er als neuer User (Schlüssel neu freigeben).
+- **PURGE call [Grund]:** zeigt zuerst, was gelöscht würde (Schlüssel, Profil, Logins, Chatzeilen,
+  Board-Dateien), erst `PURGE call CONFIRM [Grund]` löscht und sperrt. Bilder im Chat verschwinden
+  mit den Zeilen über das normale Aufräumen (keine Referenz mehr).
+- Das Sysop-Rufzeichen kann nicht gesperrt werden.
+- Konsole (auch per signiertem `//ADM` aus dem Client, CR94), Web-GUI: Seite **Keys**, Karte
+  „Banned stations“ (Ban, Purge mit Rückfrage samt Anzahl, Unban). Jede Aktion als Warnung im Log.
+- Tests `tests/test_cr115.py`.
+

@@ -409,7 +409,7 @@ class WebServer:
             if parts == ["keys"]:                                # CR93: client keys, trust
                 from .. import keys
                 return {"users": keys.users(svc), "box": keys.this_box(svc),
-                        "trusted": keys.trusted(svc)}
+                        "trusted": keys.trusted(svc), "banned": app.store.ban_list()}
         else:
             if parts and parts[0] == "keys":
                 return self._keys(parts[1:], data)
@@ -486,7 +486,25 @@ class WebServer:
                                                str(data.get("pub", "")))}
             if parts == ["untrust"]:
                 return {"text": keys.trust_del(svc, str(data.get("box", "")))}
+            # CR115: keys/ban {call, reason}, keys/unban {call}, keys/purge {call, reason,
+            # confirm}: without confirm = what would go
+            call = str(data.get("call", "")).strip().upper()
+            if parts == ["ban"]:
+                res = svc.ban(call, str(data.get("reason", "")))
+                return {"text": f"{res['base']}: banned (all SSIDs), his data stays."}
+            if parts == ["unban"]:
+                return {"text": f"{call}: may connect again." if svc.unban(call)
+                        else f"{call}: not banned."}
+            if parts == ["purge"]:
+                from prcore import auth
+                if not data.get("confirm"):
+                    return {"counts": self.app.store.purge_counts(auth.base(call))}
+                res = svc.ban(call, str(data.get("reason", "")), purge=True)
+                return {"text": f"{res['base']}: purged and banned - deleted " +
+                        ", ".join(f"{n} {k}" for k, n in res["deleted"].items()) + "."}
         except keys.KeysError as exc:
+            raise HttpError(400, str(exc)) from None
+        except ServiceError as exc:
             raise HttpError(400, str(exc)) from None
         raise HttpError(404)
 

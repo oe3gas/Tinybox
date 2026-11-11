@@ -1420,6 +1420,19 @@ function viewSettings() {
 // CR93: client keys (USER at the console) and trusted TinyBoxen (TRUST)
 function viewKeys() {
   const users = h("tbody"), trusted = h("tbody"), me = h("div", { class: "card-body note" });
+  const bans = h("tbody");                                  // CR115
+  const banCall = h("input", { class: "mono", placeholder: "OE1ABC", size: 10 });
+  const banWhy = h("input", { class: "grow", placeholder: "reason (only for you, optional)" });
+  async function purge() {
+    const call = banCall.value.trim().toUpperCase();
+    if (!call) return;
+    let d;
+    try { d = await api("keys/purge", { call }); } catch (e) { toast(e.message, true); return; }
+    const what = Object.entries(d.counts).map(([k, n]) => `${n} ${k}`).join(", ");
+    act("purge", { call, reason: banWhy.value, confirm: true },
+      `PURGE ${call}?\nBans ${call} (all SSIDs) and deletes ${what}.\n` +
+      "Mail, bulletins and the connection log stay. This cannot be undone.");
+  }
   const boxIn = h("input", { class: "mono", placeholder: "OE5XBL-1", size: 10 });
   const pubIn = h("input", { class: "mono grow", placeholder: "public key of that box (43 characters)" });
   async function act(path, body, ask) {
@@ -1449,6 +1462,13 @@ function viewKeys() {
         h("button", { class: "btn sm danger", type: "button", text: "Delete",
           onclick: () => act("user", { id: u.id, action: "DEL" }, `Forget the key ${u.fp} of ${u.call}?`) }))))
       : [h("tr", {}, h("td", { colspan: 7, text: "No client keys yet." }))]));
+    bans.replaceChildren(...((d.banned || []).length ? d.banned.map((b) => h("tr", {},
+      h("td", { class: "mono", text: b.base }), h("td", { class: b.purged ? "warn" : "", text: b.purged ? "purged" : "banned" }),
+      h("td", { class: "mono", text: fullDate(b.since) }), h("td", { text: b.reason }),
+      h("td", {}, h("button", { class: "btn sm", type: "button", text: "Unban",
+        onclick: () => act("unban", { call: b.base }, `Let ${b.base} back in?` +
+          (b.purged ? "\nHis deleted data does not come back - he starts as a new user." : "")) }))))
+      : [h("tr", {}, h("td", { colspan: 5, text: "Nobody is banned." }))]));
     trusted.replaceChildren(...(d.trusted.length ? d.trusted.map((b) => h("tr", {},
       h("td", { class: "mono", text: b.box }), h("td", { class: "mono", text: b.fp }),
       h("td", { class: "mono", text: fullDate(b.added) }),
@@ -1475,7 +1495,21 @@ function viewKeys() {
         h("button", { class: "btn primary sm", type: "button", text: "Trust",
           onclick: () => act("trust", { box: boxIn.value, pub: pubIn.value },
             `Trust ${boxIn.value.toUpperCase()}? Its users then log in here with their certificate.\n` +
-            "Fingerprint compared with its sysop?") }))));
+            "Fingerprint compared with its sysop?") }))),
+    h("section", { class: "card" },
+      h("div", { class: "card-head" }, h("h2", { class: "grow", text: "Banned stations" })),
+      h("div", { class: "card-body note",
+        text: "Ban: the station (all SSIDs) cannot connect any more, its data stays - Unban lets it back. " +
+              "Purge: ban AND delete its keys, profile, logins, chat lines and board files; " +
+              "mail, bulletins and the connection log stay." }),
+      h("div", { class: "scroll" }, h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Call", "", "Since (UTC)", "Reason", ""].map((x) => h("th", { text: x })))),
+        bans)),
+      h("div", { class: "card-body row" }, banCall, banWhy,
+        h("button", { class: "btn sm", type: "button", text: "Ban",
+          onclick: () => act("ban", { call: banCall.value, reason: banWhy.value },
+            `Ban ${banCall.value.toUpperCase()} (all SSIDs)? Running sessions end now; the data stays.`) }),
+        h("button", { class: "btn sm danger", type: "button", text: "Purge", onclick: purge }))));
   update();
   return {};
 }

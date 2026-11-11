@@ -134,6 +134,56 @@ class MessageService:
                 if m.type == "B" and m.fwd == "H" and m.note.startswith(NEW_RUBRIC_NOTE)
                 and (name is None or m.to_call == name)]
 
+    # --- CR115: ban and purge ------------------------------------------------------
+
+    def ban_of(self, call: str) -> dict | None:
+        """The ban of call (any SSID), None = may connect. The sysop call is never banned."""
+        from prcore import auth
+        base = auth.base(call.upper())
+        if self.is_sysop_call(base):
+            return None
+        return self.store.ban_get(base)
+
+    def ban(self, call: str, reason: str = "", purge: bool = False) -> dict:
+        """BAN: shut call out (all SSIDs), the data stays - UNBAN lets him back.
+        PURGE: the same, and his keys, profile, logins, chat lines and board files
+        go; mail, bulletins and the connection log stay. Sessions of call end now."""
+        from prcore import auth
+        base = auth.base(call.strip().upper())
+        if not base or not (3 <= len(base) <= 7) or not base.isalnum() or not base.isascii():
+            raise ServiceError("bad_call", f"{call}: not a call")
+        if self.is_sysop_call(base):
+            raise ServiceError("sysop", "the sysop call cannot be banned")
+        self.store.ban_put(base, reason.strip()[:80], purge)
+        gone = self.store.purge(base) if purge else {}
+        n = self._end_sessions(base)
+        log.warning("sysop: %s %s%s%s", base, "purged" if purge else "banned",
+                    f" ({reason.strip()[:80]})" if reason.strip() else "",
+                    f" - deleted {gone}" if purge else "")
+        return {"base": base, "deleted": gone, "sessions": n}
+
+    def unban(self, call: str) -> bool:
+        from prcore import auth
+        base = auth.base(call.strip().upper())
+        ok = self.store.ban_delete(base)
+        if ok:
+            log.warning("sysop: %s no longer banned", base)
+        return ok
+
+    def _end_sessions(self, base: str) -> int:
+        from prcore import auth
+        app = getattr(self, "app", None)
+        if app is None:
+            return 0
+        n = 0
+        for s in list(app.registry):
+            if auth.base(s.call) == base and not getattr(s, "closed", False):
+                from . import texts
+                s.out(texts.BANNED.format(call=s.call))
+                s.close()
+                n += 1
+        return n
+
     def box_identity(self):
         """CR93 stage 3: the key of this TinyBox (data/box.key), made at first use.
         It signs the certificates of its users."""
