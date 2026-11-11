@@ -92,6 +92,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Nachtrag .13: TX nur PTT, Queue-Chip; .14: Queue in Echtzeit; Funktest offen) – siehe unten |
 | 118 | TinyBox-Begrüßungsdialog: Gruß nach dem Namen (zufällig aus 8), Home-BBS mit Rufzeichen-Plausibilität, „S SYSOP“ mitten in den Fragen; Nachtrag: dieselbe Prüfung für Empfänger und @-Mailbox bei S | ✅ 11.11.2026 (Client 2026.11.11.15) – siehe unten |
 | 119 | TinyBox-Terminal: `SB` nicht mehr in der Hilfe für nicht authentifizierte User | ✅ 11.11.2026 – siehe unten |
+| 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (sieht/schreibt nicht alles) | offen – Variante wählen, siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4390,4 +4391,40 @@ authentifizierte User schreiben (CR92), ein Gast am Terminal kann es ohnehin nic
   („Bulletins only with the TinyBox client …“), dem Sysop `Usage: SB topic [@ area] [$BID]`.
 - Der Befehl selbst war schon gesperrt (CR92), daran ändert sich nichts.
 - Tests `tests/test_cr119.py`.
+
+## CR120 – Terminal-User in der User-Ansicht kennzeichnen (offen, erfasst 11.11.2026)
+
+### Wunsch (OE3GAS, 11.11.2026)
+
+OE3NIX ist im Chatboard ein Terminal-User. Das soll in der User-Ansicht („In this board“) des
+Clients zu sehen sein, damit die anderen wissen, dass er im Chatboard nicht alles sieht und nicht
+alles schreiben kann.
+
+### Was ein Terminal-User nicht hat (Stand CR92/CR119)
+
+- Bilder und Dateien nur als Textzeile („[Image 5.0 KB - TinyBox client only]“), keine Reaktionen,
+  Sticker, Karte, Shoutouts in der Client-Darstellung; Emojis erst ab authentifiziertem User (29.9).
+- Kein Login mit Schlüssel → Gast (keine Bulletins, Post nur lokal/an den Sysop).
+
+### Visueller Vorschlag (Claude, 11.11.2026) – Entscheidung offen
+
+Zeile in „In this board“, Avatar und Signalbalken bleiben:
+
+- **A – Pill neben dem Call:** `OE3NIX [terminal]`, kleine gelbe Pille. Sofort sichtbar, kurz.
+- **B – Icon + Untertitel:** Terminal-Icon hinter dem Call, Untertitel „nixon · terminal: text only“.
+  Sagt gleich, was es bedeutet.
+- **C – gestrichelter Ring um den Avatar:** dezent, Erklärung nur im Tooltip („Terminal user, sees
+  chat as text only, no pictures, files, reactions“).
+
+In allen Varianten zusätzlich ein Tooltip mit dieser Erklärung.
+
+### Was dafür nötig ist (Skizze, noch nicht umgesetzt)
+
+- **TinyBox:** sie weiß es (Sitzung ohne `//CLIENT` = Terminal), sagt es den Clients aber noch nicht.
+  `//WHO` (`n call[=sym]`) und das Join-Ereignis `+n call /sym` brauchen eine Kennung, z. B. ein
+  Zeichen hinter dem Call (`OE3NIX=/-~t`) – nur an Clients mit neuer Cap (z. B. `TERM`), ältere
+  bekommen die Zeile wie bisher. Kostet wenige Byte je Member, einmal beim Join.
+- **Client:** Kennung aus `//WHO`/Join merken, in der User-Ansicht nach gewählter Variante zeigen;
+  evtl. auch im Profil-Popup des Users.
+- Offen: auch „Client ohne Login mit Schlüssel“ (Gast im Client, falls es das gibt) kennzeichnen?
 
