@@ -93,6 +93,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 118 | TinyBox-Begrüßungsdialog: Gruß nach dem Namen (zufällig aus 8), Home-BBS mit Rufzeichen-Plausibilität, „S SYSOP“ mitten in den Fragen; Nachtrag: dieselbe Prüfung für Empfänger und @-Mailbox bei S | ✅ 11.11.2026 (Client 2026.11.11.15) – siehe unten |
 | 119 | TinyBox-Terminal: `SB` nicht mehr in der Hilfe für nicht authentifizierte User | ✅ 11.11.2026 – siehe unten |
 | 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (Pille „terminal“) und beim Betreten eine Systemmeldung an alle | offen – entschieden (Variante A + Systemmeldung), Umsetzung ab 12.11.2026 – siehe unten |
+| 121 | TinyBox: eine Verbindung je Rufzeichen – neuer Connect auf laufende Verbindung bekommt DM, N(R)-Fehler beendet mit DISC (gleiches Call doppelt auf der Frequenz) | ✅ 11.11.2026 (KISS/AXUDP; Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4444,4 +4445,52 @@ In allen Varianten zusätzlich ein Tooltip mit dieser Erklärung.
      bräuchten den Hinweis über andere Terminal-User eher nicht.
    - Im Client als Systemzeile wie „joined/left“ (grau, ohne Bubble), nur einmal je Betreten,
      nicht beim Laden der History wiederholen.
+
+## CR121 – Eine Verbindung je Rufzeichen (✅ 11.11.2026, Funktest offen)
+
+### Vorfall (OE3GAS, 11.11.2026, 23:24)
+
+OE3NIX war mit dem TBClient mit der Box verbunden, zusätzlich mit QTerm – beide über **denselben
+Direwolf**, beide als `OE3NIX` ohne SSID. Der Connect von QTerm ging durch, danach minutenlang:
+
+    OE3NIX → OE3GAS-1 <SABME+>  ...  OE3GAS-1 → OE3NIX <UA+>  <XID+>
+    OE3NIX → OE3GAS-1 <RR 8+>        OE3GAS-1 → OE3NIX <RR 0+> <SABME+>
+    OE3NIX → OE3GAS-1 <UA+>  <XID+>  ... (alle 3–4 s von vorne)
+
+### Ursache
+
+AX.25 kennt eine Verbindung nur am Paar eigenes Call ↔ fremdes Call; es setzt voraus, dass ein
+Call mit SSID auf dem Kanal nur einmal aktiv ist, und kann Doppelte weder erkennen noch auflösen.
+Für die Box waren beide Stationen **eine** Verbindung. QTerms SABME setzte sie zurück (UA, Zähler 0,
+normgerecht), der TBClient bestätigte mit seinem alten Stand (`RR 8`), die Box sah einen N(R)-Fehler
+und baute neu auf (`SABME`) – beide antworteten, und so weiter.
+
+Direwolf verhindert das nicht: er führt Verbindungen je AGW-Client (`ax25_link.c`
+`get_link_handle`), zwei Clients mit demselben Paar bekommen zwei Zustandsmaschinen, beide senden.
+
+### Entscheidung (OE3GAS, 11.11.2026)
+
+Die Box hilft nach (wirkt für alle Stationen, egal welche Software): wenn eine Station einen neuen
+Connect schickt, obwohl sie schon verbunden ist, wird getrennt – „dann ist wieder Ordnung“.
+
+### Umsetzung (TinyBox mit eigenem AX.25: KISS, AXUDP)
+
+- `LinkCfg.refuse_reconnect` (prcore/ax25/link.py), in der TinyBox an (`adapters/kiss.py`,
+  `adapters/axudp.py`), im Client aus (dort bleibt das Verhalten der Norm).
+- **SABM/SABME auf eine laufende Verbindung → DM**, Verbindung und Sitzung enden (Grund
+  `reconnect`, Warnung im Log: „new connect while connected - DM, session ended (station restarted,
+  or the same call twice on the air?)“). DM statt DISC: DISC ist ein eigener Abbau mit UA-Antwort,
+  bei zwei Stationen antworten beide; DM ist die Antwort der Norm auf ein abgewiesenes SABM.
+- Das **nächste SABM ist ein frischer Connect** – neue Sitzung mit Login und Begrüßung. Die andere
+  Station sendet mit altem Stand weiter, bekommt DM und ist offline.
+- **N(R)-Fehler → DISC** statt Neuaufbau (Ereignis `nr_error`, Warnung im Log) – sonst stößt die Box
+  bei zwei Stationen selbst die nächste Runde an.
+- Preis: eine Station, die nach einem Absturz neu verbindet, braucht einen SABM mehr (erst DM, dann
+  UA) und bekommt eine frische Sitzung – statt wie bisher die alte mit halb offenen Vorgängen
+  (Mail-Eingabe, Bildbytes) weiterzuführen.
+- **Nicht abgedeckt:** TinyBox über Direwolf (AGW) – dort beantwortet Direwolf das SABM selbst.
+  Lösung dafür wäre der Fork (zweites `C` für ein schon verbundenes Paar mit `d` abweisen, verhindert
+  auch den Doppel-Connect über denselben Direwolf an der Quelle) – offen, eigener Schritt.
+- Für Tests mit zwei Programmen an einem PC: verschiedene SSIDs (OE3NIX, OE3NIX-1).
+- Tests `tests/test_cr121.py`.
 

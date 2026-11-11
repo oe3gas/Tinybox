@@ -61,7 +61,8 @@ def link_cfg(cfg: Config) -> LinkCfg:
                    t1_min_sec=a.t1_min_sec, t1_max_sec=a.t1_max_sec, t2_sec=a.t2_sec,
                    t3_sec=a.t3_sec, v20_digis=a.v20_digis,
                    v20_digi_paclen=a.v20_digi_paclen, air_baud=k.air_baud, txdelay_sec=k.txdelay_ms / 1000,
-                   max_rx_info=max(512, a.paclen))
+                   max_rx_info=max(512, a.paclen),
+                   refuse_reconnect=True)              # CR121: one call, one connection
 
 
 class KissConnection(AgwConnection):
@@ -235,7 +236,12 @@ class KissAdapter(AgwAdapter):
         elif name == "reset":
             log.warning("%s: link re-established (%s) - data in flight may be lost",
                         remote, arg)
+        elif name == "nr_error":                   # CR121
+            log.warning("%s: N(R) error - link ended (the same call twice on the air?)", remote)
         elif name == "disconnected":
+            if arg == "reconnect":                 # CR121
+                log.warning("%s: new connect while connected - DM, session ended "
+                            "(station restarted, or the same call twice on the air?)", remote)
             fut = self._pending.pop(remote, None)
             if fut is not None and not fut.done():
                 fut.set_exception(ConnectionError(f"connect to {remote} failed ({arg})"))

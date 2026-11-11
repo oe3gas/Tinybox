@@ -39,8 +39,10 @@ two lists the caller drains:
         ("connected", "incoming" | "outgoing")
         ("data", bytes)                 in-order payload for the session
         ("reset", reason)               link re-established, unacked data lost
+        ("nr_error", remote)            CR121: N(R) error, the link ends (refuse_reconnect)
         ("disconnected", reason)        "remote" | "local" | "retryout" |
-                                        "refused" | "timeout" | "dm" | "protocol"
+                                        "refused" | "timeout" | "dm" | "protocol" |
+                                        "reconnect" (CR121)
 
 and next_deadline() says when tick(now) must be called at the latest. That
 makes the machine testable without radio and network (tests/ax25sim.py).
@@ -107,6 +109,11 @@ class LinkCfg:
     v20_digi_paclen: int = 128   # longest I field over such a digi (they drop long frames)
     sabme_tries: int = 2         # unanswered SABMEs before calling with SABM
     xid_tries: int = 3           # XID commands before giving up (then REJ only)
+    # CR121: AX.25 cannot tell two stations with the same call apart - both are one
+    # link. True (the TinyBox): a SABM(E) on a running link is answered DM and the
+    # link ends (the next SABM is a fresh connect), an N(R) error ends the link with
+    # DISC instead of re-establishing it. False: reset as in the standard.
+    refuse_reconnect: bool = False
 
 
 @dataclass
@@ -391,6 +398,11 @@ class Ax25Link:
             self._rx_i(f, now)
         elif f.is_s:
             self._rx_s(f, now)
+        elif kind in ("SABM", "SABME") and f.command and self.cfg.refuse_reconnect:
+            # CR121: a new connect while connected - a restarted station or a second
+            # one with the same call; either way: DM, end, the next SABM starts fresh
+            self._tx_u("DM", command=False, pf=f.pf)
+            self._to_disconnected("reconnect")
         elif kind == "SABM" and f.command:            # peer restarted the link
             self.queue.clear()
             self._accept(f, now, 8)
@@ -819,7 +831,13 @@ class Ax25Link:
         return (nr - self.va) % self.modulo <= (self.vs - self.va) % self.modulo
 
     def _nr_error(self, now: float) -> None:
-        """SDL 'N(R) error recovery': the peer acks something we never sent."""
+        """SDL 'N(R) error recovery': the peer acks something we never sent.
+        CR121 (refuse_reconnect): end the link with DISC - with two stations on one
+        call a re-establish only starts the next round."""
+        if self.cfg.refuse_reconnect:
+            self._events.append(("nr_error", self.remote))
+            self.disconnect(now)
+            return
         self._establish(now, reestablish=True)
 
     def _set_va(self, nr: int) -> None:

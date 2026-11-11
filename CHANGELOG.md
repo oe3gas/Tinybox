@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+- **Eine Verbindung je Rufzeichen (CR121):** die TinyBox (KISS, AXUDP) beantwortet einen neuen Connect auf eine
+  laufende Verbindung mit DM und beendet die Sitzung; ein N(R)-Fehler beendet die Verbindung mit DISC statt
+  Neuaufbau. Beendet das Ping-Pong, wenn dasselbe Call zweimal auf der Frequenz ist.
+
 - **Terminalmenü ohne `SB` für Gäste (CR119):** Hilfe und Usage zeigen `SB` nur, wer Bulletins schreiben
   darf (Sysop, Login mit Schlüssel).
 

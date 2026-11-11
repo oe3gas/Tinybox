@@ -50,7 +50,8 @@ def axudp_link_cfg(cfg: Config) -> LinkCfg:
                    t1_max_sec=max(a.t1_sec * 4, 10.0), t2_sec=1.5 if a.air_baud else 0.05,
                    t3_sec=300.0, air_baud=a.air_baud or 10_000_000,
                    txdelay_sec=a.txdelay_ms / 1000, srej=cfg.ax25.srej,
-                   max_rx_info=max(512, a.paclen))
+                   max_rx_info=max(512, a.paclen),
+                   refuse_reconnect=True)              # CR121: one call, one connection
 
 
 class _UdpPort(KissPort):
