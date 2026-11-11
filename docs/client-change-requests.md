@@ -3842,3 +3842,95 @@ Kommentar, Reaktion, Alarm, Avatar; dazu „lädt Bild hoch“ und die Authentis
   KISS-Mode steht die Kanal-Karte unter „Connected“. Zusammengeklappte Karten bleiben klein.
 - Unter 1600 px Breite zwei Spalten (Connection log über beide), unter 1100 px eine.
 - Geprüft im Browser (Playwright) bei 2560 und 1440 px, keine JS-Fehler; `tests/test_web.py` grün.
+
+## CR109 – APRS-Netzgraph: Zonen statt Ringe, mehr Fläche, Zoom (offen, 11.11.2026)
+
+### Erfassung (OE3GAS, 11.11.2026)
+
+1. **Hop-Radar:** Stationen mit 2 Hops nicht auf dem Ring, sondern **zwischen** den Ringen
+   „1 hop“ und „2 hops“. Den Ring größer machen, so dass er den Bereich zu 80 % füllt – jetzt
+   ist links und rechts viel Platz.
+2. **Map:** 4 Ringe (50, 100, 200, 400 km). Auch hier die Stationen zwischen den Ringen
+   platzieren, wenn möglich entsprechend der Entfernung innerhalb des Streifens. Diagramm 80 %
+   vom Platz.
+3. **Force:** die Stationen mehr verteilen, auch in der Breite.
+4. **Zoom:** bei vielen Stationen wird es unleserlich – in jeder Darstellung hineinzoomen können.
+
+### Kommentar (Claude, 11.11.2026)
+
+**Zu 1 – Zonen im Hop-Radar.** Heute ist jeder Ring eine Bahn: alle Stationen eines Hop-Werts
+liegen genau auf dem Kreis (`ringR(h)`), getrennt nur über den Winkel. Bei vielen Stationen
+(OK-Digis im Norden) muss der Algorithmus sie entlang des Kreises zusammenquetschen – daher die
+Klumpen. Werden die Ringe zu **Zonengrenzen**, bekommt jede Station eine zweite Freiheit
+(radial) und Überlappungen lassen sich deutlich besser auflösen.
+
+- Vorschlag, für alle Zonen gleich (nicht nur 2 Hops): „heard directly“ = innere Scheibe,
+  „1 hop“ = Streifen zwischen Ring 1 und 2, „2 hops“ = Streifen zwischen Ring 2 und 3. Die
+  Beschriftung steht dann im Streifen, nicht am Ring.
+- Position im Streifen: wie bei der Map nach Entfernung (nah = innen), ohne Locator in der
+  Streifenmitte. Damit trägt der Radar zusätzlich eine grobe Entfernungsinformation.
+- In der inneren Scheibe nicht bis zur Mitte gehen (z. B. ab 30 % des Radius), sonst kleben die
+  direkt gehörten Stationen am eigenen Punkt.
+
+**Zu 1/2 – 80 % der Fläche.** Die Zeichnung ist fix 720 × 470 (Seitenverhältnis ≈ 1,5 : 1) und
+wird auf die Kartenbreite skaliert. Der Kreis füllt heute ≈ 93 % der **Höhe**, aber nur ≈ 61 %
+der **Breite** – deshalb der Platz links und rechts. Ein Kreis, der 80 % der Breite füllt,
+wäre auf einem breiten Schirm ≈ 1.100 px hoch und passt nicht mehr ins Fenster.
+
+- Vorschlag: Zeichenfläche an das Fenster anpassen (Höhe ≈ sichtbare Fensterhöhe, Breite wie
+  bisher), Kreisdurchmesser = 80 % der **kleineren** Seite. Auf breiten Schirmen bleibt trotzdem
+  seitlich Platz – dort könnte die Info-Zeile (Hover: Station, Frames, km, Gerät) und die Legende
+  hin, statt unter bzw. über der Zeichnung.
+- Alternative: Knopf „Vollbild“ für die Zeichnung allein.
+- Die Map muss kreisrund bleiben (Peilung stimmt sonst nicht); beim Radar wäre eine Ellipse
+  technisch möglich, würde aber die Himmelsrichtungen verzerren – nicht empfohlen.
+
+**Zu 2 – Streifen in der Map.** 50/100/200/400 sind Verdopplungen; gleich breite Streifen ergeben
+also eine logarithmische Entfernungsskala – passt gut zu APRS (viele nahe, wenige ferne Stationen).
+Innerhalb eines Streifens linear nach Entfernung.
+
+- Die Scheibe 0–50 km ist bei uns die vollste (OE3-Umgebung). Sie sollte mehr Radius bekommen,
+  z. B. 35 % des Radius für 0–50 km, die drei Streifen 50–100, 100–200, 200–400 je ≈ 22 %.
+- Stationen über 400 km: in einen schmalen Randstreifen außerhalb von 400 km, oder am Rand
+  festhalten und kennzeichnen. Ohne diese Regel würden einzelne ferne Stationen (S5, HG) die
+  Skala sprengen.
+- Feste Ringe statt der heutigen Auswahl aus 5/10/25/…/800 km. Liegt nichts über 200 km, den
+  400-km-Streifen weglassen, damit kein leerer Rand entsteht.
+- Das heutige Auseinanderschieben naher Stationen darf eine Station nicht aus ihrem Streifen
+  schieben (radial begrenzen) – sonst stimmt die Zone nicht mehr.
+
+**Zu 3 – Force.** Ursachen im Code: die Abstoßung ist eine feste Konstante (unabhängig von der
+Zahl der Stationen), der Zug zur Mitte ist senkrecht stärker als waagrecht, und am Ende wird mit
+**einem** Faktor für x und y skaliert – das Ergebnis bleibt ein runder Haufen in einer breiten
+Fläche.
+
+- Vorschlag: x und y getrennt auf die Fläche strecken (füllt die Breite), Zug zur Mitte
+  schwächer und in beiden Richtungen gleich, Abstoßung und Federlänge an die Zahl der Stationen
+  und die Fläche anpassen.
+- Zusätzlich Kollision mit Bubble-Größe **und** Beschriftung, damit sich die Calls nicht
+  überdecken.
+
+**Zu 4 – Zoom.** Gut machbar ohne Bibliothek (der Client läuft ohne Internet): Ausschnitt der
+SVG (`viewBox`) verändern.
+
+- Bedienung: Mausrad = Zoom zum Mauszeiger, Ziehen = verschieben, Knöpfe „+ / − / Reset“ neben
+  der Zeichnung. Ein Klick auf eine Station öffnet weiter ihre Seite; Ziehen darf das nicht
+  auslösen.
+- Wichtig: **semantischer Zoom.** Ein reines Vergrößern skaliert Bubbles und Schrift mit – die
+  Überdeckungen bleiben dann genau gleich, nur größer. Deshalb beim Zoomen nur die Positionen
+  auseinanderziehen, Bubble-Größe, Linienstärke und Schrift bleiben am Bildschirm gleich groß.
+  Erst so wird das Gewirr beim Hineinzoomen wirklich lesbar.
+- Ergänzend „Level of Detail“: in der Gesamtansicht nur die Calls großer bzw. direkt gehörter
+  Stationen beschriften, beim Hineinzoomen alle.
+- Zoom und Ausschnitt je Ansicht merken und über das Neuzeichnen alle 15 s erhalten (wie heute
+  Modus und Filter). Beim Wechsel der Ansicht eigener Zoom je Ansicht.
+- Touch (Pinch) ist möglich, aber für den Client am PC zweitrangig.
+
+**Reihenfolge (Vorschlag):** zuerst Fläche und Zoom (bringt in allen drei Ansichten am meisten),
+dann Zonen im Radar und Streifen in der Map, zuletzt das Feintuning von Force.
+
+**Offen zur Entscheidung (OE3GAS):**
+
+- Radar: Zonenregel für **alle** Hop-Stufen (Vorschlag) oder nur für 2 Hops?
+- Map: Aufteilung des Radius (0–50 km größer) und Umgang mit Stationen über 400 km.
+- Fläche: Höhe ans Fenster anpassen mit Infos seitlich, oder „Vollbild“-Knopf?
