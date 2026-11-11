@@ -5,7 +5,7 @@
 // without internet). Three layouts: hop radar, map, force. Filters: packet type, device
 // (click in the pie), minimum frames per link. Stage 2: time axis (slider + play, links fade
 // in and out), line style by hop type (WIDE1 strong, WIDE2 paler, flood pale dashed), red
-// ring at digipeaters that carry many unneeded repeats. CR102: no lines to us (we only
+// ring at digipeaters with a high sin load (CR114: frames from stations in "Sins"). CR102: no lines to us (we only
 // listen), selection by role (digipeater, iGate, station, moving, heard directly), directly
 // heard stations full colour, the others paler, km labels of the map above the drawing.
 "use strict";
@@ -26,11 +26,17 @@ const AprsGraph = (() => {
   let full = false, zoom = {}, current = null;
   const HOPS = ["direct", "wide1", "wide2", "flood"];
   const HOP_TXT = { direct: "no path", wide1: "WIDE1", wide2: "WIDE2", flood: "flood" };
-  const REP_MIN = 0.1;                      // red ring from 10 % unneeded repeats on
+  const REP_MIN = 0.1;                      // red ring from 10 % sin load on (CR114: was "unneeded repeats")
   const ME_R = 6;                           // CR102: we are only a small mark in the middle
   // CR102: selection by role
   const ROLES = [["all", "All"], ["digi", "Digipeaters"], ["igate", "iGates"], ["station", "Stations"],
                  ["moving", "Moving"], ["direct", "Heard directly"]];
+  // CR114: selection by the kind of way and by sin load, and a search for calls
+  const PATHS = [["inet", "via internet"], ["wide1", "WIDE1"], ["wide2", "WIDE2"], ["flood", "flood (WIDE3)"], ["sin", "sin load"]];
+  const PATHSET = new Set(PATHS.map(([v]) => v));
+  const isSin = (n) => !!n && n.kind !== "me" && n.rep >= REP_MIN && n.rep_n >= 3;
+  let q = "";                              // search: part of a call, upper case
+  let findFocus = false, findCaret = 0;    // the search keeps the cursor over every redraw
   const isRole = (n, r) => r === "all" || (r === "moving" ? !!n.moving : r === "direct" ? !!n.direct : n.kind === r);
   try { mode = localStorage.getItem("tbc-aprs-graph") || "radar"; } catch (e) { /* ok */ }
 
@@ -264,6 +270,9 @@ const AprsGraph = (() => {
     const redraw = () => { const c = card(g, opt); box.replaceWith(c); };
     const box = el("section", "st-card st-wide gr" + (full ? " gr-full" : ""));
     current = redraw;                      // CR109: full screen on/off draws the newest card again
+    // CR114: typing in the search survives our redraw and the 15 s redraw of the page
+    const refocus = findFocus;
+    const caret = findCaret;
     dims();
     const h = el("h3", "st-h", "Network");
     h.append(el("span", "st-sub", " who reaches you over whom - click a station for its page"));
@@ -291,10 +300,14 @@ const AprsGraph = (() => {
       const n = w.chain.length >= 2 && w.chain[w.chain.length - 1] === g.me ? nodes.get(w.chain[w.chain.length - 2]) : null;
       if (n) n.direct = true;
     }
-    if (!ROLES.some(([v]) => v === role)) role = "all";
+    if (!ROLES.some(([v]) => v === role) && !PATHSET.has(role)) role = "all";
     const pick1 = (n) => n && n.kind !== "me" && isRole(n, role);
+    const hit = (c) => !!q && c !== g.me && c.includes(q);
+    const wayPick = (w) => role === "inet" ? !!w.inet : role === "sin" ? w.chain.some((c) => isSin(nodes.get(c)))
+      : (w.hop || "direct") === role;
     const pass = (w) => (cat === "all" || w.cat === cat) && (!dev || w.dev === dev)
-      && (role === "all" || w.chain.some((c) => pick1(nodes.get(c))));
+      && (role === "all" || (PATHSET.has(role) ? wayPick(w) : w.chain.some((c) => pick1(nodes.get(c)))))
+      && (!q || w.chain.some(hit));
     const links = new Map();
     const B = g.buckets || 0;
     const zero = () => new Array(B).fill(0);
@@ -352,8 +365,28 @@ const AprsGraph = (() => {
     ctl.append(layoutSeg, catSeg, mf);
     box.append(ctl);
     const ctl2 = el("div", "gr-ctl");
-    ctl2.append(el("span", "gr-tlab", "Show"), seg(ROLES, () => role, (v) => { role = v; redraw(); }));
+    const find = el("input", "gr-find");
+    find.type = "search";
+    find.placeholder = "find call…";
+    find.value = q;
+    find.setAttribute("aria-label", "Find a call or part of it");
+    let ft = 0;
+    const keepCaret = () => { findCaret = find.selectionStart ?? find.value.length; };
+    find.addEventListener("focus", () => { findFocus = true; });
+    find.addEventListener("blur", () => { setTimeout(() => { if (find.isConnected) findFocus = false; }, 0); });   // not when redrawn
+    find.addEventListener("keyup", keepCaret);
+    find.addEventListener("click", keepCaret);
+    find.addEventListener("input", () => {
+      keepCaret();
+      clearTimeout(ft);
+      ft = setTimeout(() => { q = find.value.trim().toUpperCase(); redraw(); }, 250);
+    });
+    const nHit = q ? [...nodes.keys()].filter(hit).length : 0;
+    const fc = el("span", "gr-fc", q ? (nHit ? nHit + (nHit === 1 ? " match" : " matches") : "no match") : "");
+    ctl2.append(el("span", "gr-tlab", "Show"), seg(ROLES, () => role, (v) => { role = v; redraw(); }),
+                seg(PATHS, () => role, (v) => { role = v; redraw(); }), find, fc);
     box.append(ctl2);
+    if (refocus) requestAnimationFrame(() => { find.focus(); find.setSelectionRange(caret, caret); });
 
     // stage 2: time axis - a slice of the window (a sixth) that slides, or the whole window
     const SL = Math.max(1, Math.round(B / 6));
@@ -407,7 +440,7 @@ const AprsGraph = (() => {
     }
     const rs = el("span", "");
     const rd = el("i", "gr-dot gr-repdot");
-    rs.append(rd, "unneeded repeats through the digipeater");
+    rs.append(rd, "sin load: share of frames from stations in \"Sins\" (too often, unchanged repeats)");
     lg2.append(rs);
     box.append(lg2);
 
@@ -451,7 +484,9 @@ const AprsGraph = (() => {
     const ngs = shown.map((n) => {
       const gg = sv("g", { class: "gr-node" + (n.kind === "me" ? "" : " gr-click")
                              + (n.kind === "me" || n.direct ? "" : " gr-pale")
-                             + (role !== "all" && n.kind !== "me" && !isRole(n, role) ? " gr-unsel" : "") });
+                             + (n.kind !== "me" && ((role === "sin" && !isSin(n)) || (role !== "all" && !PATHSET.has(role) && !isRole(n, role))
+                                || (q && !hit(n.call))) ? " gr-unsel" : "")
+                             + (hit(n.call) ? " gr-hit" : "") });
       const moving = n.kind === "station" && n.moving;
       const c = sv("circle", { r: R(n).toFixed(1), fill: moving ? "transparent" : ROLE[n.kind],
                                stroke: moving ? ROLE.station : n.est && n.kind !== "me" ? "var(--text)" : "var(--surface)",
@@ -467,7 +502,7 @@ const AprsGraph = (() => {
         const ring = sv("circle", { r: (R(n) + 3.5).toFixed(1), class: "gr-rep",
                                     "stroke-width": (1.5 + 4 * Math.min(1, n.rep)).toFixed(1) });
         const rt = sv("title");
-        rt.textContent = `${Math.round(100 * n.rep)} % of the frames through ${n.call} are unneeded repeats`
+        rt.textContent = `${Math.round(100 * n.rep)} % of the frames through ${n.call} come from stations in "Sins" (sin load)`
           + (n.rep_calls && n.rep_calls.length ? ` (${n.rep_calls.join(", ")})` : "");
         ring.append(rt);
         gg.insertBefore(ring, c);
@@ -582,7 +617,7 @@ const AprsGraph = (() => {
         s += ` · ${n.hop === 1 ? "heard directly" : (n.hop - 1) + " hop" + (n.hop > 2 ? "s" : "")}`;
       }
       if (n.dev) s += " · " + n.dev;
-      if (n.rep >= REP_MIN && n.rep_n >= 3) s += ` · ${Math.round(100 * n.rep)} % unneeded repeats`;
+      if (n.rep >= REP_MIN && n.rep_n >= 3) s += ` · sin load ${Math.round(100 * n.rep)} %`;
       tip.textContent = s;
     }
     shown.forEach((n, i) => {

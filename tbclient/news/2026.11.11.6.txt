@@ -1,0 +1,5 @@
+- APRS-Statistik: Karten auf-/zuklappbar,
+  offen gleich hoch mit Scrollbalken.
+- Netzgraph: Filter via Internet, WIDE1/2,
+  Flood, sin load; Suche nach Rufzeichen.
+- Roter Ring heisst jetzt sin load.

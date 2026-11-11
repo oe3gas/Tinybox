@@ -636,6 +636,15 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .st-h { margin: 0 0 8px; font-size: 14px; }
 .st-sub { font-weight: 400; color: var(--muted); font-size: 12px; }
 .st-h4 { margin: 12px 0 6px; font-size: 13px; font-weight: 600; }
+/* CR114: foldable cards; open cards in the grid have the same height and scroll inside */
+.st-toggle { cursor: pointer; user-select: none; }
+.st-caret { display: inline-block; width: 1.1em; color: var(--muted); transition: transform .15s; }
+.st-fold.st-closed .st-caret { transform: rotate(-90deg); }
+.st-fold.st-closed > .st-cbody { display: none; }
+.st-fold.st-closed > .st-h { margin-bottom: 0; }
+.st-grid > .st-fold:not(.st-closed) { height: 400px; display: flex; flex-direction: column; }
+.st-grid > .st-fold > .st-cbody { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.st-grid > .st-fold > .st-cbody .st-scroll { max-height: none; overflow: visible; }
 .st-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
 .st-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .st-table th { position: sticky; top: 0; background: var(--surface); text-align: left; border-bottom: 1px solid var(--line); }
@@ -714,6 +723,11 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 /* CR102: heard directly = full colour, only via others = paler; not selected = faint */
 .gr-node.gr-pale circle:not(.gr-rep) { fill-opacity: .4; stroke-opacity: .55; }
 .gr-node.gr-unsel { opacity: .3; }
+/* CR114: search for calls */
+.gr-find { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); width: 11em; }
+.gr-fc { font-size: 12px; color: var(--muted); }
+.gr-node.gr-hit .gr-label { fill: var(--text); font-weight: 700; display: inline; }
 .gr-click { cursor: pointer; }
 .gr-tip { font-size: 13px; color: var(--muted); min-height: 1.5em; margin: 2px 0 8px; }
 .gr-pie { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; border-top: 1px solid var(--line); padding-top: 12px; }

@@ -284,11 +284,16 @@ Station
   rechts = alles) und Play - Wege und Bubbles ohne Frames im Ausschnitt
   blenden aus, man sieht Digi-Ausfaelle und wandernde Mobile. Linien nach
   Pfad: kein Pfad/WIDE1 kraeftig, WIDE2 blass, Flood (WIDE3, long path)
-  blass gestrichelt. Roter Ring an Digipeatern, ueber die viele unnoetige
-  Wiederholungen laufen (unveraenderte Pakete, zu oft gebakt).
+  blass gestrichelt. Roter Ring = "sin load": Anteil der Frames ueber den
+  Digipeater, die von Stationen aus "Sins" kommen (zu oft gebakt,
+  unveraenderte Wiederholungen); Strichstaerke waechst mit dem Anteil.
   Keine Linien zur eigenen Station (sie hoert nur zu, kleiner Punkt in der
-  Mitte). Auswahl: Digipeater, iGates, Stationen, mobil, direkt gehoert.
+  Mitte). Auswahl: Digipeater, iGates, Stationen, mobil, direkt gehoert,
+  dazu nach Weg: via Internet, WIDE1, WIDE2, Flood (WIDE3), sin load.
+  Suchfeld fuer Rufzeichen oder Teile davon (Treffer fett, Rest blass).
   Direkt gehoerte Calls in voller Farbe, die anderen blass.
+- Karten der APRS-Statistik zum Auf- und Zuklappen (Klick auf den Titel,
+  gemerkt); offene Karten gleich hoch, Inhalt scrollt in der Karte.
 - Stationsseite je Rufzeichen (Klick auf ein Rufzeichen im Monitor oder in
   der Statistik): Rolle, Geraet, Entfernung, Art der Frames, Frames/h,
   Aktivitaet nach Wochentag/Stunde, Bakenabstaende, Wege zu dir, Leistung als

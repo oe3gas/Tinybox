@@ -4126,3 +4126,49 @@ Windows-Programm mit MinGW-w64 gebaut. **Funktest mit Funk offen.**
 
 - „✓ LoTW“ bei Client↔Client (CR99) und im Chatboard bei Mitgliedern mit LoTW-Stufe.
 
+## CR114 – APRS-Statistik: Karten aufklappbar, Netzgraph-Filter und Suche (✅ 11.11.2026)
+
+### Erfassung (OE3GAS, 11.11.2026)
+
+- Die Inhalte der Spalten liegen zu weit auseinander. Inhalte aufklappbar machen, alle gleich
+  hoch, wenn offen, wenn nötig mit Scrollbalken.
+- Was bedeutet in der Radar-Ansicht „unneeded repeats through the digipeater“? Passenden
+  Begriff finden.
+- In die Leiste oben zusätzlich: „via internet“, „WIDE1“, „WIDE2“, „flood (WIDE3)“ und die
+  „unneeded repeats“.
+- Filterfenster für die Suche nach Rufzeichen bzw. Teilen davon.
+- Rote Ringe: werden sie breiter, wenn mehr Wiederholungen erkannt werden? Wenn nein, dünner
+  machen.
+
+### Antworten (Claude, 11.11.2026)
+
+- **Bedeutung:** Der rote Ring zeigt den Anteil der Frames über diesen Digipeater, die von
+  Stationen aus der Liste „Sins“ stammen, und zwar mit „too often“ (zu oft gebakt) oder
+  „unchanged repeat“ (unverändert wiederholt). Gezählt werden *alle* Frames dieser Stationen
+  über den Digi, nicht nur die überzähligen. Es misst also, wie viel Ballast der Digi trägt, und
+  ist kein Fehler des Digis selbst.
+- **Begriff:** „sin load“, passend zur Karte „Sins“ (im Tooltip: „x % of the frames through …
+  come from stations in "Sins"“).
+- **Ringbreite:** Die Ringe sind schon proportional (Strich 1,5 + 4 × Anteil, also ≈ 1,9 px bei
+  10 % bis 5,5 px bei 100 %), daher unverändert. Dass bei uns viele dick sind, liegt an den
+  OE3-Stationen, die alle 1–2 s baken.
+
+### Umsetzung (Client 2026.11.11.6, `tbclient/web/aprsstats.js`, `aprsgraph.js`, `app.css`)
+
+- Jede Karte der APRS-Statistik (Übersicht und Stationsseite) klappt mit Klick auf den Titel
+  (oder Enter) auf und zu; der Zustand wird je Titel gemerkt (`localStorage`) und übersteht das
+  Neuzeichnen alle 15 s. Offene Karten im Raster sind alle 400 px hoch, der Inhalt scrollt in
+  der Karte (Tabellenkopf bleibt stehen); die inneren Scrollbereiche der Tabellen entfallen
+  dort.
+- Netzgraph, Zeile „Show“: zweite Knopfgruppe **via internet / WIDE1 / WIDE2 / flood (WIDE3) /
+  sin load**. Die Weg-Arten zeigen nur Wege dieser Art (nach Pfad des Wegs bzw. Internet →
+  Funk), „sin load“ die Wege über Digipeater mit rotem Ring (die übrigen Bubbles blass). Wirkt
+  zusammen mit Paketart, Gerät und min. Frames; die Rollen-Auswahl und diese Gruppe schließen
+  einander aus.
+- **Suchfeld** „find call…“ daneben: Teil eines Rufzeichens, Groß/Klein egal. Gezeigt werden
+  die Wege, auf denen ein Treffer liegt; Treffer fett beschriftet, die übrigen Bubbles blass;
+  Anzahl der Treffer daneben. Tippen übersteht das Neuzeichnen (auch alle 15 s).
+- Legende und Tooltips sagen „sin load“ statt „unneeded repeats“.
+- Geprüft im Browser (Playwright) mit Testdaten aus `AprsStats` (6000 Frames, 140 Stationen):
+  Karten gleich hoch, Zuklappen bleibt nach dem Neuladen, WIDE2, sin load, Suche mit
+  Neuzeichnen dazwischen; keine JS-Fehler. `tests/test_web.py`, `tests/test_aprsstats.py` grün.

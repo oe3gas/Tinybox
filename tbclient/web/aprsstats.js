@@ -54,11 +54,30 @@ const AprsStatsView = (() => {
   function interval(s) { return s === null || s === undefined ? "–" : s < 120 ? s + " s" : Math.round(s / 60) + " min"; }
 
   // ---- building blocks ---------------------------------------------------------------
+  // CR114: every card can be folded (click on the title); open cards in the grid all have the
+  // same height and scroll inside. Folded cards are remembered by title.
+  let closed = new Set();
+  try { closed = new Set(JSON.parse(localStorage.getItem("tbc-aprs-closed") || "[]")); } catch (e) { /* ok */ }
   function card(title, sub, ...kids) {
-    const c = mk("section", "st-card");
-    const h = mk("h3", "st-h", title);
+    const c = mk("section", "st-card st-fold" + (closed.has(title) ? " st-closed" : ""));
+    const h = mk("h3", "st-h st-toggle");
+    h.append(mk("span", "st-caret", "▾"), title);
     if (sub) h.append(mk("span", "st-sub", " " + sub));
-    c.append(h, ...kids);
+    h.tabIndex = 0;
+    h.setAttribute("role", "button");
+    const sync = () => h.setAttribute("aria-expanded", String(!c.classList.contains("st-closed")));
+    const flip = () => {
+      const shut = c.classList.toggle("st-closed");
+      if (shut) closed.add(title); else closed.delete(title);
+      try { localStorage.setItem("tbc-aprs-closed", JSON.stringify([...closed])); } catch (e) { /* ok */ }
+      sync();
+    };
+    h.addEventListener("click", (e) => { if (!e.target.closest("button")) flip(); });
+    h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+    sync();
+    const b = mk("div", "st-cbody");
+    b.append(...kids);
+    c.append(h, b);
     return c;
   }
   // cols: [label, key, render(row) -> node|string, numeric]
