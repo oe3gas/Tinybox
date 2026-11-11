@@ -671,8 +671,20 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .gr-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .gr-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .gr-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-sizing: border-box; }
-.gr-wrap { width: 100%; max-width: 980px; margin: 0 auto; }
-.gr-svg { width: 100%; height: auto; display: block; }
+.gr-wrap { width: 100%; max-width: 1100px; margin: 0 auto; position: relative; }
+.gr-svg { width: 100%; height: auto; max-height: 82vh; display: block; touch-action: none; cursor: grab; user-select: none; }
+.gr-svg.gr-drag { cursor: grabbing; }
+/* CR109: zoom buttons, small calls only when zoomed in or on hover, full screen */
+.gr-zoom { position: absolute; top: 4px; right: 4px; display: flex; gap: 4px; align-items: center; }
+.gr-zoom button { min-width: 2.2em; padding: 2px 8px; }
+.gr-zk { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); min-width: 3em; text-align: right; }
+.gr-label.gr-minor { display: none; }
+.gr-svg.gr-zoomed .gr-label.gr-minor, .gr-node:hover .gr-label.gr-minor { display: inline; }
+.gr.gr-full { position: fixed; inset: 0; z-index: 1000; margin: 0; max-width: none; border-radius: 0;
+  display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+.gr.gr-full .gr-wrap { flex: 1 1 auto; min-height: 0; max-width: none; }
+.gr.gr-full .gr-svg { height: 100%; max-height: none; }
+.gr.gr-full .gr-pie { display: none; }
 .gr-ring { fill: none; stroke: #1e3a8a; stroke-width: 1.5; opacity: .8; }   /* zones: dark blue, solid (08.11.2026) */
 @media (prefers-color-scheme: dark) { .gr-ring { stroke: #7fa6e6; } }
 .gr-bgtext { fill: var(--muted); font: 11px ui-monospace, Consolas, monospace;

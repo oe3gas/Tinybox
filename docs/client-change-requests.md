@@ -3845,7 +3845,7 @@ Kommentar, Reaktion, Alarm, Avatar; dazu „lädt Bild hoch“ und die Authentis
 - Unter 1600 px Breite zwei Spalten (Connection log über beide), unter 1100 px eine.
 - Geprüft im Browser (Playwright) bei 2560 und 1440 px, keine JS-Fehler; `tests/test_web.py` grün.
 
-## CR109 – APRS-Netzgraph: Zonen statt Ringe, Vollbild, Zoom (entschieden 11.11.2026, Umsetzung offen)
+## CR109 – APRS-Netzgraph: Zonen statt Ringe, Vollbild, Zoom (✅ 11.11.2026)
 
 ### Erfassung (OE3GAS, 11.11.2026)
 
@@ -3942,6 +3942,36 @@ dann Zonen im Radar und Streifen in der Map, zuletzt das Feintuning von Force.
   12,5/25/50 %, gleiche Abstände 25/50/75 %).
 
 Damit sind alle Punkte entschieden, CR109 ist bereit zur Umsetzung.
+
+### Umsetzung (Client 2026.11.11.4, `tbclient/web/aprsgraph.js`, `app.css`)
+
+- **Fläche:** Zeichnung 720 × 600 statt 720 × 470 (höchstens 82 % der Fensterhöhe), äußerer
+  Ring ≈ 92 % der Höhe. **Vollbild-Knopf** rechts oben an der Zeichnung: die Karte deckt das
+  ganze Fenster (Browser-Vollbild), die Zeichnung wird so breit, wie der Schirm erlaubt;
+  Geräte-Torte im Vollbild ausgeblendet. Beenden mit „Exit full screen“ oder Esc. Bleibt über
+  das Neuzeichnen alle 15 s erhalten.
+- **Zoom** in allen drei Ansichten: Mausrad = Zoom zum Mauszeiger (bis 16×), Ziehen =
+  verschieben, Knöpfe + / − / 1:1, Anzeige des Faktors. Semantisch: nur die Abstände wachsen,
+  Bubbles, Linien und Schrift bleiben gleich groß. Zoom je Ansicht gemerkt, übersteht das
+  Neuzeichnen; Vollbild ein/aus setzt ihn zurück. Ein Klick auf eine Station öffnet ihre
+  Seite, nach dem Ziehen nicht.
+- **Beschriftung:** kleine Stationen (keine Digipeater), die nur über andere kommen, zeigen ihr
+  Call erst ab 2× Zoom oder beim Darüberfahren.
+- **Hop-Radar:** jede Hop-Stufe ist eine Zone („heard directly“ = innere Scheibe ab 30 % ihres
+  Radius, „1 hop“, „2 hops“ … als Streifen; innere Scheibe etwas größer). Winkel = Peilung,
+  in der Zone nah = innen (log. Skala 5–400 km), ohne Locator in der Mitte. Überlappende
+  Bubbles werden auseinandergeschoben, bleiben aber in ihrer Zone. Beschriftung in der Zone.
+- **Map:** feste Ringe 50/100/200/400 km bei 35/57/78/100 %, im Streifen linear. Stationen
+  über 400 km knapp außerhalb des 400-km-Rings. Reicht nichts so weit, fallen die äußeren Ringe
+  weg (der letzte nötige Ring liegt dann außen). Auseinanderschieben nur innerhalb des Streifens.
+- **Force:** Abstoßung und Federlänge nach Fläche und Zahl der Stationen, gleicher Zug zur
+  Mitte in beiden Richtungen, dann Breite und Höhe getrennt gestreckt; zum Schluss werden
+  überlappende Bubbles getrennt.
+- Geprüft im Browser (Playwright) mit 171 synthetischen Stationen (OE, OK, S5, HG, OM, SR, DB):
+  alle drei Ansichten normal und im Vollbild, Mausrad-Zoom, Ziehen ohne Stations-Klick, Klick
+  öffnet die Station, Zoom und Vollbild nach dem Neuzeichnen erhalten, Esc; keine JS-Fehler.
+  `tests/test_web.py`, `tests/test_aprsstats.py` grün.
+- Hinweis: über der Zeichnung zoomt das Mausrad und scrollt nicht die Seite.
 
 ## CR110 – Statusleiste: Phasen und Verkehr in Echtzeit (✅ 11.11.2026, Client 2026.11.11)
 

@@ -12,7 +12,7 @@
 
 const AprsGraph = (() => {
   const NS = "http://www.w3.org/2000/svg";
-  const W = 720, H = 470, CX = W / 2, CY = H / 2 + 6;
+  let W = 720, H = 600, CX = W / 2, CY = H / 2 + 6, RO = CY - 30;   // CR109: set by dims()
   const ROLE = { me: "var(--sys)", digi: "#eb6834", igate: "#1baf7a", station: "var(--accent)" };
   const PIE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"];
   const OTHER = "#a3a19a";
@@ -21,6 +21,9 @@ const AprsGraph = (() => {
   let mode = "radar", cat = "all", dev = null, minF = 1, pieBy = "frames", role = "all";
   let tpos = null;                         // stage 2: last bucket of the time slice, null = all
   let playTimer = 0, playing = false;      // playing survives the 15 s redraw of the page
+  // CR109: full screen and zoom per layout ({k, x, y}: factor and the point in the middle),
+  // both survive the 15 s redraw of the page
+  let full = false, zoom = {}, current = null;
   const HOPS = ["direct", "wide1", "wide2", "flood"];
   const HOP_TXT = { direct: "no path", wide1: "WIDE1", wide2: "WIDE2", flood: "flood" };
   const REP_MIN = 0.1;                      // red ring from 10 % unneeded repeats on
@@ -54,6 +57,44 @@ const AprsGraph = (() => {
   }
 
   // ---- layouts (from all ways, so filtering does not move anything) ---------------------
+  // CR109: drawing size - normal 720 x 600; in full screen as wide as the screen allows
+  function dims() {
+    H = 600;
+    const asp = full ? Math.max(1.2, Math.min(2.8, window.innerWidth / Math.max(320, window.innerHeight - 190))) : 1.2;
+    W = Math.round(H * asp);
+    CX = W / 2;
+    CY = H / 2 + 6;
+    RO = CY - 30;                          // outer ring; room for "N" above and the labels below
+  }
+  // keep a point inside the ring band lo..hi around the middle
+  function annulus(p, lo, hi) {
+    let dx = p[0] - CX, dy = p[1] - CY, r = Math.hypot(dx, dy);
+    if (r < 0.01) { dx = 0; dy = -1; r = 1; }
+    const r2 = Math.min(hi, Math.max(lo, r));
+    if (r2 !== r || r === 1) { p[0] = CX + dx / r * r2; p[1] = CY + dy / r * r2; }
+  }
+  // CR109: push bubbles apart just enough to see each; limit(c, p) keeps each in its zone
+  function spread(P, cs, rad, limit, gap, iters) {
+    const pts = cs.map((c) => P[c]), rs = cs.map(rad);
+    for (let it = 0; it < iters; it++) {
+      let moved = false;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const a = pts[i], b = pts[j];
+          let dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy);
+          const want = rs[i] + rs[j] + gap;
+          if (d >= want) continue;
+          if (d < 0.01) { dx = Math.cos(i * 2.4 + j); dy = Math.sin(i * 2.4 + j); d = 1; }
+          const m = (want - d) / 2, ux = dx / d, uy = dy / d;
+          a[0] -= ux * m; a[1] -= uy * m; b[0] += ux * m; b[1] += uy * m;
+          moved = true;
+        }
+      }
+      cs.forEach((c, i) => limit(c, pts[i]));
+      if (!moved) break;
+    }
+  }
+  const KMS = [0, 50, 100, 200, 400], KFR = [0, 0.35, 0.57, 0.78, 1];   // CR109: map rings
   function layouts(g, nodes, links, R) {
     const me = nodes.get(g.me);
     const home = me && me.lat !== null ? [me.lat, me.lon] : null;
@@ -86,108 +127,144 @@ const AprsGraph = (() => {
     }
     for (const n of nodes.values()) { n.hop = hop.has(n.call) ? hop.get(n.call) : 1; n._r = R(n); }
     const maxHop = Math.max(1, ...[...nodes.values()].map((n) => n.hop));
-    const ringR = (h) => (CY - 22) * (maxHop === 1 ? 0.62 : 0.36 + 0.64 * (h - 1) / (maxHop - 1));
+    const others = [...nodes.values()].filter((n) => n.kind !== "me");
+    const rad = (c) => nodes.get(c)._r;
 
-    // hop radar: ring = hops, angle = bearing (without a locator: next to the one it goes to)
+    // hop radar (CR109): each hop count is a zone between two rings, angle = bearing (without
+    // a locator: next to the one it goes to), inside the zone near = in, far = out
+    const zOut = (h) => RO * (maxHop === 1 ? 1 : 0.15 + 0.85 * h / maxHop);
+    const zIn = (h) => h === 1 ? zOut(1) * 0.3 : zOut(h - 1);
+    const kmf = (km) => km === null ? 0.5 : Math.max(0, Math.min(1, Math.log2(Math.max(5, km) / 5) / Math.log2(80)));
     const radar = { [g.me]: [CX, CY] };
     const ang = new Map();
     for (let h = 1; h <= maxHop; h++) {
-      const ring = [...nodes.values()].filter((n) => n.hop === h && n.kind !== "me");
-      ring.forEach((n, i) => {
+      const zone = others.filter((n) => n.hop === h);
+      zone.forEach((n, i) => {
         let a = n.brg;
         if (a === null) {
           const down = [...links.values()].find((l) => l.a === n.call && ang.has(l.b));
-          a = down ? ang.get(down.b) : 2 * Math.PI * i / ring.length;
+          a = down ? ang.get(down.b) : 2 * Math.PI * i / zone.length;
         }
-        n._a = a;
+        ang.set(n.call, a);
+        const r = zIn(h) + (zOut(h) - zIn(h)) * (0.18 + 0.64 * kmf(n.km));
+        radar[n.call] = [CX + r * Math.sin(a), CY - r * Math.cos(a)];
       });
-      ring.sort((x, y) => x._a - y._a);
-      // keep neighbours apart by their size (and squeeze evenly when the ring is full)
-      const need = ring.map((n) => n._r + 16);
-      const sq = Math.min(1, 2 * Math.PI * ringR(h) / Math.max(1, need.reduce((x, y) => x + y, 0)));
-      const a = ring.map((n) => n._a);
-      for (let it = 0; it < 120; it++) {
-        for (let i = 0; i < a.length && a.length > 1; i++) {
-          const j = (i + 1) % a.length;
-          const gap = sq * (need[i] + need[j]) / 2 / ringR(h);
-          let d = a[j] - a[i];
-          if (j === 0) d += 2 * Math.PI;
-          if (d < gap) { const m = (gap - d) / 2; a[i] -= m; a[j] += m; }
-        }
-      }
-      ring.forEach((n, i) => { ang.set(n.call, a[i]); radar[n.call] = [CX + ringR(h) * Math.sin(a[i]), CY - ringR(h) * Math.cos(a[i])]; });
+    }
+    const inZone = (c, p) => {
+      const n = nodes.get(c), lo = zIn(n.hop), hi = zOut(n.hop), pad = Math.min(n._r + 2, (hi - lo) / 2);
+      annulus(p, lo + pad, hi - pad);
+    };
+    spread(radar, others.map((n) => n.call), rad, inZone, 4, 160);
+    const radarRings = [];
+    for (let h = 1; h <= maxHop; h++) {
+      radarRings.push({ r: zOut(h), lab: h === 1 ? "heard directly" : (h - 1) + " hop" + (h > 2 ? "s" : ""),
+                        ly: h === 1 ? zOut(1) * 0.62 : (zIn(h) + zOut(h)) / 2 });
     }
 
-    // map: true bearing, distance on a square-root scale (near stations stay apart)
+    // map (CR109): true bearing; rings at 50/100/200/400 km at 35/57/78/100 % of the radius,
+    // linear inside each band; beyond 400 km just outside the last ring
     let geo = null;
-    const maxKm = Math.max(1, ...[...nodes.values()].map((n) => n.km || 0));
-    const rMax = CY - 26;
-    const gr = (km) => rMax * Math.sqrt(km / maxKm);
+    const maxKm = Math.max(1, ...others.map((n) => n.km || 0));
+    let top = KMS.findIndex((k) => k > 0 && k >= maxKm);
+    if (top < 0) top = KMS.length - 1;
+    const beyond = maxKm > KMS[top];
+    const rTop = beyond ? RO - 20 : RO;
+    const gr = (km) => {
+      if (km >= KMS[top]) return rTop;
+      let i = 0;
+      while (KMS[i + 1] < km) i++;
+      const f = KFR[i] + (KFR[i + 1] - KFR[i]) * (km - KMS[i]) / (KMS[i + 1] - KMS[i]);
+      return rTop * f / KFR[top];
+    };
+    const band = (km) => {
+      if (km > KMS[top]) return [rTop + 2, RO + 6];
+      let i = 0;
+      while (KMS[i + 1] < km) i++;
+      return [i === 0 ? 0 : gr(KMS[i]), gr(KMS[i + 1])];
+    };
+    const geoRings = [];
     if (home) {
       geo = { [g.me]: [CX, CY] };
-      for (const n of nodes.values()) {
-        if (n.kind === "me") continue;
-        geo[n.call] = n.km === null ? [...radar[n.call]] : [CX + gr(n.km) * Math.sin(n.brg), CY - gr(n.km) * Math.cos(n.brg)];
+      for (const n of others) {
+        geo[n.call] = n.km === null ? [...radar[n.call]]
+          : beyond && n.km > KMS[top] ? [CX + (rTop + 10) * Math.sin(n.brg), CY - (rTop + 10) * Math.cos(n.brg)]
+          : [CX + gr(n.km) * Math.sin(n.brg), CY - gr(n.km) * Math.cos(n.brg)];
       }
-      // stations close together: push apart just enough to see each (we stay put)
-      const cs = Object.keys(geo), rad = (c) => nodes.get(c)._r;
-      for (let it = 0; it < 60; it++) {
-        for (let i = 0; i < cs.length; i++) {
-          for (let j = i + 1; j < cs.length; j++) {
-            const a = geo[cs[i]], b = geo[cs[j]];
-            const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 0.1, want = rad(cs[i]) + rad(cs[j]) + 6;
-            if (d >= want) continue;
-            const m = (want - d) / 2, ux = dx / d, uy = dy / d;
-            const fa = cs[i] === g.me ? 0 : cs[j] === g.me ? 2 : 1, fb = 2 - fa;
-            a[0] -= ux * m * fa; a[1] -= uy * m * fa; b[0] += ux * m * fb; b[1] += uy * m * fb;
-          }
-        }
-      }
+      const inBand = (c, p) => {
+        const n = nodes.get(c);
+        if (n.km === null) return;
+        const [lo, hi] = band(n.km), pad = Math.min(n._r + 1, (hi - lo) / 2);
+        annulus(p, Math.max(lo + pad, ME_R + n._r + 3), hi - pad);
+      };
+      spread(geo, others.map((n) => n.call), rad, inBand, 4, 160);
+      for (let i = 1; i <= top; i++) geoRings.push({ r: gr(KMS[i]), lab: KMS[i] + " km", ly: gr(KMS[i]) - 4 });
     }
 
-    // force: start from the radar, springs along the links, all push each other away
+    // force (CR109): springs along the links, all push each other away (strength from the
+    // number of stations and the area), then stretched to width and height separately
     const fs = [...nodes.values()].map((n) => ({ c: n.call, x: radar[n.call][0], y: radar[n.call][1], fix: n.kind === "me" }));
     const ix = new Map(fs.map((p, i) => [p.c, i]));
     const ls = [...links.values()].map((l) => [ix.get(l.a), ix.get(l.b)]);
+    const kk = 0.9 * Math.sqrt(W * H / Math.max(1, fs.length));
     for (let it = 0; it < 300; it++) {
-      const k = 1 - it / 300;
+      const temp = (W / 12) * (1 - it / 300) + 0.5;
       const dx = new Float64Array(fs.length), dy = new Float64Array(fs.length);
       for (let i = 0; i < fs.length; i++) {
         for (let j = i + 1; j < fs.length; j++) {
           let ex = fs[i].x - fs[j].x, ey = fs[i].y - fs[j].y;
-          const d2 = Math.max(25, ex * ex + ey * ey), f = 1800 / d2, d = Math.sqrt(d2);
+          const d = Math.max(3, Math.hypot(ex, ey)), f = kk * kk / d;
           ex = ex / d * f; ey = ey / d * f;
           dx[i] += ex; dy[i] += ey; dx[j] -= ex; dy[j] -= ey;
         }
       }
       for (const [i, j] of ls) {
-        const ex = fs[j].x - fs[i].x, ey = fs[j].y - fs[i].y, d = Math.hypot(ex, ey) || 1, f = (d - 60) * 0.06;
+        const ex = fs[j].x - fs[i].x, ey = fs[j].y - fs[i].y, d = Math.hypot(ex, ey) || 1, f = d * d / kk;
         dx[i] += ex / d * f; dy[i] += ey / d * f; dx[j] -= ex / d * f; dy[j] -= ey / d * f;
       }
       fs.forEach((p, i) => {
         if (p.fix) return;
-        dx[i] += (CX - p.x) * 0.01; dy[i] += (CY - p.y) * 0.015;
-        const m = Math.hypot(dx[i], dy[i]), lim = 12 * k + 0.5;
-        p.x += m > lim ? dx[i] / m * lim : dx[i];
-        p.y += m > lim ? dy[i] / m * lim : dy[i];
+        dx[i] += (CX - p.x) * 0.6; dy[i] += (CY - p.y) * 0.6;    // gravity, the same both ways
+        const m = Math.hypot(dx[i], dy[i]) || 1, step = Math.min(m, temp);
+        p.x += dx[i] / m * step;
+        p.y += dy[i] / m * step;
       });
     }
-    // stretch to the drawing, us still in the middle
+    // stretch to the drawing, width and height on their own, us still in the middle
     const me0 = fs.find((p) => p.fix) || { x: CX, y: CY };
-    const sx = Math.max(1, ...fs.map((p) => Math.abs(p.x - me0.x))) / (CX - 40);
-    const sy = Math.max(1, ...fs.map((p) => Math.abs(p.y - me0.y))) / (CY - 34);
-    const sc = Math.max(sx, sy, 0.4);
+    const sx = Math.max(1, ...fs.map((p) => Math.abs(p.x - me0.x))) / (CX - 44);
+    const sy = Math.max(1, ...fs.map((p) => Math.abs(p.y - me0.y))) / (CY - 36);
     const force = {};
-    for (const p of fs) force[p.c] = [CX + (p.x - me0.x) / sc, CY + (p.y - me0.y) / sc];
-    return { radar, geo, force, maxHop, ringR, maxKm, gr, home: !!home };
+    for (const p of fs) force[p.c] = [CX + (p.x - me0.x) / sx, CY + (p.y - me0.y) / sy];
+    spread(force, others.map((n) => n.call), rad, (c, p) => {
+      p[0] = Math.min(W - 24, Math.max(24, p[0]));
+      p[1] = Math.min(H - 24, Math.max(20, p[1]));
+    }, 6, 80);
+    return { radar, geo, force, maxHop, rings: { radar: radarRings, geo: geoRings }, home: !!home };
   }
 
-  // ---- the card -------------------------------------------------------------------------
+  // CR109: full screen - the card itself covers the window (it is redrawn every 15 s, so the
+  // browser full screen goes to the page and the card follows the state)
+  function setFull(on) {
+    full = on;
+    zoom = {};
+    try {
+      if (on && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+      if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    } catch (e) { /* the card alone is enough */ }
+    if (current) current();
+  }
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && full) setFull(false); else if (full && current) current(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && full) setFull(false); });
+  let rsz = 0;
+  window.addEventListener("resize", () => { if (!full) return; clearTimeout(rsz); rsz = setTimeout(() => { zoom = {}; if (current) current(); }, 200); });
+
   function card(g, opt) {
     const CAT = opt.cats || {};
     const onStation = opt.onStation || (() => {});
     const redraw = () => { const c = card(g, opt); box.replaceWith(c); };
-    const box = el("section", "st-card st-wide gr");
+    const box = el("section", "st-card st-wide gr" + (full ? " gr-full" : ""));
+    current = redraw;                      // CR109: full screen on/off draws the newest card again
+    dims();
     const h = el("h3", "st-h", "Network");
     h.append(el("span", "st-sub", " who reaches you over whom - click a station for its page"));
     box.append(h);
@@ -344,26 +421,17 @@ const AprsGraph = (() => {
     const bg = sv("g"), gl = sv("g"), gn = sv("g"), gt = sv("g");   // gt: ring labels on top (CR102)
     svg.append(bg, gl, gn, gt);
     const txt = (x, y, s, anchor) => { const t = sv("text", { x, y, class: "gr-bgtext", "text-anchor": anchor || "start" }); t.textContent = s; return t; };
+    // CR109: semantic zoom - only the positions are scaled, bubbles, lines and text keep their size
+    const zs = () => zoom[mode] || (zoom[mode] = { k: 1, x: CX, y: CY });
+    const T = (p, z) => [CX + (p[0] - z.x) * z.k, CY + (p[1] - z.y) * z.k];
     function background() {
       bg.replaceChildren();
       gt.replaceChildren();
-      const ring = (r) => sv("circle", { cx: CX, cy: CY, r, class: "gr-ring" });
-      if (mode === "radar") {
-        for (let hh = 1; hh <= L.maxHop; hh++) {
-          bg.append(ring(L.ringR(hh)));
-          gt.append(txt(CX, CY + L.ringR(hh) - 4, hh === 1 ? "heard directly" : (hh - 1) + " hop" + (hh > 2 ? "s" : ""), "middle"));
-        }
-      }
-      if (mode === "geo") {
-        let last = 0;
-        for (const km of [5, 10, 25, 50, 100, 200, 400, 800]) {
-          if (km > L.maxKm * 1.05) break;
-          const r = L.gr(km);
-          if (r < 22 || r - last < 28) continue;
-          last = r;
-          bg.append(ring(r));
-          gt.append(txt(CX, CY + r - 4, km + " km", "middle"));
-        }
+      const z = zs(), c = T([CX, CY], z);
+      for (const rg of (L.rings[mode] || [])) {
+        bg.append(sv("circle", { cx: c[0].toFixed(1), cy: c[1].toFixed(1), r: (rg.r * z.k).toFixed(1), class: "gr-ring" }));
+        const lp = T([CX, CY + rg.ly], z);
+        if (lp[1] > 8 && lp[1] < H - 2) gt.append(txt(lp[0].toFixed(1), lp[1].toFixed(1), rg.lab, "middle"));
       }
       if (mode !== "force" && L.home) gt.append(txt(CX, 14, "N", "middle"));
     }
@@ -390,7 +458,9 @@ const AprsGraph = (() => {
                                "stroke-width": moving ? 2 : 1.5 });
       if (moving) c.setAttribute("stroke-dasharray", "3 2");
       else if (n.est && n.kind !== "me") c.setAttribute("stroke-dasharray", "1 2");
-      const t = sv("text", { y: (R(n) + 12).toFixed(1), class: "gr-label", "text-anchor": "middle" });
+      // CR109: small stations (not digipeaters) only heard via others: call when zoomed in or on hover
+      const minor = n.kind !== "me" && n.kind !== "digi" && !n.direct && R(n) < 10;
+      const t = sv("text", { y: (R(n) + 12).toFixed(1), class: "gr-label" + (minor ? " gr-minor" : ""), "text-anchor": "middle" });
       t.textContent = n.call;
       gg.append(c, t);
       if (n.kind !== "me" && n.rep >= REP_MIN && n.rep_n >= 3) {     // stage 2: channel health
@@ -416,9 +486,12 @@ const AprsGraph = (() => {
       const k = mode === "force" ? 0 : 0.12;
       return `M${x1.toFixed(1)},${y1.toFixed(1)}Q${((x1 + x2) / 2 - dy * k).toFixed(1)},${((y1 + y2) / 2 + dx * k).toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
     }
-    function place(P) {
+    function place(P0) {
+      const z = zs(), P = {};
+      for (const c in P0) P[c] = T(P0[c], z);
       shown.forEach((n, i) => ngs[i].setAttribute("transform", `translate(${P[n.call][0].toFixed(1)},${P[n.call][1].toFixed(1)})`));
       edges.forEach((l, i) => epaths[i].setAttribute("d", curve(l, P)));
+      svg.classList.toggle("gr-zoomed", z.k >= 2);
     }
     place(pos);
 
@@ -474,6 +547,7 @@ const AprsGraph = (() => {
       try { localStorage.setItem("tbc-aprs-graph", v); } catch (e) { /* ok */ }
       [...layoutSeg.children].forEach((b, i) => b.classList.toggle("on", ["radar", "geo", "force"].filter((x) => x !== "geo" || L.home)[i] === v));
       background();
+      zoomTxt();
       const t0 = performance.now(), id = ++anim;
       const step = (t) => {
         if (id !== anim) return;
@@ -514,10 +588,66 @@ const AprsGraph = (() => {
     shown.forEach((n, i) => {
       ngs[i].addEventListener("mouseenter", () => focus(n));
       ngs[i].addEventListener("mouseleave", () => focus(null));
-      if (n.kind !== "me") ngs[i].addEventListener("click", () => onStation(n.call));
+      if (n.kind !== "me") ngs[i].addEventListener("click", () => { if (!dragged) onStation(n.call); });
     });
+    // CR109: zoom (wheel = at the pointer, drag = move, buttons) and full screen
+    const zbar = el("div", "gr-zoom");
+    const zb = (t, title, f) => { const b = el("button", "sm", t); b.type = "button"; b.title = title; b.addEventListener("click", f); zbar.append(b); return b; };
+    const zk = el("span", "gr-zk");
+    function view() { ++anim; background(); place(pos); zoomTxt(); }
+    function zoomTxt() { const k = zs().k; zk.textContent = k > 1.01 ? k.toFixed(1) + "×" : ""; }
+    function pan(z) {                      // keep the middle of the view inside the drawing
+      z.x = Math.min(W, Math.max(0, z.x));
+      z.y = Math.min(H, Math.max(0, z.y));
+      if (z.k <= 1.001) { z.k = 1; z.x = CX; z.y = CY; }
+    }
+    function zoomAt(s, f) {
+      const z = zs(), k2 = Math.min(16, Math.max(1, z.k * f));
+      const qx = (s[0] - CX) / z.k + z.x, qy = (s[1] - CY) / z.k + z.y;
+      z.x = qx - (s[0] - CX) / k2;
+      z.y = qy - (s[1] - CY) / k2;
+      z.k = k2;
+      pan(z);
+      view();
+    }
+    const svgPt = (e) => {
+      const m = svg.getScreenCTM();
+      if (!m) return [CX, CY];
+      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+      return [p.x, p.y];
+    };
+    zb("+", "Zoom in", () => zoomAt([CX, CY], 1.5));
+    zb("−", "Zoom out", () => zoomAt([CX, CY], 1 / 1.5));
+    zb("1:1", "Whole drawing", () => { zoom[mode] = { k: 1, x: CX, y: CY }; view(); });
+    zbar.append(zk);
+    zb(full ? "Exit full screen" : "Full screen", full ? "Back to the page (Esc)" : "The drawing over the whole screen", () => setFull(!full));
+    zoomTxt();
+    svg.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      zoomAt(svgPt(e), Math.pow(1.0015, -Math.max(-300, Math.min(300, e.deltaY))));
+    }, { passive: false });
+    let drag = null, dragged = false;
+    svg.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      drag = { p: svgPt(e), id: e.pointerId, cap: false };
+      dragged = false;
+    });
+    svg.addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const p = svgPt(e), dx = p[0] - drag.p[0], dy = p[1] - drag.p[1];
+      if (!dragged && Math.hypot(dx, dy) < 4) return;
+      if (!drag.cap) { try { svg.setPointerCapture(e.pointerId); } catch (x) { /* ok */ } drag.cap = true; }
+      dragged = true;
+      const z = zs();
+      if (z.k > 1) { z.x -= dx / z.k; z.y -= dy / z.k; pan(z); view(); }
+      drag.p = p;
+      svg.classList.add("gr-drag");
+    });
+    const endDrag = () => { drag = null; svg.classList.remove("gr-drag"); setTimeout(() => { dragged = false; }, 0); };
+    svg.addEventListener("pointerup", endDrag);
+    svg.addEventListener("pointercancel", endDrag);
     const wrap = el("div", "gr-wrap");
-    wrap.append(svg);
+    wrap.append(svg, zbar);
     box.append(wrap, tip);
 
     // the device pie (follows the packet type; a click filters the graph)

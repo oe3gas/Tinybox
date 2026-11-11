@@ -1,0 +1,3 @@
+- APRS-Netzgraph: Zonen statt Ringe (Radar,
+  Karte 50/100/200/400 km), Kraft breiter.
+- Zoom mit Mausrad/Ziehen, Vollbild-Knopf.
