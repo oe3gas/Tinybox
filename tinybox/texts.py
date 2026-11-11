@@ -41,12 +41,17 @@ HELP = [
     "  S call     Send private message (same as SP call)",
     "  SP call @ mailbox   Private message to a user of another mailbox,",
     "             e.g. SP OE1ABC @ OE1XAB.#WIE.AUT.EU",
-    "  SB topic   Send bulletin, e.g. SB ALL  (SB ALL @ WW: to the whole network)",
-    "             Optional at the end: $BID, e.g. SB DX @ EU $DX0815",
     "  QSO        Your last connects to this mailbox (QSO 30: the last 30)",
     "  STAT       Link quality of your radio connection (STAT ALL: all stations)",
     "  V          Version",
 ]
+# CR119: only for whom may write bulletins (sysop, login with key) - a guest
+# on the terminal cannot (CR92), so he does not see the command at all
+HELP_BULLETIN = [
+    "  SB topic   Send bulletin, e.g. SB ALL  (SB ALL @ WW: to the whole network)",
+    "             Optional at the end: $BID, e.g. SB DX @ EU $DX0815",
+]
+HELP_BULLETIN_AFTER = "             e.g. SP OE1ABC @ OE1XAB.#WIE.AUT.EU"
 HELP_SYSOP = [
     "Sysop:",
     "  E n field value   Edit header, field = TO, FROM, TYPE, STATUS, SUBJ, AT",
@@ -82,7 +87,8 @@ BAD_RUBRIC = "Rubric {rubric} is not open for bulletins here. Rubrics: {rubrics}
 
 USAGE_R = "Usage: R n"
 USAGE_K = "Usage: K n"
-USAGE_S = "Usage: S call[,call...] [@ mailbox] [$BID]  or  S SYSOP  or  SB topic [@ area] [$BID]"
+USAGE_S = "Usage: S call[,call...] [@ mailbox] [$BID]  or  S SYSOP"
+USAGE_SB = "Usage: SB topic [@ area] [$BID]"                    # CR119
 USAGE_E = "Usage: E n field value  (field = TO, FROM, TYPE, STATUS, SUBJ, AT)"
 
 NO_MESSAGES = "No messages."

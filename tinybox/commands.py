@@ -75,7 +75,11 @@ def cmd_bye(s: Session, arg: str) -> None:
 
 
 def cmd_help(s: Session, arg: str) -> None:
-    s.out(*texts.HELP, *(texts.HELP_SYSOP if s.sysop else []))
+    lines = list(texts.HELP)
+    if rights.may_write_bulletin(rights.role_of(s)):     # CR119: not for guests
+        i = lines.index(texts.HELP_BULLETIN_AFTER) + 1
+        lines[i:i] = texts.HELP_BULLETIN
+    s.out(*lines, *(texts.HELP_SYSOP if s.sysop else []))
 
 
 def cmd_jlog(s: Session, arg: str) -> None:
@@ -213,7 +217,8 @@ def cmd_read_mine(s: Session, arg: str) -> None:
 def _send(s: Session, arg: str, type: str) -> None:
     m = SEND_RE.match(arg.strip())
     if not arg or m is None:
-        s.out(texts.USAGE_S)
+        s.out(texts.USAGE_SB if type == "B" and rights.may_write_bulletin(rights.role_of(s))
+              else texts.NEED_LOGIN if type == "B" else texts.USAGE_S)
         return
     if type == "B" and not rights.may_write_bulletin(rights.role_of(s)):
         s.out(texts.NEED_LOGIN)              # CR92: before the user types the text

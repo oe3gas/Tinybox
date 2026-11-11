@@ -2,6 +2,9 @@
 
 ## Unveröffentlicht
 
+- **Terminalmenü ohne `SB` für Gäste (CR119):** Hilfe und Usage zeigen `SB` nur, wer Bulletins schreiben
+  darf (Sysop, Login mit Schlüssel).
+
 - **Begrüßungsdialog (CR118):** Gruß nach dem Namen (zufällig aus 8 Floskeln), Home-BBS mit
   Rufzeichen-Plausibilität (kein Locator, kein Rubrikname), `S SYSOP` schreibt an den Sysop – auch mitten in
   den Fragen. Client 2026.11.11.15. Nachtrag: dieselbe Prüfung für den Empfänger bei `S` und die Mailbox

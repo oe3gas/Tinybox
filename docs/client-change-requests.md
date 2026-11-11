@@ -91,6 +91,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
 | 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Nachtrag .13: TX nur PTT, Queue-Chip; .14: Queue in Echtzeit; Funktest offen) – siehe unten |
 | 118 | TinyBox-Begrüßungsdialog: Gruß nach dem Namen (zufällig aus 8), Home-BBS mit Rufzeichen-Plausibilität, „S SYSOP“ mitten in den Fragen; Nachtrag: dieselbe Prüfung für Empfänger und @-Mailbox bei S | ✅ 11.11.2026 (Client 2026.11.11.15) – siehe unten |
+| 119 | TinyBox-Terminal: `SB` nicht mehr in der Hilfe für nicht authentifizierte User | ✅ 11.11.2026 – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4376,3 +4377,17 @@ Beim Begrüßungsdialog (Fragen nach dem Login, CR73):
   Element (die Mailbox) wird genauso geprüft. Steht vorne ein Gebiet (`#NOE`, `AUT`, `EU`), bleibt es
   bei der Formprüfung. Fehler `invalid_address`.
 - **Nicht geprüft:** Post von Forward-Partnern, Inbox/MQTT-Skripte, Sysop-Konsole und Web-GUI.
+
+## CR119 – `SB` aus dem Terminalmenü für Gäste (✅ 11.11.2026)
+
+**Wunsch (OE3GAS, 11.11.2026):** Im Terminalmenü der Box muss `SB` weg – Bulletins dürfen nur
+authentifizierte User schreiben (CR92), ein Gast am Terminal kann es ohnehin nicht.
+
+**Umsetzung:**
+- Hilfe (`H`/`?`): die zwei `SB`-Zeilen (`texts.HELP_BULLETIN`) nur, wenn die Sitzung Bulletins
+  schreiben darf (`rights.may_write_bulletin` – Sysop, Login mit Schlüssel); für Gäste fehlen sie.
+- Usage von `S` ohne den `SB`-Teil; `SB` allein zeigt dem Gast gleich den Hinweis `NEED_LOGIN`
+  („Bulletins only with the TinyBox client …“), dem Sysop `Usage: SB topic [@ area] [$BID]`.
+- Der Befehl selbst war schon gesperrt (CR92), daran ändert sich nichts.
+- Tests `tests/test_cr119.py`.
+
