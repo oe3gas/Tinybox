@@ -3843,7 +3843,7 @@ Kommentar, Reaktion, Alarm, Avatar; dazu „lädt Bild hoch“ und die Authentis
 - Unter 1600 px Breite zwei Spalten (Connection log über beide), unter 1100 px eine.
 - Geprüft im Browser (Playwright) bei 2560 und 1440 px, keine JS-Fehler; `tests/test_web.py` grün.
 
-## CR109 – APRS-Netzgraph: Zonen statt Ringe, mehr Fläche, Zoom (offen, 11.11.2026)
+## CR109 – APRS-Netzgraph: Zonen statt Ringe, Vollbild, Zoom (entschieden 11.11.2026, Umsetzung offen)
 
 ### Erfassung (OE3GAS, 11.11.2026)
 
@@ -3935,11 +3935,8 @@ dann Zonen im Radar und Streifen in der Map, zuletzt das Feintuning von Force.
 - Radar: Zonenregel für **alle** Hop-Stufen.
 - Map: Stationen über 400 km knapp außerhalb des 400-km-Rings anordnen.
 
-**Noch offen:** Lage der Ringe in der Map, d. h. wie viel vom Radius die Scheibe 0–50 km bekommt
-(Rest teilen sich 50–100, 100–200, 200–400 gleich). Beispiele bei Außenradius 100 %:
+- Map: Ringe bei **35 % (50 km), 57 % (100 km), 78 % (200 km), 100 % (400 km)** des
+  Außenradius; innerhalb jedes Streifens linear nach Entfernung (verworfen: maßstäblich
+  12,5/25/50 %, gleiche Abstände 25/50/75 %).
 
-| Variante | 50 km | 100 km | 200 km | 400 km | Fläche 0–50 km |
-|---|---|---|---|---|---|
-| maßstäblich (linear) | 12,5 % | 25 % | 50 % | 100 % | ≈ 1,5 % |
-| gleiche Abstände | 25 % | 50 % | 75 % | 100 % | ≈ 6 % |
-| Vorschlag Claude | 35 % | 57 % | 78 % | 100 % | ≈ 12 % |
+Damit sind alle Punkte entschieden, CR109 ist bereit zur Umsetzung.
