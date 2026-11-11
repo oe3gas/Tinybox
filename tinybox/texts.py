@@ -82,7 +82,7 @@ BAD_RUBRIC = "Rubric {rubric} is not open for bulletins here. Rubrics: {rubrics}
 
 USAGE_R = "Usage: R n"
 USAGE_K = "Usage: K n"
-USAGE_S = "Usage: S call[,call...] [@ mailbox] [$BID]  or  SB topic [@ area] [$BID]"
+USAGE_S = "Usage: S call[,call...] [@ mailbox] [$BID]  or  S SYSOP  or  SB topic [@ area] [$BID]"
 USAGE_E = "Usage: E n field value  (field = TO, FROM, TYPE, STATUS, SUBJ, AT)"
 
 NO_MESSAGES = "No messages."
@@ -111,13 +111,23 @@ LONG_OUTPUT = "*** {n} lines follow - send A to abort"   # CR40 (replaces the pa
 CANCELLED = "Message cancelled."
 
 # --- profile (CR73) ---
-PROFILE_INTRO = "Please introduce yourself. Enter skips a question, /AB all of them."
+PROFILE_INTRO = ("Please introduce yourself. Enter skips a question, /AB all of them, "
+                 "S SYSOP writes to the sysop.")             # CR118
 PROFILE_ASK = {"name": "Your first name: ",
                "loc": "Your locator (e.g. JN88EP): ",
                "home": "Your home BBS (e.g. OE3XSR): "}
 PROFILE_BAD = {"name": "Name: up to 12 letters, please.",
                "loc": "Locator: 4 or 6 characters, e.g. JN88 or JN88EP.",
                "home": "Home BBS: a mailbox call, e.g. OE3XSR or OE3XSR.#NOE.AUT.EU."}
+# CR118: after the name one of these, chosen at random
+PROFILE_GREET = ("Hello {name}, great to copy you!",
+                 "Hi {name}, nice to have you on frequency!",
+                 "Welcome aboard, {name}!",
+                 "Good to see you here, {name}!",
+                 "Hello {name}, you are 5/9 here!",
+                 "Hi {name}, glad you found your way to us!",
+                 "Nice to meet you, {name}!",
+                 "Hello {name}, thanks for dropping in!")
 PROFILE_THANKS = "Thank you. Change it any time with N, NL and NH."
 PROFILE_HOME_HERE = "Thank you for choosing {box} as your home!"
 PROFILE_LATER = "OK. Set it later with N name, NL locator, NH home BBS."

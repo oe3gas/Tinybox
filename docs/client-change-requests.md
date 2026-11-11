@@ -90,6 +90,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 113 | LoTW als Vertrauensanker: eigenen Schlüssel mit dem LoTW-Zertifikat bestätigen (höchstes Vertrauen) | Stufe 1 (Client signiert) ✅, Stufe 2 (Prüfung in der Box) ✅ 11.11.2026; Stufe 3 Anzeige und „Gerät bürgt für Gerät“ offen – siehe unten |
 | 112 | Direwolf-Fork überarbeitet für die Statusleiste: SABM-Versuche, Retry, echtes TX/RX (PTT/DCD), Kanalauslastung, Pegel je Frame, AX.25-Parameter, Feature-Abfrage; Abbruchgrund, eigene Frames im Client-Monitor | ✅ 11.11.2026 (Fork 2026.11.11, Funktest offen) – siehe unten |
 | 117 | Bild-Upload: Fortschrittsbalken und TX-Chip in der Kopfzeile passen nicht zum Senden (Balken steht, TX dunkel) | ✅ 11.11.2026 (Client 2026.11.11.12, Nachtrag .13: TX nur PTT, Queue-Chip; .14: Queue in Echtzeit; Funktest offen) – siehe unten |
+| 118 | TinyBox-Begrüßungsdialog: Gruß nach dem Namen (zufällig aus 8), Home-BBS mit Rufzeichen-Plausibilität, „S SYSOP“ mitten in den Fragen | ✅ 11.11.2026 (Client 2026.11.11.15) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4338,4 +4339,31 @@ Zahl steht und fällt dann auf einmal auf 0.
   etwas wartet). Wiederholungen (N(S) schon gesehen) zählen nicht. Modulo 8 und 128.
 - Kopfzeile „Queue n · ack m“, ebenso der Queue-Chip im Kanal.
 - Ohne Fork (Original-Direwolf) sieht der Client die eigenen I-Frames nicht: dann bleibt es bei `Y`.
+
+## CR118 – Begrüßungsdialog der TinyBox (✅ 11.11.2026, Client 2026.11.11.15)
+
+### Wunsch (OE3GAS, 11.11.2026)
+
+Beim Begrüßungsdialog (Fragen nach dem Login, CR73):
+
+1. Nach dem Namen ein kurzer Gruß „Hello [name], great to copy you!“ – dazu 7 weitere freundliche,
+   kurze Floskeln, die Box wählt zufällig.
+2. Beim Home-BBS dieselben Plausibilitätsprüfungen wie schon eingebaut (eingegeben wurde `jn77ss`
+   und durchgelassen).
+3. `S SYSOP` soll erlaubt sein und eine Mail an den Sysop erzeugen.
+
+### Umsetzung
+
+- `texts.PROFILE_GREET` (8 Floskeln, ASCII): „Hello {name}, great to copy you!“, „Hi {name}, nice to
+  have you on frequency!“, „Welcome aboard, {name}!“, „Good to see you here, {name}!“, „Hello {name},
+  you are 5/9 here!“, „Hi {name}, glad you found your way to us!“, „Nice to meet you, {name}!“,
+  „Hello {name}, thanks for dropping in!“. Nur wenn ein Name angegeben wurde.
+- Home-BBS (`prcore/profile.check_home`, also Box, N/NH, Client-Formular und `//PROF`): zusätzlich
+  `plausible_call` aus CR92 (Präfix mit Buchstabe, Ziffern, Suffix; kein `70CM`, `QO100`) und
+  **kein Locator** (`JN77SS`, `JO44KT` haben Rufzeichenform, sind aber ein Feld).
+- `S SYSOP` / `SP SYSOP`: Empfänger `SYSOP` = Sysop-Rufzeichen der Box (`[station] sysop_call`),
+  überall, auch in einer Liste. Mitten in den Fragen beendet `S SYSOP` den Dialog (Antworten bleiben)
+  und startet die Mail. Hinweis in der Einleitung: „… /AB all of them, S SYSOP writes to the sysop.“
+  Gäste dürfen das wie bisher (Post an den Sysop geht immer).
+- Tests `tests/test_cr118.py`.
 

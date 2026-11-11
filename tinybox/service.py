@@ -278,6 +278,8 @@ class MessageService:
         """Validate a destination before the user types the whole message.
         Returns the normalized destination."""
         to_call = normalize_call(to_call)
+        if type == "P" and to_call == "SYSOP":      # CR118: S SYSOP = the sysop of this box
+            to_call = base_call(self.cfg.station.sysop_call.upper())
         if type == "P":
             if not is_valid_call(to_call):
                 raise ServiceError("invalid_call", to_call)

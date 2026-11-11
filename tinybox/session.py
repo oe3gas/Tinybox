@@ -7,6 +7,8 @@ gives the session a Transport to write to and to close the connection.
 from __future__ import annotations
 
 import logging
+import random
+import re
 import time
 from enum import Enum
 from typing import Protocol
@@ -17,6 +19,8 @@ from . import logsetup, profiles, rights, texts
 from .config import Config
 from .service import MessageService, ServiceError
 from .store import utc_now
+
+SYSOP_MAIL_RE = re.compile(r"^\s*SP?\s+SYSOP\s*$", re.I)   # CR118: allowed in the questions
 
 log = logging.getLogger("tinybox.monitor")
 
@@ -263,6 +267,8 @@ class Session:
             return
         if value:
             self._ask_answers[field] = value
+            if field == "name":              # CR118: a short greeting, one of a few
+                self.out(random.choice(texts.PROFILE_GREET).format(name=value))
         self._ask_fields.pop(0)
         self._ask_next()
 
@@ -340,7 +346,13 @@ class Session:
                 # a TinyBox client announces itself (//CLIENT) while the terminal
                 # questions are up: they are over, the client has its own form
                 self._ask_end(quiet=True)
-            if self.state == State.PROFILE:
+            if self.state == State.PROFILE and SYSOP_MAIL_RE.match(line):
+                # CR118: "S SYSOP" in the middle of the questions: they end (what was
+                # answered is kept) and the mail to the sysop starts
+                self._ask_end()
+                from . import commands  # local import avoids a cycle
+                commands.dispatch(self, line)
+            elif self.state == State.PROFILE:
                 self._on_profile(line)
             elif self.state == State.COLLECT:
                 self._on_collect(line)

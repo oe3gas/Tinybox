@@ -1,0 +1,2 @@
+- Profil: Home-BBS wird wie ein Rufzeichen geprueft,
+  kein Locator, kein Rubrikname.

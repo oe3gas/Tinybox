@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 import zlib
 
+from prcore.kissport import plausible_call
 from prcore.text import isnum
 
 FIELDS = ("name", "loc", "home")
@@ -62,7 +63,13 @@ def check_home(text: str) -> str:
         return ""
     first, dot, rest = home.partition(".")
     home = first.split("-", 1)[0] + dot + rest
-    if len(home) > MAX_HOME or not HOME_RE.match(home) or not CALL_RE.match(home.split(".")[0]):
+    call = home.split(".")[0]
+    if len(home) > MAX_HOME or not HOME_RE.match(home) or not CALL_RE.match(call):
+        raise ProfileError("home")
+    # CR118: the same plausibility as for a connecting station (CR92: prefix with a
+    # letter, digits, suffix - no rubric name like 70CM or QO100), and no locator
+    # (JN77SS looks like a call but is a square)
+    if not plausible_call(call) or LOCATOR_RE.match(call):
         raise ProfileError("home")
     return home
 

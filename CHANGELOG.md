@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+- **Begrüßungsdialog (CR118):** Gruß nach dem Namen (zufällig aus 8 Floskeln), Home-BBS mit
+  Rufzeichen-Plausibilität (kein Locator, kein Rubrikname), `S SYSOP` schreibt an den Sysop – auch mitten in
+  den Fragen. Client 2026.11.11.15.
+
 - **Bild-Upload: Fortschritt und TX (CR117):** der Balken springt bei einer ersten `Y`-Antwort 0 nicht mehr ans
   Ende, eigene I-Frames zählen mit (max. 95 % bis `//IMGOK`); TX leuchtet, solange Frames warten, und folgt
   den eigenen Frames. Client 2026.11.11.12. Nachtrag 2026.11.11.13: TX nur noch bei PTT (Fork), wartende
