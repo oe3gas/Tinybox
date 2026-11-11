@@ -3990,3 +3990,15 @@ Client und Client läuft – als Status-Chips. Entscheidungen:
   `peer.hist_wait/heard_wait/serving`, `peerfun.pong_at`, `budget.refused/slowed()`.
 - Tests: `tests/test_activity.py`.
 
+
+## CR111 – Sysop-Konsole: volle Breite, Terminal-Look (✅ 11.11.2026, Client 2026.11.11.2)
+
+**Wunsch OE3GAS:** Die Sysop-Konsole in den Settings in voller Breite; Farbschema des Fensters
+terminal-like grün auf schwarz statt schwarz auf grau.
+
+### Umsetzung
+
+- `tbclient/web/index.html`: Karte `#adm-card` aus dem zweispaltigen Teil (`.set-cols`) heraus,
+  jetzt eigene Karte in voller Breite direkt über „Connection log“.
+- `tbclient/web/app.css`: `.adm-out` schwarz mit Grün `#33ff66`, Monospace, Höhe bis 20 Zeilen;
+  Eingabezeile `#adm-line` im selben Look (Cursor, Platzhalter grün).

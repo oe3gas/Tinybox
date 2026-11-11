@@ -1,0 +1,2 @@
+- Sysop-Konsole in den Settings volle Breite,
+  Terminal-Look gruen auf schwarz.

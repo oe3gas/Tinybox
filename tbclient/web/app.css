@@ -881,9 +881,15 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 }
 
 /* CR94: sysop console over the radio */
-.adm-out { max-height: 14em; min-height: 3em; overflow: auto; margin: 6px 0; padding: 6px 8px;
-           background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font-size: 12px;
+.adm-out { max-height: 20em; min-height: 3em; overflow: auto; margin: 6px 0; padding: 6px 8px;
+           background: #000; color: #33ff66; border: 1px solid #1f5f2f; border-radius: 6px; font-size: 12px;
+           font-family: ui-monospace, Consolas, "Courier New", monospace;
            white-space: pre-wrap; word-break: break-word; }
+/* CR111: terminal look - green on black, also the input line */
+.adm-out::selection { background: #33ff66; color: #000; }
+#adm-line { background: #000; color: #33ff66; border-color: #1f5f2f; caret-color: #33ff66;
+            font-family: ui-monospace, Consolas, "Courier New", monospace; }
+#adm-line::placeholder { color: #1f8f3f; }
 .adm-quick { flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .rd-sysbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 12px;
              border-bottom: 1px solid var(--line); }

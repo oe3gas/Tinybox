@@ -11,7 +11,8 @@ danach einzeln signiert zur Box (CR93 Stufe 2). Wartet der Schluessel
 auf den Sysop, sagt der Mail-Sync das sofort (CR106). Die Heimat-BBS
 stellt ein Zertifikat aus; damit klappt der Login auch an TinyBoxen,
 deren Sysop der Heimat-BBS vertraut (Stufe 3). Der Sysop selbst hat in
-den Settings eine Sysop-Konsole: Befehle an seine TinyBox, signiert (CR94),
+den Settings eine Sysop-Konsole (volle Breite, gruen auf schwarz, CR111):
+Befehle an seine TinyBox, signiert (CR94),
 und im Leser "Sysop": in der TinyBox loeschen, Bulletins verschieben und
 kopieren (CR21). Zwei TBClients pruefen beim Connect gegenseitig ihre
 Schluessel (CR99): bestaetigt durch die Heimat-BBS, bekannt oder anderer
