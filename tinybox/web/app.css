@@ -438,11 +438,22 @@ main.um-grid .um-fill { flex: 1; }
 main.um-grid .um-entry { border-top: 1px solid var(--line, #ddd); border-bottom: 1px solid var(--line, #ddd); }
 @media (max-width: 1100px) { main.um-grid { grid-template-columns: minmax(0, 1fr); } }
 .um-list { max-height: 70vh; overflow-y: auto; }
-.um-person { border-top: 1px solid var(--line, #ddd); padding: 10px 16px; }
-.um-person.wait { background: #FFF8E6; }
-.um-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
-.um-head strong { min-width: 80px; }
-.um-ssids { font-size: 12px; margin: 2px 0 0 96px; }
+.um-list { overflow-x: auto; }
+table.um-table td { vertical-align: middle; }
+table.um-table tr.wait td { background: #FFF8E6; }
+table.um-table tr.open td { border-bottom-color: transparent; }
+table.um-table td.um-chips { padding-right: 0; text-align: right; width: 1%; }
+.um-chips { white-space: nowrap; }
+.um-chip { display: inline-flex; align-items: center; justify-content: center; height: 22px; min-width: 26px;
+  padding: 0 6px; margin-left: 4px; border-radius: 11px; background: var(--ink); color: #FFFFFF;
+  font: 700 11px var(--mono); letter-spacing: .03em; vertical-align: middle; }
+.um-chip.lotw { background: var(--ok); }
+.um-tog { display: inline-block; width: 14px; color: var(--ink-3); }
+table.um-table td.warn { color: #8A5A00; font-weight: 600; }
+table.um-table tr.um-detail td { white-space: normal; padding: 0 10px 10px 10px; }
+.um-detail .um-ssids { margin: 2px 0 0 0; padding-left: 60px; }
+.um-detail .um-key { margin-left: 60px; }
+.um-ssids { font-size: 12px; }
 .um-key { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center;
   font-size: 13px; margin: 8px 0 0 96px; padding-top: 6px; border-top: 1px dashed var(--line, #ddd); }
 .um-key.wait { font-weight: 600; }
@@ -450,6 +461,6 @@ main.um-grid .um-entry { border-top: 1px solid var(--line, #ddd); border-bottom:
 .um-kmeta { grid-column: 1; font-size: 12px; font-weight: 400; }
 .um-key .um-btns { grid-column: 2; grid-row: 1 / span 2; }
 .um-btns { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
-.um-key .ok, .um-head .ok { color: #1E6B35; }
-.um-key .warn, .um-head .warn { color: #8A5A00; font-weight: 600; }
-@media (max-width: 700px) { .um-key, .um-ssids { margin-left: 0; } }
+.um-key .ok { color: #1E6B35; }
+.um-key .warn { color: #8A5A00; font-weight: 600; }
+@media (max-width: 700px) { .um-key, .um-ssids { margin-left: 0; padding-left: 0; } }

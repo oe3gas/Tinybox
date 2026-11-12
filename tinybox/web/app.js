@@ -1483,32 +1483,47 @@ function viewKeys(find) {
         h("button", { class: "btn sm danger", type: "button", text: "Delete",
           onclick: () => act("user", { id: u.id, action: "DEL" }, `Forget the key ${u.fp} of ${u.call}?`) })));
   }
-  function personCard(p) {
-    const head = h("div", { class: "um-head" },
-      h("strong", { class: "mono", text: p.call }),
-      h("span", { text: p.name || "–" }),
-      h("span", { class: "mono", text: p.loc || "" }),
-      h("span", { class: "mono", text: p.home ? "home " + p.home : "" }),
-      ...(p.first ? [h("span", { class: "muted", text: "first " + fullDate(p.first) })] : []),
-      h("span", { class: "muted", text: p.last ? "last " + fullDate(p.last) : "never logged in" }),
-      ...(p.connects ? [h("span", { class: "muted", text: p.connects + " connect" + (p.connects > 1 ? "s" : "") })] : []),
-      h("span", { class: p.waiting ? "warn" : p.keys.length ? "" : "muted",
-        text: p.waiting ? `${p.waiting} key waiting` : p.keys.length ? `${p.keys.length} key(s)` + (p.lotw ? " · ✓ LoTW" : "") : "no key" }),
-      h("span", { class: "um-btns" }, ...(p.sysop ? [h("span", { class: "muted", text: "sysop" })] : p.ban
+  // One table row per user (OE3GAS 12.11.2026); a click on the row opens his keys below it.
+  // Chips left of the call: black key chip = a released key, LoTW chip left of it.
+  const open = new Map();                         // call -> open?  (survives the re-render)
+  const cols = ["", "Call", "Name", "Locator", "Home BBS", "First login", "Last login", "Connects", "# of keys", ""];
+  function personRows(p) {
+    const released = p.keys.some((k) => k.status === "active");
+    const isOpen = open.has(p.call) ? open.get(p.call) : p.waiting > 0;   // waiting keys: open
+    const row = h("tr", { class: "um-row click" + (p.waiting ? " wait" : "") + (isOpen ? " open" : ""),
+      title: isOpen ? "Hide the keys" : "Show the keys",
+      onclick: () => { open.set(p.call, !isOpen); renderPeople(); } },
+      h("td", { class: "um-chips" },
+        ...(p.lotw ? [h("span", { class: "um-chip lotw", text: "LoTW", title: "key confirmed with LoTW" })] : []),
+        ...(released ? [h("span", { class: "um-chip key", text: "🔑", title: "released key" })] : [])),
+      h("td", { class: "mono" }, h("span", { class: "um-tog", text: isOpen ? "▾" : "▸" }), h("strong", { text: p.call })),
+      h("td", { text: p.name || "–" }),
+      h("td", { class: "mono", text: p.loc || "" }),
+      h("td", { class: "mono", text: p.home || "" }),
+      h("td", { class: "mono", text: p.first ? fullDate(p.first) : "" }),
+      h("td", { class: "mono", text: p.last ? fullDate(p.last) : "never" }),
+      h("td", { class: "mono", text: p.connects ? String(p.connects) : "" }),
+      h("td", { class: p.waiting ? "warn" : "mono", text: p.waiting ? `${p.keys.length} (${p.waiting} waiting)` : String(p.keys.length) }),
+      h("td", { onclick: (e) => e.stopPropagation() }, h("span", { class: "um-btns" }, ...(p.sysop ? [h("span", { class: "muted", text: "sysop" })] : p.ban
         ? [h("span", { class: "warn", text: p.ban.purged ? "purged" : "banned" }),
            h("button", { class: "btn sm", type: "button", text: "Unban",
              onclick: () => act("unban", { call: p.call }, `Let ${p.call} back in?`) })]
         : [h("button", { class: "btn sm", type: "button", text: "Ban",
              onclick: () => act("ban", { call: p.call }, `Ban ${p.call} (all SSIDs)? Running sessions end now; the data stays.`) }),
-           h("button", { class: "btn sm danger", type: "button", text: "Purge", onclick: () => purge(p.call) })])));
-    return h("div", { class: "um-person" + (p.waiting ? " wait" : "") }, head,
-      ...(p.ssids.length > 1 ? [h("div", { class: "um-ssids muted mono", text: p.ssids.join(" · ") })] : []),
-      ...p.keys.map(keyRow));
+           h("button", { class: "btn sm danger", type: "button", text: "Purge", onclick: () => purge(p.call) })]))));
+    if (!isOpen) return [row];
+    return [row, h("tr", { class: "um-detail" + (p.waiting ? " wait" : "") }, h("td", { colspan: cols.length },
+      ...(p.ssids.length > 1 ? [h("div", { class: "um-ssids muted mono", text: "SSIDs " + p.ssids.join(" · ") })] : []),
+      ...(p.keys.length ? p.keys.map(keyRow) : [h("div", { class: "um-ssids muted", text: "No key." })])))];
   }
   function renderPeople() {
     const q = filter.value.trim().toUpperCase();
     const list = (data ? data.people : []).filter((p) => !q || p.call.includes(q) || (p.name || "").toUpperCase().includes(q));
-    people.replaceChildren(...(list.length ? list.map(personCard) : [h("div", { class: "card-body note", text: data && data.people.length ? "Nobody fits." : "No users yet." })]));
+    people.replaceChildren(list.length
+      ? h("table", { class: "data um-table" },
+          h("thead", {}, h("tr", {}, cols.map((x) => h("th", { text: x })))),
+          h("tbody", {}, ...list.flatMap(personRows)))
+      : h("div", { class: "card-body note", text: data && data.people.length ? "Nobody fits." : "No users yet." }));
     const wait = data ? data.people.reduce((n, p) => n + p.waiting, 0) : 0;
     waitNote.replaceChildren(wait
       ? h("span", { class: "warn", text: `${wait} new key(s) wait for your release - they are at the top. ` }) : "",
