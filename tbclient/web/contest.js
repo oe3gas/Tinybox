@@ -1,0 +1,202 @@
+/* CR122: CQ contest - battleships with a radio touch. The rules run in the
+ * client (prcore/contest.py); this draws the game it reports and sends the
+ * actions. Used for another TBClient (peer view) and for the TinyBox (chat).
+ *
+ * Contest.render(box, g, o)
+ *   g  the game from the snapshot (null = none yet)
+ *   o  { opp, on, act(act, arg), err, newText, hide() }
+ */
+"use strict";
+const Contest = (() => {
+  const N = 8;
+  const mk = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const btn = (txt, fn, dis, cls) => {
+    const b = mk("button", "sm" + (cls ? " " + cls : ""), txt);
+    b.type = "button"; b.disabled = !!dis; b.onclick = (ev) => { ev.stopPropagation(); fn(); };
+    return b;
+  };
+  const pill = (cls, txt) => mk("span", "ct-pill " + cls, txt);
+  const sn = (n) => String(n).padStart(3, "0");
+
+  // the moves in the order they were made: the first player calls first
+  function history(g) {
+    const out = [];
+    const a = g.first ? g.mc : g.tc, b = g.first ? g.tc : g.mc;
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if (a[i]) out.push([g.first ? "me" : "them", a[i]]);
+      if (b[i]) out.push([g.first ? "them" : "me", b[i]]);
+    }
+    return out;
+  }
+
+  function logText(who, m, g) {
+    const [loc, res, call, ser] = m;
+    if (who === "me") return res === "QSO" ? `CQ ${loc}  ${call} 5NN ${sn(ser)}  ${kmOf(g, loc)} km`
+      : `CQ ${loc}  ${res === "WEAK" ? "QRZ? weak sigs" : "no answer"}`;
+    return `${g.opp} CQ ${loc}  ` + (res === "QSO" ? `worked your ${call}` : "no answer");
+  }
+  const kmOf = (g, loc) => (g.cells.find((c) => c.l === loc) || {}).km || 0;
+
+  function newGame(box, o) {
+    const r = mk("div", "ct-new");
+    r.append(mk("span", "", o.newText || `New CQ contest with ${o.opp}: `));
+    const lab = mk("label", "ct-hint");
+    const cb = mk("input"); cb.type = "checkbox"; cb.checked = true;
+    lab.append(cb, " propagation hint");
+    r.append(lab, btn("Start", () => o.act("new", cb.checked ? "1" : "0"), !o.on, "primary-sm"));
+    box.append(r, mk("div", "small muted ct-rules",
+      "8 x 8 grid squares, 5 hidden contest stations each. Call CQ into a square - a station " +
+      "there answers and is worked. You call first; the round is played out; all 5 first wins."));
+    if (o.err) box.append(mk("div", "small ct-err", o.err));
+  }
+
+  function lastMsg(g) {
+    if (g.st === "setup") return null;
+    const m = g.mc[g.mc.length - 1];
+    if (g.pend) return ["", `CQ ${g.pend} ...`, "calling, waiting for an answer"];
+    if (!m) return null;
+    if (m[1] === "QSO") return ["ok", `QSO: ${m[2]} answers from ${m[0]}`,
+      `5NN ${sn(m[3])} · ${kmOf(g, m[0])} km · ${g.worked} of 5 worked`];
+    if (m[1] === "WEAK") return ["warn", `CQ ${m[0]}: QRZ?`, "Weak signals - a station is in a neighbouring square."];
+    return ["", `CQ ${m[0]}: no answer`, "Nobody there. Try another square."];
+  }
+
+  function endCard(g, o) {
+    const T = { win: ["win", "🏆 Contest won"], loss: ["loss", "Contest lost"], draw: ["draw", "Contest ended in a draw"],
+                resigned: ["loss", "You resigned"], "they resigned": ["win", `🏆 ${g.opp} resigned - you won`] };
+    const [cls, head] = T[g.res] || ["draw", "Contest over"];
+    const card = mk("div", "ct-end " + cls);
+    card.append(mk("div", "ct-end-h", head));
+    let txt;
+    if (g.res === "win") txt = g.tie ? `Both logs complete - your stations were further away (${g.tie[0]} km to ${g.tie[1]} km).`
+      : `You worked all 5 stations in ${g.mc.length} CQ calls. ${g.opp} logged ${g.lost} of 5.`;
+    else if (g.res === "loss") txt = g.tie ? `Both logs complete - ${g.opp}'s stations were further away (${g.tie[1]} km to ${g.tie[0]} km).`
+      : `${g.opp} worked all 5 of your stations first. You logged ${g.worked} of 5. The stations you missed are shown in pink.`;
+    else if (g.res === "draw") txt = "Both logs complete, the same distance.";
+    else txt = `Score ${g.worked}:${g.lost}.`;
+    card.append(mk("div", "ct-end-t", txt));
+    const row = mk("div", "ct-pills");
+    row.append(pill("", `Score ${g.worked}:${g.lost}`), pill("", `Distance ${g.km} km`),
+      g.check === "ok" ? pill("ok", "✓ log check ok") : g.check === "bad" ? pill("bad", "✗ board does not match")
+        : pill("", "waiting for the log of " + g.opp));
+    card.append(row, mk("div", "ct-73", ["win", "they resigned"].includes(g.res) ? "73 · tnx fer the contest"
+      : `73 de ${g.opp} · gl next time`));
+    const acts = mk("div", "ct-acts");
+    acts.append(btn("New contest", () => o.act("close"), false),
+      btn("Close", () => { o.act("close"); if (o.hide) o.hide(); }, false));
+    card.append(acts);
+    return card;
+  }
+
+  function cell(g, c, big, o, i) {
+    const d = mk("div", "ct-c");
+    const center = i === 3 * N + 3;
+    if (center) d.classList.add("ctr");
+    const line = (a, b) => { d.append(mk("span", "ct-a", a)); if (b !== undefined) d.append(mk("span", "ct-b", b)); };
+    if (big && g.st === "setup") {
+      const call = g.me[c.l];
+      if (call) { d.classList.add("mine"); line(call, c.l); } else line(c.l, c.p);
+      if (!g.ready && o.on) d.onclick = () => o.act("place", c.l);
+    } else if (big) {
+      const m = g.mc.find((x) => x[0] === c.l);
+      const rv = g.reveal && g.reveal[c.l];
+      if (m && m[1] === "QSO") { d.classList.add("qso"); line(m[2], c.l); }
+      else if (m && m[1] === "WEAK") { d.classList.add("weak"); line("QRZ?", c.l); }
+      else if (m) { d.classList.add("nil"); line(c.l, "·"); }
+      else if (rv) { d.classList.add("miss"); line(rv, c.l); }
+      else if (g.pend === c.l) { d.classList.add("pend"); line("CQ", c.l); }
+      else line(c.l, c.p);
+      if (g.my_turn && o.on && !m) { d.classList.add("can"); d.onclick = () => o.act("cq", c.l); }
+      d.title = `${c.l} · ${c.p} · ${c.km} km`;
+    } else {
+      const call = g.me[c.l], t = g.tc.find((x) => x[0] === c.l);
+      if (call && t) { d.classList.add("hit"); line(call, c.l); }
+      else if (call) { d.classList.add("mine"); line(call, c.l); }
+      else if (t) { d.classList.add("nil"); line(c.l, "·"); }
+      else line(c.l);
+      d.title = c.l;
+    }
+    return d;
+  }
+
+  function board(g, big, o) {
+    const b = mk("div", "ct-board" + (big ? " big" : " small"));
+    g.cells.forEach((c, i) => b.append(cell(g, c, big, o, i)));
+    return b;
+  }
+
+  function render(box, g, o) {
+    box.replaceChildren();
+    if (!g) { newGame(box, o); return; }
+    const head = mk("div", "ct-head");
+    const title = mk("div", "ct-title");
+    title.append(mk("b", "", "📻 CQ contest"), mk("span", "muted", ` with ${g.opp} · center ${g.c}` +
+      (g.h ? " · propagation hint" : "")));
+    head.append(title);
+    let st;
+    if (g.st === "setup") st = g.ready ? mk("span", "muted", `waiting for ${g.opp} to place the stations ...`)
+      : mk("span", "", `Place your stations: tap squares (${Object.keys(g.me).length}/5)`);
+    else if (g.st === "play") st = g.my_turn ? mk("span", "ph-move ct-move", "🎙 your move")
+      : mk("span", "muted", g.pend ? `CQ ${g.pend} ...` : `${g.opp} is calling CQ ...`);
+    if (st) head.append(st);
+    box.append(head);
+    if (g.st !== "setup") {
+      const pills = mk("div", "ct-pills");
+      pills.append(pill("ok", `You ${g.worked}/5`), pill("", `${g.opp} ${g.lost}/5`), pill("", `CQ calls ${g.mc.length}`));
+      box.append(pills);
+    }
+    if (g.st === "end") box.append(endCard(g, o));
+    else {
+      const m = lastMsg(g);
+      if (m) {
+        const d = mk("div", "ct-msg " + m[0]);
+        d.append(mk("b", "", m[1]), mk("div", "small", m[2]));
+        box.append(d);
+      }
+    }
+    const grid = mk("div", "ct-grid");
+    const left = mk("div", "ct-left"), right = mk("div", "ct-right");
+    left.append(mk("div", "ct-lab small muted", g.st === "setup" ? "Your stations" : `Your CQ calls (${g.opp}'s squares)`),
+                board(g, true, o));
+    if (g.st === "setup") {
+      const acts = mk("div", "ct-acts");
+      if (!g.ready) acts.append(btn("Random", () => o.act("random"), !o.on),
+        btn("Ready", () => o.act("ready"), !o.on || Object.keys(g.me).length !== 5, "primary-sm"));
+      acts.append(btn("Give up", () => o.act("close"), false));
+      left.append(acts);
+    } else if (g.st === "play") {
+      const f = mk("form", "ct-cq");
+      const inp = mk("input"); inp.maxLength = 4; inp.placeholder = "KN08"; inp.className = "ct-in";
+      inp.setAttribute("aria-label", "Grid square for the CQ call");
+      const err = mk("div", "small ct-err");
+      f.append(mk("span", "ct-cqw", "CQ"), inp, btn("Call CQ", () => f.requestSubmit(), !g.my_turn || !o.on),
+               btn("Resign", () => o.act("resign"), !o.on));
+      f.onsubmit = (ev) => {
+        ev.preventDefault();
+        const v = inp.value.trim().toUpperCase();
+        if (!g.cells.some((c) => c.l === v)) { err.textContent = "Enter a square from the board, like " + g.cells[27].l + "."; return; }
+        if (g.mc.some((m) => m[0] === v)) { err.textContent = `Already called ${v}. Pick another square.`; return; }
+        o.act("cq", v);
+      };
+      inp.oninput = () => { err.textContent = ""; };
+      left.append(f, err);
+    }
+    grid.append(left);
+    if (g.st !== "setup") {
+      right.append(mk("div", "ct-lab small muted", "Your stations"), board(g, false, o));
+      const log = mk("div", "ct-log");
+      const h = history(g).reverse().slice(0, 8);
+      log.append(...(h.length ? h.map(([w, m]) => mk("div", w, logText(w, m, g))) : [mk("div", "muted", "No calls yet")]));
+      right.append(mk("div", "ct-lab small muted", "Log"), log);
+      grid.append(right);
+    }
+    box.append(grid);
+  }
+
+  return { render };
+})();

@@ -100,6 +100,9 @@ the chat events (+n call, -n, =n, %n b) and the %Q statistics line (CR33);
 SHORT = //SYNC knows short=<bytes>: only personal mail up to that size comes
 with its text, everything else only as a header (CR40).
 
+CT = the CQ contest with the box as the opponent (CR122, see contest.py):
+    //CT NEW h=<0|1> -> //CT OK c=<loc> h=.. and //CT READY <hash>, then the moves.
+
 HSEQ = //H history lines carry the event number of the line:
     //H <unix> #<n hex> <call>: <text>
 so a comment "~^5 ..." finds its quoted line also in the history (lines
@@ -130,7 +133,7 @@ from prcore import profile as pf
 from prcore.release import RELEASE
 from prcore.text import isnum
 
-from . import clientnews, clientsync, profiles
+from . import clientnews, clientsync, contest, profiles
 from .addressing import base_call
 
 if TYPE_CHECKING:
@@ -145,7 +148,7 @@ REQUIRE_AUTH = True
 
 PROTO = "TB1"
 KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
-              "HSEQ", "ADM", "BFILE", "LOTW")
+              "HSEQ", "ADM", "BFILE", "LOTW", "CT")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 FILE_COMMANDS = ("FPUT", "FGET")          # CR86: files in a board
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
@@ -285,6 +288,11 @@ def handle(s: Session, line: str) -> None:
                           signed=lambda lines: check_signed(s, line, counter, sig, lines))
     elif cmd in clientsync.COMMANDS:
         clientsync.handle(s, cmd, parts[1:])
+    elif cmd == "CT":                       # CR122: the box plays the CQ contest
+        if "CT" not in s.client.caps:
+            s.out("//ERR CT needs CT")
+        else:
+            contest.handle(s, line[2:][2:].strip())
     elif cmd in IMG_COMMANDS:
         if "IMG" not in s.client.caps:
             s.out(f"//ERR {cmd} needs IMG")

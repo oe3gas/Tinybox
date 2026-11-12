@@ -29,6 +29,7 @@ from .links import AgwLink, AgwPort, TelnetLink
 from .logbook import Logbook
 from .mailstore import MailStore
 from . import peerfile
+from .contest import ContestSlot
 from .peerchat import PeerChat
 from .boardfiles import BoardFiles
 from .peerfile import FileStore
@@ -187,6 +188,10 @@ class ClientCore:
         self.images.store.purge()
         # name, locator, home BBS - own and of the others (CR73)
         self.profiles = Profiles(self)
+        # CR122: the CQ contest against the TinyBox of the chat channel
+        self.box_contest = ContestSlot(self, lambda: "box:" + self.target.split("-")[0],
+                                       lambda: self.target, self._send, lambda: "",
+                                       lambda text: self.console.append("*** " + text))
 
     # --- settings --------------------------------------------------------
 
@@ -548,7 +553,17 @@ class ClientCore:
             return chan.peer.fun.speedtest()
         if act.startswith("chess-"):
             return chan.peer.fun.chess(act[6:], arg)
+        if act.startswith("ct-") and "CT" in chan.peer.caps:     # CR122: CQ contest
+            if chan.state != "online" and act not in ("ct-close", "ct-place", "ct-random"):
+                return False
+            return chan.peer.fun.contest.act(act[3:], arg)
         return False
+
+    def contest_act(self, act: str, arg: str = "") -> bool:
+        """CR122: the CQ contest against the TinyBox of the chat channel."""
+        if act != "close" and (self.state != "online" or "CT" not in self.caps):
+            return False
+        return self.box_contest.act(act, arg)
 
     def peer_accept(self, ch: int) -> bool:
         """CR99: the user takes the other key of the TBClient in channel ch."""
@@ -910,7 +925,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -1423,6 +1438,8 @@ class ClientCore:
             if re.match(r"^-?\d+$", left):
                 self.sysmsg = {"text": text, "left": int(left), "at": int(time.time())}
                 self.console.append("*** " + text)
+        elif cmd == "CT":                  # CR122: the box plays the CQ contest
+            self.box_contest.take(rest)
         elif cmd == "ERR":
             self.console.append(line)
         # //CLIENT etc. echoed by a terminal: ignore
@@ -1673,6 +1690,8 @@ class ClientCore:
             "img": {"rate": self.cfg.img_rate, "target": self.cfg.img_target},
             **self.profiles.snapshot(calls),                            # CR73
             "activity": activity.build(self),                           # CR110: status bar
+            "contest": {"ok": "CT" in self.caps, "err": self.box_contest.err,   # CR122
+                        "game": self.box_contest.summary()},
         }
 
     def _image_refs(self, ch: int | None = None) -> set[str]:

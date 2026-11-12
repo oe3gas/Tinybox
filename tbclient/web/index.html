@@ -60,6 +60,7 @@
     <section class="navsec sec-station">
       <div class="nav-h sync-h"><span>Station</span><button id="nav-settings" class="sec-gear" aria-label="Settings" title="Settings">⚙&#xFE0E;</button></div>
       <button id="nav-terminal" class="nav-item" title="Type TinyBox commands (L, R, F, QSO ...) directly - the TinyBox of the chat channel"><span><span class="ic">▸</span> TinyBox terminal</span></button>
+      <button id="nav-contest" class="nav-item hidden" title="CQ contest against the TinyBox - battleships with contest stations"><span><span class="ic">▸</span> CQ contest</span><span id="nav-contest-st"></span></button>
       <button id="nav-monitor" class="nav-item" title="Monitor: everything heard (Alt+0)"><span><span class="ic">▸</span> Monitor</span></button>
       <button id="nav-stats" class="nav-item" title="APRS statistics of the channel: stations, devices, digipeaters, sins"><span><span class="ic">▸</span> APRS statistics</span></button>
     </section>
@@ -83,6 +84,7 @@
     <span class="row nowrap"><button id="mb-sync" class="sm">Sync now</button><button id="mb-close" class="icon-btn" aria-label="Dismiss">✕</button></span>
   </div>
 
+  <section id="box-contest" class="ct-panel box-contest hidden" aria-label="CQ contest"></section>
   <main id="chat" class="chat">
     <section id="offline" class="card center hidden">
       <p class="big">Not connected to <span id="off-tb"></span></p>
@@ -92,6 +94,7 @@
     <section id="pick" class="card center hidden">
       <p class="big">Choose a board</p>
       <p class="muted">Tap a board above to join.</p>
+      <button id="pick-contest" class="sm hidden">📻 CQ contest against the TinyBox</button>
     </section>
     <ol id="messages" class="messages"></ol>
   </main>
@@ -197,6 +200,7 @@
     </form>
     <div id="peer-head" class="peer-head hidden" aria-label="The other TBClient"></div>
     <div id="peer-chess" class="peer-chess hidden" aria-label="Chess"></div>
+    <div id="peer-contest" class="ct-panel hidden" aria-label="CQ contest"></div>
     <div class="term-split">
       <pre id="term-out" class="term-out" aria-live="polite"></pre>
       <aside id="aprs-lens" class="ar-lens" aria-label="APRS Lense" hidden></aside>
@@ -380,6 +384,7 @@
 <script src="/aprsgraph.js"></script>
 <script src="/aprsstats.js"></script>
 <script src="/chess.js"></script>
+<script src="/contest.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

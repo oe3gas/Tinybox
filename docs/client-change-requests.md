@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 12.11.2026 (CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -94,6 +94,7 @@ Stand: 11.11.2026 (CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR10
 | 119 | TinyBox-Terminal: `SB` nicht mehr in der Hilfe für nicht authentifizierte User | ✅ 11.11.2026 – siehe unten |
 | 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (Pille „terminal“) und beim Betreten eine Systemmeldung an alle | offen – entschieden (Variante A + Systemmeldung), Umsetzung ab 12.11.2026 – siehe unten |
 | 121 | TinyBox: eine Verbindung je Rufzeichen – neuer Connect auf laufende Verbindung bekommt DM, N(R)-Fehler beendet mit DISC (gleiches Call doppelt auf der Frequenz) | ✅ 11.11.2026 (KISS/AXUDP; Funktest offen) – siehe unten |
+| 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12; Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4493,4 +4494,72 @@ Connect schickt, obwohl sie schon verbunden ist, wird getrennt – „dann ist w
   auch den Doppel-Connect über denselben Direwolf an der Quelle) – offen, eigener Schritt.
 - Für Tests mit zwei Programmen an einem PC: verschiedene SSIDs (OE3NIX, OE3NIX-1).
 - Tests `tests/test_cr121.py`.
+
+## CR122 – CQ contest: Schiffe versenken mit Amateurfunk-Touch (✅ 12.11.2026, Client 2026.11.12, Funktest offen)
+
+### Erfassung (OE3GAS, 12.11.2026)
+
+Variante zu CR81 („Schiffe versenken“). Spielfeld aus Großfeldern, in der Mitte das Großfeld der
+Box, in der sich die Clients treffen, oder bei Direct Connect das eines der beiden Clients.
+Hinter den Großfeldern verbergen sich 10 Conteststationen, 5 je Spieler, frei platziert; das
+System vergibt passende Rufzeichen (DE, SP, OE, HG …). Jeder „Schuss“ ist ein `CQ <Großfeld>` –
+meldet sich dort eine Station, ist sie gearbeitet, sonst ein CQ ohne Antwort. Abwechselnd; wer
+zuerst alle 5 gearbeitet hat, gewinnt.
+
+Entscheidungen nach dem Mockup (OE3GAS, 12.11.2026):
+- Felder mit dem Locator beschriftet (JN88, JN89 …), keine Zeilen-/Spaltenbeschriftung.
+- Spielfeld **8 × 8**.
+- Rufzeichen immer 4–5 Zeichen (DL1AB, S57DT, OE3A).
+- Gearbeitet grün, am Ende nicht gefundene Stationen („missed“) rosa.
+- Ausbreitungshinweis standardmäßig **ein**.
+- Auch **gegen die Box** spielbar – im Chat (TBClient mit der Box verbunden), nicht im Terminal.
+- Rundenende als feste Regel: **ja**. Mehrere Spiele der Box gleichzeitig, eines je Client: **ja**.
+
+### Regeln (umgesetzt)
+
+- Brett: 8 × 8 Großfelder (2° × 1°), das Zentrum in Spalte 4, Zeile 4 von oben (8 hat keine Mitte).
+  Zentrum: bei Direct Connect der Locator des Einladenden, gegen die Box der Locator der Box
+  (`[station] locator` in `tinybox.conf`). Beide Seiten berechnen das Brett aus dem Zentrum.
+- Rufzeichen aus einer Tabelle Land je Großfeld (40–56° N, 0–30° O; Meer zählt zur nächsten
+  Küste), Felder mit mehreren Ländern losen (JN88: OE3, OE1, OK, OM); bei OE passt die Ziffer zum
+  Bundesland (JN77 → OE6, JN67 → OE2, JN57 → OE7 …). Außerhalb der Tabelle: OE.
+- Ausbreitungshinweis: keine Station im Feld, aber im Nachbarfeld → „QRZ? weak sigs“. Beim Start
+  abwählbar. Mit Hinweis rund 23 Rufe je Spieler, ohne rund 50 (Simulation).
+- Der Einladende ruft zuerst. Das Spiel endet nur nach dem Zug des Zweiten (Runde fertig): wer
+  alle 5 hat, gewinnt; beide 5 → die Entfernung der gearbeiteten Stationen (km vom Zentrum)
+  entscheidet, gleich → Unentschieden.
+- Stille Prüfung am Ende (wie bei CR81 entschieden): Hash der Aufstellung beim Start, am Ende
+  legen beide offen, der andere prüft Hash und jede Antwort („log check ok“ / „board does not match“).
+
+### Protokoll (Zeilen `//CT …`, Fähigkeit `CT` – zwischen Clients in `//TB`, bei der Box in `//CLIENT`/`//OK`)
+
+    //CT NEW h=<0|1> [c=<loc>]      Einladung (ohne c: der andere bestimmt das Zentrum – die Box)
+    //CT OK c=<loc> h=<0|1>         angenommen
+    //CT READY <hash>               Stationen gesetzt (sha256 über Aufstellung + Salz, 16 hex)
+    //CT CQ <loc>                   ein Zug
+    //CT R <loc> <call> <nr>        Station antwortet (5NN wird nicht gesendet)
+    //CT R <loc> NIL | WEAK         keine Antwort / schwach im Nachbarfeld
+    //CT END <loc:call,...> <salt>  Offenlegen am Ende
+    //CT RESIGN
+    //CT ERR no_locator | no_game   (nur die Box)
+
+Ein Zug rund 15–25 Bytes; ein Spiel mit Hinweis rund 1,5 kB über Funk.
+
+### Umsetzung
+
+- `prcore/contest.py`: Regeln, Brett, Rufzeichen, Hash und Prüfung, einfacher Gegner (sucht
+  neben „QRZ?“, meidet die Nachbarn eines „no answer“) – für Client und Box gemeinsam.
+- TinyBox `tinybox/contest.py`: die Box als Gegner, ein Spiel je Rufzeichen (ohne SSID), beliebig
+  viele gleichzeitig, im Speicher (einen Tag; nach einem Neustart der Box weg). Die Box setzt
+  zufällig und ruft gleich nach ihrer Antwort selbst. Ohne Locator spielt sie nicht.
+- TBClient `tbclient/contest.py`: ein Spiel je Gegner in den Settings (geht nach Neustart oder neuem
+  Connect weiter); der Client beantwortet die CQ-Rufe des anderen selbst aus der eigenen Aufstellung.
+- Web-GUI `contest.js`: Knopf „📻 CQ contest“ in der TBClient-Ansicht (Zeile und rechte Spalte, mit
+  „your move“) und links unter „Station“ bzw. in „Choose a board“ gegen die TinyBox. Setzen per
+  Klick oder „Random“, dann „Ready“; Ruf per Klick aufs Feld oder Eingabe `CQ KN08`. Großes Brett =
+  eigene Rufe, kleines = eigene Stationen (vom Gegner gearbeitet: rot durchgestrichen), Log,
+  Meldung zum letzten Ruf, Siegerkarte bzw. Niederlage mit den verpassten Stationen in Rosa.
+- Bei Direct Connect braucht der Einladende einen Locator im Profil (sonst Hinweis); ältere Clients
+  ohne `CT` sehen den Knopf nicht.
+- Tests `tests/test_cr122.py` (Regeln, ganze Spiele, Betrugsprüfung, Box mit zwei Spielen, zwei Clients).
 

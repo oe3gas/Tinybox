@@ -1,4 +1,5 @@
-"""TBClient to TBClient, the extras (CR78 stage 8): ping, speed test, chess.
+"""TBClient to TBClient, the extras (CR78 stage 8): ping, speed test, chess,
+CQ contest (CR122, cap CT: //CT lines, see prcore/contest.py and contest.py).
 
 Ping        //PING <token>  ->  //PONG <token>        round trip, last 5 kept
 Speed test  //ST <n> go + n bytes  ->  //STR <n> <ms>  then  //ST <n> back + n bytes
@@ -26,6 +27,7 @@ from typing import TYPE_CHECKING
 from prcore.text import isnum
 
 from . import budget
+from .contest import ContestSlot, my_center
 
 if TYPE_CHECKING:
     from .peer import Peer
@@ -42,6 +44,10 @@ class PeerFun:
         self._ping: tuple[str, float] | None = None
         self.st: dict | None = None            # speed test: {"state", "out", "in", "at"}
         self.pong_at = 0.0                     # CR110: last answer to our ping
+        # CR122: the CQ contest with this station (only with cap CT)
+        self.contest = ContestSlot(lambda: self.peer.ch.core, lambda: self.peer.call,
+                                   lambda: self.peer.call, self.peer._send,
+                                   lambda: my_center(self.peer.ch.core), self._note)
 
     @property
     def ch(self):
@@ -218,6 +224,8 @@ class PeerFun:
             self._result(int(p[0]), int(p[1]))
         elif word == "CHESS":
             self._on_chess(rest)
+        elif word == "CT" and "CT" in self.peer.caps:      # CR122
+            self.contest.take(rest)
         else:
             return False
         return True
@@ -236,4 +244,6 @@ class PeerFun:
         g = self.game
         return {"pings": self.pings, "pinging": self._ping is not None, "st": self.st,
                 "last": self.core.settings.get("fun_last", {}).get(self.peer.call, {}),
-                "chess": None if g is None else {**g, "my_turn": self._my_turn()}}
+                "chess": None if g is None else {**g, "my_turn": self._my_turn()},
+                "ct": "CT" in self.peer.caps, "contest": self.contest.summary(),
+                "ct_center": my_center(self.core)}

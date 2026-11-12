@@ -46,6 +46,11 @@ Zuletzt dazugekommen
   (Queue, UI/I, Qualitaet) je Kanal, im Monitor eine Zeile je Kanal;
   Fertiges wird gruen und verblasst. Kopfzeile: Direwolf, TX, RX.
   Ein/aus mit dem Knopf oben oder in den Settings.
+- CQ contest (CR122): Schiffe versenken mit Contest-Stationen auf 8 x 8
+  Grossfeldern um die Box bzw. den Einladenden, 5 Stationen je Spieler mit
+  passenden Rufzeichen, Zug = CQ <Grossfeld>, Ausbreitungshinweis "QRZ?".
+  Gegen einen TBClient (TBClient-Ansicht) oder gegen die TinyBox (links
+  unter Station). Pruefung am Ende ueber Hash.
 - TBClient-Ansicht in drei Spalten (CR80, PC ab 1000 px): rechts Ping, Speed
   test, Chess, QSL, Heard there, Delete history untereinander, unter jedem
   der letzte Wert - je Gegenstation gemerkt, auch nach neuem Connect - oder

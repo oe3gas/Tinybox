@@ -1,0 +1,2 @@
+- CQ contest (Schiffe versenken): 8x8 Grossfelder,
+  5 Conteststationen, CQ <Feld>. Gegen TBClient oder Box.

@@ -70,7 +70,7 @@ log = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from .channels import Channel
 
-PEER_CAPS = ("PROF", "HEARD", "HIST", "IMG", "FILE", "FUN", "AUTH")
+PEER_CAPS = ("PROF", "HEARD", "HIST", "IMG", "FILE", "FUN", "AUTH", "CT")
 HEARD_MAX = 10              # stations in one //HEARD line
 RESEND_MAX = 10             # lines sent again at most (//HM); more missing = both delete
 
@@ -326,7 +326,7 @@ class Peer:
         elif word in ("FGET", "F", "NOFILE"):
             if not self.files.take(word, rest):
                 return False
-        elif word in ("PING", "PONG", "ST", "STR", "CHESS"):
+        elif word in ("PING", "PONG", "ST", "STR", "CHESS", "CT"):
             if not self.fun.take(word, rest):
                 return False
         else:
