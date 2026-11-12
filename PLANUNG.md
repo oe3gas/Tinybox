@@ -2028,8 +2028,15 @@ Die Stufen dürfen sich überschneiden.
   teilen (VP0, FT, VK9, 3D2, CE0, PY0 …), und gelöschte, deren Präfix heute anders vergeben
   oder mehrdeutig ist (EA9, OK, PJ, VO, 8Z4, 9U5, CR8, KS4, DDR Y2–Y9 …).
 - Gelöschte bei DX-God, u.a. 9S4, AC3, AC4, KZ5, VQ1, ZC6, PK1–PK6, FB8, CR10, 1M.
-- Spalte `spiel_praefix`: noch der bereinigte ARRL-Präfix; daraus werden die Muster, nach
-  denen die Box die Calls bildet.
+- Spalte `anzeige`: Text für die Antwort A/B/C; gelöschte mit „(alt)“ (Comoros und
+  Palestine gibt es aktuell und gelöscht).
+- Spalte `muster`: daraus bildet die Box das Call, mehrere Muster mit Komma (eins zufällig).
+  Buchstaben/Ziffern fest, `[A-R]` bzw. `[1-57]` = ein Zeichen daraus, `#` = Ziffer 0–9.
+  Die Box hängt 1–3 zufällige Buchstaben an. Beispiele: England `G#,M#,2E#` → G4XYZ, M0AB,
+  2E1K; Spanien `E[A-H][1-57]` (6, 8, 9 sind Balearen, Kanaren, Ceuta & Melilla).
+- Geprüft (12.11.2026): je Muster 300 Zufalls-Calls gegen alle 340 aktuellen Entitäten –
+  auch die weggelassenen – und die gelöschten der Liste; längster Präfix gewinnt. Kein Call
+  landet bei einer anderen Entität.
 
 **Offen:**
 
@@ -2037,7 +2044,6 @@ Die Stufen dürfen sich überschneiden.
   ist geschätzt (Spalte `rang_quelle`). Mit der vollständigen Most-Wanted-Liste neu einteilen.
 - IARU-Region bei Iran, Mongolei, Grönland, Peter I und den US-Pazifikinseln um Hawaii prüfen
   (Spalte `iaru_pruefen`).
-- Muster für die Call-Bildung je Entität.
 - Später ggf. nicht eindeutige Entitäten über den Suffix zurückholen (FT5W, VP0S …).
 
 ## Quellen
