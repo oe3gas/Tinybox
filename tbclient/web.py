@@ -17,7 +17,8 @@ API:
   POST /api/peer/heard {"ch": n}             CR78: ask the TBClient there whom it hears
   POST /api/peer/fun  {"ch", "act", "arg"}   CR78: ping, speed, chess-new/move/resign/end/close,
                                               CR122: ct-new/place/random/ready/cq/resign/close
-  POST /api/contest   {"act", "arg"}          CR122: the same against the TinyBox (new/place/...)
+  POST /api/contest   {"act", "arg", "to"}    CR122: the same against the TinyBox (new/place/...),
+                                              with "to": against that client, through the box
   POST /api/peer/clear {"ch": n}             CR78: delete the chat history with it (both sides)
   POST /api/peer/img   {"ch", "data", "blurhash", "caption"}  CR78: a picture to the TBClient
   POST /api/peer/imgget {"ch", "hash"}       CR78: fetch a picture from the TBClient that sent it
@@ -310,7 +311,8 @@ class WebServer:
                 ok = core.peer_fun(ch if isinstance(ch, int) else 0, str(data.get("act", "")),
                                    str(data.get("arg", "")))
             elif path == "/api/contest":           # CR122: {"act", "arg"} CQ contest vs the box
-                ok = core.contest_act(str(data.get("act", "")), str(data.get("arg", "")))
+                ok = core.contest_act(str(data.get("act", "")), str(data.get("arg", "")),
+                                      str(data.get("to", ""))[:12])
             elif path == "/api/peer/clear":        # CR78: {"ch": n} - delete the chat history
                 ch = data.get("ch")
                 ok = core.peer_clear(ch if isinstance(ch, int) else 0)

@@ -219,6 +219,12 @@ const Contest = (() => {
         + (g.st === "end" ? ` · ${g.res}` : "")));
       return;
     }
+    if (g.st === "setup" && !g.cells.length) {       // through the box: the board comes with the answer
+      const acts = mk("div", "ct-acts");
+      acts.append(btn("Withdraw", () => o.act("close"), false));
+      box.append(mk("div", "small muted", "The board is the square of the TinyBox - it comes with the answer."), acts);
+      return;
+    }
     if (g.st !== "setup") {
       const pills = mk("div", "ct-pills");
       pills.append(pill("ok", `You ${g.worked}/5`), pill("", `${g.opp} ${g.lost}/5`), pill("", `CQ calls ${g.mc.length}`));

@@ -264,7 +264,7 @@ class Game:
         return True
 
     def random_place(self) -> bool:
-        if self.s["st"] != "setup" or self.ready():
+        if self.s["st"] != "setup" or self.ready() or len(self.board) < STATIONS:
             return False
         locs = self.rng.sample(self.board, STATIONS)
         self.s["me"] = {loc: callsign(loc, self.rng) for loc in locs}

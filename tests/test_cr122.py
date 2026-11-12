@@ -220,6 +220,75 @@ class BoxTests(unittest.TestCase):
         self.assertIn("//ERR CT needs CT", t.take())
 
 
+class RelayTests(unittest.TestCase):
+    """Two clients play each other through the box (CTR)."""
+
+    def setUp(self):
+        self.app = chat_app()
+        self.app.cfg.station.locator = "JN88IN"
+        boxcontest._pairs.clear()
+
+    def client(self, call, caps="CHAT,CT,CTR"):
+        s, t = login(self.app, call)
+        type_lines(s, f"//CLIENT TB1 caps={caps}")
+        t.take()
+        self.app.registry.add(s) if s not in list(self.app.registry) else None
+        return s, t
+
+    @staticmethod
+    def lines(t, frm):
+        return [x[len(f"//CTR {frm} "):] for x in t.take().split("\r") if x.startswith(f"//CTR {frm} ")]
+
+    def test_game_through_the_box(self):
+        sa, ta = self.client("OE3ABC")
+        sb, tb = self.client("OE1XYZ-2")
+        a = C.Game(C.new_state("", True, True, "OE1XYZ"))
+        b = None
+        type_lines(sa, "//CTR OE1XYZ NEW h=1 c=KN99")      # the box sets the center
+        got = self.lines(tb, "OE3ABC")
+        self.assertEqual(got, ["NEW h=1 c=JN88"])
+        b = C.Game(C.new_state("JN88", True, False, "OE3ABC"))
+        type_lines(sb, "//CTR OE3ABC OK c=JN88 h=1")
+        for line in self.lines(ta, "OE1XYZ"):
+            a.take(line)
+        self.assertEqual(a.s["c"], "JN88")
+        a.random_place()
+        b.random_place()
+        queue = [("b", x) for x in a.set_ready()] + [("a", x) for x in b.set_ready()]
+
+        def flush(queue):
+            while queue:
+                to, line = queue.pop(0)
+                src, dst_t, dst_g, frm, back = (sa, tb, b, "OE3ABC", "a") if to == "b" \
+                    else (sb, ta, a, "OE1XYZ", "b")
+                type_lines(src, f"//CTR {'OE1XYZ' if to == 'b' else 'OE3ABC'} {line}")
+                for got in self.lines(dst_t, frm):
+                    queue += [(back, x) for x in dst_g.take(got)]
+
+        flush(queue)
+        for _ in range(200):
+            g = a if a.my_turn() else b if b.my_turn() else None
+            if g is None:
+                break
+            flush([("b" if g is a else "a", x) for x in g.cq(g.pick())])
+        self.assertEqual((a.s["st"], b.s["st"]), ("end", "end"))
+        self.assertEqual((a.s["check"], b.s["check"]), ("ok", "ok"))
+
+    def test_errors(self):
+        sa, ta = self.client("OE3ABC")
+        type_lines(sa, "//CTR OE1XYZ NEW h=1")
+        self.assertIn("//CTR OE1XYZ ERR offline", ta.take())
+        type_lines(sa, "//CTR OE1XYZ CQ JN88")
+        self.assertIn("//CTR OE1XYZ ERR no_game", ta.take())
+        type_lines(sa, "//CTR OE1XYZ HELLO")
+        self.assertIn("//CTR OE1XYZ ERR bad", ta.take())
+        sb, tb = self.client("OE1XYZ", caps="CHAT,CT")    # an older client: not handed on
+        type_lines(sa, "//CTR OE1XYZ NEW h=1")
+        self.assertIn("//CTR OE1XYZ ERR offline", ta.take())
+        type_lines(sb, "//CTR OE3ABC NEW h=1")
+        self.assertIn("//ERR CTR needs CTR", tb.take())
+
+
 class FakeProfiles:
     def __init__(self, loc):
         self.loc = loc
@@ -306,6 +375,32 @@ class SlotTests(unittest.TestCase):
             (a if to == "a" else b).take(line[5:])
         self.assertIsNone(a.state)
         self.assertIn("declined", a.err)
+
+
+class CoreRelayTests(unittest.TestCase):
+    """The client core: //CTR lines of the box become a game per call."""
+
+    def test_invite_through_box_and_snapshot(self):
+        import tempfile
+        from tbclient.core import ClientCore
+        from tests.test_activity import client_cfg
+        with tempfile.TemporaryDirectory() as tmp:
+            core = ClientCore(client_cfg(tmp))
+            sent = []
+            core._send = sent.append
+            core.caps = {"CT", "CTR"}
+            core._control("//CTR OE1XYZ NEW h=1 c=JN88")
+            rel = core._relay_summary()
+            self.assertEqual(rel[0]["call"], "OE1XYZ")
+            self.assertEqual(rel[0]["game"]["st"], "invited")
+            core._chat_state = lambda *a: None
+            core.chan.state = "online"
+            self.assertTrue(core.contest_act("accept", "", "OE1XYZ"))
+            self.assertEqual(sent[-1], "//CTR OE1XYZ OK c=JN88 h=1")
+            self.assertTrue(core.contest_act("random", "", "OE1XYZ"))
+            self.assertTrue(core.contest_act("ready", "", "OE1XYZ"))
+            self.assertTrue(sent[-1].startswith("//CTR OE1XYZ READY "))
+            self.assertFalse(core.contest_act("new", "1", core.cfg.mycall))   # not against yourself
 
 
 if __name__ == "__main__":

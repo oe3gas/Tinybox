@@ -13,6 +13,17 @@ A TBClient in client mode with cap CT invites the box:
 One game per call (without SSID), any number at the same time, kept in memory
 for a day - a game goes on after a new connect, not after a restart of the box.
 Without a locator in [station] the box does not play (//CT ERR no_locator).
+
+Two clients of the box play each other through it (cap CTR): the box hands
+the //CT lines on, from the logged-in call - nobody can play in another's name:
+
+    //CTR <to> <line>      client -> box: a //CT line for <to> (NEW, OK, CQ ...)
+    //CTR <from> <line>    box -> client: the line of <from>
+    //CTR <to> ERR offline|no_game|no_locator|bad     the box could not hand it on
+
+The center is the square of the box (it adds c= to the NEW). Only NEW opens a
+pair; the other lines go only between two calls with a game (a day, NO ends it).
+Each line goes over the air twice (to the box, to the other) - about 3 kB a game.
 """
 
 from __future__ import annotations
@@ -34,6 +45,8 @@ KEEP_SEC = 24 * 3600
 MAX_GAMES = 200
 
 _games: dict[str, dict] = {}            # base call -> game state
+_pairs: dict[frozenset, float] = {}     # CTR: two base calls with a game -> last line
+RELAY_WORDS = ("NEW", "OK", "NO", "READY", "CQ", "R", "END", "RESIGN", "PAUSE", "RESUME")
 
 
 def _prune(now: float) -> None:
@@ -41,6 +54,51 @@ def _prune(now: float) -> None:
         del _games[call]
     while len(_games) > MAX_GAMES:
         del _games[min(_games, key=lambda c: _games[c].get("touch", 0))]
+
+
+def _clients_of(s: "Session", base: str) -> list:
+    app = getattr(s.service, "app", None)
+    return [x for x in (list(app.registry) if app is not None else [])
+            if base_call(x.call) == base and not getattr(x, "closed", False)
+            and x.client is not None and "CTR" in x.client.caps]
+
+
+def relay(s: "Session", rest: str) -> None:
+    """//CTR <to> <line>: hand a //CT line on to another client of this box."""
+    p = rest.split()
+    if len(p) < 2:
+        return
+    me, to, word, now = base_call(s.call), base_call(p[0].upper())[:9], p[1].upper(), time.time()
+    for pair in [k for k, t in _pairs.items() if now - t > KEEP_SEC]:
+        del _pairs[pair]
+    if word not in RELAY_WORDS or to == me or len(rest) > 200:
+        s.out(f"//CTR {to} ERR bad")
+        return
+    pair = frozenset((me, to))
+    line = " ".join(p[1:])
+    if word == "NEW":
+        center = s.cfg.station.locator[:4].upper()
+        if not contest.valid_center(center):
+            s.out(f"//CTR {to} ERR no_locator")
+            return
+        line = " ".join([x for x in p[1:] if not x.lower().startswith("c=")] + [f"c={center}"])
+    elif pair not in _pairs:
+        s.out(f"//CTR {to} ERR no_game")
+        return
+    targets = _clients_of(s, to)
+    if not targets:
+        s.out(f"//CTR {to} ERR offline")
+        _pairs.pop(pair, None)
+        return
+    targets[-1].out(f"//CTR {me} {line}")             # the newest session of that call
+    if word == "NO":
+        _pairs.pop(pair, None)
+    else:
+        _pairs[pair] = now
+        while len(_pairs) > MAX_GAMES:
+            del _pairs[min(_pairs, key=_pairs.get)]
+    if word == "NEW":
+        log.info("%s: CQ contest with %s through the box", s.call, to)
 
 
 def game_of(call: str) -> dict | None:

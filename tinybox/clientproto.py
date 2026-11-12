@@ -102,6 +102,7 @@ with its text, everything else only as a header (CR40).
 
 CT = the CQ contest with the box as the opponent (CR122, see contest.py):
     //CT NEW h=<0|1> -> //CT OK c=<loc> h=.. and //CT READY <hash>, then the moves.
+CTR = two clients of the box play each other through it: //CTR <call> <line>.
 
 HSEQ = //H history lines carry the event number of the line:
     //H <unix> #<n hex> <call>: <text>
@@ -148,7 +149,7 @@ REQUIRE_AUTH = True
 
 PROTO = "TB1"
 KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
-              "HSEQ", "ADM", "BFILE", "LOTW", "CT")
+              "HSEQ", "ADM", "BFILE", "LOTW", "CT", "CTR")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 FILE_COMMANDS = ("FPUT", "FGET")          # CR86: files in a board
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
@@ -293,6 +294,11 @@ def handle(s: Session, line: str) -> None:
             s.out("//ERR CT needs CT")
         else:
             contest.handle(s, line[2:][2:].strip())
+    elif cmd == "CTR":                      # CR122: two clients play through the box
+        if "CTR" not in s.client.caps:
+            s.out("//ERR CTR needs CTR")
+        else:
+            contest.relay(s, line[2:][3:].strip())
     elif cmd in IMG_COMMANDS:
         if "IMG" not in s.client.caps:
             s.out(f"//ERR {cmd} needs IMG")

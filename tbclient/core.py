@@ -192,6 +192,7 @@ class ClientCore:
         self.box_contest = ContestSlot(self, lambda: "box:" + self.target.split("-")[0],
                                        lambda: self.target, self._send, lambda: "",
                                        lambda text: self.console.append("*** " + text))
+        self.relay_contests: dict[str, ContestSlot] = {}      # CR122: through the box
 
     # --- settings --------------------------------------------------------
 
@@ -559,11 +560,44 @@ class ClientCore:
             return chan.peer.fun.contest.act(act[3:], arg)
         return False
 
-    def contest_act(self, act: str, arg: str = "") -> bool:
-        """CR122: the CQ contest against the TinyBox of the chat channel."""
-        if act != "close" and (self.state != "online" or "CT" not in self.caps):
+    def contest_act(self, act: str, arg: str = "", to: str = "") -> bool:
+        """CR122: the CQ contest against the TinyBox of the chat channel - or,
+        with to=<call>, against another client of that box (handed on by it)."""
+        offline_ok = act in ("close", "decline", "place", "random")
+        if to:
+            to = to.upper().split("-")[0]
+            if not CALL_RE.match(to) or to == self.cfg.mycall.upper().split("-")[0]:
+                return False
+            if not offline_ok and (self.state != "online" or "CTR" not in self.caps):
+                return False
+            return self._relay_slot(to).act(act, arg)
+        if not offline_ok and (self.state != "online" or "CT" not in self.caps):
             return False
         return self.box_contest.act(act, arg)
+
+    def _relay_slot(self, call: str) -> ContestSlot:
+        """The game with <call> through the TinyBox of the chat channel."""
+        box = self.target.split("-")[0]
+        key = f"rel:{box}:{call}"
+        slot = self.relay_contests.get(key)
+        if slot is None:
+            slot = ContestSlot(self, lambda: key, lambda: call,
+                               lambda line: self._send(f"//CTR {call} {line[5:]}"), lambda: "",
+                               lambda text: self.console.append("*** " + text))
+            self.relay_contests[key] = slot
+        return slot
+
+    def _relay_summary(self) -> list[dict]:
+        box = self.target.split("-")[0]
+        prefix = f"rel:{box}:"
+        for key in self.settings.get("contest", {}):
+            if key.startswith(prefix):
+                self._relay_slot(key[len(prefix):])
+        out = []
+        for key, slot in sorted(self.relay_contests.items()):
+            if key.startswith(prefix) and (slot.state is not None or slot.err):
+                out.append({"call": key[len(prefix):], "game": slot.summary(), "err": slot.err})
+        return out
 
     def peer_accept(self, ch: int) -> bool:
         """CR99: the user takes the other key of the TBClient in channel ch."""
@@ -925,7 +959,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -1440,6 +1474,11 @@ class ClientCore:
                 self.console.append("*** " + text)
         elif cmd == "CT":                  # CR122: the box plays the CQ contest
             self.box_contest.take(rest)
+        elif cmd == "CTR":                 # CR122: another client, handed on by the box
+            call, _, line = rest.partition(" ")
+            call = call.upper()
+            if CALL_RE.match(call) and line:
+                self._relay_slot(call).take(line)
         elif cmd == "ERR":
             self.console.append(line)
         # //CLIENT etc. echoed by a terminal: ignore
@@ -1691,7 +1730,8 @@ class ClientCore:
             **self.profiles.snapshot(calls),                            # CR73
             "activity": activity.build(self),                           # CR110: status bar
             "contest": {"ok": "CT" in self.caps, "err": self.box_contest.err,   # CR122
-                        "game": self.box_contest.summary()},
+                        "game": self.box_contest.summary(),
+                        "rel_ok": "CTR" in self.caps, "rel": self._relay_summary()},
         }
 
     def _image_refs(self, ch: int | None = None) -> set[str]:

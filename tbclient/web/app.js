@@ -688,6 +688,13 @@ function renderPeople() {
         d.onclick = (ev) => { ev.stopPropagation(); directTo(c); };
         row.append(d);
       }
+      if (c !== S.mycall && S.contest && S.contest.rel_ok) {   // CR122: through the box
+        const g = el("button", "icon-btn pdirect", "📻");
+        g.type = "button";
+        g.title = `CQ contest with ${c} through the TinyBox (if ${c} has a TBClient that plays)`;
+        g.onclick = (ev) => { ev.stopPropagation(); contestInvite(c.split("-")[0]); };
+        row.append(g);
+      }
       mem.append(row);
     }
   } else {
@@ -3211,25 +3218,57 @@ function renderPeerContest(c, p) {
     hide: () => { contestOpen = false; render(); } });
 }
 
-/* ... and against the TinyBox of the chat channel */
+/* ... and in the chat channel: against the TinyBox, or against another client of
+ * the box (handed on by it, CTR) - one block per game in the panel */
+const REL_ERR = { offline: "is not connected to the TinyBox with a TBClient that plays through it.",
+  no_game: "has no game with you any more.", no_locator: "- the TinyBox has no locator set.", bad: "- refused by the TinyBox." };
 function renderBoxContest() {
   const k = S.contest || {};
   const can = S.state === "online" && S.mode === "tinybox" && k.ok;
+  const rel = k.rel || [];
+  const any = k.game || rel.some((r) => r.game);
   const nb = $("nav-contest");
-  nb.classList.toggle("hidden", !can && !k.game);
+  nb.classList.toggle("hidden", !can && !any);
   nb.classList.toggle("active", boxContestOpen);
-  $("nav-contest-st").replaceChildren(k.game && k.game.my_turn ? el("span", "ph-move ct-navmove", "your move") : "");
+  const move = (k.game && k.game.my_turn) || rel.some((r) => r.game && r.game.my_turn);
+  $("nav-contest-st").replaceChildren(move ? el("span", "ph-move ct-navmove", "your move") : "");
   const pk = $("pick-contest");
   if (pk) pk.classList.toggle("hidden", !can);
   const box = $("box-contest");
-  const show = boxContestOpen && (can || k.game);
+  const show = boxContestOpen && (can || any);
   box.classList.toggle("hidden", !show);
   if (!show) return;
+  const want = ["box", ...rel.map((r) => "rel:" + r.call)];
+  for (const d of [...box.children]) if (!want.includes(d.dataset.key)) d.remove();
+  const part = (key) => {
+    let d = [...box.children].find((x) => x.dataset.key === key);
+    if (!d) { d = el("div", "ct-part"); d.dataset.key = key; box.append(d); }
+    return d;
+  };
+  for (const r of rel) {                         // games with other clients first
+    const d = part("rel:" + r.call);
+    const err = r.err ? `${r.call} ${REL_ERR[r.err.split(" ")[0]] || r.err}` : "";
+    if (!r.game) {
+      d.replaceChildren(el("div", "small ct-err", err));
+      continue;
+    }
+    Contest.render(d, r.game, { key: "rel:" + r.call, opp: r.call, on: can && k.rel_ok, err,
+      act: (act, arg) => api("contest", { act, arg: arg || "", to: r.call }),
+      hide: () => { boxContestOpen = false; render(); } });
+    if (err) d.append(el("div", "small ct-err", err));
+  }
   const err = k.err === "no_locator" ? "The TinyBox has no locator set - it cannot play." : k.err;
-  Contest.render(box, k.game, { key: "box", opp: S.tinybox, on: can, err,
+  Contest.render(part("box"), k.game, { key: "box", opp: S.tinybox, on: can, err,
     newText: `New CQ contest against the TinyBox ${S.tinybox}: `,
     act: (act, arg) => api("contest", { act, arg: arg || "" }),
     hide: () => { boxContestOpen = false; render(); } });
+  box.append(part("box"));                       // the box itself last
+}
+
+/* CR122: invite a member of the board - the box hands the game on */
+function contestInvite(call) {
+  boxContestOpen = true;
+  api("contest", { act: "new", arg: "1", to: call }).then(() => render());
 }
 
 /* CR122: another TBClient invites to a CQ contest - a card over everything,
@@ -3238,24 +3277,33 @@ const ctInviteSeen = new Set();
 function renderInvites() {
   const box = $("ct-invite");
   const inv = (S.channels || []).filter((c) => c.peer && c.peer.fun && c.peer.fun.contest
-    && c.peer.fun.contest.st === "invited");
+    && c.peer.fun.contest.st === "invited")
+    .map((c) => ({ n: c.n, target: c.target, g: c.peer.fun.contest,
+                   act: (a) => api("peer/fun", { ch: c.n, act: "ct-" + a, arg: "" }),
+                   open: () => { contestOpen = true; switchCh(c.n); } }));
+  for (const r of ((S.contest || {}).rel || []))           // through the TinyBox
+    if (r.game && r.game.st === "invited")
+      inv.push({ n: S.chat_ch, target: r.call, g: r.game, via: S.tinybox,
+                 act: (a) => api("contest", { act: a, arg: "", to: r.call }),
+                 open: () => { boxContestOpen = true; if (S.chat_ch) switchCh(S.chat_ch); } });
   box.classList.toggle("hidden", !inv.length);
   if (!inv.length) return;
-  const c = inv[0], g = c.peer.fun.contest;
+  const c = inv[0], g = c.g;
   const id = `${c.n}:${c.target}:${g.c}`;
   if (!ctInviteSeen.has(id)) {
     ctInviteSeen.add(id);
     if (notifyCfg.popup && canPopup() && Notification.permission === "granted" && document.hidden) showPopup(`CQ contest - ${c.target}`, `${c.target} invites you to a CQ contest`, c.n);
     if (notifyCfg.tone && typeof playBK === "function") playBK();
   }
-  const fun = (act) => api("peer/fun", { ch: c.n, act: "ct-" + act, arg: "" });
+  const fun = c.act;
   const b = (txt, cls, fn) => { const x = el("button", "sm " + cls, txt); x.type = "button"; x.onclick = fn; return x; };
   box.replaceChildren(
     el("div", "ci-h", `📻 ${c.target} invites you to a CQ contest`),
     el("div", "small muted", `Battleships with contest stations · center ${g.c}` + (g.h ? " · propagation hint" : "")
+      + (c.via ? ` · through ${c.via}` : "")
       + (inv.length > 1 ? ` · ${inv.length - 1} more` : "")),
     (() => { const r = el("div", "ct-acts");
-      r.append(b("Accept", "primary-sm", () => { fun("accept"); contestOpen = true; switchCh(c.n); }),
+      r.append(b("Accept", "primary-sm", () => { fun("accept"); c.open(); }),
                b("Decline", "", () => fun("decline")));
       return r; })());
 }

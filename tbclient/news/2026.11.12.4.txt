@@ -1,0 +1,2 @@
+- CQ contest im Chatboard gegen andere Teilnehmer
+  (Knopf neben dem Call, ueber die Box).
