@@ -4,7 +4,7 @@
  *
  * Contest.render(box, g, o)
  *   g  the game from the snapshot (null = none yet)
- *   o  { opp, on, act(act, arg), err, newText, hide() }
+ *   o  { key, opp, on, act(act, arg), err, newText, hide() }   key: one per opponent
  */
 "use strict";
 const Contest = (() => {
@@ -22,23 +22,61 @@ const Contest = (() => {
   };
   const pill = (cls, txt) => mk("span", "ct-pill " + cls, txt);
   const sn = (n) => String(n).padStart(3, "0");
-
-  // the moves in the order they were made: the first player calls first
-  function history(g) {
-    const out = [];
-    const a = g.first ? g.mc : g.tc, b = g.first ? g.tc : g.mc;
-    for (let i = 0; i < Math.max(a.length, b.length); i++) {
-      if (a[i]) out.push([g.first ? "me" : "them", a[i]]);
-      if (b[i]) out.push([g.first ? "them" : "me", b[i]]);
+  // The GUI draws the board anew with every update: a running animation keeps its
+  // phase through a negative delay (the blink by the clock, the flash since the QSO).
+  const BLINK_MS = 1000, FLASH_MS = 1800;
+  const seen = {};          // key -> number of own calls already shown
+  const flash = {};         // key -> {loc, at}
+  function track(key, g) {
+    const n = g.mc.length;
+    if (seen[key] === undefined || n < seen[key]) { seen[key] = n; return; }
+    if (n > seen[key]) {
+      const m = g.mc[n - 1];
+      if (m[1] === "QSO") flash[key] = { loc: m[0], at: Date.now() };
+      seen[key] = n;
     }
-    return out;
+  }
+  function animate(d, key, loc, g) {
+    if (g.pend === loc) {
+      d.classList.add("blink");
+      d.style.animationDelay = `-${Date.now() % BLINK_MS}ms`;
+    }
+    const f = flash[key];
+    if (f && f.loc === loc) {
+      const t = Date.now() - f.at;
+      if (t < FLASH_MS) { d.classList.add("flash"); d.style.animationDelay = `-${t}ms`; }
+      else delete flash[key];
+    }
   }
 
-  function logText(who, m, g) {
+  // one entry of a log as a chip: grey = no answer, brown = QRZ?, green + tick = QSO
+  function chip(m, g, mine) {
     const [loc, res, call, ser] = m;
-    if (who === "me") return res === "QSO" ? `CQ ${loc}  ${call} 5NN ${sn(ser)}  ${kmOf(g, loc)} km`
-      : `CQ ${loc}  ${res === "WEAK" ? "QRZ? weak sigs" : "no answer"}`;
-    return `${g.opp} CQ ${loc}  ` + (res === "QSO" ? `worked your ${call}` : "no answer");
+    const d = mk("div", "ct-chip " + (res === "QSO" ? "qso" : res === "WEAK" ? "weak" : "nil"));
+    d.append(mk("span", "ct-chip-cq", `CQ ${loc}`));
+    if (res === "QSO") {
+      d.append(mk("span", "ct-chip-r", `✓ ${call}`),
+               mk("span", "ct-chip-x", mine ? `5NN ${sn(ser)} · ${kmOf(g, loc)} km` : `${kmOf(g, loc)} km`));
+    } else d.append(mk("span", "ct-chip-r", res === "WEAK" ? "QRZ? weak sigs" : "no answer"));
+    return d;
+  }
+  function logs(g) {
+    const wrap = mk("div", "ct-logs");
+    for (const [mine, list, head] of [[true, g.mc, `Your log · ${g.worked}/5`],
+                                      [false, g.tc, `${g.opp}'s log · ${g.lost}/5`]]) {
+      const col = mk("div", "ct-logcol" + (mine ? " mine" : ""));
+      col.append(mk("div", "ct-lab small muted", head));
+      if (mine && g.pend) {
+        const p = mk("div", "ct-chip pend blink");
+        p.style.animationDelay = `-${Date.now() % BLINK_MS}ms`;
+        p.append(mk("span", "ct-chip-cq", `CQ ${g.pend}`), mk("span", "ct-chip-r", "calling ..."));
+        col.append(p);
+      }
+      const items = list.slice().reverse().map((m) => chip(m, g, mine));
+      col.append(...(items.length || (mine && g.pend) ? items : [mk("div", "small muted", "no calls yet")]));
+      wrap.append(col);
+    }
+    return wrap;
   }
   const kmOf = (g, loc) => (g.cells.find((c) => c.l === loc) || {}).km || 0;
 
@@ -95,6 +133,7 @@ const Contest = (() => {
 
   function cell(g, c, big, o, i) {
     const d = mk("div", "ct-c");
+    if (big && g.st !== "setup") animate(d, o.key || "", c.l, g);
     const center = i === 3 * N + 3;
     if (center) d.classList.add("ctr");
     const line = (a, b) => { d.append(mk("span", "ct-a", a)); if (b !== undefined) d.append(mk("span", "ct-b", b)); };
@@ -133,13 +172,25 @@ const Contest = (() => {
   function render(box, g, o) {
     box.replaceChildren();
     if (!g) { newGame(box, o); return; }
+    track(o.key || "", g);
+    if (g.st === "invited") {
+      const r = mk("div", "ct-invite");
+      r.append(mk("b", "", `📻 ${g.opp} invites you to a CQ contest`),
+        mk("div", "small muted", `center ${g.c}` + (g.h ? " · propagation hint" : " · no propagation hint") + " · " + g.opp + " calls first"));
+      const acts = mk("div", "ct-acts");
+      acts.append(btn("Accept", () => o.act("accept"), !o.on, "primary-sm"), btn("Decline", () => o.act("decline"), false));
+      r.append(acts);
+      box.append(r);
+      return;
+    }
     const head = mk("div", "ct-head");
     const title = mk("div", "ct-title");
     title.append(mk("b", "", "📻 CQ contest"), mk("span", "muted", ` with ${g.opp} · center ${g.c}` +
       (g.h ? " · propagation hint" : "")));
     head.append(title);
     let st;
-    if (g.st === "setup") st = g.ready ? mk("span", "muted", `waiting for ${g.opp} to place the stations ...`)
+    if (g.st === "setup" && !g.acc) st = mk("span", "muted", `waiting for ${g.opp} to accept ...`);
+    else if (g.st === "setup") st = g.ready ? mk("span", "muted", `waiting for ${g.opp} to place the stations ...`)
       : mk("span", "", `Place your stations: tap squares (${Object.keys(g.me).length}/5)`);
     else if (g.st === "play") st = g.my_turn ? mk("span", "ph-move ct-move", "🎙 your move")
       : mk("span", "muted", g.pend ? `CQ ${g.pend} ...` : `${g.opp} is calling CQ ...`);
@@ -189,13 +240,10 @@ const Contest = (() => {
     grid.append(left);
     if (g.st !== "setup") {
       right.append(mk("div", "ct-lab small muted", "Your stations"), board(g, false, o));
-      const log = mk("div", "ct-log");
-      const h = history(g).reverse().slice(0, 8);
-      log.append(...(h.length ? h.map(([w, m]) => mk("div", w, logText(w, m, g))) : [mk("div", "muted", "No calls yet")]));
-      right.append(mk("div", "ct-lab small muted", "Log"), log);
       grid.append(right);
     }
     box.append(grid);
+    if (g.st !== "setup") box.append(logs(g));
   }
 
   return { render };

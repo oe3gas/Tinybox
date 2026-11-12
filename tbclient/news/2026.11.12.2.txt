@@ -1,0 +1,2 @@
+- CQ contest: Einladung annehmen/ablehnen, Log in 2 Spalten
+  als Chips, CQ-Feld blinkt, QSO blinkt 3x.

@@ -246,12 +246,17 @@ class SlotTests(unittest.TestCase):
                 (a if to == "a" else b).take(line[5:])
 
         self.assertTrue(a.act("new", "1"))
+        a.act("random")
+        self.assertTrue(a.act("ready"))                        # before the answer: kept
         flush()
         self.assertEqual(b.state["c"], "JN88")                 # the inviter's square
+        self.assertEqual(b.state["st"], "invited")             # waits for the user
         self.assertFalse(b.state["first"])
-        a.act("random")
+        self.assertFalse(a.summary()["acc"])
+        self.assertTrue(b.act("accept"))
+        flush()
+        self.assertTrue(a.summary()["acc"])
         b.act("random")
-        self.assertTrue(a.act("ready"))
         self.assertTrue(b.act("ready"))
         flush()
         self.assertEqual(a.state["st"], "play")
@@ -269,6 +274,25 @@ class SlotTests(unittest.TestCase):
         self.assertEqual(len(summ["cells"]), 64)
         self.assertTrue(a.act("close"))
         self.assertIsNone(a.state)
+
+    def test_decline(self):
+        ca, cb = FakeCore("JN88"), FakeCore("JN78")
+        q: list[tuple[str, str]] = []
+        a = ContestSlot(ca, lambda: "OE3B", lambda: "OE3B", lambda line: q.append(("b", line)),
+                        lambda: "JN88")
+        b = ContestSlot(cb, lambda: "OE3A", lambda: "OE3A", lambda line: q.append(("a", line)),
+                        lambda: "JN78")
+        a.act("new", "1")
+        while q:
+            to, line = q.pop(0)
+            (a if to == "a" else b).take(line[5:])
+        self.assertTrue(b.act("decline"))
+        self.assertIsNone(b.state)
+        while q:
+            to, line = q.pop(0)
+            (a if to == "a" else b).take(line[5:])
+        self.assertIsNone(a.state)
+        self.assertIn("declined", a.err)
 
 
 if __name__ == "__main__":

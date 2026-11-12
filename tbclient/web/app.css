@@ -1018,9 +1018,30 @@ button.primary-sm:disabled { opacity: .5; }
 .ct-cq { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .ct-cqw { font: 700 13px ui-monospace, Consolas, monospace; color: var(--muted); }
 .ct-in { width: 80px; text-transform: uppercase; font-family: ui-monospace, Consolas, monospace; padding: 4px 10px; font-size: 14px; }
-.ct-log { font: 12px/1.5 ui-monospace, Consolas, monospace; }
-.ct-log div { border-bottom: 1px solid var(--line); padding: 1px 0; }
-.ct-log .them { color: var(--muted); }
+/* the two logs: own calls left, the partner's right - as chips */
+.ct-logs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 12px; }
+.ct-logcol { display: flex; flex-direction: column; gap: 4px; }
+.ct-chip { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 3px 10px; border-radius: 12px;
+  font: 12px/1.4 ui-monospace, Consolas, monospace; border: 1px solid transparent; }
+.ct-chip-cq { font-weight: 700; }
+.ct-chip-x { opacity: .8; }
+.ct-chip.nil { background: color-mix(in srgb, var(--muted) 12%, var(--surface)); color: var(--muted); }
+.ct-chip.weak { background: #f3e6d3; color: #7a4b12; border-color: #e2c79c; }
+.ct-chip.qso { background: color-mix(in srgb, var(--ok) 20%, var(--surface)); color: var(--ok); border-color: var(--ok); }
+.ct-chip.qso .ct-chip-r { font-weight: 700; }
+.ct-chip.pend { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); border: 1px dashed var(--accent); }
+@media (prefers-color-scheme: dark) { .ct-chip.weak { background: #4a3417; color: #f0cf9c; border-color: #6e4f22; } }
+/* a CQ on the air blinks lightly until the answer, a QSO inverts the square three times */
+@keyframes ct-blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.ct-c.blink, .ct-chip.blink { animation: ct-blink 1s ease-in-out infinite; }
+@keyframes ct-flash { 0%, 33%, 66% { filter: invert(1); } 16%, 50%, 83%, 100% { filter: none; } }
+.ct-c.flash { animation: ct-flash 1.8s steps(1, end) 1 both; }
+@media (prefers-reduced-motion: reduce) { .ct-c.blink, .ct-chip.blink { animation: none; } .ct-c.flash { animation: none; outline: 2px solid var(--ok); } }
+/* the invitation of another TBClient */
+.ct-invite { border: 1px solid var(--accent); border-radius: 12px; padding: 10px 14px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.ct-invite-pop { position: fixed; right: 16px; bottom: 16px; z-index: 60; max-width: 340px; background: var(--surface);
+  border: 2px solid var(--accent); border-radius: 12px; padding: 12px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+.ct-invite-pop .ci-h { font-weight: 700; margin-bottom: 2px; }
 .ct-end { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
 .ct-end.win { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--surface)); }
 .ct-end.win .ct-end-h, .ct-end.win .ct-end-t, .ct-end.win .ct-73 { color: var(--ok); }

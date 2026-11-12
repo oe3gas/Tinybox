@@ -302,6 +302,7 @@ function render() {
   }
   renderMessages();
   renderBoxContest();                               // CR122
+  renderInvites();
 }
 
 /* Joining a board (CR24): the tapped board stays coloured until the TinyBox
@@ -3204,9 +3205,9 @@ function renderPeerContest(c, p) {
   const show = contestOpen && view === "peer" && p && p.fun && p.fun.ct;
   box.classList.toggle("hidden", !show);
   if (!show) return;
-  Contest.render(box, p.fun.contest, { opp: c.target, on: c.state === "online",
+  Contest.render(box, p.fun.contest, { key: "peer:" + c.target, opp: c.target, on: c.state === "online",
     act: (act, arg) => api("peer/fun", { ch: activeCh, act: "ct-" + act, arg: arg || "" }),
-    err: p.fun.ct_center ? "" : "Set your locator in your profile first - your square is the center of the board.",
+    err: p.fun.ct_err || (p.fun.ct_center ? "" : "Set your locator in your profile first - your square is the center of the board."),
     hide: () => { contestOpen = false; render(); } });
 }
 
@@ -3225,10 +3226,38 @@ function renderBoxContest() {
   box.classList.toggle("hidden", !show);
   if (!show) return;
   const err = k.err === "no_locator" ? "The TinyBox has no locator set - it cannot play." : k.err;
-  Contest.render(box, k.game, { opp: S.tinybox, on: can, err,
+  Contest.render(box, k.game, { key: "box", opp: S.tinybox, on: can, err,
     newText: `New CQ contest against the TinyBox ${S.tinybox}: `,
     act: (act, arg) => api("contest", { act, arg: arg || "" }),
     hide: () => { boxContestOpen = false; render(); } });
+}
+
+/* CR122: another TBClient invites to a CQ contest - a card over everything,
+ * in whatever view, with Accept / Decline (and the OS popup if switched on). */
+const ctInviteSeen = new Set();
+function renderInvites() {
+  const box = $("ct-invite");
+  const inv = (S.channels || []).filter((c) => c.peer && c.peer.fun && c.peer.fun.contest
+    && c.peer.fun.contest.st === "invited");
+  box.classList.toggle("hidden", !inv.length);
+  if (!inv.length) return;
+  const c = inv[0], g = c.peer.fun.contest;
+  const id = `${c.n}:${c.target}:${g.c}`;
+  if (!ctInviteSeen.has(id)) {
+    ctInviteSeen.add(id);
+    if (notifyCfg.popup && canPopup() && Notification.permission === "granted" && document.hidden) showPopup(`CQ contest - ${c.target}`, `${c.target} invites you to a CQ contest`, c.n);
+    if (notifyCfg.tone && typeof playBK === "function") playBK();
+  }
+  const fun = (act) => api("peer/fun", { ch: c.n, act: "ct-" + act, arg: "" });
+  const b = (txt, cls, fn) => { const x = el("button", "sm " + cls, txt); x.type = "button"; x.onclick = fn; return x; };
+  box.replaceChildren(
+    el("div", "ci-h", `📻 ${c.target} invites you to a CQ contest`),
+    el("div", "small muted", `Battleships with contest stations · center ${g.c}` + (g.h ? " · propagation hint" : "")
+      + (inv.length > 1 ? ` · ${inv.length - 1} more` : "")),
+    (() => { const r = el("div", "ct-acts");
+      r.append(b("Accept", "primary-sm", () => { fun("accept"); contestOpen = true; switchCh(c.n); }),
+               b("Decline", "", () => fun("decline")));
+      return r; })());
 }
 
 function renderPeerChat(lines) {

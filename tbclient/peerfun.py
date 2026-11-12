@@ -246,4 +246,4 @@ class PeerFun:
                 "last": self.core.settings.get("fun_last", {}).get(self.peer.call, {}),
                 "chess": None if g is None else {**g, "my_turn": self._my_turn()},
                 "ct": "CT" in self.peer.caps, "contest": self.contest.summary(),
-                "ct_center": my_center(self.core)}
+                "ct_center": my_center(self.core), "ct_err": self.contest.err}

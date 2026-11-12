@@ -17,7 +17,8 @@ distance of the worked stations decides (km from the center), equal - a draw.
 
 Lines (after "//CT "):
     NEW h=<0|1> [c=<loc>]       invitation; without c the other side says the center
-    OK c=<loc> h=<0|1>          taken, the center and the hint rule for both
+    OK c=<loc> h=<0|1>          accepted, the center and the hint rule for both
+    NO                          declined (the invited TBClient asks its user first)
     READY <hash>                stations placed: sha256 over placement and salt, 16 hex
     CQ <loc>                    a move
     R <loc> <call> <serial>     the station answers (5NN is not sent)
@@ -205,7 +206,7 @@ def new_state(center: str, hints: bool, first: bool, opp: str) -> dict:
     return {"v": 1, "c": center.upper()[:4] if center else "", "h": bool(hints),
             "first": first, "opp": opp, "st": "setup", "me": {}, "salt": "", "hm": "",
             "ht": "", "tready": False, "mc": [], "pend": "", "tc": [], "ser": 0,
-            "res": "", "reveal": None, "check": "", "sent_end": False,
+            "res": "", "reveal": None, "check": "", "sent_end": False, "acc": not first,
             "at": int(time.time())}
 
 
@@ -327,11 +328,13 @@ class Game:
         word, s = p[0].upper(), self.s
         if word == "OK":
             a = _args(p[1:])
-            if s["st"] == "setup" and not s["me"] and valid_center(a.get("c", "")):
-                s["c"] = a["c"].upper()[:4]
+            if s["st"] == "setup" and valid_center(a.get("c", "")) and (not s["me"] or s["c"]):
+                if not s["c"]:
+                    s["c"] = a["c"].upper()[:4]
                 s["h"] = a.get("h", "1") != "0"
+                s["acc"] = True
             return []
-        if word == "READY" and len(p) == 2 and len(p[1]) == 16 and s["st"] == "setup":
+        if word == "READY" and len(p) == 2 and len(p[1]) == 16 and s["st"] in ("setup", "invited"):
             s["ht"], s["tready"] = p[1].lower(), True
             self._maybe_start()
             return []
@@ -412,6 +415,7 @@ class Game:
         return {**{k: s[k] for k in ("c", "h", "first", "opp", "st", "me", "mc", "pend", "tc",
                                      "res", "reveal", "check")},
                 "tie": s.get("tie"), "ready": self.ready(), "tready": s["tready"],
+                "acc": s.get("acc", True),
                 "my_turn": self.my_turn(), "worked": self.worked(), "lost": self.lost(),
                 "km": self.distance(s["mc"]),
                 "cells": [{"l": loc, "p": label(loc), "km": km(s["c"], loc)} for loc in board]}

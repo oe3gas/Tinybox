@@ -3,7 +3,8 @@
 The rules and the lines are in prcore/contest.py. One slot per opponent: the
 game dict lives in the settings ("contest" -> key), so it goes on after a
 restart or the next connect. Key: the call of the other TBClient, or
-"box:<call>" for the TinyBox. The client answers the CQ calls of the other
+"box:<call>" for the TinyBox. An invitation of another TBClient waits for
+the user (st "invited": accept -> //CT OK, decline -> //CT NO). The client answers the CQ calls of the other
 side itself, from its own placement - the user only calls.
 """
 
@@ -82,7 +83,21 @@ class ContestSlot:
         state = self.state
         if state is None:
             return False
+        if act in ("accept", "decline") and state["st"] == "invited":
+            if act == "accept":
+                state["st"] = "setup"
+                self._save(state)
+                self._send([f"OK c={state['c']} h={1 if state['h'] else 0}"])
+            else:
+                self._save(None)
+                self._send(["NO"])
+                self._note("📻 CQ contest declined")
+            return True
         if act == "close":
+            if state["st"] == "invited":
+                self._save(None)
+                self._send(["NO"])
+                return True
             if state["st"] != "end":
                 self._send(contest.Game(state).resign())
             self._save(None)
@@ -131,9 +146,17 @@ class ContestSlot:
                 self._send(["RESIGN"])           # no locator here: no game
                 return
             hints = a.get("h", "1") != "0"
-            self._save(contest.new_state(center, hints, first=False, opp=self._opp()))
-            self._send([f"OK c={center} h={1 if hints else 0}"])
-            self._note(f"📻 {self._opp()} started a CQ contest - place your stations")
+            state = contest.new_state(center, hints, first=False, opp=self._opp())
+            state["st"] = "invited"              # the user accepts or declines first
+            self._save(state)
+            self._note(f"📻 {self._opp()} invites you to a CQ contest")
+            return
+        if word == "NO":
+            state = self.state
+            if state is not None and state["first"] and state["st"] == "setup":
+                self._save(None)
+                self.err = f"{self._opp()} declined the CQ contest."
+                self._note(f"📻 {self._opp()} declined the CQ contest")
             return
         state = self.state
         if state is None:

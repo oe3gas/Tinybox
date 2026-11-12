@@ -554,7 +554,7 @@ class ClientCore:
         if act.startswith("chess-"):
             return chan.peer.fun.chess(act[6:], arg)
         if act.startswith("ct-") and "CT" in chan.peer.caps:     # CR122: CQ contest
-            if chan.state != "online" and act not in ("ct-close", "ct-place", "ct-random"):
+            if chan.state != "online" and act not in ("ct-close", "ct-place", "ct-random", "ct-decline"):
                 return False
             return chan.peer.fun.contest.act(act[3:], arg)
         return False

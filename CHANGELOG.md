@@ -5,7 +5,9 @@
 - **CQ contest (CR122):** Schiffe versenken mit Amateurfunk-Touch – 8 × 8 Großfelder um die Box bzw. den
   Einladenden, je 5 Conteststationen mit passenden Rufzeichen, Zug `CQ <Großfeld>`, Ausbreitungshinweis
   „QRZ?“. Gegen einen TBClient oder gegen die TinyBox (mehrere Spiele gleichzeitig), Prüfung am Ende über
-  Hash. Zeilen `//CT`, Fähigkeit `CT`. Client 2026.11.12.
+  Hash. Zeilen `//CT`, Fähigkeit `CT`. Client 2026.11.12. Nachtrag 2026.11.12.2: Einladung zwischen Clients
+  annehmen/ablehnen (`//CT NO`), Log in zwei Spalten als Chips, CQ-Feld blinkt bis zur Antwort, QSO-Feld
+  invertiert 3×.
 
 - **Eine Verbindung je Rufzeichen (CR121):** die TinyBox (KISS, AXUDP) beantwortet einen neuen Connect auf eine
   laufende Verbindung mit DM und beendet die Sitzung; ein N(R)-Fehler beendet die Verbindung mit DISC statt

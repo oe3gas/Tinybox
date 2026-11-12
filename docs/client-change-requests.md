@@ -94,7 +94,7 @@ Stand: 12.11.2026 (CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 2
 | 119 | TinyBox-Terminal: `SB` nicht mehr in der Hilfe für nicht authentifizierte User | ✅ 11.11.2026 – siehe unten |
 | 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (Pille „terminal“) und beim Betreten eine Systemmeldung an alle | offen – entschieden (Variante A + Systemmeldung), Umsetzung ab 12.11.2026 – siehe unten |
 | 121 | TinyBox: eine Verbindung je Rufzeichen – neuer Connect auf laufende Verbindung bekommt DM, N(R)-Fehler beendet mit DISC (gleiches Call doppelt auf der Frequenz) | ✅ 11.11.2026 (KISS/AXUDP; Funktest offen) – siehe unten |
-| 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12; Funktest offen) – siehe unten |
+| 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; Funktest Box ✓, Client↔Client offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4562,4 +4562,27 @@ Ein Zug rund 15–25 Bytes; ein Spiel mit Hinweis rund 1,5 kB über Funk.
 - Bei Direct Connect braucht der Einladende einen Locator im Profil (sonst Hinweis); ältere Clients
   ohne `CT` sehen den Knopf nicht.
 - Tests `tests/test_cr122.py` (Regeln, ganze Spiele, Betrugsprüfung, Box mit zwei Spielen, zwei Clients).
+
+### Nachtrag (OE3GAS, 12.11.2026, nach dem ersten Spiel gegen die Box: „funktioniert sehr gut“)
+
+- Client gegen Client: startet einer das Spiel, poppt beim anderen eine **Einladung** auf, die er
+  annehmen oder ablehnen kann.
+- **Log in zwei Spalten:** links das eigene, rechts das des Spielpartners; die Rufe als **Chips** –
+  hellgrau ohne Antwort, hellbraun bei QRZ?, grün mit Häkchen bei Erfolg.
+- Ein abgesetzter CQ: das Feld **blinkt leicht**, bis die Antwort kommt; bei Erfolg wird das Feld
+  **3× invertiert**.
+
+### Umsetzung Nachtrag (Client 2026.11.12.2 – 12.11.2026) ✅
+
+- Neue Zeile `//CT NO` (abgelehnt). `//CT NEW` legt beim Eingeladenen das Spiel mit Stand „invited“
+  an; erst „Accept“ schickt `//CT OK`, „Decline“ `//CT NO` – beim Einladenden verschwindet das Spiel
+  mit dem Hinweis „… declined the CQ contest“. Der Einladende darf schon setzen und „Ready“ geben,
+  der Kopf zeigt „waiting for … to accept“. Die Box nimmt wie bisher sofort an.
+- Einladungskarte unten rechts über jeder Ansicht (Accept wechselt in den Kanal und öffnet das
+  Spiel), dazu Popup bzw. „BK“ in CW nach den Einstellungen von CR85.
+- Log unter den Brettern in zwei Spalten, neueste oben, der laufende Ruf als blinkender Chip
+  „calling …“; Chips mit Rapport, Nummer und km.
+- Blinken und Invertieren laufen über das Neuzeichnen der Ansicht hinweg weiter (Phase über die Uhr).
+  Bei „reduzierte Bewegung“ im System: kein Blinken, das QSO-Feld bekommt nur einen Rahmen.
+- Tests `tests/test_cr122.py`: Einladung annehmen (mit „Ready“ vor der Annahme) und ablehnen.
 
