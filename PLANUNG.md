@@ -2021,6 +2021,24 @@ Die Stufen dürfen sich überschneiden.
   Entitäten die Calls kommen.
 - Die zwei falschen Antworten kommen aus demselben Pool.
 
+**Ablauf (entschieden 12.11.2026):**
+
+- Start im Chatboard mit Stufe, Regionen und Anzahl der Calls (beim Start wählbar).
+- Anmeldung: Die Box öffnet eine Anmeldezeit; wer „mit“ sagt (oder im Client klickt),
+  spielt. Alle anderen sind Zuschauer: Sie sehen Call, A/B/C, Auflösung und Stand, ihre
+  Zeilen bleiben normaler Chat. Ein Zuschauer kann jederzeit einsteigen und spielt ab dem
+  nächsten Call mit. Verlässt ein Spieler das Board, wartet die Box nicht mehr auf ihn, sein
+  Stand bleibt in der Wertung.
+- Tipps gehen nur an die Box (Protokollzeile, wie `//CT` bei CQ Contest), nicht an alle – kein
+  Abschreiben, kein Fan-out. Sichtbar ist nur, wer schon getippt hat.
+- 30 Sekunden pro Call. Die Auflösung kommt, sobald alle Spieler getippt haben, spätestens
+  nach 30 s; wer nicht getippt hat, bekommt für das Call keinen Punkt.
+- Timer für alle sichtbar: Die Box sendet die Zeit nur einmal mit dem Call, der Client zählt
+  selbst herunter (kein Funkverkehr pro Sekunde). Maßgeblich ist die Uhr der Box; sie nimmt
+  Tipps mit ein paar Sekunden Zugabe für die Laufzeit an.
+- Spielzeilen sind im Client einklappbar (für Zuschauer; über Funk gehen sie trotzdem).
+- Am Ende gewinnt, wer die meisten richtigen Antworten hat.
+
 **Spielliste `prcore/prefixraten.csv`** (306 Einträge: 278 aktuelle, 28 gelöschte Entitäten):
 
 - Grundlage: ARRL-DXCC-Liste (Current_Deleted.txt, Februar 2022), ITU-Präfixtabelle.
