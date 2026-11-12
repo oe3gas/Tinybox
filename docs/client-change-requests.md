@@ -94,7 +94,7 @@ Stand: 12.11.2026 (CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 2
 | 119 | TinyBox-Terminal: `SB` nicht mehr in der Hilfe für nicht authentifizierte User | ✅ 11.11.2026 – siehe unten |
 | 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (Pille „terminal“) und beim Betreten eine Systemmeldung an alle | offen – entschieden (Variante A + Systemmeldung), Umsetzung ab 12.11.2026 – siehe unten |
 | 121 | TinyBox: eine Verbindung je Rufzeichen – neuer Connect auf laufende Verbindung bekommt DM, N(R)-Fehler beendet mit DISC (gleiches Call doppelt auf der Frequenz) | ✅ 11.11.2026 (KISS/AXUDP; Funktest offen) – siehe unten |
-| 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; Funktest Box ✓, Client↔Client offen) – siehe unten |
+| 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; .3: Pause, hochklappen; Funktest Box ✓, Client↔Client offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4585,4 +4585,13 @@ Ein Zug rund 15–25 Bytes; ein Spiel mit Hinweis rund 1,5 kB über Funk.
 - Blinken und Invertieren laufen über das Neuzeichnen der Ansicht hinweg weiter (Phase über die Uhr).
   Bei „reduzierte Bewegung“ im System: kein Blinken, das QSO-Feld bekommt nur einen Rahmen.
 - Tests `tests/test_cr122.py`: Einladung annehmen (mit „Ready“ vor der Annahme) und ablehnen.
+
+### Nachtrag 2 (OE3GAS, 12.11.2026): Pause-Taste und Spiel hochklappen – für Client↔Client und gegen die Box
+
+Umsetzung (Client 2026.11.12.3) ✅:
+- „⏸ Pause“ im Kopf des Spiels (nur während des Spiels): `//CT PAUSE`, bis `//CT RESUME` ruft niemand;
+  der andere sieht „⏸ paused by …“. Fortsetzen („▶ Resume“) darf jede Seite – sonst hinge das Spiel,
+  wenn der Pausierende geht. Die Box merkt sich die Pause nur (sie ruft ohnehin erst nach dem Client).
+- „▴“ klappt das Spiel auf die Kopfzeile hoch (Stand, „your move“, Pause, Spielstand in einer Zeile),
+  „▾“ wieder auf; je Gegner im Browser gemerkt.
 

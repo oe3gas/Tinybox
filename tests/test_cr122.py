@@ -106,6 +106,19 @@ class RulesTests(unittest.TestCase):
             a.take(line)
         self.assertTrue(b.my_turn())
 
+    def test_pause(self):
+        a, b = pair()
+        start(a, b)
+        self.assertEqual(a.pause(True), ["PAUSE"])
+        b.take("PAUSE")
+        self.assertFalse(a.my_turn())
+        self.assertEqual(a.cq(a.board[0]), [])
+        self.assertEqual(b.summary()["pause"], "them")
+        self.assertEqual(b.pause(False), ["RESUME"])           # the other side may resume
+        a.take("RESUME")
+        self.assertTrue(a.my_turn())
+        self.assertEqual(a.pause(False), [])                   # not paused: nothing to send
+
     def test_cheating_found(self):
         a, b = pair(hints=False, seed=5)
         a.random_place()

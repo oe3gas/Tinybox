@@ -26,6 +26,12 @@ const Contest = (() => {
   // phase through a negative delay (the blink by the clock, the flash since the QSO).
   const BLINK_MS = 1000, FLASH_MS = 1800;
   const seen = {};          // key -> number of own calls already shown
+  let fold = {};            // key -> true: the game folded up to its head line (per browser)
+  try { fold = JSON.parse(localStorage.getItem("tbc-ct-fold") || "{}"); } catch (e) { /* ok */ }
+  const setFold = (key, on) => {
+    if (on) fold[key] = true; else delete fold[key];
+    try { localStorage.setItem("tbc-ct-fold", JSON.stringify(fold)); } catch (e) { /* ok */ }
+  };
   const flash = {};         // key -> {loc, at}
   function track(key, g) {
     const n = g.mc.length;
@@ -192,10 +198,27 @@ const Contest = (() => {
     if (g.st === "setup" && !g.acc) st = mk("span", "muted", `waiting for ${g.opp} to accept ...`);
     else if (g.st === "setup") st = g.ready ? mk("span", "muted", `waiting for ${g.opp} to place the stations ...`)
       : mk("span", "", `Place your stations: tap squares (${Object.keys(g.me).length}/5)`);
+    else if (g.st === "play" && g.pause) st = mk("span", "ct-paused", g.pause === "me" ? "⏸ paused"
+      : `⏸ paused by ${g.opp}`);
     else if (g.st === "play") st = g.my_turn ? mk("span", "ph-move ct-move", "🎙 your move")
       : mk("span", "muted", g.pend ? `CQ ${g.pend} ...` : `${g.opp} is calling CQ ...`);
-    if (st) head.append(st);
+    const key = o.key || "", folded = !!fold[key];
+    const tools = mk("div", "ct-tools");
+    if (st) tools.append(st);
+    if (g.st === "play") tools.append(g.pause ? btn("▶ Resume", () => o.act("resume"), !o.on)
+      : btn("⏸ Pause", () => o.act("pause"), !o.on));
+    const fb = btn(folded ? "▾" : "▴", () => { setFold(key, !folded); render(box, g, o); }, false, "ct-fold");
+    fb.title = folded ? "Show the game" : "Fold the game up";
+    fb.setAttribute("aria-label", fb.title);
+    tools.append(fb);
+    head.append(tools);
     box.append(head);
+    box.classList.toggle("ct-folded", folded);
+    if (folded) {
+      if (g.st !== "setup") box.append(mk("div", "small muted", `You ${g.worked}/5 · ${g.opp} ${g.lost}/5 · CQ calls ${g.mc.length}`
+        + (g.st === "end" ? ` · ${g.res}` : "")));
+      return;
+    }
     if (g.st !== "setup") {
       const pills = mk("div", "ct-pills");
       pills.append(pill("ok", `You ${g.worked}/5`), pill("", `${g.opp} ${g.lost}/5`), pill("", `CQ calls ${g.mc.length}`));
@@ -225,13 +248,14 @@ const Contest = (() => {
       const inp = mk("input"); inp.maxLength = 4; inp.placeholder = "KN08"; inp.className = "ct-in";
       inp.setAttribute("aria-label", "Grid square for the CQ call");
       const err = mk("div", "small ct-err");
-      f.append(mk("span", "ct-cqw", "CQ"), inp, btn("Call CQ", () => f.requestSubmit(), !g.my_turn || !o.on),
+      f.append(mk("span", "ct-cqw", "CQ"), inp, btn("Call CQ", () => f.requestSubmit(), !g.my_turn || !o.on || !!g.pause),
                btn("Resign", () => o.act("resign"), !o.on));
       f.onsubmit = (ev) => {
         ev.preventDefault();
         const v = inp.value.trim().toUpperCase();
         if (!g.cells.some((c) => c.l === v)) { err.textContent = "Enter a square from the board, like " + g.cells[27].l + "."; return; }
         if (g.mc.some((m) => m[0] === v)) { err.textContent = `Already called ${v}. Pick another square.`; return; }
+        if (g.pause) { err.textContent = "The game is paused - resume it first."; return; }
         o.act("cq", v);
       };
       inp.oninput = () => { err.textContent = ""; };

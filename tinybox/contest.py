@@ -8,6 +8,7 @@ A TBClient in client mode with cap CT invites the box:
                               //CT CQ <loc>            call (the client invited: it starts)
     //CT R <loc> ...       the client's answer to the box's call
     //CT END ... / RESIGN  as between two clients; the box lays its stations open too
+    //CT PAUSE / RESUME    the client takes a break (the box only calls after the client)
 
 One game per call (without SSID), any number at the same time, kept in memory
 for a day - a game goes on after a new connect, not after a restart of the box.

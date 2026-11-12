@@ -973,6 +973,10 @@ button.primary-sm { background: var(--accent); color: #fff; border-color: var(--
 button.primary-sm:disabled { opacity: .5; }
 .ct-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .ct-move { font-size: 13px; }
+.ct-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ct-paused { font-weight: 700; color: var(--warn); }
+button.ct-fold { padding: 2px 10px; font-size: 14px; line-height: 1.2; }
+.ct-panel.ct-folded .ct-head { margin-bottom: 2px; }
 .ct-navmove { font-size: 10px; padding: 0 6px !important; }
 #nav .ph-move { display: inline-block; border-radius: 10px; font-weight: 700; border: 1.5px solid #111;
   animation: ph-move 1.2s ease-in-out infinite; }

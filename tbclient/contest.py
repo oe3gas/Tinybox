@@ -115,6 +115,9 @@ class ContestSlot:
         elif act == "cq":
             lines = g.cq(arg)
             ok = bool(lines)
+        elif act in ("pause", "resume"):
+            lines = g.pause(act == "pause")
+            ok = bool(lines)
         elif act == "resign":
             lines = g.resign()
             ok = bool(lines)

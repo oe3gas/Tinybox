@@ -26,6 +26,7 @@ Lines (after "//CT "):
     END <loc:call,...> <salt>   at the end both lay their stations open; the other
                                 side checks the hash and every answer of the game
     RESIGN
+    PAUSE / RESUME              no calls until RESUME (either side may resume)
 
 Nobody can cheat through the GUI (the client answers, not the user); the check
 at the end also finds two game states that drifted apart. A game is a plain
@@ -207,6 +208,7 @@ def new_state(center: str, hints: bool, first: bool, opp: str) -> dict:
             "first": first, "opp": opp, "st": "setup", "me": {}, "salt": "", "hm": "",
             "ht": "", "tready": False, "mc": [], "pend": "", "tc": [], "ser": 0,
             "res": "", "reveal": None, "check": "", "sent_end": False, "acc": not first,
+            "pause": "",
             "at": int(time.time())}
 
 
@@ -233,7 +235,7 @@ class Game:
 
     def my_turn(self) -> bool:
         s = self.s
-        if s["st"] != "play" or s["pend"]:
+        if s["st"] != "play" or s["pend"] or s.get("pause"):
             return False
         return len(s["mc"]) == len(s["tc"]) if s["first"] else len(s["tc"]) > len(s["mc"])
 
@@ -289,6 +291,13 @@ class Game:
             return []
         s["pend"] = loc
         return [f"CQ {loc}"]
+
+    def pause(self, on: bool) -> list[str]:
+        s = self.s
+        if s["st"] != "play" or bool(s.get("pause")) == on:
+            return []
+        s["pause"] = "me" if on else ""
+        return ["PAUSE" if on else "RESUME"]
 
     def resign(self) -> list[str]:
         s = self.s
@@ -362,6 +371,10 @@ class Game:
                 return []
             s["pend"] = ""
             return self._check_end()
+        if word in ("PAUSE", "RESUME"):
+            if s["st"] == "play":
+                s["pause"] = "them" if word == "PAUSE" else ""
+            return []
         if word == "RESIGN":
             if s["st"] != "end":
                 s["st"], s["res"] = "end", "they resigned"
@@ -415,7 +428,7 @@ class Game:
         return {**{k: s[k] for k in ("c", "h", "first", "opp", "st", "me", "mc", "pend", "tc",
                                      "res", "reveal", "check")},
                 "tie": s.get("tie"), "ready": self.ready(), "tready": s["tready"],
-                "acc": s.get("acc", True),
+                "acc": s.get("acc", True), "pause": s.get("pause", ""),
                 "my_turn": self.my_turn(), "worked": self.worked(), "lost": self.lost(),
                 "km": self.distance(s["mc"]),
                 "cells": [{"l": loc, "p": label(loc), "km": km(s["c"], loc)} for loc in board]}
