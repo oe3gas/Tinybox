@@ -153,15 +153,29 @@ def short(text: str, full: bool = False, chars: int = PAYLOAD_CHARS) -> str:
     return f"{len(text)}c {text[:chars]!r}..."
 
 
+def duration(took_ms: int) -> str:
+    """A duration in ms as '(312ms)'; from one minute on readable as
+    '(1m53.9s)' or '(2h05m07s)' - '(113934ms)' nobody reads at a glance."""
+    if took_ms < 60_000:
+        return f"({took_ms}ms)"
+    tenths = round(took_ms / 100)
+    if tenths < 36_000:
+        m, t = divmod(tenths, 600)
+        return f"({m}m{t // 10}.{t % 10}s)"
+    h, rest = divmod(round(took_ms / 1000), 3600)
+    m, s = divmod(rest, 60)
+    return f"({h}h{m:02d}m{s:02d}s)"
+
+
 def ms(t0: float) -> str:
     """Duration since a time.monotonic() mark, as '(312ms)' - that is where
     the time went. Over radio almost every bug is a timing problem."""
-    return f"({int((time.monotonic() - t0) * 1000)}ms)"
+    return duration(int((time.monotonic() - t0) * 1000))
 
 
 def ms_if_slow(t0: float, limit: int = SLOW_MS) -> str:
     took = int((time.monotonic() - t0) * 1000)
-    return f"({took}ms)" if took >= limit else ""
+    return duration(took) if took >= limit else ""
 
 
 # --- counters (for the closing line) --------------------------------------
@@ -261,7 +275,7 @@ CTX_IN_LINE = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} \w \S+\s+#(\d+)
 LEGEND = (
     "# TinyBox log - time with ms | level D I W E | component | #session call | message",
     "#   '<' from the station, '>' to the station, '<<' '>>' AGW frames,"
-    " (312ms) is a duration",
+    " (312ms) (1m53.9s) is a duration",
     "#   '-----' is a start or a stop, 'MARK:' a mark set by the sysop."
     " grep '#7' for one connection.",
 )

@@ -83,7 +83,7 @@ weitergegeben werden, siehe Abschnitt 5.
 | `<` | Eingabe **der Station** an die TinyBox |
 | `>` | Ausgabe **der TinyBox** an die Station |
 | `<<` / `>>` | AGW-Frame mit Typ und Bytezahl (nur mit `LOG DEBUG agw`) |
-| `(312ms)` | Dauer – dort ist die Zeit geblieben |
+| `(312ms)` / `(1m53.9s)` | Dauer – dort ist die Zeit geblieben; ab einer Minute in m/s, ab einer Stunde in h/m/s |
 | `-----` | Anfang oder Ende eines Laufs |
 | `===== MARK: ... =====` | vom Sysop gesetzte Marke |
 | `12c 'Test subject'` | gekürzter Mail-Text: 12 Zeichen, so fängt er an |

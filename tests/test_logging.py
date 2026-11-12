@@ -476,7 +476,17 @@ class ConfigTests(unittest.TestCase):
 
 class DurationTests(unittest.TestCase):
     def test_ms_has_the_shape_the_legend_promises(self):
-        self.assertRegex(logsetup.ms(0.0), r"^\(\d+ms\)$")
+        import time
+        self.assertRegex(logsetup.ms(time.monotonic() - 0.3), r"^\(\d+ms\)$")
+
+    def test_long_durations_are_readable(self):
+        self.assertEqual(logsetup.duration(312), "(312ms)")
+        self.assertEqual(logsetup.duration(59_999), "(59999ms)")
+        self.assertEqual(logsetup.duration(60_000), "(1m0.0s)")
+        self.assertEqual(logsetup.duration(113_934), "(1m53.9s)")
+        self.assertEqual(logsetup.duration(3_599_000), "(59m59.0s)")
+        self.assertEqual(logsetup.duration(3_599_960), "(1h00m00s)")
+        self.assertEqual(logsetup.duration(7_507_400), "(2h05m07s)")
 
     def test_only_slow_steps_get_a_duration(self):
         import time
