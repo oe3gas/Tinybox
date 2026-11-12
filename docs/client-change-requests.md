@@ -97,7 +97,7 @@ Stand: 12.11.2026 (CR124 erfasst; CR123; CR122; CR87–CR100 aus dem Security-Au
 | 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; .3: Pause, hochklappen; .4: über die Box gegen andere Clients; .5: Hinweis-Fix; Funktest Box ✓, Client↔Client offen) – siehe unten |
 | 123 | Prefix raten im Chatboard: die Box nennt ein Rufzeichen, Spieler tippen die DXCC-Entität (A/B/C); Stufen, IARU-Regionen, Anzahl Calls, Anmeldung, Zuschauer, 30-s-Timer, einklappbar | ✅ 12.11.2026 (Client 2026.11.12.5, Funktest offen) – siehe unten |
 | 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig | offen – siehe unten |
-| 125 | TinyBox: bis zu 5 Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste von Rufzeichen | offen – siehe unten |
+| 125 | TinyBox: bis zu 5 gleichberechtigte Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste, Post an den Sysop geht an `SYSOP` (alle) | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4769,23 +4769,37 @@ User (`session.py`: Gast gehalten, Third-Party aus), Inbox-Absender, Logkopf, St
   `sysop_call = OE3GAS, OE3TEC`. Ein einzelnes Rufzeichen bleibt gültig (abwärtskompatibel).
 - Höchstens 5 Rufzeichen; mehr → `ConfigError` beim Start. Jedes muss ein gültiges Rufzeichen sein,
   doppelte (gleiches Basisrufzeichen) werden einmal gezählt bzw. mit Warnung entfernt.
-- Der **erste** Eintrag ist der Haupt-Sysop: Er wird überall dort verwendet, wo ein einzelnes
-  Rufzeichen gebraucht wird (Konsole, Web-GUI, `SHUTDOWN` „by“, Inbox-Absender, Stationsprofil,
-  Texte an User).
+- **Alle Sysops sind gleich**, es gibt keinen Haupt-Sysop (OE3GAS, 12.11.2026). Wo der Code heute
+  `cfg.station.sysop_call` als einzelnes Rufzeichen verwendet, kommt statt eines Rufzeichens die
+  Adresse `SYSOP` bzw. die Liste aller Sysops:
+  - **Post an den Sysop** (Systemnachrichten der Box wie gehaltene Post, Sysop-Rufzeichen auf Funk,
+    Forward-Fehler, Schlüssel wartet auf Freigabe; und `S SYSOP` von Usern) hat als Empfänger
+    **`SYSOP`**, nicht das Rufzeichen eines Sysops. Jeder Sysop sieht diese Post (`list_for`/`read`
+    mit Sysop-Rechten), egal mit welchem Rufzeichen und über welchen Zugang. `check_send` setzt
+    `SYSOP` nicht mehr in `sysop_call` um; `SYSOP` ist als Empfänger erlaubt, obwohl es kein
+    gültiges Rufzeichen ist, und bleibt lokal (kein Forwarding, kein `@`).
+  - Absender bzw. „by“ bei lokalen Sysop-Quellen (Konsole, Web-GUI, `SHUTDOWN`/`RESTART`,
+    Inbox ohne Absender): `SYSOP`.
+  - Texte an User (Gast gehalten, Third-Party aus), Logkopf, `STATUS`/`INFO`, Stationsprofil,
+    Web-GUI: alle Sysop-Rufzeichen bzw. „the sysop“.
+- Freigabe der Schlüssel (CR93) für weitere Sysops: die bestehende Prozedur genügt (`USER OK`,
+  Web-GUI „Keys“), nichts Neues nötig.
 - `is_sysop_call()` prüft gegen alle Einträge (jede SSID). Damit gelten für alle Sysops dieselben
   Rechte wie heute: Telnet, AXUDP, Client über Funk mit Schlüssel und signierten `//ADM`-Befehlen
   (CR94), Rubriken, `WARN`, brocast-Quellen. Über Funk per Terminal bleibt jeder Sysop Gast.
 - `RELOAD` (CR82) übernimmt eine geänderte Liste ohne Neustart.
 - `tinybox.conf.example`: Kommentar zur Liste und zur Höchstzahl.
-- `STATUS`/`INFO` und Web-GUI (Dashboard, Keys) zeigen alle Sysops.
 
-### Offen (Entscheidung bei Gerhard)
+### Entschieden (OE3GAS, 12.11.2026)
 
-- Systemnachrichten (gehaltene Post, Sysop-Rufzeichen auf Funk, Forward-Fehler, Schlüssel wartet
-  auf Freigabe …): nur an den Haupt-Sysop oder an alle Sysops?
-- `S SYSOP` von Usern: an den Haupt-Sysop oder an alle?
-- Sollen alle Sysops gleichberechtigt sein, oder dürfen manche Befehle (`SHUTDOWN`, `RESTART`,
-  `RELOAD`, `TRUST`, `USER OK`) nur dem Haupt-Sysop vorbehalten bleiben?
-- Schlüssel (CR93): Jeder Sysop braucht einen eigenen freigegebenen Schlüssel für den Client-Modus –
-  reicht die bestehende Freigabe in der Web-GUI „Keys“?
-- Testbed (`tbtest/bed.py`) auf eine Liste umstellen oder beim einzelnen Sysop lassen.
+- Alle Sysops gleich, kein Haupt-Sysop, alle Rechte für alle.
+- Alle Nachrichten an den Sysop gehen an alle Sysops, Empfänger `SYSOP`.
+- Schlüssel: bestehende Freigabe-Prozedur.
+- Testbed (`tbtest/bed.py`): braucht keine Änderung, ein einzelnes Rufzeichen bleibt gültig.
+
+### Offen
+
+- Lesestatus der `SYSOP`-Post: gemeinsam (einer liest → für alle gelesen) oder je Sysop? Vorschlag:
+  gemeinsam, wie ein geteiltes Postfach; Löschen wirkt für alle.
+- Bestehende Post an das Rufzeichen des bisherigen Sysops bleibt, wie sie ist (keine Migration),
+  oder auf `SYSOP` umschreiben? Vorschlag: bleibt.
