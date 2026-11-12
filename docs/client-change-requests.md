@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.11.2026 (CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 12.11.2026 (CR124 erfasst; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -96,6 +96,7 @@ Stand: 12.11.2026 (CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PL
 | 121 | TinyBox: eine Verbindung je Rufzeichen – neuer Connect auf laufende Verbindung bekommt DM, N(R)-Fehler beendet mit DISC (gleiches Call doppelt auf der Frequenz) | ✅ 11.11.2026 (KISS/AXUDP; Funktest offen) – siehe unten |
 | 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; .3: Pause, hochklappen; .4: über die Box gegen andere Clients; .5: Hinweis-Fix; Funktest Box ✓, Client↔Client offen) – siehe unten |
 | 123 | Prefix raten im Chatboard: die Box nennt ein Rufzeichen, Spieler tippen die DXCC-Entität (A/B/C); Stufen, IARU-Regionen, Anzahl Calls, Anmeldung, Zuschauer, 30-s-Timer, einklappbar | ✅ 12.11.2026 (Client 2026.11.12.5, Funktest offen) – siehe unten |
+| 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4677,3 +4678,74 @@ Ein Call mit Auflösung rund 150 Bytes über Funk (einmal als UI-Frame an alle).
 - Beide Seiten brauchen den neuen Stand – mit einem älteren Gegner meldet die Prüfung am Ende sonst
   „board does not match“.
 
+## CR124 – Prefix raten: deutsche Oberfläche, Kreis-Timer, Einladung, Start vorzeitig (offen)
+
+### Erfassung (OE3GAS, 12.11.2026, nach dem ersten Test von CR123)
+
+1. **Oberfläche auf Deutsch** (Panel, Formular, Spielzeilen im Chat, Fehlertexte).
+2. **Timer als Kreis:** eine Kreisfläche, die mit der Zeit kleiner wird (Tortenstück schrumpft im
+   Uhrzeigersinn), in der Mitte die Sekunden. Für die Anmeldung und für die Tipp-Abgabe.
+3. **Anmeldung vorzeitig beenden:** Der Starter kann die Anmeldezeit übergehen – sind z.B. nach
+   25 s alle angemeldet, startet er das Spiel sofort.
+4. **Startformular:** statt „R1 R2 R3“ die Regionen ausgeschrieben, statt „Calls“ die Frage
+   „Wie viele Calls sollen gefragt werden?“.
+5. **Einladung attraktiver** (Bild 2: „OE3GAS starts a game. Who plays along?“ mit einem Knopf).
+6. **Gewählter Tipp mit Hintergrundfarbe**, nicht nur mit Rahmen.
+
+### Vorschlag
+
+**Texte (Client):**
+
+| bisher | neu |
+|---|---|
+| Stage | Stufe |
+| R1 / R2 / R3 | IARU-Region 1 / 2 / 3 (gewünscht war „Zone“ – siehe Hinweis) |
+| Calls | Wie viele Calls sollen gefragt werden? |
+| Start | Spiel starten |
+| Play along | Ich spiele mit! |
+| Play along (from the next call) | Ab dem nächsten Call mitspielen |
+| signup | Anmeldung |
+| tipped: … / nobody has tipped yet | Getippt: … / Noch kein Tipp |
+| Right! / A was right. | Richtig! / Richtig war A. |
+| Called off – nobody plays. | Abgebrochen – niemand spielt mit. |
+| Nobody scored. / 🏆 OE3GAS | Keine Punkte vergeben. / 🏆 Sieger: OE3GAS |
+| New game / Stop | Neues Spiel / Abbrechen |
+| 10 calls · 261 entities | 10 Calls · 261 Entitäten |
+| Spielzeilen im Chat („… plays along“, „… has tipped“ …) | „… spielt mit“, „… hat getippt“, „Richtig war A“, „Spielende“ |
+
+Hinweis „Zone“: Die Regionen der IARU heißen Region 1–3; „Zone“ sind die ITU- und CQ-Zonen
+(1–90 bzw. 1–40). Vorschlag daher „IARU-Region 1“; Entscheidung bei Gerhard.
+Die Texte der Box für Terminal-User bleiben englisch wie der Rest der Box.
+
+**Kreis-Timer:** rund 56 px, Fläche als `conic-gradient` (Rest der Zeit gefüllt), Sekunden mittig.
+Farbe: blau, ab 10 s orange, ab 5 s rot. Bei der Anmeldung kleiner im Kopf der Einladung, bei der
+Frage neben dem Rufzeichen. Läuft weiter ohne Funkverkehr (der Client zählt selbst, wie bisher).
+
+**Anmeldung vorzeitig beenden:** Der Starter sieht in der Einladung „Alle da? Jetzt starten“ (ab
+einem Mitspieler außer ihm aktiv, allein auch möglich). Protokoll neu: `//PR GO` (nur der Starter,
+sonst `//PR ERR not_starter`; außerhalb der Anmeldung `//PR ERR not_open`); die Box schließt die
+Anmeldung sofort und sendet wie bisher `!PR GO …`. Terminal: `/PR GO`.
+
+**Einladung (Vorschläge):**
+
+- Eigene Karte statt Textzeile: farbiger Rand und leicht getönter Hintergrund, großes 🎯.
+- Überschrift „OE3GAS fordert euch heraus!“, darunter „Welches Land steckt hinter dem Rufzeichen?“.
+- Die Einstellungen als Chips: Stufe, Regionen, Anzahl Calls, Entitäten.
+- Kreis-Timer der Anmeldung rechts oben.
+- Mitspieler als Chips mit Häkchen („Schon dabei: OE3GAS ✓ OE3TEC ✓“), neue kommen mit kurzer
+  Einblend-Animation.
+- Großer Knopf „Ich spiele mit!“ (leicht pulsierend, solange man nicht dabei ist); danach
+  „Du bist dabei ✓ – gleich geht's los“.
+- Für den Starter zusätzlich „Alle da? Jetzt starten“.
+- Optional: Ist man gerade nicht im Chat-Fenster, zeigt der Board-Eintrag links ein 🎯-Abzeichen,
+  solange die Anmeldung läuft.
+
+**Gewählter Tipp:** Hintergrund in Akzentfarbe (hell getönt) plus Rahmen, „Dein Tipp“ klein darunter;
+nach der Auflösung wie bisher grün (richtig) bzw. rot (falsch).
+
+### Offen
+
+- „IARU-Region“ oder „Zone“ (siehe Hinweis).
+- Nebenbei bemerkt: Die News-Datei `tbclient/news/2026.11.12.5.txt` wurde vom CR122-Fix mit
+  derselben Client-Version überschrieben; die Zeile zu Prefix raten fehlt dort. Bei der Umsetzung
+  von CR124 in die News der neuen Version aufnehmen.
