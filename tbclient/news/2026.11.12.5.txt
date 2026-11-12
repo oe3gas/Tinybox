@@ -1,2 +1,2 @@
-- Prefix raten im Chatboard: Call nennen, Entitaet
-  A/B/C tippen, 30 s, Zuschauer moeglich.
+- CQ contest: QRZ? nur noch fuer Stationen, die noch
+  nicht gearbeitet sind.

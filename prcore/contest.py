@@ -9,7 +9,8 @@ Each player hides 5 contest stations, one per square at most. The station gets
 a callsign of 4-5 characters that fits its square (DL1AB, S57DT, OE3A ...).
 A move is "CQ <square>". A station there answers - it is worked; otherwise the
 CQ goes unanswered. Propagation hint (on by default): no station there, but one
-in a neighbouring square - "QRZ? weak sigs".
+not yet worked in a neighbouring square - "QRZ? weak sigs" (a worked station is
+in the log and gives no hint any more).
 
 Who calls first: the one who invited. The game ends only after a move of the
 second player (the round is played out): whoever has all 5 wins; both 5 - the
@@ -188,11 +189,14 @@ def parse_placement(text: str) -> dict[str, str] | None:
     return out
 
 
-def answer(stations: dict[str, str], board: list[str], hints: bool, loc: str) -> str:
-    """'<call>' if a station is there, else 'WEAK' or 'NIL'."""
+def answer(stations: dict[str, str], board: list[str], hints: bool, loc: str,
+           worked: set[str] | frozenset = frozenset()) -> str:
+    """'<call>' if a station is there, else 'WEAK' or 'NIL'. A station the caller
+    has worked already gives no hint any more (it is in the log - only the ones
+    still to find are heard next door)."""
     if loc in stations:
         return stations[loc]
-    if hints and any(n in stations for n in neighbours(board, loc)):
+    if hints and any(n in stations and n not in worked for n in neighbours(board, loc)):
         return "WEAK"
     return "NIL"
 
@@ -351,7 +355,8 @@ class Game:
             loc = p[1].upper()
             if not self.their_turn() or loc not in self.board or any(t[0] == loc for t in s["tc"]):
                 return []
-            a = answer(s["me"], self.board, s["h"], loc)
+            worked = {t[0] for t in s["tc"] if t[1] == "QSO"}
+            a = answer(s["me"], self.board, s["h"], loc, worked)
             if a in ("NIL", "WEAK"):
                 s["tc"].append([loc, a])
                 out = [f"R {loc} {a}"]
@@ -398,8 +403,11 @@ class Game:
         if len(stations) != STATIONS or any(loc not in board for loc in stations) \
                 or commit(stations, salt) != s["ht"]:
             return False
-        for m in s["mc"]:
-            want = answer(stations, board, s["h"], m[0])
+        worked: set[str] = set()
+        for m in s["mc"]:                      # in the order of the game
+            want = answer(stations, board, s["h"], m[0], worked)
+            if m[1] == "QSO":
+                worked.add(m[0])
             got = m[2] if m[1] == "QSO" else m[1]
             if want != got:
                 return False

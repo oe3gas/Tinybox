@@ -13,7 +13,8 @@
   Hash. Zeilen `//CT`, Fähigkeit `CT`. Client 2026.11.12. Nachtrag 2026.11.12.2: Einladung zwischen Clients
   annehmen/ablehnen (`//CT NO`), Log in zwei Spalten als Chips, CQ-Feld blinkt bis zur Antwort, QSO-Feld
   invertiert 3×. 2026.11.12.3: Pause-Taste (`//CT PAUSE`/`RESUME`) und Spiel hochklappen. 2026.11.12.4: im Chatboard gegen
-  andere Teilnehmer – die Box reicht die Zeilen weiter (`//CTR`, Fähigkeit `CTR`).
+  andere Teilnehmer – die Box reicht die Zeilen weiter (`//CTR`, Fähigkeit `CTR`). 2026.11.12.5: „QRZ?“ nur noch für
+  Stationen, die noch nicht gearbeitet sind.
 
 - **Eine Verbindung je Rufzeichen (CR121):** die TinyBox (KISS, AXUDP) beantwortet einen neuen Connect auf eine
   laufende Verbindung mit DM und beendet die Sitzung; ein N(R)-Fehler beendet die Verbindung mit DISC statt

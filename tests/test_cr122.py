@@ -75,6 +75,8 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(C.answer(st, board, True, "JN98"), "WEAK")
         self.assertEqual(C.answer(st, board, False, "JN98"), "NIL")
         self.assertEqual(C.answer(st, board, True, "KN28"), "NIL")
+        # a station already worked gives no hint any more
+        self.assertEqual(C.answer(st, board, True, "JN98", {"JN88"}), "NIL")
 
     def test_full_games_end_and_check(self):
         for seed in range(30):
@@ -105,6 +107,22 @@ class RulesTests(unittest.TestCase):
         for line in b.take(out[0]):
             a.take(line)
         self.assertTrue(b.my_turn())
+
+    def test_hint_only_for_stations_still_to_find(self):
+        a, b = pair(hints=True, seed=9)
+        start(a, b)
+        loc = sorted(b.s["me"])[0]
+        deliver(a, b, "b", a.cq(loc))                       # worked
+        self.assertEqual(a.s["mc"][-1][1], "QSO")
+        while not a.my_turn():
+            deliver(a, b, "a", b.cq(b.pick()))
+        others = set(b.s["me"]) - {loc}
+        near = [n for n in C.neighbours(a.board, loc) if n not in b.s["me"]
+                and not any(x in others for x in C.neighbours(a.board, n))
+                and not any(m[0] == n for m in a.s["mc"])]
+        self.assertTrue(near)
+        deliver(a, b, "b", a.cq(near[0]))
+        self.assertEqual(a.s["mc"][-1][1], "NIL")           # next to the worked one: nothing
 
     def test_pause(self):
         a, b = pair()
