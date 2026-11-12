@@ -4790,9 +4790,38 @@ User (`session.py`: Gast gehalten, Third-Party aus), Inbox-Absender, Logkopf, St
 - `RELOAD` (CR82) übernimmt eine geänderte Liste ohne Neustart.
 - `tinybox.conf.example`: Kommentar zur Liste und zur Höchstzahl.
 
+### Rechte – gelten für jeden Sysop der Liste
+
+Gerhard (12.11.2026): alle Sysop-Rechte für alle Sysops mitbedenken, z. B. das erweiterte
+Funktionsschema beim Connect über den TBClient. Bestand im Code: Fast alle Rechte hängen schon an
+`service.is_sysop_call()` bzw. an `clientproto.admin_allowed()`, das wiederum `is_sysop_call()`
+prüft. Mit der Liste in `is_sysop_call()` bekommen sie alle Sysops automatisch; bei der Umsetzung
+trotzdem jede Stelle prüfen und mit einem **zweiten Sysop-Rufzeichen testen**:
+
+| Recht | Stelle heute | mit CR125 |
+|-------|--------------|-----------|
+| TBClient: erweitertes Schema – Cap `ADM`, Sysop-Konsole im Client, „Sysop ▾“ im Leser (CR94, CR21) | `clientproto.admin_allowed()`, Caps-Abgleich (`caps.discard("ADM")`) | jeder Sysop mit seinem in dieser Box freigegebenen Schlüssel |
+| TBClient: schreibt als Sysop (Rolle `sysop`, Origin `sysop`, Bulletin an `WARN` → Warnseite, freie Rubriken) | `clientsync.py` (`admin_allowed`) | jeder Sysop |
+| Sysop-Sitzung über Telnet, AXUDP (Prompt `TinyBox SYSOP`, `HELP_SYSOP`, Sysop-Befehle) | `telnet.py`, `axudp.py` (`_sysop_allowed`) | jedes Rufzeichen der Liste, jede SSID |
+| Funk/Terminal: Sysop-Rufzeichen ist Gast, Meldung „Sysop-Rufzeichen auf Funk“ | `agw.py` (`_sysop_allowed`, `sysop_call_on_air`) | gilt für jedes Rufzeichen der Liste; Meldung an `SYSOP` |
+| Rollen und Rechte (Bulletins löschen, brocast-Seiten/`WARN`, Rubriken frei, kein Gast-Halt) | `rights.py`, `service.py` (`is_sysop_call` bei Rolle/Third-Party) | jeder Sysop |
+| Mehrfach-Verbindungen je Rufzeichen (Ausnahme für den Sysop) | `session.py` (`MAX_PER_CALL`, `session.sysop`) | jeder Sysop |
+| Web-GUI „Keys“: Kennzeichen „sysop“ | `keys.py` | bei jedem Sysop |
+| Third-Party-Sperre: Post von/an den Sysop erlaubt | `service.check_send` | Post von jedem Sysop und an `SYSOP` erlaubt |
+
+Zusätzlich:
+
+- **Wer war es?** Befehle eines Sysops über den Client (`//ADM`) laufen heute in einer
+  `SysopConsole`, die `cfg.station.sysop_call` als „by“ nimmt (`SHUTDOWN`/`RESTART`, `MOVE`/`COPY`/
+  `KILL`). Künftig das Rufzeichen des angemeldeten Sysops eintragen, damit Log, Systemmeldung und
+  „(copied from …)“ zeigen, welcher Sysop es war. Lokal (Konsole, Web-GUI) bleibt es `SYSOP`.
+- **Client:** braucht keine Änderung – er schaltet die Sysop-Funktionen nur nach dem `ADM`-Cap der
+  Box frei, nicht nach einem Rufzeichen-Vergleich. Bei der Umsetzung gegenprüfen.
+- Andere Dienste (brocastd, kisshub, dxfeed) kennen kein Sysop-Rufzeichen; nichts zu tun.
+
 ### Entschieden (OE3GAS, 12.11.2026)
 
-- Alle Sysops gleich, kein Haupt-Sysop, alle Rechte für alle.
+- Alle Sysops gleich, kein Haupt-Sysop, alle Rechte für alle – auch das erweiterte Schema im TBClient.
 - Alle Nachrichten an den Sysop gehen an alle Sysops, Empfänger `SYSOP`.
 - Schlüssel: bestehende Freigabe-Prozedur.
 - Testbed (`tbtest/bed.py`): braucht keine Änderung, ein einzelnes Rufzeichen bleibt gültig.
