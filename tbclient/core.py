@@ -30,6 +30,7 @@ from .logbook import Logbook
 from .mailstore import MailStore
 from . import peerfile
 from .contest import ContestSlot
+from .prefixgame import PrefixGame
 from .peerchat import PeerChat
 from .boardfiles import BoardFiles
 from .peerfile import FileStore
@@ -193,6 +194,7 @@ class ClientCore:
                                        lambda: self.target, self._send, lambda: "",
                                        lambda text: self.console.append("*** " + text))
         self.relay_contests: dict[str, ContestSlot] = {}      # CR122: through the box
+        self.prefix = PrefixGame(self._send, lambda: self.cfg.mycall.upper())   # CR123
 
     # --- settings --------------------------------------------------------
 
@@ -574,6 +576,15 @@ class ClientCore:
         if not offline_ok and (self.state != "online" or "CT" not in self.caps):
             return False
         return self.box_contest.act(act, arg)
+
+    def prefix_act(self, act: str, arg: str = "") -> bool:
+        """CR123: Prefix raten in the board (start / join / tip / stop / close)."""
+        if act != "close" and (self.state != "online" or "PR" not in self.caps
+                               or not self.board):
+            return False
+        ok = self.prefix.act(act, arg)
+        self._touch()
+        return ok
 
     def _relay_slot(self, call: str) -> ContestSlot:
         """The game with <call> through the TinyBox of the chat channel."""
@@ -959,7 +970,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -1474,6 +1485,9 @@ class ClientCore:
                 self.console.append("*** " + text)
         elif cmd == "CT":                  # CR122: the box plays the CQ contest
             self.box_contest.take(rest)
+        elif cmd == "PR":                  # CR123: the box answers a Prefix raten command
+            self.prefix.answer(rest)
+            self._touch()
         elif cmd == "CTR":                 # CR122: another client, handed on by the box
             call, _, line = rest.partition(" ")
             call = call.upper()
@@ -1539,6 +1553,7 @@ class ClientCore:
             self._save_settings()
         self._hist_keys = set()
         self._hist_buf, self._hist_lo, self._hist_hi = None, 0, 0
+        self.prefix.clear()                          # CR123: the game belongs to the board
         self.board = None
         self.members = {}
         self.numbers = {}
@@ -1613,8 +1628,9 @@ class ClientCore:
                 if call:
                     self.quality[call] = b
         elif ev.kind == "system":
+            pr = self.prefix.event(ev.text)              # CR123: Prefix raten
             self._add({"id": pos, "seq": ev.seq, "kind": "system", "text": ev.text,
-                       "time": now})
+                       "time": now, **({"pr": True} if pr else {})})
 
     def _set_number(self, num: int, call: str) -> None:
         """Member numbers are reused: a new holder pushes the old one out."""
@@ -1732,6 +1748,8 @@ class ClientCore:
             "contest": {"ok": "CT" in self.caps, "err": self.box_contest.err,   # CR122
                         "game": self.box_contest.summary(),
                         "rel_ok": "CTR" in self.caps, "rel": self._relay_summary()},
+            "prefix": {"ok": "PR" in self.caps and bool(self.board), "err": self.prefix.err,  # CR123
+                       "game": self.prefix.summary()},
         }
 
     def _image_refs(self, ch: int | None = None) -> set[str]:

@@ -302,6 +302,7 @@ function render() {
   }
   renderMessages();
   renderBoxContest();                               // CR122
+  renderPrefix();                                   // CR123
   renderInvites();
 }
 
@@ -791,6 +792,10 @@ function renderMessages() {
     if (!m.history && inHistory) { ol.append(el("li", "divider", "now")); inHistory = false; }
     if (m.kind === "join" || m.kind === "leave") {
       ol.append(el("li", "sys", `${m.call} ${m.kind === "join" ? "joined" : "left"} · ${hhmm(m.time)}`));
+      prevCall = null; continue;
+    }
+    if (m.kind === "system" && m.pr) {               // CR123: Prefix raten, foldable
+      if (!Prefix.folded()) ol.append(el("li", "sys pr-line", Prefix.line(m.text)));
       prevCall = null; continue;
     }
     if (m.kind === "system") { ol.append(el("li", "sys", wireToText(m.text))); prevCall = null; continue; }
@@ -3265,6 +3270,24 @@ function renderBoxContest() {
   box.append(part("box"));                       // the box itself last
 }
 
+/* CR123: Prefix raten in the board - the panel over the chat (prefix.js draws it) */
+let prOpen = false;
+function renderPrefix() {
+  const k = S.prefix || {};
+  const bh = $("bh-prefix");
+  if (bh) { bh.classList.toggle("hidden", !k.ok); bh.classList.toggle("active", prOpen || !!k.game); }
+  const box = $("prefix");
+  const show = !!S.board && (!!k.game || (prOpen && k.ok));
+  box.classList.toggle("hidden", !show);
+  if (!show) return;
+  Prefix.render(box, k, {
+    act: (act, arg) => api("prefix", { act, arg: arg || "" }).then(() => { if (act === "start") prOpen = false; }),
+    hide: () => { prOpen = false; render(); },
+    newGame: () => { prOpen = true; render(); },
+    redraw: () => render(),
+  });
+}
+
 /* CR122: invite a member of the board - the box hands the game on */
 function contestInvite(call) {
   boxContestOpen = true;
@@ -4087,6 +4110,7 @@ async function start() {
   $("freq-change").onclick = () => { $("sheet").classList.add("hidden"); openFreq(); };
   $("nav-terminal").onclick = openTerm;
   $("nav-contest").onclick = () => { boxContestOpen = !boxContestOpen; render(); };     // CR122
+  $("bh-prefix").onclick = () => { prOpen = !prOpen; render(); };                       // CR123
   $("pick-contest").onclick = () => { boxContestOpen = true; render(); };
   $("bh-leave").onclick = () => api("leave");
   const openSheet = (focus) => {

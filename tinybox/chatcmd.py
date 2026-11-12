@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 from prcore.profile import short as profile_short
 from prcore.text import isnum
 
-from . import clientnews, clientproto, texts
+from . import clientnews, clientproto, prefixgame, texts
 from .config import ChatBoard
 
 if TYPE_CHECKING:
@@ -279,6 +279,8 @@ def handle(s: Session, line: str) -> None:
                 pass
             if not ok:
                 s.out("//ERR react" if s.client else texts.CHAT_UNKNOWN)
+        elif cmd == "PR":                 # CR123: Prefix raten (terminal users)
+            prefixgame.command(s, arg)
         elif cmd in ("H", "HELP", "?") and isnum(arg.strip()):
             _history(s, int(arg.strip()))
         elif cmd in ("H", "HELP", "?"):
@@ -289,6 +291,8 @@ def handle(s: Session, line: str) -> None:
     if len(text) > hub.cfg.chat.max_line:
         text = text[:hub.cfg.chat.max_line]
         s.out(texts.CHAT_CUT.format(max=hub.cfg.chat.max_line))
+    if prefixgame.chat_line(s, text):  # CR123: "mit" while a game runs = play along
+        return
     if s.client is not None:          # CR12: an image reference must name an upload
         reason = hub.images.check_line(s, text)
         if reason:

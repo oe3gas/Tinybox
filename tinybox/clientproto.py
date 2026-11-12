@@ -103,6 +103,8 @@ with its text, everything else only as a header (CR40).
 CT = the CQ contest with the box as the opponent (CR122, see contest.py):
     //CT NEW h=<0|1> -> //CT OK c=<loc> h=.. and //CT READY <hash>, then the moves.
 CTR = two clients of the box play each other through it: //CTR <call> <line>.
+PR = Prefix raten in a board (CR123, see prefixgame.py): //PR START|JOIN|A|B|C|STOP,
+    the game comes as system events "#<seq> !PR ..." to everybody in the board.
 
 HSEQ = //H history lines carry the event number of the line:
     //H <unix> #<n hex> <call>: <text>
@@ -134,7 +136,7 @@ from prcore import profile as pf
 from prcore.release import RELEASE
 from prcore.text import isnum
 
-from . import clientnews, clientsync, contest, profiles
+from . import clientnews, clientsync, contest, prefixgame, profiles
 from .addressing import base_call
 
 if TYPE_CHECKING:
@@ -149,7 +151,7 @@ REQUIRE_AUTH = True
 
 PROTO = "TB1"
 KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
-              "HSEQ", "ADM", "BFILE", "LOTW", "CT", "CTR")
+              "HSEQ", "ADM", "BFILE", "LOTW", "CT", "CTR", "PR")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 FILE_COMMANDS = ("FPUT", "FGET")          # CR86: files in a board
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
@@ -299,6 +301,8 @@ def handle(s: Session, line: str) -> None:
             s.out("//ERR CTR needs CTR")
         else:
             contest.relay(s, line[2:][3:].strip())
+    elif cmd == "PR":                       # CR123: Prefix raten in the board
+        prefixgame.command(s, line[2:][2:].strip())
     elif cmd in IMG_COMMANDS:
         if "IMG" not in s.client.caps:
             s.out(f"//ERR {cmd} needs IMG")

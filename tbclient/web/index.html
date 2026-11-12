@@ -72,7 +72,8 @@
   <nav id="boards" class="boards" aria-label="Chat boards"></nav>
   <div id="board-head" class="board-head hidden">
     <div class="bh-text"><b id="bh-name"></b> <span id="bh-desc" class="muted"></span></div>
-    <button id="bh-leave" class="leave-btn" title="Leave this board">Leave</button>
+    <span class="row nowrap"><button id="bh-prefix" class="sm hidden" title="Prefix raten: which DXCC entity is this call? Play in the board">🎯 Prefix raten</button>
+    <button id="bh-leave" class="leave-btn" title="Leave this board">Leave</button></span>
   </div>
 
   <div id="prof-banner" class="mail-banner prof-banner hidden" role="status">
@@ -85,6 +86,7 @@
   </div>
 
   <section id="box-contest" class="ct-panel box-contest hidden" aria-label="CQ contest"></section>
+  <section id="prefix" class="ct-panel pr-panel hidden" aria-label="Prefix raten"></section>
   <main id="chat" class="chat">
     <section id="offline" class="card center hidden">
       <p class="big">Not connected to <span id="off-tb"></span></p>
@@ -386,6 +388,7 @@
 <div id="ct-invite" class="ct-invite-pop hidden" role="alertdialog" aria-label="CQ contest invitation"></div>
 <script src="/chess.js"></script>
 <script src="/contest.js"></script>
+<script src="/prefix.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

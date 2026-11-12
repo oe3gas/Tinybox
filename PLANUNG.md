@@ -1992,7 +1992,7 @@ Vorgesehen (Reihenfolge):
 keine Altersgrenze mehr. Der Zeitraum muss erkennbar sein: „All“ heißt jetzt „Last … days“
 (bei unserem Verkehr ≈ 6,9 Tage). Punkte 1 und 2 sind mit umgesetzt (Client 2026.11.10).
 
-## 31. Spiel „Prefix raten“ (Regeln entschieden 12.11.2026, noch nicht umgesetzt)
+## 31. Spiel „Prefix raten“ (entschieden und umgesetzt 12.11.2026, CR123)
 
 Die Box nennt ein fiktives Rufzeichen, dazu drei Vorschläge A, B, C (DXCC-Entitäten). Die
 Teilnehmer im Chatboard starten das Spiel gemeinsam, jeder gibt pro Call seinen Tipp ab. Am Ende

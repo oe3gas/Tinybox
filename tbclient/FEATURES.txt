@@ -51,6 +51,10 @@ Zuletzt dazugekommen
   passenden Rufzeichen, Zug = CQ <Grossfeld>, Ausbreitungshinweis "QRZ?".
   Gegen einen TBClient (TBClient-Ansicht) oder gegen die TinyBox (links
   unter Station). Pruefung am Ende ueber Hash.
+- Prefix raten (CR123): im Chatboard nennt die Box ein Rufzeichen, die
+  Spieler tippen die DXCC-Entitaet (A/B/C), 30 s je Call mit Countdown.
+  Start mit Stufe (Newcomer, OM, Pro, DX-God), IARU-Regionen und Anzahl
+  Calls; wer nicht mitspielt, schaut zu. Spielzeilen einklappbar.
 - TBClient-Ansicht in drei Spalten (CR80, PC ab 1000 px): rechts Ping, Speed
   test, Chess, QSL, Heard there, Delete history untereinander, unter jedem
   der letzte Wert - je Gegenstation gemerkt, auch nach neuem Connect - oder

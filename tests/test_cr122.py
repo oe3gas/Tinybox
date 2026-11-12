@@ -388,7 +388,7 @@ class CoreRelayTests(unittest.TestCase):
             core = ClientCore(client_cfg(tmp))
             sent = []
             core._send = sent.append
-            core.caps = {"CT", "CTR"}
+            core.caps = {"CT", "CTR", "PR"}
             core._control("//CTR OE1XYZ NEW h=1 c=JN88")
             rel = core._relay_summary()
             self.assertEqual(rel[0]["call"], "OE1XYZ")

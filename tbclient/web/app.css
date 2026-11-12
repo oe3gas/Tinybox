@@ -961,6 +961,31 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .members-map.hidden { display: none; }
 .members-map .ph-map { display: block; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
 
+/* CR123: Prefix raten (prefix.js) */
+.pr-panel { overflow-y: auto; max-height: 60vh; }
+.pr-title { display: inline-flex; gap: 4px; align-items: baseline; flex-wrap: wrap; }
+.pr-form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pr-lab, .pr-reg { display: inline-flex; gap: 5px; align-items: center; }
+.pr-regs { display: inline-flex; gap: 10px; }
+.pr-n { width: 4.5em; padding: 3px 6px; border-radius: 6px; font-size: 14px; }
+.pr-rules { margin-top: 6px; }
+.pr-err { color: var(--bad); min-height: 16px; font-size: 13px; }
+.pr-k { font-size: 13px; color: var(--muted); }
+.pr-timer { font: 700 18px/1 ui-monospace, Consolas, monospace; min-width: 3.2em; text-align: right; }
+.pr-timer.low { color: var(--bad); }
+.pr-call { font: 700 30px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 2px; text-align: center; margin: 4px 0 10px; }
+.pr-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+@media (max-width: 620px) { .pr-opts { grid-template-columns: minmax(0, 1fr); } }
+button.pr-opt { padding: 10px 8px; font-size: 14px; text-align: left; white-space: normal; }
+button.pr-opt:disabled { opacity: 1; cursor: default; }
+button.pr-opt.mine { border: 2px solid var(--accent); }
+button.pr-opt.sent { opacity: .7; }
+button.pr-opt.right { background: color-mix(in srgb, var(--ok) 20%, var(--surface)); border-color: var(--ok); color: var(--ok); }
+button.pr-opt.wrong { background: color-mix(in srgb, var(--bad) 15%, var(--surface)); border-color: var(--bad); color: var(--bad); }
+.pr-scores { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
+.pr-tipped { margin-bottom: 6px; }
+.pr-line { font-size: 12px; }
+
 /* CR122: CQ contest - battleships with contest stations (contest.js) */
 .ct-panel { padding: 10px max(14px, calc((100% - 760px) / 2)); background: var(--surface);
   border-bottom: 1px solid var(--line); font-size: 14px; }

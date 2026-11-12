@@ -17,6 +17,7 @@ API:
   POST /api/peer/heard {"ch": n}             CR78: ask the TBClient there whom it hears
   POST /api/peer/fun  {"ch", "act", "arg"}   CR78: ping, speed, chess-new/move/resign/end/close,
                                               CR122: ct-new/place/random/ready/cq/resign/close
+  POST /api/prefix    {"act", "arg"}          CR123: Prefix raten (start "OM 12 10", join, tip "A", stop, close)
   POST /api/contest   {"act", "arg", "to"}    CR122: the same against the TinyBox (new/place/...),
                                               with "to": against that client, through the box
   POST /api/peer/clear {"ch": n}             CR78: delete the chat history with it (both sides)
@@ -91,6 +92,7 @@ FILES = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js",
          "/logo.svg": "logo.svg", "/aprsstats.js": "aprsstats.js", "/aprsgraph.js": "aprsgraph.js",
          "/chess.js": "chess.js",
          "/contest.js": "contest.js",
+         "/prefix.js": "prefix.js",
          "/aprsview.js": str(SHARED / "aprsview.js"), "/aprsview.css": str(SHARED / "aprsview.css")}
 # CR42: the icons of the connection in the top bar
 FILES.update({f"/conn/{p.name}": f"conn/{p.name}" for p in (STATIC / "conn").glob("*.png")})
@@ -313,6 +315,8 @@ class WebServer:
             elif path == "/api/contest":           # CR122: {"act", "arg"} CQ contest vs the box
                 ok = core.contest_act(str(data.get("act", "")), str(data.get("arg", "")),
                                       str(data.get("to", ""))[:12])
+            elif path == "/api/prefix":            # CR123: {"act", "arg"} Prefix raten in the board
+                ok = core.prefix_act(str(data.get("act", "")), str(data.get("arg", ""))[:40])
             elif path == "/api/peer/clear":        # CR78: {"ch": n} - delete the chat history
                 ch = data.get("ch")
                 ok = core.peer_clear(ch if isinstance(ch, int) else 0)

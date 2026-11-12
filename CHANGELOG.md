@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **Prefix raten (CR123, PLANUNG 31):** Spiel im Chatboard – die Box nennt ein fiktives Rufzeichen, die
+  Spieler tippen die DXCC-Entität (A/B/C), 30 s je Call. Start mit Stufe, IARU-Regionen und Anzahl der Calls,
+  Anmeldung („mit“), Zuschauer, Tipps nur an die Box. Spielliste `prcore/prefixraten.csv` (306 Entitäten).
+  Zeilen `//PR`, Fähigkeit `PR`, Ereignisse `!PR …`; Terminal `/PR …`. Client 2026.11.12.5.
+
 - **CQ contest (CR122):** Schiffe versenken mit Amateurfunk-Touch – 8 × 8 Großfelder um die Box bzw. den
   Einladenden, je 5 Conteststationen mit passenden Rufzeichen, Zug `CQ <Großfeld>`, Ausbreitungshinweis
   „QRZ?“. Gegen einen TBClient oder gegen die TinyBox (mehrere Spiele gleichzeitig), Prüfung am Ende über

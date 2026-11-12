@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.11.2026 (CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 12.11.2026 (CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -95,6 +95,7 @@ Stand: 12.11.2026 (CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 2
 | 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (Pille „terminal“) und beim Betreten eine Systemmeldung an alle | offen – entschieden (Variante A + Systemmeldung), Umsetzung ab 12.11.2026 – siehe unten |
 | 121 | TinyBox: eine Verbindung je Rufzeichen – neuer Connect auf laufende Verbindung bekommt DM, N(R)-Fehler beendet mit DISC (gleiches Call doppelt auf der Frequenz) | ✅ 11.11.2026 (KISS/AXUDP; Funktest offen) – siehe unten |
 | 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; .3: Pause, hochklappen; .4: über die Box gegen andere Clients; Funktest Box ✓, Client↔Client offen) – siehe unten |
+| 123 | Prefix raten im Chatboard: die Box nennt ein Rufzeichen, Spieler tippen die DXCC-Entität (A/B/C); Stufen, IARU-Regionen, Anzahl Calls, Anmeldung, Zuschauer, 30-s-Timer, einklappbar | ✅ 12.11.2026 (Client 2026.11.12.5, Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4614,3 +4615,53 @@ Jetzt reicht die Box die Zeilen zwischen zwei ihrer Clients weiter (Client 2026.
   „CQ contest“ links unter Station, über dem Spiel gegen die Box. Gespeichert je Box und Gegner.
 - Tests `tests/test_cr122.py`: ganzes Spiel über die Box, Fehlerfälle, älterer Client, Client-Kern.
 
+## CR123 – Prefix raten im Chatboard (✅ 12.11.2026, Client 2026.11.12.5, Funktest offen)
+
+### Erfassung (OE3GAS, 12.11.2026)
+
+Die Box gibt ein fiktives Rufzeichen vor, das einer DXCC-Entität zugeordnet werden muss (ARRL-DXCC-Liste,
+ITU-Präfixe; M0 ist ebenso UK wie G5). Drei Vorschläge A, B, C; jeder Spieler tippt; am Ende gewinnt, wer
+die meisten richtigen Antworten hat. Die Teilnehmer im Chatboard starten gemeinsam. Beim Start einstellbar:
+IARU-Regionen 1, 2, 3 (einzeln oder kombiniert), Stufe Newcomer / OM / Pro / DX-God, Anzahl der Calls.
+Wer im Board ist, aber nicht spielen will, schaut zu. 30 s je Tipp mit Timer für alle; Spielzeilen
+einklappbar. Regeln, Stufen und Spielliste: PLANUNG 31.
+
+### Protokoll (Fähigkeit `PR`; Terminal-User tippen `/PR …`)
+
+Vom Board-Mitglied an die Box, Antwort nur an den Sender:
+
+    //PR START s=<NC|OM|PRO|GOD> r=<123> n=<1-50>   -> //PR OK START
+    //PR JOIN                (oder die Chatzeile „mit“ / „join“)  -> //PR OK JOIN
+    //PR A | B | C           der Tipp, geht an niemanden weiter     -> //PR OK TIP <k> <A>
+    //PR STOP                nur wer gestartet hat
+    //PR ERR busy|no_game|no_board|bad|no_pool|not_player|late|twice|not_starter
+
+Die Box an alle im Board, als Systemereignis (ältere Clients zeigen den Text, Terminals lesbaren Text):
+
+    #<n> !PR OPEN <starter> <stufe> R<regionen> <calls> <entitäten> <anmeldung s>
+    #<n> !PR IN <call>                       spielt mit (Anmeldung oder ab dem nächsten Call)
+    #<n> !PR GO <call> ...                   Anmeldung zu, die Spieler
+    #<n> !PR Q <k>/<n> <rufzeichen> <s> <A>|<B>|<C>
+    #<n> !PR TIP <call>                      hat getippt (ohne Buchstaben)
+    #<n> !PR RES <k> <buchstabe> <call>=<punkte>[+] ...   + = diesmal richtig
+    #<n> !PR END <call>=<punkte> ...
+    #<n> !PR STOP by <call> | no_players
+
+Ein Call mit Auflösung rund 150 Bytes über Funk (einmal als UI-Frame an alle).
+
+### Umsetzung
+
+- `prcore/prefixgame.py`: Spielliste laden, Pool (Stufe + Regionen, Auffüllen auf 50 aus der nächst
+  schwächeren Stufe, seltenste zuerst; weniger als 50 erlaubt), Rufzeichen aus dem Muster, Frage mit zwei
+  falschen Antworten aus demselben Pool, jede Entität einmal je Spiel.
+- TinyBox `tinybox/prefixgame.py`: ein Spiel je Board, im Speicher. Anmeldung 60 s, der Starter spielt
+  mit. 30 s je Call, die Box nimmt Tipps 5 s länger an (Laufzeit); Auflösung sobald alle Spieler im Board
+  getippt haben, sonst nach 35 s; 5 s Pause bis zum nächsten Call. Wer später einsteigt, spielt ab dem
+  nächsten Call; wer das Board verlässt, auf den wartet die Box nicht mehr; ist kein Spieler mehr da,
+  bricht sie ab. Terminal: `/PR …` und Hilfe unter `/H`.
+- TBClient `tbclient/prefixgame.py` (Zustand aus den Ereignissen), Web-GUI `prefix.js`: Knopf
+  „🎯 Prefix raten“ im Kopf des Boards; Startformular (Stufe, R1–R3, Anzahl); Panel über dem Chat mit
+  Rufzeichen, A/B/C, Countdown (der Client zählt selbst, rot ab 5 s), wer getippt hat, Auflösung grün/rot,
+  Stand, Sieger. „Play along“ für Zuschauer. „▴“ klappt Panel und Spielzeilen im Chat ein (im Browser gemerkt).
+- Tests `tests/test_cr123.py`: Liste, Stufengrößen, Auffüllen, Muster, ganzes Spiel mit Zuschauer,
+  Terminal, Fehler und Stop, später Einsteigen und Gehen, Client-Zustand aus einem echten Spiel.
