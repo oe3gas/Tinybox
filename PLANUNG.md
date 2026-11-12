@@ -1992,6 +1992,54 @@ Vorgesehen (Reihenfolge):
 keine Altersgrenze mehr. Der Zeitraum muss erkennbar sein: „All“ heißt jetzt „Last … days“
 (bei unserem Verkehr ≈ 6,9 Tage). Punkte 1 und 2 sind mit umgesetzt (Client 2026.11.10).
 
+## 31. Spiel „Prefix raten“ (Regeln entschieden 12.11.2026, noch nicht umgesetzt)
+
+Die Box nennt ein fiktives Rufzeichen, dazu drei Vorschläge A, B, C (DXCC-Entitäten). Die
+Teilnehmer im Chatboard starten das Spiel gemeinsam, jeder gibt pro Call seinen Tipp ab. Am Ende
+der Runde gewinnt, wer die meisten richtigen Antworten hat.
+
+**Einstellungen beim Start:**
+
+- IARU-Region 1, 2, 3 – einzeln oder kombiniert.
+- Stufe (Rang in der Most-Wanted-Liste, 1 = gesuchteste, 340 Entitäten):
+
+| Stufe | Rangbereich | Entitäten (alle Regionen) |
+|---|---|---|
+| Newcomer | untere 40 % (205–340) | 125 |
+| OM | untere 90 % (35–340) | 261 |
+| Pro | obere 30 % (1–102) | 64 |
+| DX-God | obere 20 % (1–68) + gelöschte Entitäten | 66 |
+
+Die Stufen dürfen sich überschneiden.
+
+**Pool einer Runde:**
+
+- Mindestens 50 Entitäten je Stufe. Reichen die eigenen nicht, füllt die Box aus der nächst
+  schwächeren Stufe auf (DX-God → Pro → OM → Newcomer), die seltensten zuerst, nur bis 50.
+- Kommt der Pool auch dann nicht auf 50, wird mit weniger gespielt (heute: Newcomer R2 = 30,
+  R3 = 16, R2+R3 = 46; OM R3 = 46). Die Box sagt beim Start immer an, aus wie vielen
+  Entitäten die Calls kommen.
+- Die zwei falschen Antworten kommen aus demselben Pool.
+
+**Spielliste `prcore/prefixraten.csv`** (306 Einträge: 278 aktuelle, 28 gelöschte Entitäten):
+
+- Grundlage: ARRL-DXCC-Liste (Current_Deleted.txt, Februar 2022), ITU-Präfixtabelle.
+- Nur Entitäten mit eindeutigem Präfix. Weggelassen: aktuelle Entitäten, die sich einen Präfix
+  teilen (VP0, FT, VK9, 3D2, CE0, PY0 …), und gelöschte, deren Präfix heute anders vergeben
+  oder mehrdeutig ist (EA9, OK, PJ, VO, 8Z4, 9U5, CR8, KS4, DDR Y2–Y9 …).
+- Gelöschte bei DX-God, u.a. 9S4, AC3, AC4, KZ5, VQ1, ZC6, PK1–PK6, FB8, CR10, 1M.
+- Spalte `spiel_praefix`: noch der bereinigte ARRL-Präfix; daraus werden die Muster, nach
+  denen die Box die Calls bildet.
+
+**Offen:**
+
+- Ränge: echt nur für die Top 25 (gdxf, Mixed 2025, dazu Top 25 CW/Phone/Digital), der Rest
+  ist geschätzt (Spalte `rang_quelle`). Mit der vollständigen Most-Wanted-Liste neu einteilen.
+- IARU-Region bei Iran, Mongolei, Grönland, Peter I und den US-Pazifikinseln um Hawaii prüfen
+  (Spalte `iaru_pruefen`).
+- Muster für die Call-Bildung je Entität.
+- Später ggf. nicht eindeutige Entitäten über den Suffix zurückholen (FT5W, VP0S …).
+
 ## Quellen
 
 - Security-Advisory TinyBox (9V1NE, 09.11.2026): https://gist.github.com/nnamon/3d93af6dd520d5f4b392c3fb57407d63
@@ -2001,4 +2049,7 @@ keine Altersgrenze mehr. Der Zeitraum muss erkennbar sein: „All“ heißt jetz
 - Direwolf-Dokumentation (AGW-Interface): https://github.com/wb2osz/direwolf/tree/master/doc
 - DXSpider-Wiki, Verbinden mit einem Knoten: https://wiki.dxcluster.org/wiki/How_to_connect
 - AD1C Country Files (cty.dat): https://www.country-files.com
+- ARRL DXCC-Liste (Text): https://www.arrl.org/files/file/DXCC/Current_Deleted.txt
+- Most Wanted aus Mitteleuropa (gdxf): https://gdxf.de/mostwanted/index.php
+- ITU-Präfixe: https://en.wikipedia.org/wiki/ITU_prefix
 - Raspberry Pi OS (Downloads, unterstützte Modelle): https://www.raspberrypi.com/software/operating-systems/
