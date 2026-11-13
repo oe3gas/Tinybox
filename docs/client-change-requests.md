@@ -94,7 +94,7 @@ Stand: 13.11.2026 (CR127 erfasst; CR126 erfasst; CR124; CR123; CR122; CR87–CR1
 | 119 | TinyBox-Terminal: `SB` nicht mehr in der Hilfe für nicht authentifizierte User | ✅ 11.11.2026 – siehe unten |
 | 120 | Chatboard: Terminal-User in der User-Ansicht kennzeichnen (Pille „terminal“) und beim Betreten eine Systemmeldung an alle | offen – entschieden (Variante A + Systemmeldung), Umsetzung ab 12.11.2026 – siehe unten |
 | 121 | TinyBox: eine Verbindung je Rufzeichen – neuer Connect auf laufende Verbindung bekommt DM, N(R)-Fehler beendet mit DISC (gleiches Call doppelt auf der Frequenz) | ✅ 11.11.2026 (KISS/AXUDP; Funktest offen) – siehe unten |
-| 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; .3: Pause, hochklappen; .4: über die Box gegen andere Clients; .5: Hinweis-Fix; Funktest Box ✓, Client↔Client offen) – siehe unten |
+| 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; .3: Pause, hochklappen; .4: über die Box gegen andere Clients; .5: Hinweis-Fix; 2026.11.13.2: Ansicht; Funktest Box ✓, Client↔Client offen) – siehe unten |
 | 123 | Prefix raten im Chatboard: die Box nennt ein Rufzeichen, Spieler tippen die DXCC-Entität (A/B/C); Stufen, IARU-Regionen, Anzahl Calls, Anmeldung, Zuschauer, 30-s-Timer, einklappbar | ✅ 12.11.2026 (Client 2026.11.12.5, Funktest offen) – siehe unten |
 | 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig, Weltkarte als Hintergrund | ✅ 13.11.2026 (Client 2026.11.13, Funktest offen) – siehe unten |
 | 125 | TinyBox: bis zu 5 gleichberechtigte Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste, Post an den Sysop geht an `SYSOP` (alle) | offen – siehe unten |
@@ -4988,3 +4988,12 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
 
 - Höchstens 50 gezählte Spiele je Spielerpaar und Tag (UTC); weitere Meldungen: `//GAME ERR <id> limit`.
 - Spiele zwischen Spielern verschiedener Heimat-Boxen zählen vorerst nicht (später ggf. über Forwarding).
+
+### Nachtrag 4 (OE3GAS, 13.11.2026): Ansicht – umgesetzt (Client 2026.11.13.2) ✅
+
+- Setzen: die Knöpfe rechts neben dem Brett – „Place your stations by tapping squares or: [Random]“,
+  darunter „Start game“ (statt „Ready“) und „Cancel game“ (statt „Give up“).
+- Im Spiel beide Bretter gleich groß.
+- Meldung zum letzten Ruf: „no answer“ mit 😢, QSO mit 😍.
+- Ende: verloren mit 😢, gewonnen mit 🎆 (Unentschieden 🤝).
+

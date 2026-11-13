@@ -104,15 +104,15 @@ const Contest = (() => {
     const m = g.mc[g.mc.length - 1];
     if (g.pend) return ["", `CQ ${g.pend} ...`, "calling, waiting for an answer"];
     if (!m) return null;
-    if (m[1] === "QSO") return ["ok", `QSO: ${m[2]} answers from ${m[0]}`,
+    if (m[1] === "QSO") return ["ok", `😍 QSO: ${m[2]} answers from ${m[0]}`,
       `5NN ${sn(m[3])} · ${kmOf(g, m[0])} km · ${g.worked} of 5 worked`];
     if (m[1] === "WEAK") return ["warn", `CQ ${m[0]}: QRZ?`, "Weak signals - a station is in a neighbouring square."];
-    return ["", `CQ ${m[0]}: no answer`, "Nobody there. Try another square."];
+    return ["", `😢 CQ ${m[0]}: no answer`, "Nobody there. Try another square."];
   }
 
   function endCard(g, o) {
-    const T = { win: ["win", "🏆 Contest won"], loss: ["loss", "Contest lost"], draw: ["draw", "Contest ended in a draw"],
-                resigned: ["loss", "You resigned"], "they resigned": ["win", `🏆 ${g.opp} resigned - you won`] };
+    const T = { win: ["win", "🎆 Contest won"], loss: ["loss", "😢 Contest lost"], draw: ["draw", "🤝 Contest ended in a draw"],
+                resigned: ["loss", "😢 You resigned"], "they resigned": ["win", `🎆 ${g.opp} resigned - you won`] };
     const [cls, head] = T[g.res] || ["draw", "Contest over"];
     const card = mk("div", "ct-end " + cls);
     card.append(mk("div", "ct-end-h", head));
@@ -243,12 +243,18 @@ const Contest = (() => {
     const left = mk("div", "ct-left"), right = mk("div", "ct-right");
     left.append(mk("div", "ct-lab small muted", g.st === "setup" ? "Your stations" : `Your CQ calls (${g.opp}'s squares)`),
                 board(g, true, o));
-    if (g.st === "setup") {
+    if (g.st === "setup") {                         // the actions right of the board
+      const side = mk("div", "ct-setup");
+      if (!g.ready) {
+        const r = mk("div", "ct-setup-row");
+        r.append(mk("span", "", "Place your stations by tapping squares or: "), btn("Random", () => o.act("random"), !o.on));
+        side.append(r, mk("div", "small muted", `${Object.keys(g.me).length} of 5 placed`));
+      } else side.append(mk("div", "muted", `Your stations are on the air - waiting for ${g.opp} ...`));
       const acts = mk("div", "ct-acts");
-      if (!g.ready) acts.append(btn("Random", () => o.act("random"), !o.on),
-        btn("Ready", () => o.act("ready"), !o.on || Object.keys(g.me).length !== 5, "primary-sm"));
-      acts.append(btn("Give up", () => o.act("close"), false));
-      left.append(acts);
+      if (!g.ready) acts.append(btn("Start game", () => o.act("ready"), !o.on || Object.keys(g.me).length !== 5, "primary-sm"));
+      acts.append(btn("Cancel game", () => o.act("close"), false));
+      side.append(acts);
+      right.append(side);
     } else if (g.st === "play") {
       const f = mk("form", "ct-cq");
       const inp = mk("input"); inp.maxLength = 4; inp.placeholder = "KN08"; inp.className = "ct-in";
@@ -268,7 +274,8 @@ const Contest = (() => {
       left.append(f, err);
     }
     grid.append(left);
-    if (g.st !== "setup") {
+    if (g.st === "setup") grid.append(right);
+    else {
       right.append(mk("div", "ct-lab small muted", "Your stations"), board(g, false, o));
       grid.append(right);
     }
