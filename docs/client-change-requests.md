@@ -5051,6 +5051,19 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
   bei mehreren Spielern mehr Bytes, nicht weniger. Mitlesen mit einem Monitor bleibt möglich (Funk ist
   offen); für ein Spiel unerheblich.
 
+### Nachtrag (OE3GAS, 14.11.2026): Zuschauer mit I-Frames nicht mehr beliefern – aufgenommen, noch nicht umsetzen
+
+Heute (`_deliver` in `tinybox/chat.py`): Die Spielzeile geht einmal als UI an `TBCHAT-<n>`, wenn ein
+UI-Client im Board ist und die Board-Nummer ≤ `MAX_UI_BOARD`. Eigene I-Frames bekommen Clients ohne
+UI-Empfang (v. a. entfernte Stationen über Digipeater), ältere Clients ohne Mitgliedsnummern (alte Form
+zusätzlich) und Terminals (Text).
+
+- Zuschauer, die per I-Frame versorgt würden (Client ohne UI-Empfang oder ohne Mitgliedsnummern),
+  bekommen die Spielzeilen **nicht mehr**, nur „Spiel läuft“ beim Start und eine Zeile beim Ende – wie
+  Terminals. Die Spieler selbst bekommen weiter alles (UI bzw. I-Frame).
+- Der UI-Frame bleibt (die Spieler brauchen ihn); UI-Zuschauer blenden im Client aus.
+- Echte Ersparnis über Funk: alle I-Frames an Zuschauer und Terminals während des Spiels.
+
 ### Nachtrag 5 (OE3GAS, 13.11.2026): Startseite im Stil von „Prefix raten“ – umgesetzt (Client 2026.11.13.7) ✅
 
 - Karte mit Gerhards Contest-Foto (eigener Fundus, ohne Copyright) rechts im Hintergrund,
