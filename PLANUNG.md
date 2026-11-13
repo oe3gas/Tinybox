@@ -2090,13 +2090,20 @@ Für andere Stationen ein Production-Release als ZIP (INSTALL.md):
   `git pull` später nur die Release-Dateien. Der Direwolf-Fork kommt nur mit einem neuen Paket.
 - Gebaut wird mit `release/build_release.sh <direwolf-tinybox.exe>` aus `main` auf GitHub.
 
-## 33. Spiel „Funk-Quiz“ (Idee und Entwurf, 13.11.2026)
+## 33. Spiel „Elmer Quiz“ (Idee und Entwurf, 13.11.2026)
 
-**Entschieden (13.11.2026) – gilt für alle Spiele (Prefix raten, CQ Contest, Funk-Quiz):**
+**Entschieden (13.11.2026) – gilt für alle Spiele (Prefix raten, CQ Contest, Elmer Quiz):**
 
 - **Keine Spiele für Terminal-User.** Gespielt wird nur mit dem TBClient. Es gibt keinen
   Volltext-Rückfall für Terminal-Teilnehmer.
 - Übertragung so kurz wie möglich – je kürzer, je besser.
+
+**Entschieden (13.11.2026) – Elmer Quiz:**
+
+- Name: **Elmer Quiz** (Elmer = im US-Slang der Mentor, der Neulingen das Funken beibringt).
+- Rechenaufgaben werden **erzeugt** (Vorlagen mit Zufallswerten), nicht fest in der CSV.
+- Zuschauer sehen nur, **dass** ein Quiz läuft – keine Fragen, Antworten oder Auflösungen.
+  Anders als bei Prefix raten (31), wo Zuschauer alles sehen.
 
 **Idee:** Ablauf wie Prefix raten (31): Start im Chatboard, Anmeldung, Frage mit drei Antworten
 A/B/C, Tippzeit, Auflösung, Sieger = meiste richtige Antworten. Inhalt: Fragen aus der
@@ -2104,15 +2111,14 @@ Amateurfunktechnik.
 
 **Entwurf (noch nicht entschieden):**
 
-- Name: Funk-Quiz, QSO-Quiz oder Elmer.
 - Kategorien statt IARU-Regionen, beim Start einzeln oder kombiniert wählbar: Rechnen
   (Wellenlänge, Ohm, dB, SWR, Schwingkreis), Begriffe (Q-Gruppen, CW-Abkürzungen), Technik
   (Bauteile, Antennen, Ausbreitung), Geschichte, Kurioses.
 - Stufen wie bei Prefix raten: Newcomer (etwa Einsteigerprüfung), OM (volle Lizenz), Pro, DX-God.
-- Wissensfragen in `prcore/funkquiz.csv`: `id;kat;stufe;frage;a;b;c;richtig;info;quelle`.
+- Wissensfragen in `prcore/elmerquiz.csv`: `id;kat;stufe;frage;a;b;c;richtig;info;quelle`.
   Die Spalte `quelle` ist Pflicht (Geschichte und Kurioses prüfen). Frage höchstens etwa
   80 Zeichen, Antwort höchstens etwa 20, `info` = eine kurze Zeile nach der Auflösung.
-- Rechenaufgaben aus Vorlagen erzeugt: Zufallswerte, falsche Antworten aus typischen Fehlern
+- Rechenaufgaben: Vorlagen mit Zufallswerten, falsche Antworten aus typischen Fehlern
   (Faktor 2, λ/4 statt λ/2, falsche Einheit). Werte so wählen, dass die drei Antworten klar
   auseinanderliegen. Optional als Rundenabschluss eine Schätzfrage (am nächsten dran gewinnt).
 
@@ -2132,10 +2138,6 @@ Amateurfunktechnik.
 
 **Offen:**
 
-- Name.
-- Rechenaufgaben erzeugen oder fest in der CSV.
-- Was Terminal-Teilnehmer im selben Board von laufenden Spielen sehen (bei Prefix raten heute
-  „Zuschauer“, 31).
 - Erste Fragensammlung (etwa 50 geprüfte Fragen) mit Quellen.
 
 ## 34. brocast-Statistik mit Vorschlag fürs Karussell (entschieden und umgesetzt 13.11.2026)
