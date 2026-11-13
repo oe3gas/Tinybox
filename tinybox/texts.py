@@ -185,7 +185,7 @@ CHAT_HELP = [
     "  /R n emoji React to line #n with an emoji code, e.g. /R 4F :+1",
     "  /H n       Show the last n stored lines",
     "  /PR START s=OM r=123 n=10   Prefix raten (s: NC OM PRO GOD, r: IARU regions)",
-    "  /PR JOIN   Play along, /PR A|B|C your tip, /PR STOP (who started)",
+    "  /PR JOIN   Play along, /PR A|B|C your tip; who started: /PR GO, /PR STOP",
     "  /H         This help",
 ]
 

@@ -2037,6 +2037,9 @@ Die Stufen dürfen sich überschneiden.
   selbst herunter (kein Funkverkehr pro Sekunde). Maßgeblich ist die Uhr der Box; sie nimmt
   Tipps mit ein paar Sekunden Zugabe für die Laufzeit an.
 - Spielzeilen sind im Client einklappbar (für Zuschauer; über Funk gehen sie trotzdem).
+- CR124: Der Starter kann die Anmeldung vorzeitig beenden („Alle da? Jetzt starten“, `//PR GO`).
+  Oberfläche deutsch, Weltkarte als Hintergrund – nur Stimmung, im Spiel gedämpft und unscharf,
+  keine Hilfe beim Raten.
 - Am Ende gewinnt, wer die meisten richtigen Antworten hat.
 
 **Spielliste `prcore/prefixraten.csv`** (306 Einträge: 278 aktuelle, 28 gelöschte Entitäten):

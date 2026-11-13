@@ -84,7 +84,7 @@ STATIC = Path(__file__).resolve().parent / "web"
 SHARED = Path(__file__).resolve().parent.parent / "tinybox" / "web"   # CR55: one copy for both GUIs
 TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
          ".js": "text/javascript; charset=utf-8", ".json": "application/json",
-         ".png": "image/png", ".svg": "image/svg+xml", ".webp": "image/webp"}
+         ".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml", ".webp": "image/webp"}
 FILES = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js",
          "/emoji.json": "emoji.json", "/aprs/symbols-0.png": "aprs/aprs-symbols-24-0@2x.png",
          "/aprs/symbols-1.png": "aprs/aprs-symbols-24-1@2x.png",
@@ -92,7 +92,7 @@ FILES = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js",
          "/logo.svg": "logo.svg", "/aprsstats.js": "aprsstats.js", "/aprsgraph.js": "aprsgraph.js",
          "/chess.js": "chess.js",
          "/contest.js": "contest.js",
-         "/prefix.js": "prefix.js",
+         "/prefix.js": "prefix.js", "/prefix-map.jpg": "prefix-map.jpg",
          "/aprsview.js": str(SHARED / "aprsview.js"), "/aprsview.css": str(SHARED / "aprsview.css")}
 # CR42: the icons of the connection in the top bar
 FILES.update({f"/conn/{p.name}": f"conn/{p.name}" for p in (STATIC / "conn").glob("*.png")})

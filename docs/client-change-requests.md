@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 12.11.2026 (CR124 erfasst; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 13.11.2026 (CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -96,7 +96,7 @@ Stand: 12.11.2026 (CR124 erfasst; CR123; CR122; CR87–CR100 aus dem Security-Au
 | 121 | TinyBox: eine Verbindung je Rufzeichen – neuer Connect auf laufende Verbindung bekommt DM, N(R)-Fehler beendet mit DISC (gleiches Call doppelt auf der Frequenz) | ✅ 11.11.2026 (KISS/AXUDP; Funktest offen) – siehe unten |
 | 122 | CQ contest – Schiffe versenken mit Amateurfunk-Touch: 8 × 8 Großfelder um die Box bzw. den Einladenden, 5 Conteststationen je Spieler, „CQ <Großfeld>“; gegen einen TBClient oder gegen die TinyBox | ✅ 12.11.2026 (Client 2026.11.12, Nachtrag .2: Einladung, Log, Blinken; .3: Pause, hochklappen; .4: über die Box gegen andere Clients; .5: Hinweis-Fix; Funktest Box ✓, Client↔Client offen) – siehe unten |
 | 123 | Prefix raten im Chatboard: die Box nennt ein Rufzeichen, Spieler tippen die DXCC-Entität (A/B/C); Stufen, IARU-Regionen, Anzahl Calls, Anmeldung, Zuschauer, 30-s-Timer, einklappbar | ✅ 12.11.2026 (Client 2026.11.12.5, Funktest offen) – siehe unten |
-| 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig | offen – siehe unten |
+| 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig, Weltkarte als Hintergrund | ✅ 13.11.2026 (Client 2026.11.13, Funktest offen) – siehe unten |
 | 125 | TinyBox: bis zu 5 gleichberechtigte Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste, Post an den Sysop geht an `SYSOP` (alle) | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
@@ -4679,7 +4679,7 @@ Ein Call mit Auflösung rund 150 Bytes über Funk (einmal als UI-Frame an alle).
 - Beide Seiten brauchen den neuen Stand – mit einem älteren Gegner meldet die Prüfung am Ende sonst
   „board does not match“.
 
-## CR124 – Prefix raten: deutsche Oberfläche, Kreis-Timer, Einladung, Start vorzeitig (offen)
+## CR124 – Prefix raten: deutsche Oberfläche, Kreis-Timer, Einladung, Start vorzeitig (✅ 13.11.2026, Client 2026.11.13)
 
 ### Erfassung (OE3GAS, 12.11.2026, nach dem ersten Test von CR123)
 
@@ -4744,12 +4744,32 @@ Anmeldung sofort und sendet wie bisher `!PR GO …`. Terminal: `/PR GO`.
 **Gewählter Tipp:** Hintergrund in Akzentfarbe (hell getönt) plus Rahmen, „Dein Tipp“ klein darunter;
 nach der Auflösung wie bisher grün (richtig) bzw. rot (falsch).
 
-### Offen
+### Nachtrag (OE3GAS, 13.11.2026)
 
-- „IARU-Region“ oder „Zone“ (siehe Hinweis).
-- Nebenbei bemerkt: Die News-Datei `tbclient/news/2026.11.12.5.txt` wurde vom CR122-Fix mit
-  derselben Client-Version überschrieben; die Zeile zu Prefix raten fehlt dort. Bei der Umsetzung
-  von CR124 in die News der neuen Version aufnehmen.
+7. **Weltkarte als Hintergrund** (Amateurfunk-Weltkarte mit DXCC-Präfixen und CQ-Zonen, von Gerhard
+   geliefert): Teil des Spiels, wird mit dem Client ausgeliefert (`tbclient/web/prefix-map.jpg`,
+   Titelzeile abgeschnitten, 106 kB), nicht über Funk. Nur Hintergrund, keine Infoquelle: im
+   Setup und in der Einladung rechts sichtbar (links abgedeckt für die Schrift, bei genau einer
+   Region der passende Ausschnitt), im Spiel stark gedämpft und unscharf.
+   Entschieden: „IARU-Region“ (nicht „Zone“), die Vorschläge zur Einladung, Ring-Timer mit den
+   Sekunden in einem weißen Kreis; vier Screens wie im Entwurf (Setup, Einladung Mitspieler,
+   Einladung Einladender, Spiel).
+
+### Umsetzung (Client 2026.11.13)
+
+- `tbclient/web/prefix.js` neu: Setup-Karte (Stufe als Leiste mit Erklärung, Regionen als Kacheln
+  mit Namen, Anzahl mit −/+ und geschätzter Dauer, „Einladung senden“; die Auswahl bleibt beim
+  Neuzeichnen erhalten), Einladung für Mitspieler („… fordert euch heraus!“, Chips, „Schon dabei“,
+  pulsierender Knopf „Ich spiele mit!“, danach „Du bist dabei ✓“), Einladung für den Starter („Alle
+  da? Jetzt starten“ bzw. „Allein starten“, „Abbrechen“), Spiel-Screen (Rufzeichen groß, Ring-Timer,
+  A/B/C, „Dein Tipp“ farbig hinterlegt, Getippt/warten auf, Stand), Ergebnis („🏆 Sieger“), deutsche
+  Spielzeilen im Chat, eingeklappt eine Zeile mit kleinem Ring. Ring: blau, ab 10 s orange, ab 5 s rot.
+- `tbclient/prefixgame.py`: Aktion `go`; die Anmeldedauer aus `PR OPEN` für den Ring.
+- TinyBox: `//PR GO` bzw. `/PR GO` – nur der Starter, nur in der Anmeldung (sonst `not_starter`,
+  `not_open`); schließt die Anmeldung sofort.
+- Die News-Zeile zu Prefix raten fehlte in 2026.11.12.5 (vom CR122-Fix mit derselben Version
+  überschrieben) – steht jetzt in `news/2026.11.13.txt`.
+- Offen: Herkunft und Lizenz der Karte festhalten (das Repo ist öffentlich).
 
 ## CR125 – Mehrere Sysops (bis zu 5) (offen)
 

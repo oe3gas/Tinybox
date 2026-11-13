@@ -1,0 +1,3 @@
+- Prefix raten im Chatboard: die Box nennt ein Call,
+  Land A/B/C tippen. Jetzt deutsch, Kreis-Timer,
+  Starter kann vorzeitig starten.

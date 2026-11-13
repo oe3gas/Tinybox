@@ -55,6 +55,8 @@ Zuletzt dazugekommen
   Spieler tippen die DXCC-Entitaet (A/B/C), 30 s je Call mit Countdown.
   Start mit Stufe (Newcomer, OM, Pro, DX-God), IARU-Regionen und Anzahl
   Calls; wer nicht mitspielt, schaut zu. Spielzeilen einklappbar.
+  CR124: Oberflaeche deutsch, Weltkarte als Hintergrund, Kreis-Timer,
+  Einladung als Karte, Starter kann die Anmeldung vorzeitig beenden.
 - TBClient-Ansicht in drei Spalten (CR80, PC ab 1000 px): rechts Ping, Speed
   test, Chess, QSL, Heard there, Delete history untereinander, unter jedem
   der letzte Wert - je Gegenstation gemerkt, auch nach neuem Connect - oder

@@ -6,6 +6,9 @@
   Spieler tippen die DXCC-Entität (A/B/C), 30 s je Call. Start mit Stufe, IARU-Regionen und Anzahl der Calls,
   Anmeldung („mit“), Zuschauer, Tipps nur an die Box. Spielliste `prcore/prefixraten.csv` (306 Entitäten).
   Zeilen `//PR`, Fähigkeit `PR`, Ereignisse `!PR …`; Terminal `/PR …`. Client 2026.11.12.5.
+  CR124 (Client 2026.11.13): Oberfläche deutsch, Weltkarte als Hintergrund (im Spiel gedämpft und unscharf),
+  Kreis-Timer für Anmeldung und Tipp, Einladung als Karte, gewählter Tipp farbig; der Starter beendet die
+  Anmeldung vorzeitig mit `//PR GO` (Terminal `/PR GO`).
 
 - **CQ contest (CR122):** Schiffe versenken mit Amateurfunk-Touch – 8 × 8 Großfelder um die Box bzw. den
   Einladenden, je 5 Conteststationen mit passenden Rufzeichen, Zug `CQ <Großfeld>`, Ausbreitungshinweis

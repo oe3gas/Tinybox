@@ -41,7 +41,7 @@ class PrefixGame:
             self.err = ""
             self.g = {"phase": "signup", "starter": p[0], "stage": p[1],
                       "regions": p[2].lstrip("R"), "calls": _int(p[3]), "entities": _int(p[4]),
-                      "until": now + _int(p[5]), "scores": {p[0]: 0}, "k": 0, "q": None,
+                      "until": now + _int(p[5]), "secs": _int(p[5]), "scores": {p[0]: 0}, "k": 0, "q": None,
                       "tipped": [], "mytip": "", "res": None, "at": now}
         elif g is None:
             return True                  # a game we did not see begin: wait for the next
@@ -110,6 +110,8 @@ class PrefixGame:
                 return False
             self.g["mytip"] = letter.lower()      # small: sent, not yet confirmed
             self._send(f"//PR {letter}")
+        elif act == "go":                       # CR124: the starter ends the signup
+            self._send("//PR GO")
         elif act == "stop":
             self._send("//PR STOP")
         elif act == "close":

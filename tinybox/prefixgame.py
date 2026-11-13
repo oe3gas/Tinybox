@@ -6,10 +6,11 @@ sends //PR ..., a terminal user types /PR ...:
 
     PR START s=<NC|OM|PRO|GOD> r=<1|2|3 combined, e.g. 12> n=<calls 1-50>
     PR JOIN              play along (a chat line "mit" or "join" does the same)
+    PR GO                only the one who started: end the signup now (CR124)
     PR A | B | C         the tip - only to the box, nobody else sees it
     PR STOP              only the one who started
 
-Answers only to the sender: //PR OK START|JOIN|STOP, //PR OK TIP <k> <letter>,
+Answers only to the sender: //PR OK START|JOIN|GO|STOP, //PR OK TIP <k> <letter>,
 //PR ERR busy|no_game|no_board|bad|no_pool|not_open|not_player|late|twice|not_starter.
 
 The game itself goes to everybody in the board as system events (#<seq> !PR ...),
@@ -216,13 +217,13 @@ _HUMAN_ERR = {
     "busy": "A game is already running in this board.",
     "no_game": "No Prefix raten game in this board.",
     "no_board": "Join a board first.",
-    "bad": "Usage: /PR START s=NC|OM|PRO|GOD r=123 n=10, /PR JOIN, /PR A|B|C, /PR STOP",
+    "bad": "Usage: /PR START s=NC|OM|PRO|GOD r=123 n=10, /PR JOIN, /PR GO, /PR A|B|C, /PR STOP",
     "no_pool": "No entities for these regions and this stage.",
-    "not_open": "The game is over.",
+    "not_open": "The signup is over.",
     "not_player": "You do not play - /PR JOIN first.",
     "late": "Too late for this call.",
     "twice": "Already done.",
-    "not_starter": "Only the one who started can stop the game.",
+    "not_starter": "Only the one who started the game can do that.",
 }
 
 
@@ -275,7 +276,7 @@ def command(s: "Session", rest: str) -> None:
         _start(s, p[1:])
         return
     g = _games.get(board)
-    if word not in ("JOIN", "MIT", "STOP") and not (len(word) == 1 and word in LETTERS):
+    if word not in ("JOIN", "MIT", "STOP", "GO") and not (len(word) == 1 and word in LETTERS):
         _answer(s, err="bad")
         return
     if g is None:
@@ -284,6 +285,15 @@ def command(s: "Session", rest: str) -> None:
     if word in ("JOIN", "MIT"):
         err = g.join(s.call)
         _answer(s, ok="JOIN", err=err, human="You play along.")
+    elif word == "GO":                  # CR124: all there - the starter ends the signup
+        if s.call != g.starter:
+            _answer(s, err="not_starter")
+        elif g.phase != "signup":
+            _answer(s, err="not_open")
+        else:
+            _answer(s, ok="GO")
+            g._cancel()
+            g.go()
     elif word == "STOP":
         if s.call != g.starter:
             _answer(s, err="not_starter")

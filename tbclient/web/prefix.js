@@ -1,10 +1,13 @@
-/* CR123: Prefix raten in the chat board. The box runs the game (tinybox/prefixgame.py),
+/* CR123/CR124: Prefix raten in the chat board. The box runs the game (tinybox/prefixgame.py),
  * the client keeps the state (tbclient/prefixgame.py); this draws it and sends the actions.
+ * The texts are German (CR124). Background: prefix-map.jpg, only for the mood - in the
+ * game itself dimmed and blurred, it must not help to find the answer.
  *
  * Prefix.render(box, k, o)
  *   k  S.prefix from the snapshot: { ok, err, game }
- *   o  { open, act(act, arg), hide() }   open: the start form was asked for
- * Prefix.folded()  true: the game lines in the chat are folded away (per browser)
+ *   o  { act(act, arg) -> Promise, hide(), newGame(), redraw() }
+ * Prefix.line(text)  a game event as a line in the chat
+ * Prefix.folded()    true: panel and game lines in the chat are folded (per browser)
  */
 "use strict";
 const Prefix = (() => {
@@ -14,86 +17,233 @@ const Prefix = (() => {
     if (text !== undefined) e.textContent = text;
     return e;
   };
-  const btn = (txt, fn, dis, cls) => {
-    const b = mk("button", "sm" + (cls ? " " + cls : ""), txt);
+  const btn = (txt, fn, cls, dis) => {
+    const b = mk("button", cls || "pr-sec", txt);
     b.type = "button"; b.disabled = !!dis; b.onclick = (ev) => { ev.stopPropagation(); fn(); };
     return b;
   };
   const STAGE = { NC: "Newcomer", OM: "OM", PRO: "Pro", GOD: "DX-God" };
-  const ERR = {
-    busy: "A game is already running in this board.", no_game: "No game in this board.",
-    bad: "The box did not understand that.", no_pool: "No entities for this stage and these regions.",
-    not_player: "You do not play - press “Play along”.", late: "Too late for this call.",
-    twice: "Already done.", not_starter: "Only the one who started can stop the game.",
-    no_board: "Join a board first.",
+  const STAGE_INFO = {
+    NC: "die unteren 40 % der Most-Wanted-Liste – die häufigen Länder",
+    OM: "die unteren 90 % der Most-Wanted-Liste – von häufig bis ziemlich selten",
+    PRO: "die oberen 30 % der Most-Wanted-Liste – die seltenen",
+    GOD: "die oberen 20 % und gelöschte Entitäten – nur für Kenner",
   };
+  const REGION = { 1: "Europa, Afrika, Nahost", 2: "Amerika", 3: "Asien, Pazifik" };
+  // the part of the map for the chosen region: [size, position]; more regions: the world
+  const VIEW = { 1: ["260%", "52% 22%"], 2: ["200%", "12% 55%"], 3: ["190%", "100% 50%"] };
+  const WORLD = ["140%", "30% 62%"];
+  const ERR = {
+    busy: "In diesem Board läuft schon ein Spiel.", no_game: "In diesem Board läuft kein Spiel.",
+    bad: "Das hat die Box nicht verstanden.", no_pool: "Für diese Stufe und Regionen gibt es keine Entitäten.",
+    not_player: "Du spielst nicht mit.", late: "Zu spät für diesen Call.", twice: "Schon erledigt.",
+    not_starter: "Das kann nur, wer das Spiel gestartet hat.", not_open: "Die Anmeldung ist schon vorbei.",
+    no_board: "Zuerst einem Board beitreten.",
+  };
+  const SIGNUP_SEC = 60, PER_CALL_SEC = 40;   // 30 s + 5 s grace + 5 s pause
+
   let fold = false;
   try { fold = localStorage.getItem("tbc-pr-fold") === "1"; } catch (e) { /* ok */ }
   const setFold = (on) => {
     fold = on;
     try { localStorage.setItem("tbc-pr-fold", on ? "1" : "0"); } catch (e) { /* ok */ }
   };
+  // the setup survives the redraws of the page
+  const setup = { stage: "OM", regions: new Set(["1", "2", "3"]), calls: 10, msg: "" };
+
   let off = 0;                    // clock of the client core - clock of the browser
   const left = (until) => Math.max(0, Math.ceil(until - (Date.now() / 1000 + off)));
-  const regs = (r) => "R" + r.split("").join("+");
+  const regs = (r) => "IARU-Region " + r.split("").join("+");
 
-  function form(box, o, err) {
-    const f = mk("div", "pr-form");
-    const sel = mk("select");
-    for (const [v, t] of Object.entries(STAGE)) {
-      const op = mk("option", "", t); op.value = v; if (v === "OM") op.selected = true; sel.append(op);
-    }
-    const regBox = mk("span", "pr-regs");
-    const cbs = ["1", "2", "3"].map((r) => {
-      const l = mk("label", "pr-reg"); const c = mk("input"); c.type = "checkbox"; c.checked = true; c.value = r;
-      l.append(c, " R" + r); regBox.append(l); return c;
-    });
-    const n = mk("input", "pr-n"); n.type = "number"; n.min = "1"; n.max = "50"; n.value = "10";
-    const msg = mk("span", "pr-err", err || "");
-    const go = btn("Start", () => {
-      const r = cbs.filter((c) => c.checked).map((c) => c.value).join("");
-      const calls = parseInt(n.value, 10);
-      if (!r) { msg.textContent = "Choose at least one region."; return; }
-      if (!(calls >= 1 && calls <= 50)) { msg.textContent = "1 to 50 calls."; return; }
-      o.act("start", `${sel.value} ${r} ${calls}`);
-    }, false, "primary-sm");
-    const lab = (t, e) => { const l = mk("label", "pr-lab"); l.append(t + " ", e); return l; };
-    f.append(lab("Stage", sel), regBox, lab("Calls", n), go);
-    box.append(f, mk("div", "small muted pr-rules",
-      "The box names a call, you pick the entity: A, B or C. 30 s per call. " +
-      "Whoever plays along is asked; everybody else in the board watches."), msg);
+  function ring(until, total, cls) {
+    const r = mk("div", "pr-ring" + (cls ? " " + cls : ""));
+    r.dataset.until = until; r.dataset.total = total;
+    r.append(mk("span", "", String(left(until))));
+    paint(r);
+    return r;
+  }
+  function paint(r) {
+    const l = left(parseFloat(r.dataset.until)), tot = parseFloat(r.dataset.total) || 1;
+    r.style.setProperty("--p", Math.max(0, Math.min(1, l / tot)));
+    r.dataset.lvl = l <= 5 ? "red" : l <= 10 ? "orange" : "";
+    r.firstChild.textContent = String(l);
   }
 
-  function scores(g, right) {
-    const d = mk("div", "pr-scores");
-    const items = Object.entries(g.scores).sort((a, b) => b[1] - a[1]);
-    for (const [c, n] of items) {
-      const s = mk("span", "ct-pill" + ((right || []).includes(c) ? " ok" : ""), `${c} ${n}`);
-      d.append(s);
-    }
+  function card(cls, view) {
+    const c = mk("div", "pr-card" + (cls ? " " + cls : ""));
+    const bg = mk("div", "pr-bg");
+    if (view) { bg.style.backgroundSize = view[0]; bg.style.backgroundPosition = view[1]; }
+    c.append(bg, mk("div", "pr-veil"));
+    return c;
+  }
+  const viewOf = (r) => (r && r.length === 1 ? VIEW[r] : WORLD);
+  const chips = (items, cls) => {
+    const d = mk("div", "pr-chips");
+    for (const t of items) d.append(mk("span", "pr-chip" + (cls ? " " + cls : ""), t));
     return d;
+  };
+  const target = () => mk("div", "pr-target", "🎯");
+  const ranked = (g) => Object.entries(g.scores).sort((a, b) => b[1] - a[1]);
+
+  // --- 1 setup --------------------------------------------------------------------------
+  function drawSetup(box, k, o) {
+    const r = [...setup.regions].sort().join("");
+    const c = card("", viewOf(r));
+    const inner = mk("div", "pr-in");
+    const main = mk("div", "pr-main");
+    main.append(mk("div", "pr-big", "Prefix raten"),
+                mk("div", "pr-sub", "Die Box nennt ein Rufzeichen – wer erkennt das Land?"));
+    main.append(mk("div", "pr-lab", "Stufe"));
+    const seg = mk("div", "pr-seg");
+    for (const [v, t] of Object.entries(STAGE)) {
+      seg.append(btn(t, () => { setup.stage = v; o.redraw(); }, setup.stage === v ? "on" : ""));
+    }
+    main.append(seg, mk("div", "pr-hint", `${STAGE[setup.stage]}: ${STAGE_INFO[setup.stage]}`));
+    main.append(mk("div", "pr-lab", "Aus welchen IARU-Regionen?"));
+    const rg = mk("div", "pr-regs");
+    for (const n of ["1", "2", "3"]) {
+      const on = setup.regions.has(n);
+      const b = btn("", () => {
+        if (on) setup.regions.delete(n); else setup.regions.add(n);
+        setup.msg = ""; o.redraw();
+      }, "pr-reg" + (on ? " on" : ""));
+      b.append(mk("b", "", (on ? "✓ " : "") + "Region " + n), mk("span", "", REGION[n]));
+      rg.append(b);
+    }
+    main.append(rg, mk("div", "pr-lab", "Wie viele Calls sollen gefragt werden?"));
+    const row = mk("div", "pr-steprow");
+    const step = mk("div", "pr-step");
+    const set = (d) => { setup.calls = Math.max(1, Math.min(50, setup.calls + d)); o.redraw(); };
+    step.append(btn("−", () => set(-1), "pr-stepb"), mk("span", "pr-stepn", String(setup.calls)),
+                btn("+", () => set(1), "pr-stepb"));
+    const min = Math.round((SIGNUP_SEC + setup.calls * PER_CALL_SEC) / 60);
+    row.append(step, mk("span", "pr-hint", `je 30 s · ca. ${min} Minute${min === 1 ? "" : "n"}`));
+    main.append(row);
+    const acts = mk("div", "pr-acts");
+    acts.append(btn("Einladung senden", () => {
+      if (!setup.regions.size) { setup.msg = "Bitte mindestens eine Region wählen."; o.redraw(); return; }
+      setup.msg = "";
+      o.act("start", `${setup.stage} ${r} ${setup.calls}`);
+    }, "pr-cta"), btn("Abbrechen", () => o.hide()));
+    main.append(acts, mk("div", "pr-err", setup.msg || ERR[k.err] || k.err || ""));
+    inner.append(target(), main);
+    c.append(inner);
+    box.append(c);
   }
 
-  function head(g, o) {
-    const h = mk("div", "ct-head");
-    const title = mk("b", "", "🎯 Prefix raten");
-    const info = mk("span", "small muted",
-      ` · ${STAGE[g.stage] || g.stage} · ${regs(g.regions)} · ${g.calls} calls · ${g.entities} entities`);
-    const t = mk("span", "pr-title"); t.append(title, info);
-    const tools = mk("span", "ct-tools");
-    if (g.phase === "ask" && g.q) {
-      tools.append(mk("span", "pr-k", `${g.k}/${g.calls}`));
-      const tm = mk("span", "pr-timer"); tm.dataset.until = g.q.until; tm.textContent = left(g.q.until) + " s";
-      tools.append(tm);
-    } else if (g.phase === "signup") {
-      const tm = mk("span", "pr-timer"); tm.dataset.until = g.until; tm.textContent = left(g.until) + " s";
-      tools.append(mk("span", "small muted", "signup"), tm);
+  // --- 2/3 invitation ---------------------------------------------------------------------
+  function drawSignup(box, g, k, o) {
+    const c = card("", viewOf(g.regions));
+    const inner = mk("div", "pr-in");
+    const main = mk("div", "pr-main");
+    const players = Object.keys(g.scores);
+    const facts = [STAGE[g.stage] || g.stage, regs(g.regions), `${g.calls} Calls`, `${g.entities} Entitäten`];
+    if (g.me_starter) {
+      const n = players.length - 1;
+      main.append(mk("div", "pr-big", n ? `Du hast eingeladen – ${n} Mitspieler` : "Du hast eingeladen"),
+                  mk("div", "pr-sub", facts.join(" · ")),
+                  chips(players.map((p) => p + " ✓"), "ok"));
+      const acts = mk("div", "pr-acts");
+      acts.append(btn(n ? "Alle da? Jetzt starten" : "Allein starten", () => o.act("go"), "pr-cta"),
+                  btn("Abbrechen", () => o.act("stop")));
+      main.append(acts);
+    } else {
+      main.append(mk("div", "pr-big", `${g.starter} fordert euch heraus!`),
+                  mk("div", "pr-sub", "Welches Land steckt hinter dem Rufzeichen?"),
+                  chips(facts));
+      const who = mk("div", "pr-who");
+      who.append(mk("span", "", "Schon dabei: "), chips(players.map((p) => p + " ✓"), "ok"));
+      main.append(who);
+      if (g.me_plays) main.append(mk("div", "pr-in-ok", "Du bist dabei ✓ – gleich geht's los"));
+      else main.append(btn("Ich spiele mit!", () => o.act("join"), "pr-cta pulse"));
     }
-    if (g.me_starter && g.phase !== "over") tools.append(btn("Stop", () => o.act("stop")));
-    tools.append(btn(fold ? "▾" : "▴", () => { setFold(!fold); o.redraw(); }, false, "ct-fold"));
-    if (g.phase === "over") tools.append(btn("✕", () => o.act("close"), false, "ct-fold"));
+    main.append(mk("div", "pr-err", ERR[k.err] || k.err || ""));
+    const side = mk("div", "pr-side");
+    side.append(ring(g.until, g.secs || SIGNUP_SEC), mk("div", "pr-ringlab", "Anmeldung"));
+    inner.append(target(), main, side);
+    c.append(inner);
+    box.append(c);
+  }
+
+  // --- 4 game -----------------------------------------------------------------------------
+  function headBar(g, o) {
+    const h = mk("div", "pr-bar");
+    const t = mk("span", "pr-bartitle");
+    t.append(mk("b", "", "🎯 Prefix raten"), ` · ${STAGE[g.stage] || g.stage} · ${regs(g.regions)}`);
+    const tools = mk("span", "pr-tools");
+    if (g.k) tools.append(mk("b", "", `Call ${g.k} von ${g.calls}`));
+    if (fold && g.phase === "ask" && g.q) tools.append(ring(g.q.until, g.q.secs, "mini"));
+    if (fold && g.phase === "signup") tools.append(ring(g.until, g.secs || SIGNUP_SEC, "mini"));
+    if (g.me_starter && g.phase !== "over") tools.append(btn("Abbrechen", () => o.act("stop"), "pr-sec small"));
+    tools.append(btn(fold ? "▾" : "▴", () => { setFold(!fold); o.redraw(); }, "pr-sec small"));
+    if (g.phase === "over") tools.append(btn("✕", () => o.act("close"), "pr-sec small"));
     h.append(t, tools);
     return h;
+  }
+
+  function drawGame(box, g, k, o) {
+    const c = card("game");
+    const inner = mk("div", "pr-gin");
+    inner.append(headBar(g, o));
+    const q = g.q;
+    const top = mk("div", "pr-qrow");
+    top.append(mk("div", "pr-call", q.call));
+    if (g.phase === "ask") top.append(ring(q.until, q.secs, "big"));
+    inner.append(top);
+    const opts = mk("div", "pr-opts");
+    const res = g.phase === "wait" ? g.res : null;
+    q.options.forEach((name, i) => {
+      const L = "ABC"[i];
+      const mine = g.mytip.toUpperCase() === L;
+      const b = btn("", () => o.act("tip", L), "pr-opt",
+                    !g.me_plays || !!g.mytip || g.phase !== "ask" || left(q.until) <= 0);
+      b.append(mk("span", "", `${L}  ${name}`));
+      if (mine) { b.classList.add("mine"); b.append(mk("small", "", "Dein Tipp")); }
+      if (g.mytip === L.toLowerCase()) b.classList.add("sent");     // on its way
+      if (res && res.letter === L) b.classList.add("right");
+      else if (res && mine) b.classList.add("wrong");
+      opts.append(b);
+    });
+    inner.append(opts);
+    const foot = mk("div", "pr-foot");
+    const info = mk("span", "");
+    if (res) {
+      const ok = g.me_plays && g.mytip.toUpperCase() === res.letter;
+      info.append(mk("b", ok ? "pr-ok" : "", ok ? "Richtig! " : `Richtig war ${res.letter}. `));
+    } else {
+      const waiting = Object.keys(g.scores).filter((c) => !g.tipped.includes(c));
+      if (g.tipped.length) { info.append("Getippt: "); info.append(mk("b", "", g.tipped.join(", "))); }
+      else info.append("Noch kein Tipp");
+      if (waiting.length && g.tipped.length) info.append(" · warten auf " + waiting.join(", "));
+    }
+    if (!g.me_plays && g.phase === "ask") {
+      info.append(" ");
+      info.append(btn("Ab dem nächsten Call mitspielen", () => o.act("join"), "pr-sec small"));
+    }
+    const sc = chips(ranked(g).map(([c, n]) => `${c} ${n}`));
+    if (res) [...sc.children].forEach((ch, i) => {
+      if (res.right.includes(ranked(g)[i][0])) ch.classList.add("ok");
+    });
+    foot.append(info, sc);
+    inner.append(foot, mk("div", "pr-err", ERR[k.err] || k.err || ""));
+    c.append(inner);
+    box.append(c);
+  }
+
+  function drawOver(box, g, k, o) {
+    const c = card("game");
+    const inner = mk("div", "pr-gin");
+    inner.append(headBar(g, o));
+    let msg;
+    if (g.stopped) msg = g.stopped === "no_players" ? "Abgebrochen – niemand spielt mit."
+      : "Abgebrochen" + (g.stopped.startsWith("by ") ? " von " + g.stopped.slice(3) : "") + ".";
+    else msg = (g.winners || []).length ? `🏆 Sieger: ${g.winners.join(" und ")}` : "Keine Punkte vergeben.";
+    inner.append(mk("div", "pr-result", msg), chips(ranked(g).map(([c, n]) => `${c} ${n}`)));
+    const acts = mk("div", "pr-acts");
+    acts.append(btn("Neues Spiel", () => o.act("close").then(() => o.newGame()), "pr-cta"));
+    inner.append(acts);
+    c.append(inner);
+    box.append(c);
   }
 
   function render(box, k, o) {
@@ -102,69 +252,26 @@ const Prefix = (() => {
     box.replaceChildren();
     box.classList.toggle("ct-folded", !!(g && fold));
     if (g) off = g.now - Date.now() / 1000;
-    if (!g) {
-      const h = mk("div", "ct-head");
-      h.append(mk("b", "", "🎯 Prefix raten"), btn("✕", () => o.hide(), false, "ct-fold"));
-      box.append(h);
-      form(box, o, ERR[k.err] || k.err);
+    if (!g) { drawSetup(box, k, o); return; }
+    if (fold) {
+      const c = card("game folded");
+      const inner = mk("div", "pr-gin");
+      inner.append(headBar(g, o));
+      c.append(inner);
+      box.append(c);
       return;
     }
-    box.append(head(g, o));
-    if (fold) return;
-    const err = mk("div", "pr-err", ERR[k.err] || k.err || "");
-    if (g.phase === "signup") {
-      box.append(mk("div", "", `${g.starter} starts a game. Who plays along?`));
-      box.append(scores(g));
-      if (!g.me_plays) box.append(btn("Play along", () => o.act("join"), false, "primary-sm"));
-      else box.append(mk("div", "small muted", "You play along - the first call comes when the signup is over."));
-    } else if ((g.phase === "ask" || g.phase === "wait") && g.q) {
-      box.append(mk("div", "pr-call", g.q.call));
-      const opts = mk("div", "pr-opts");
-      const res = g.phase === "wait" ? g.res : null;
-      g.q.options.forEach((name, i) => {
-        const L = "ABC"[i];
-        const mine = g.mytip.toUpperCase() === L;
-        const b = btn(`${L}  ${name}`, () => o.act("tip", L),
-                      !g.me_plays || !!g.mytip || g.phase !== "ask" || left(g.q.until) <= 0, "pr-opt");
-        if (mine) b.classList.add("mine");
-        if (g.mytip === L.toLowerCase()) b.classList.add("sent");      // on its way, not confirmed
-        if (res && res.letter === L) b.classList.add("right");
-        else if (res && mine) b.classList.add("wrong");
-        opts.append(b);
-      });
-      box.append(opts);
-      if (res) {
-        const ok = g.me_plays && g.mytip.toUpperCase() === res.letter;
-        box.append(mk("div", "ct-msg " + (ok ? "ok" : ""), g.me_plays
-          ? (ok ? "Right!" : `${res.letter} was right.`) : `${res.letter} was right.`));
-        box.append(scores(g, res.right));
-      } else {
-        const t = mk("div", "small muted pr-tipped");
-        t.textContent = g.tipped.length ? "tipped: " + g.tipped.join(" ") : "nobody has tipped yet";
-        box.append(t);
-        if (!g.me_plays) box.append(btn("Play along (from the next call)", () => o.act("join")));
-      }
-    } else if (g.phase === "over") {
-      if (g.stopped) box.append(mk("div", "ct-msg warn", g.stopped === "no_players"
-        ? "Called off - nobody plays." : `Called off (${g.stopped}).`));
-      else {
-        const w = g.winners || [];
-        box.append(mk("div", "ct-msg ok", w.length ? `🏆 ${w.join(" and ")}` : "Nobody scored."));
-      }
-      box.append(scores(g));
-      box.append(btn("New game", () => o.act("close").then(() => o.newGame()), false));
+    if (g.phase === "signup") drawSignup(box, g, k, o);
+    else if ((g.phase === "ask" || g.phase === "wait") && g.q) drawGame(box, g, k, o);
+    else if (g.phase === "over") drawOver(box, g, k, o);
+    else {                                           // GO received, the first call is coming
+      const c = card("game");
+      const inner = mk("div", "pr-gin");
+      inner.append(headBar(g, o), mk("div", "pr-result", "Gleich kommt der erste Call …"));
+      c.append(inner);
+      box.append(c);
     }
-    box.append(err);
   }
-
-  // the countdowns run without a new snapshot
-  setInterval(() => {
-    for (const t of document.querySelectorAll(".pr-timer[data-until]")) {
-      const s = left(parseFloat(t.dataset.until));
-      t.textContent = s + " s";
-      t.classList.toggle("low", s <= 5);
-    }
-  }, 250);
 
   // a game event as a line in the chat (the box sends "PR ..." as system text)
   function line(text) {
@@ -172,19 +279,23 @@ const Prefix = (() => {
     const rest = text.slice(4 + w.length);
     const tab = (items) => items.map((x) => x.replace("=", " ").replace(/\+$/, " ✓")).join(", ");
     switch (w) {
-      case "OPEN": return `🎯 ${p[0]} starts Prefix raten: ${STAGE[p[1]] || p[1]}, ${regs(p[2].slice(1))}, ` +
-                          `${p[3]} calls from ${p[4]} entities`;
-      case "IN": return `🎯 ${p[0]} plays along`;
-      case "GO": return `🎯 Players: ${p.join(", ")}`;
+      case "OPEN": return `🎯 ${p[0]} startet Prefix raten: ${STAGE[p[1]] || p[1]}, ${regs(p[2].slice(1))}, ` +
+                          `${p[3]} Calls aus ${p[4]} Entitäten`;
+      case "IN": return `🎯 ${p[0]} spielt mit`;
+      case "GO": return `🎯 Es geht los – Spieler: ${p.join(", ")}`;
       case "Q": { const o = rest.split(" ").slice(3).join(" ").split("|");
                   return `🎯 ${p[0]}: ${p[1]}?  ` + o.map((n, i) => `${"ABC"[i]} ${n}`).join("  "); }
-      case "TIP": return `🎯 ${p[0]} has tipped`;
-      case "RES": return `🎯 ${p[0]}: ${p[1]} was right - ${tab(p.slice(2))}`;
-      case "END": return `🎯 Game over - ${tab(p)}`;
-      case "STOP": return `🎯 Prefix raten called off (${rest === "no_players" ? "nobody plays" : rest})`;
+      case "TIP": return `🎯 ${p[0]} hat getippt`;
+      case "RES": return `🎯 ${p[0]}: richtig war ${p[1]} – ${tab(p.slice(2))}`;
+      case "END": return `🎯 Spielende – ${tab(p)}`;
+      case "STOP": return "🎯 Prefix raten abgebrochen" +
+        (rest === "no_players" ? " – niemand spielt mit" : rest.startsWith("by ") ? " von " + rest.slice(3) : "");
       default: return text;
     }
   }
+
+  // the countdowns run without a new snapshot
+  setInterval(() => { for (const r of document.querySelectorAll(".pr-ring[data-until]")) paint(r); }, 200);
 
   return { render, line, folded: () => fold };
 })();

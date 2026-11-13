@@ -182,6 +182,25 @@ class BoardTests(unittest.TestCase):
         self.assertIn("STOP by OE3GAS", self.events(tb)[0])
         self.assertIsNone(box.game_in("TREFF"))
 
+    def test_starter_ends_the_signup(self):                  # CR124
+        a, ta = self.client("OE3GAS")
+        b, tb = self.client("OE3TEC")
+        type_lines(a, "//PR START s=OM r=1 n=2")
+        type_lines(b, "//PR JOIN")
+        tb.take()
+        type_lines(b, "//PR GO")
+        self.assertIn("//PR ERR not_starter", tb.take())
+        type_lines(a, "//PR GO")
+        self.assertIn("//PR OK GO", ta.take())
+        ev = self.events(tb)
+        self.assertEqual(ev[0], "GO OE3GAS OE3TEC")
+        self.assertTrue(ev[1].startswith("Q 1/2 "))
+        self.assertEqual(box.game_in("TREFF").phase, "ask")
+        type_lines(a, "//PR GO")
+        self.assertIn("//PR ERR not_open", ta.take())
+        self.timers.fire()                                   # only the question timer was left
+        self.assertTrue(self.events(tb)[0].startswith("RES 1 "))
+
     def test_late_join_and_leaving(self):
         a, ta = self.client("OE3GAS")
         b, tb = self.client("OE3TEC")
@@ -232,12 +251,15 @@ class ClientTests(unittest.TestCase):
                     elif x.startswith("//PR "):
                         pg_.answer(x[5:])
 
+            self.assertTrue(pg_.act("go"))
+            self.assertEqual(sent[-1], "//PR GO")
             self.assertTrue(pg_.act("start", "PRO 2 2"))
             self.assertEqual(sent[-1], "//PR START s=PRO r=2 n=2")
             type_lines(s, sent[-1])
             feed()
             g = pg_.summary(1000.0)
-            self.assertEqual((g["phase"], g["stage"], g["regions"], g["entities"]), ("signup", "PRO", "2", 50))
+            self.assertEqual((g["phase"], g["stage"], g["regions"], g["entities"], g["secs"]),
+                             ("signup", "PRO", "2", 50, 60))
             self.assertTrue(g["me_plays"] and g["me_starter"])
             timers.fire()
             feed(1001.0)
