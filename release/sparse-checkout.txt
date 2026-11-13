@@ -1,0 +1,35 @@
+# Which repo files an installation from the release package contains.
+# git sparse-checkout (non-cone, gitignore syntax): everything, minus the lines with "!".
+# install.ps1 / build_release.sh use this file; a "git pull" keeps to it.
+/*
+# GeoSphere weather and the DX cluster feed are not part of the release
+!/geosphere_*
+!/dxfeed*
+!/start_alles.bat
+# NanoPi build, Feeder-Pi, simulators, test tools
+!/build_production.sh
+!/deploy/
+!/production/
+!/feederpi/
+!/pi_*
+!/fwdsim*
+!/tbtest*
+!/tools/
+!/flake.*
+# tests and development documents
+!/tests/
+!/test/
+!/runtests.bat
+!/docs/
+!/PLANUNG.md
+!/CLAUDE.md
+!/PRODUCTION.md
+!/GIT-ANLEITUNG.md
+!/*.odt
+!/brocast/tests/
+!/brocast/test/
+!/brocast/funktest/
+!/brocast/mockup/
+!/brocast/tools/
+!/brocast/runtests.bat
+!/release/build_release.sh

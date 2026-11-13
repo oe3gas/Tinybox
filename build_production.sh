@@ -65,7 +65,8 @@ brocast/test
 brocast/tests
 brocast/tools
 tbclient
-tbclient.conf.example'
+tbclient.conf.example
+release'
 
 # true if path $1 equals or lies below one of the patterns in list $2
 matches() {

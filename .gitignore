@@ -53,3 +53,8 @@ production/
 # modem73 (tools/modem73): the exe and the build folder stay out of the repo
 modem73.exe
 tools/modem73/modem73/
+
+# Windows release package (release/build_release.sh, INSTALL.md)
+/release-out/
+/direwolf/
+/tbstart.conf

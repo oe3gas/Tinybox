@@ -2064,6 +2064,24 @@ Die Stufen dürfen sich überschneiden.
   (Spalte `iaru_pruefen`).
 - Später ggf. nicht eindeutige Entitäten über den Suffix zurückholen (FT5W, VP0S …).
 
+## 32. Windows-Release-Paket mit Installer und Startmenü (umgesetzt 13.11.2026)
+
+Für andere Stationen ein Production-Release als ZIP (INSTALL.md):
+
+- **Inhalt:** alle Programme und Skripte für TBClient, TinyBox, brocast und kisshub plus der
+  aktuelle Direwolf-Fork (`direwolf\direwolf-tinybox.exe`). **Nicht** enthalten: GeoSphere-Skripte
+  und DX-Cluster-Sammler (dxfeed), außerdem NanoPi-Build, Feeder-Pi, Simulatoren, Tests und
+  Planungsunterlagen. Maßgeblich ist allein `release/sparse-checkout.txt`.
+- **Installer** (`install.bat` → `release/install.ps1`): Zielordner, Git und Python per winget,
+  Dateien kopieren, Python-Pakete, Konfigurationsdialog `release/konfig.py` (füllt tbclient.conf,
+  tinybox.conf, brocastd.conf als Listener, direwolf.conf und tbstart.conf aus den Vorlagen).
+- **Startmenü** (`TinyBox-Start.bat` → `release/start.ps1`): 1 nur Client, 2 Client + TinyBox,
+  3 Client + brocast-Listener, 4 alle drei; vorher `git pull`, dann Direwolf (falls eingestellt)
+  und die gewählten Programme.
+- **Updates über Git:** Das Paket enthält einen flachen Git-Clone mit Sparse-Checkout, daher holt
+  `git pull` später nur die Release-Dateien. Der Direwolf-Fork kommt nur mit einem neuen Paket.
+- Gebaut wird mit `release/build_release.sh <direwolf-tinybox.exe>` aus `main` auf GitHub.
+
 ## Quellen
 
 - Security-Advisory TinyBox (9V1NE, 09.11.2026): https://gist.github.com/nnamon/3d93af6dd520d5f4b392c3fb57407d63
