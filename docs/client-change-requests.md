@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.11.2026 (CR126 erfasst; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 13.11.2026 (CR127 erfasst; CR126 erfasst; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -99,6 +99,7 @@ Stand: 13.11.2026 (CR126 erfasst; CR124; CR123; CR122; CR87–CR100 aus dem Secu
 | 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig, Weltkarte als Hintergrund | ✅ 13.11.2026 (Client 2026.11.13, Funktest offen) – siehe unten |
 | 125 | TinyBox: bis zu 5 gleichberechtigte Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste, Post an den Sysop geht an `SYSOP` (alle) | offen – siehe unten |
 | 126 | Prefix raten: Antwortzeit 5–30 s einstellbar, Ergebnis nach jedem Call, Übersicht am Spielende, Spielerliste auf der Box (Spiele, richtige/alle Tipps), Sysop löscht Scores – für alle Spiele | offen – siehe unten |
+| 127 | Spielergebnisse (Schach, CQ Contest) vom Client signiert an die Box melden – zählt nur, wenn beide Spieler dasselbe Ergebnis signiert melden | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4904,7 +4905,7 @@ mit Anzahl der Spiele:
   Schach = Punkte (Sieg 1, Remis ½) / Spiele.
 - Abfrage: `//GAMES TOP` (LB1) und `//GAMES TOP <spiel>` (LB2), Antwort nur an den Fragenden;
   Client: Knopf „Bestenliste“ (im Board-Kopf und am Spielende), Terminal `/TOP` bzw. `/TOP <spiel>`.
-- Ab wie vielen Spielen jemand erscheint: Vorschlag 3.
+- Jeder erscheint ab dem 1. Spiel (entschieden 13.11.2026).
 
 **5 Sysop löscht:** Konsolenbefehl der Box, auch über die Fernverwaltung im TBClient (`//ADM`):
 
@@ -4922,4 +4923,68 @@ Mit Rückfrage („wirklich? J/N“) und Eintrag im Log. Andere Spiele schreiben
   Ergebnisse an die Box melden (die Box sieht sie heute nicht – Schach direkt zwischen den Clients, CQ
   Contest nur weitergereicht; wäre Selbstauskunft), kommt als eigener CR. Bis dahin zeigen deren
   Sektionen „noch keine Spiele“.
-- Offen: Mindestzahl Spiele für die Leaderboards (Vorschlag 3).
+- Entschieden: Leaderboards ab dem 1. Spiel. Das Melden von Schach und CQ Contest: CR127.
+
+## CR127 – Spielergebnisse signiert an die Box melden (Schach, CQ Contest) (offen)
+
+### Erfassung (OE3GAS, 13.11.2026)
+
+Schach und CQ Contest laufen zwischen den Clients; die Box sieht die Ergebnisse nicht. Für die
+Leaderboards (CR126) melden die Clients die Ergebnisse an die Box – **signiert**, damit keine
+Scherz-Ergebnisse in die Liste kommen.
+
+### Vorschlag
+
+**Grundsatz: Ein Ergebnis zählt nur, wenn beide Spieler es melden – jeder signiert mit seinem
+eigenen Schlüssel, und beide Meldungen stimmen überein.** Ein Spieler allein kann sich so keinen Sieg
+eintragen, und niemand kann im Namen eines anderen melden.
+
+**Signatur:** Die Meldung ist ein Befehl wie `//SEND` oder `//PROF`, signiert mit dem Geräteschlüssel
+aus CR93 (`auth.command_message`: Box, Call, Nonce der Sitzung, Zähler, Zeile). Die Box nimmt sie nur
+von einem Call mit freigegebenem Schlüssel an (aktiv an dieser Box oder per Zertifikat einer
+vertrauten Box). Ohne Schlüssel: kein Eintrag, der Client sagt warum.
+
+**Spiel-ID und Verlauf:** Beim Spielstart erzeugt der Einladende eine Zufalls-ID (16 Hex) und schickt
+sie mit der Einladung; beide Clients merken sie. Am Ende bildet jeder Client einen Hash über den
+Spielverlauf (Schach: die Züge, CQ Contest: Aufstellung und Schüsse; SHA-256, 16 Hex). Beide Clients
+haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt nicht dazu.
+
+**Protokoll (Fähigkeit `GAME`):**
+
+    //GAME RES g=<chess|contest> id=<16 hex> vs=<call> r=<win|loss|draw> h=<16 hex> n=<züge> t=<ende unix> c=<n> sig=..
+    -> //GAME OK <id> pending      erste Meldung, wartet auf den Gegner
+    -> //GAME OK <id> counted      beide Meldungen passen: eingetragen
+    -> //GAME ERR <id> nokey|unsigned|mismatch|dup|old|self|bad
+
+**Abgleich auf der Box** (neue Tabelle `game_reports`, Schlüssel id + call):
+
+- Die zweite Meldung zählt, wenn: gleiches Spiel, gleiche ID, die Calls über Kreuz (A vs B / B vs A),
+  Ergebnis passend (win ↔ loss, draw ↔ draw), gleicher Hash, gleiche Zügezahl, Spielende höchstens
+  10 min auseinander. Dann schreibt die Box beide in `game_stats` (CR126): games +1, wins bzw. Punkte
+  (Schach: Sieg 1, Remis ½).
+- Passt es nicht: beide Meldungen „strittig“, nichts wird gezählt, Eintrag im Log; der Sysop sieht
+  strittige Spiele bei `GAMES`.
+- Meldet der Gegner nicht innerhalb von 7 Tagen: die Meldung verfällt, nichts wird gezählt.
+- Meldungen älter als 7 Tage nimmt die Box nicht an (`old`), dieselbe ID kein zweites Mal (`dup`),
+  gegen sich selbst nicht (`self`, auch nicht mit anderer SSID).
+- Abgebrochene Spiele werden nicht gemeldet.
+
+**Client:**
+
+- Fertige Spiele kommen in eine Warteschlange (bleibt über Neustarts) und gehen beim nächsten
+  Login an die Heimat-Box; danach steht am Spiel „Ergebnis gemeldet ✓“, „wartet auf den Gegner“
+  oder „nicht gezählt (…)“.
+- Schach direkt über Funk (ohne Box) wird so später nachgemeldet; CQ Contest über die Box
+  (`//CTR`) genauso.
+
+### Grenzen
+
+- Zwei Spieler, die sich absprechen, können gemeinsam ein ausgedachtes Spiel melden – beide müssten
+  dafür ihren eigenen Schlüssel einsetzen. Vorschlag: höchstens 10 gezählte Spiele je Paar und Tag.
+- Beide müssen an **dieselbe** Box melden. Haben die Spieler verschiedene Heimat-Boxen, zählt das Spiel
+  dort nicht (später ggf. über Forwarding).
+
+### Offen
+
+- Grenze je Paar und Tag (Vorschlag 10) – ja/nein?
+- Spiele zwischen Spielern verschiedener Boxen: vorerst nicht zählen?
