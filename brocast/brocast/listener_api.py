@@ -59,6 +59,7 @@ class ListenerApi(JsonServer):
         self.dict_broadcast: Callable[[], dict[str, Any]] | None = None   # station only
         self.tx_status: Callable[[], dict[str, Any]] | None = None        # station only
         self.tx_action: Callable[[str, Any], dict[str, Any]] | None = None
+        self.stats_report: Callable[[int], dict[str, Any]] | None = None   # station only
 
     def route(self, req: Request) -> tuple[int, Any]:
         parts, method, body, li = req.parts, req.method, req.body, self.listener
@@ -70,6 +71,14 @@ class ListenerApi(JsonServer):
                 return 200, {**daemon, **li.status()}
             if parts == ["tx"] and method == "GET":         # view "Sendung" (08.11.2026)
                 return 200, self.tx_status() if self.tx_status else {"station": False}
+            if parts == ["stats"] and method == "GET":       # view "Statistik" (13.11.2026)
+                try:
+                    hours = int(req.q("hours", "24"))
+                except ValueError:
+                    raise HttpError(400, "hours muss eine Zahl sein") from None
+                if not 1 <= hours <= 48:
+                    raise HttpError(400, "hours: 1 bis 48")
+                return 200, self.stats_report(hours) if self.stats_report else {"station": False}
             if len(parts) == 2 and parts[0] == "tx" and method == "POST" and self.tx_action:
                 try:                                       # off {id} / restore {provider, key}
                     return 200, self.tx_action(parts[1], body)
@@ -134,7 +143,7 @@ class ListenerApi(JsonServer):
                         return 200, li.set_read(org, page_id, body.get("read"))
                     if parts[3] == "favorite":
                         return 200, li.set_favorite(org, page_id, body.get("favorite"))
-            if parts and parts[0] in ("pages", "settings", "subscriptions", "status", "tx",
+            if parts and parts[0] in ("pages", "settings", "subscriptions", "status", "tx", "stats",
                                       "categories", "stations", "rubrics", "rxlog",
                                       "dictionary"):
                 raise HttpError(405, f"Methode {method} hier nicht erlaubt")

@@ -11,25 +11,27 @@ import asyncio
 import logging
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
 
 import yaml
 
-from . import colorlog, config, dictimport, dicttransfer, fragment, zdict
+from . import advisor, colorlog, config, dictimport, dicttransfer, fragment, txlog, zdict
 from .agw import AgwLink
 from .ax25 import UIFrame
 from .carousel import Carousel
 from .codec import BrocastError, Codec
 from .dictionary import Dictionary
-from .frame import (FORMAT_FRAGMENT, describe_other, parse as parse_frame,
-                    unknown_format)
+from .frame import (FORMAT_FRAGMENT, build as build_frame, describe_other,
+                    parse as parse_frame, unknown_format)
 from .ingest import IngestServer
 from .kiss import KissLink
 from .listener import Listener
 from .listener_api import ListenerApi
 from .station import Station
+from .stats import Stats
 from .store import Store
 from .txlog import TxLog
 
@@ -37,6 +39,8 @@ VERSION = "0.3 (M3)"
 HOUSEKEEPING_SEC = 60
 DICT_DATA = ("brocastd", "dictionary-data")   # carousel page with the packed dictionary
 DICT_REPEAT_MIN = 15                           # second round for listeners that missed a part
+STATS_FILE = "statistik.json"                  # 24-h counter (stats.py), next to the database
+STATS_CACHE_SEC = 60                           # view "Statistik": report at most this often
 log = logging.getLogger("brocastd")
 
 
@@ -71,6 +75,9 @@ class Daemon:
         self.station: Station | None = None
         self.ingest: IngestServer | None = None
         self.txlog: TxLog | None = None
+        self.stats: Stats | None = None
+        self._report: tuple[float, int, dict[str, Any]] | None = None
+        self._report_job: threading.Thread | None = None
         if cfg.is_station:
             if cfg.txlog_dir is not None:
                 self.txlog = TxLog(cfg.txlog_dir, cfg.callsign)
@@ -82,6 +89,11 @@ class Daemon:
             self.carousel = Carousel(self.store, self._send, cfg.station, cfg.callsign, clock,
                                      txlog=self.txlog, queue_len=queue_len, traffic=cfg.traffic)
             self.carousel.schedules[DICT_DATA] = self._dict_gap
+            self.stats = Stats(cfg.data_dir / STATS_FILE, cfg.station.baud,
+                               cfg.station.txdelay_ms, clock)
+            self.stats.load()
+            self.carousel.stats = self.stats
+            self.web.stats_report = self.stats_report      # view "Statistik" (13.11.2026)
             if cfg.beacon.interval_min:
                 self.carousel.set_beacon(self._beacon_frame, cfg.beacon.interval_min,
                                          " / ".join(self._beacon_text().splitlines()))
@@ -106,6 +118,8 @@ class Daemon:
                 src, dest, kind = describe_other(data)
                 if src.upper() != self.cfg.callsign:
                     self.carousel.heard(src, dest, kind)
+                    if self.stats is not None:
+                        self.stats.foreign(self.clock(), src, kind, len(data))
             self._receive(data, own=False)
 
     def _receive(self, data: bytes, own: bool) -> None:
@@ -306,6 +320,8 @@ class Daemon:
             await asyncio.sleep(self.cfg.db_flush_sec)
             if self.store.flush():
                 log.debug("Datenbank: flüchtige Daten geschrieben")
+            if self.stats is not None and self.stats.save():
+                log.debug("Statistik geschrieben")
 
     def on_release(self, result) -> None:
         """From prcore.release.watch(): shown on the listener's status page."""
@@ -371,6 +387,52 @@ class Daemon:
             res = self.station.restore(str(body.get("provider", "")), str(body.get("key", "")))
             return {"ok": res["restored"], **res}
         raise BrocastError(f"unbekannte Aktion {action!r}")
+
+    def stats_report(self, hours: int = 24, wait: bool = False) -> dict[str, Any]:
+        """View "Statistik": the last `hours` evaluated, with a proposal (advisor.py).
+
+        The re-calculation takes a moment (on the NanoPi several seconds), so it runs
+        in a thread: the call returns the last report (or {"computing": True}) and the
+        GUI asks again. The inputs (pages, counter) are taken here in the loop."""
+        if not (self.carousel and self.stats):
+            return {"station": False}
+        now = self.clock()
+        cached = self._report
+        if cached and cached[1] == hours and now - cached[0] < STATS_CACHE_SEC:
+            return cached[2]
+        st = self.cfg.station
+        pages = advisor.pages_from_rows(
+            self.store.list_pages(),
+            lambda row: [len(build_frame(self.cfg.callsign, d, st.path, row.hdr))
+                         for d in self.store.frames(row.pid)], st)
+        args = (now, hours, pages, self.stats.window(now, hours))
+        if wait:
+            return self._compute_report(*args)
+        job = self._report_job
+        if job is None or not job.is_alive():
+            self._report_job = threading.Thread(target=self._compute_report, args=args,
+                                                name="statistik", daemon=True)
+            self._report_job.start()
+        if cached and cached[1] == hours:
+            return {**cached[2], "computing": True}
+        return {"station": True, "computing": True}
+
+    def _compute_report(self, now: float, hours: int, pages: list[dict],
+                        buckets: list[dict]) -> dict[str, Any]:
+        try:
+            sends = None
+            if self.cfg.txlog_dir is not None:
+                since = now - hours * 3600
+                sends = txlog.group_sends(txlog.read_lines(
+                    txlog.files_for(self.cfg.txlog_dir, since, now), since, now))
+            rep = advisor.analyze(self.cfg.station, self.cfg.traffic,
+                                  self.cfg.beacon.interval_min, sends, buckets, pages, now, hours)
+            rep.update({"station": True, "callsign": self.cfg.callsign})
+        except Exception as exc:          # never take brocastd down for the statistics
+            log.exception("Statistik: Auswertung fehlgeschlagen")
+            rep = {"station": True, "error": str(exc)}
+        self._report = (now, hours, rep)
+        return rep
 
     def status(self) -> dict[str, Any]:
         now = self.clock()
@@ -452,6 +514,8 @@ class Daemon:
         finally:
             for t in tasks:
                 t.cancel()
+            if self.stats is not None:
+                self.stats.save()
             if self.ingest:
                 await self.ingest.close()
             await self.web.close()

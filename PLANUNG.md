@@ -2138,6 +2138,39 @@ Amateurfunktechnik.
   „Zuschauer“, 31).
 - Erste Fragensammlung (etwa 50 geprüfte Fragen) mit Quellen.
 
+## 34. brocast-Statistik mit Vorschlag fürs Karussell (entschieden und umgesetzt 13.11.2026)
+
+**Wunsch (Gerhard):** Aus 24 h Betrieb ausrechnen, wie Sendungen und Karussell optimiert werden
+können. Entschieden: Sendeprotokoll **und** neuer Zähler; Anzeige in der Web-GUI und auf der
+Kommandozeile; **nur Empfehlung**, `brocastd.conf` bleibt unangetastet.
+
+- **Zähler** `brocast/brocast/stats.py`: je Stunde (UTC) Laufzeit, fremde Frames (UI /
+  Verbindung, Bytes, geschätzte Sendezeit mit TXDELAY einmal je Aussendung, Rufzeichen), eigene
+  Sendezeit, Zurückstellung nach Grund (`busy`, `channel`, `budget`, `link`), Zeit in
+  TinyBox-Stufe 1/2, Verspätung gegen `next_tx`, Budget-Spitze. Das Karussell meldet bei jedem
+  Schritt die Zeit seit dem letzten (Lücken über 90 s zählen nicht). Im RAM, gesichert mit dem
+  normalen Flush (`db_flush_sec`) und beim Beenden in `data/statistik.json` (atomar, 48 h,
+  einige kB) – kein Schreiben pro Frame (eMMC, Abschnitt 26).
+- **Auswertung** `brocast/brocast/advisor.py`: Sendeprotokoll → Aussendungen je Seite und
+  Revision; Alter der Revision aus der DB (`rev_t`). Nachrechnung mit derselben Regel wie
+  `Carousel.gap_min` für den aktuellen Takt und ein Raster (`REPEATS` × `MAX_INTERVALS` ×
+  `AGINGS`). Maße: Sendezeit je Tag und Ø Wartezeit eines zufällig einschaltenden Hörers
+  (Σ Lücke² / 2 / Σ Lücke), getrennt für Inhalte jünger/älter als 24 h. Die Nachrechnung des
+  aktuellen Takts wird gegen die tatsächlichen Aussendungen gezeigt (Kontrolle).
+  - **ausgewogen:** geringste Sendezeit mit Wartezeit höchstens +15 %; **sparsam:** bis +60 %
+    (neu) / +100 % (älter), nur wenn mindestens 8 % billiger als ausgewogen; **schneller:**
+    kürzeste Wartezeit ohne mehr Sendezeit. Alle Vorschläge senden eine neue Revision in der
+    ersten Stunde mindestens dreimal.
+  - Vorschlag „sparsam“, wenn der Kanal voll ist (fremd ≥ 15 % oder ≥ 10 % der Zeit
+    zurückgestellt), sonst „ausgewogen“ – nur wenn er ≥ 10 % und ≥ 60 s am Tag spart.
+  - Weitere Hinweise: Budget zu knapp / viel Reserve, `quiet_s` bei viel UI-Verkehr, Bake unter
+    30 min mit ≥ 5 % Anteil, `burst_frames` bei ruhigem Kanal, Seiten mit ≥ 15 % Anteil, Seiten
+    mit ≥ 20 Revisionen am Tag.
+- **Anzeige:** Web-GUI „Statistik“ (Station), `GET /api/v1/stats?hours=24`; gerechnet in einem
+  Thread, Ergebnis 60 s zwischengespeichert. Konsole: `py -3 -m brocast statistik`
+  (`--json`, `--stunden`), liest die Dateien und die DB nur lesend.
+- Tests: `brocast/tests/test_advisor.py` (ein Betriebstag mit dem echten Karussell).
+
 ## Quellen
 
 - Security-Advisory TinyBox (9V1NE, 09.11.2026): https://gist.github.com/nnamon/3d93af6dd520d5f4b392c3fb57407d63

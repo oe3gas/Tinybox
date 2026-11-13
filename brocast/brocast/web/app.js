@@ -245,6 +245,7 @@ function updateBack() {
   $("nav-rxlog").classList.toggle("mon", pane === "view" && state.screen === "rxlog");
   $("nav-status").classList.toggle("mon", pane === "view" && state.screen === "status");
   $("nav-tx").classList.toggle("mon", pane === "view" && state.screen === "tx");
+  $("nav-stats").classList.toggle("mon", pane === "view" && state.screen === "stats");
 }
 
 /* ---------- left pane ---------- */
@@ -2380,6 +2381,7 @@ async function refreshTx() {
 function renderTxHeader() {
   const tx = state.tx, pill = $("hdr-tx"), air = $("hdr-air");
   $("nav-tx").hidden = !tx;
+  $("nav-stats").hidden = !tx;
   pill.hidden = air.hidden = !tx;
   document.body.classList.toggle("tx-on", !!tx);      // the top bar makes room (CSS)
   if (!tx) return;
@@ -2643,6 +2645,239 @@ function renderTxView() {
   v.replaceChildren(w);
 }
 
+/* ---------- view "Statistik" (station, 13.11.2026) ----------
+ * The last 24 h evaluated by brocastd (advisor.py): channel, waiting, what the
+ * airtime went into, the carousel re-calculated for other settings, proposal.
+ * Only a recommendation: brocastd.conf is changed by the sysop. */
+
+let statsTimer = null;
+
+async function renderStats() {
+  state.screen = "stats";
+  state.selected = null;
+  clearTimeout(statsTimer);
+  let rep;
+  try { rep = await api("GET", "/stats?hours=24"); } catch (e) { rep = { error: e.message }; }
+  if (state.screen !== "stats") return;
+  state.stats = rep;
+  renderStatsView();
+  if (rep && rep.computing)                     // re-calculation still running: ask again
+    statsTimer = setTimeout(() => { if (state.screen === "stats") renderStats().catch(() => {}); }, 1500);
+}
+
+function dur(s) {
+  s = Math.abs(s || 0);
+  if (s >= 5400) return (Math.round(s / 360) / 10).toLocaleString("de-AT") + " h";
+  if (s >= 90) return Math.round(s / 60) + " min";
+  return Math.round(s) + " s";
+}
+function pct(v) { return (v === null || v === undefined) ? "–" : num(Math.round(v * 10) / 10).replace(".", ",") + " %"; }
+function minv(v) { return (v === null || v === undefined) ? "–" : num(v).replace(".", ",") + " min"; }
+function hh(ts) { return new Date(ts * 1000).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" }); }
+
+function statTile(k, v, s) {
+  const t = el("div", "stile");
+  t.append(el("div", "k", k), el("div", "v", v));
+  if (s) t.append(el("div", "s", s));
+  return t;
+}
+
+const KIND_LABEL = { neu: "neue Revisionen", staffel: "Staffel (repeat_minutes)", wiederholung: "Wiederholung (max_interval_min)",
+                     gealtert: "gealtert (aging)", "rücknahme": "Rücknahmen", dictionary: "Dictionary", bake: "Bake" };
+
+/* Channel per hour: stacked bars own / foreign (share of the hour), hover tooltip, table view. */
+function hourChart(ch) {
+  const card = el("section", "txcard");
+  const head = el("div", "chead");
+  head.append(el("h3", null, "Kanalbelegung je Stunde"));
+  const leg = el("div", "legend");
+  for (const [cls, label] of [["own", "brocast (eigene Sendezeit)"], ["fr", "fremd (gehört, geschätzt)"]]) {
+    const i = el("span", "li"); i.append(el("span", "sw " + cls), label); leg.append(i);
+  }
+  const tbtn = el("button", "btn sm", "Tabelle");
+  tbtn.type = "button";
+  head.append(el("span", "grow"), leg, tbtn);
+  card.append(head);
+  const hours = ch.hours || [];
+  const max = Math.max(5, ...hours.map(h => 100 * (h.own_s + h.foreign_s) / 3600));
+  const top = max <= 5 ? 5 : max <= 10 ? 10 : max <= 20 ? 20 : max <= 50 ? 50 : 100;
+  const plot = el("div", "hchart");
+  const axis = el("div", "yaxis");
+  for (const v of [top, top / 2, 0]) axis.append(el("span", null, num(v) + " %"));
+  const bars = el("div", "bars");
+  const tip = el("div", "ctip");
+  tip.hidden = true;
+  for (const h of hours) {
+    const col = el("div", "col" + (h.run_s < 600 ? " off" : ""));
+    const stack = el("div", "stack");
+    const fr = el("div", "seg fr"), own = el("div", "seg own");
+    fr.style.height = (100 * (100 * h.foreign_s / 3600) / top) + "%";
+    own.style.height = (100 * (100 * h.own_s / 3600) / top) + "%";
+    stack.append(fr, own);
+    const hr = new Date(h.t * 1000).getHours();
+    col.append(stack, el("span", "xl" + (hr % 3 ? " minor" : ""), hr));
+    const show = () => {
+      tip.replaceChildren(el("b", null, `${hh(h.t)}–${hh(h.t + 3600)}`),
+        el("div", null, `brocast ${dur(h.own_s)} (${pct(100 * h.own_s / 3600)})`),
+        el("div", null, `fremd ${dur(h.foreign_s)} (${pct(100 * h.foreign_s / 3600)}) · ${h.ui} UI, ${h.conn} Verb., ${h.calls} Rufz.`),
+        el("div", null, `Verspätung Ø ${num(h.late_avg_s)} s, max ${h.late_max_s} s`),
+        el("div", "m", h.run_s < 3500 ? `brocastd lief ${dur(h.run_s)}` : ""));
+      tip.hidden = false;
+      const r = col.getBoundingClientRect(), pr = plot.getBoundingClientRect();
+      tip.style.left = Math.min(Math.max(r.left - pr.left + r.width / 2 - 110, 0), pr.width - 220) + "px";
+    };
+    col.onmouseenter = show;
+    col.onclick = show;
+    bars.append(col);
+  }
+  bars.onmouseleave = () => { tip.hidden = true; };
+  plot.append(axis, bars, tip);
+  const table = el("table", "stable");
+  table.hidden = true;
+  const tr0 = el("tr");
+  for (const c of ["Stunde", "brocast", "fremd", "UI", "Verb.", "Verspätung Ø", "lief"]) tr0.append(el("th", null, c));
+  table.append(tr0);
+  for (const h of hours) {
+    const tr = el("tr");
+    for (const c of [`${hh(h.t)}`, dur(h.own_s), dur(h.foreign_s), h.ui, h.conn, `${num(h.late_avg_s)} s`, dur(h.run_s)]) tr.append(el("td", null, c));
+    table.append(tr);
+  }
+  tbtn.onclick = () => { table.hidden = !table.hidden; plot.hidden = !table.hidden; tbtn.classList.toggle("on", !table.hidden); };
+  card.append(plot, table);
+  return card;
+}
+
+function adviceItem(a) {
+  const it = el("div", "adv " + a.level);
+  const h = el("div", "ah");
+  h.append(el("span", "badge", a.level === "change" ? "ÄNDERN" : a.level === "ok" ? "PASST" : "HINWEIS"),
+    el("b", null, a.title));
+  if (a.saving_s) h.append(el("span", "save", `spart ≈ ${dur(a.saving_s)}/Tag`));
+  it.append(h, el("p", null, a.text));
+  if (a.conf && a.conf.length) {
+    const box = el("div", "conf");
+    box.append(el("pre", null, a.conf.join("\n")));
+    const cp = el("button", "btn sm", "Kopieren");
+    cp.type = "button";
+    cp.onclick = async () => {
+      try { await navigator.clipboard.writeText(a.conf.join("\n")); toast("In die Zwischenablage kopiert."); }
+      catch (e) { toast("Kopieren geht hier nicht – bitte markieren.", true); }
+    };
+    box.append(cp);
+    it.append(box);
+  }
+  return it;
+}
+
+function renderStatsView() {
+  const rep = state.stats, v = $("view");
+  const w = el("div", "txwrap");
+  const head = el("div", "txhead");
+  head.append(el("h2", null, "Statistik"));
+  w.append(head);
+  if (!rep || rep.error || rep.station === false) {
+    w.append(el("p", "empty", rep && rep.error ? `Auswertung fehlgeschlagen: ${rep.error}` : "Nur eine Station sendet."));
+    v.replaceChildren(w);
+    return;
+  }
+  if (!rep.basis) {
+    w.append(el("p", "empty", "Die letzten 24 h werden ausgewertet …"));
+    v.replaceChildren(w);
+    return;
+  }
+  const b = rep.basis, ch = rep.channel, wt = rep.waiting;
+  head.append(el("span", "sub", `Station ${rep.callsign || ""} · ${new Date(rep.since * 1000).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} bis ${hh(rep.now)} · ` +
+    `brocastd lief ${num(b.run_h).replace(".", ",")} h · Sendeprotokoll ${b.txlog ? b.sends + " Aussendungen" : "aus"}` +
+    (rep.computing ? " · wird neu berechnet …" : "")));
+  for (const n of b.notes) w.append(el("div", "snote", n));
+
+  // proposal
+  const adv = el("section", "txcard");
+  adv.append(el("h3", null, "Vorschlag"));
+  for (const a of rep.advice) adv.append(adviceItem(a));
+  adv.append(el("div", "bnote", "Nur Empfehlung: Werte in brocastd.conf eintragen ([station]; Bake unter [beacon], " +
+    "Ruhezeit unter [traffic]) und brocastd neu starten. Nach 24 h zeigt diese Seite, wie es wirkt."));
+  w.append(adv);
+
+  // tiles
+  const tiles = el("div", "stiles");
+  tiles.append(statTile("brocast auf dem Kanal", pct(ch.own_pct), dur(ch.own_s)),
+    statTile("fremder Verkehr", pct(ch.foreign_pct), `${ch.ui} UI · ${ch.conn} Verb. · ${ch.calls} Rufz.`),
+    statTile("Verspätung Ø", `${num(wt.late_avg_s).replace(".", ",")} s`, `${wt.late_over} von ${wt.sends} über 1 min · max ${dur(wt.late_max_s)}`),
+    statTile("zurückgestellt", dur(wt.hold.busy + wt.hold.channel + wt.hold.budget),
+      `Betrieb ${dur(wt.hold.busy)} · Kanal ${dur(wt.hold.channel)} · Budget ${dur(wt.hold.budget)}`),
+    statTile("Budget-Spitze", `${num(wt.budget_peak_s).replace(".", ",")} s`, `von ${num(wt.budget_limit_s)} s je ${rep.config.airtime_window_min} min`));
+  w.append(tiles);
+
+  // options
+  if (rep.options && rep.options.length) {
+    const oc = el("section", "txcard flush");
+    oc.append(el("h3", "bar", "Karussell nachgerechnet – was andere Einstellungen gebracht hätten"));
+    const t = el("table", "stable opts");
+    const tr0 = el("tr");
+    for (const c of ["", "repeat_minutes", "max_interval_min", "aging", "Sendezeit/Tag", "Ø Wartezeit neu", "Ø Wartezeit älter", "Spitze 10 min"]) tr0.append(el("th", null, c));
+    t.append(tr0);
+    for (const o of rep.options) {
+      const tr = el("tr", o.name === rep.recommended ? "rec" : o.name === "aktuell" ? "cur" : "");
+      const name = el("td", "nm");
+      name.append(el("b", null, o.name), el("div", "lbl", o.label));
+      if (o.same_as) {
+        const td = el("td", "same", `wie ${o.same_as}`);
+        td.colSpan = 7;
+        tr.append(name, td);
+      } else {
+        tr.append(name, el("td", "mono", o.repeat_minutes), el("td", "mono", o.max_interval_min), el("td", "mono", o.aging || "–"),
+          el("td", "mono", dur(o.air_day_s)), el("td", "mono", minv(o.access_young_min)), el("td", "mono", minv(o.access_old_min)),
+          el("td", "mono", `${num(o.peak_s).replace(".", ",")} s`));
+      }
+      t.append(tr);
+    }
+    const scroll = el("div", "sscroll");
+    scroll.append(t);
+    oc.append(scroll);
+    const chk = rep.sim_check;
+    oc.append(el("div", "bnote pad", "Wartezeit = wie lange ein Hörer, der zu einem beliebigen Zeitpunkt einschaltet, im Schnitt auf eine Seite wartet " +
+      "(neu: Inhalt jünger als 24 h). Gerechnet mit den Seiten und Revisionen der letzten 24 h, ohne Rücksicht-Pausen." +
+      (chk ? ` Kontrolle: gesendet ${chk.measured_sends}, nachgerechnet ${chk.simulated_sends} Aussendungen.` : "")));
+    w.append(oc);
+  }
+
+  w.append(hourChart(ch));
+
+  // where the airtime went + biggest consumers
+  if (rep.own) {
+    const low = el("div", "txgrid even");
+    const kc = el("section", "txcard");
+    kc.append(el("h3", null, "Wofür die Sendezeit ging"));
+    const total = rep.own.air_s || 1;
+    const kl = el("div", "kinds");
+    for (const [k, s] of Object.entries(rep.own.kinds)) {
+      if (!s) continue;
+      const row = el("div", "kr");
+      const bar = el("span", "kb"), f = el("span");
+      f.style.width = (100 * s / total) + "%";
+      bar.append(f);
+      row.append(el("span", "kn", KIND_LABEL[k] || k), bar, el("span", "kv", `${dur(s)} · ${pct(100 * s / total)}`));
+      kl.append(row);
+    }
+    kc.append(kl, el("div", "bnote", `${rep.own.sends} Seiten-Aussendungen, ${rep.own.frames} Frames, ` +
+      `${Math.round(rep.own.bytes / 1024)} kB, ${rep.own.pages} Seiten`));
+    const tc = el("section", "txcard flush");
+    tc.append(el("h3", "bar", "Größte Verbraucher"));
+    const tl = el("div", "txlist consumers");
+    for (const p of rep.own.top) {
+      const row = el("div", "r");
+      row.append(el("span", "pg", `P${p.page}`), el("span", "ti", p.title || p.typ),
+        el("span", "meta", `${p.sends}× · ${p.revs} Rev. · ${p.frames} Tl`), el("span", "when", pct(p.share)));
+      tl.append(row);
+    }
+    tc.append(tl);
+    low.append(kc, tc);
+    w.append(low);
+  }
+  v.replaceChildren(w);
+}
+
 async function init() {
   state.view = loadView();
   state.graphic = loadGraphic();
@@ -2657,6 +2892,7 @@ async function init() {
   $("btn-settings").onclick = show(renderSettings);
   $("nav-status").onclick = show(renderStatus);
   $("nav-tx").onclick = show(renderTx);
+  $("nav-stats").onclick = show(renderStats);
   $("hdr-tx").onclick = show(renderTx);
   $("nav-rxlog").onclick = show(() => renderRxlog(null));
   $("dictbar-details").onclick = show(renderStatus);

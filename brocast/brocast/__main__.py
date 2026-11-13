@@ -4,6 +4,7 @@
     py -3 -m brocast decode <hex>      CBOR-Hexstring dekodieren und anzeigen
     py -3 -m brocast dict              Dictionary-Version und Hash anzeigen
     py -3 -m brocast bild <datei>      Bild als Teletext-Mosaik (nur Station, --help dort)
+    py -3 -m brocast statistik         24 h auswerten, Vorschlag fürs Karussell (nur Station)
 """
 
 from __future__ import annotations
@@ -46,6 +47,9 @@ def main(argv: list[str]) -> int:
         elif argv[0] == "bild":
             from .imagecmd import main as bild_main
             return bild_main(argv[1:])
+        elif argv[0] == "statistik":
+            from .statcmd import main as stat_main
+            return stat_main(argv[1:])
         elif argv[0] == "dict":
             d = codec.d
             print(f"{d.name} Version {d.version}, Hash {d.hash4.hex()}")

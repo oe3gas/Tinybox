@@ -23,6 +23,9 @@
   * what is on the air right now, what waits and what went out last is kept
     for the web GUI (tx_state(), view "Sendung", 08.11.2026) - updated with
     every frame handed to Direwolf, like the Sendeprotokoll
+  * statistics (13.11.2026, stats.py): every step reports the time since the
+    last one with the TinyBox level and why sending was held; every send its
+    airtime and how late it was against the plan (view "Statistik")
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from collections import deque
 from typing import Awaitable, Callable
 
 from .config import StationCfg, TrafficCfg
+from .stats import Stats
 from .frame import airtime_s, build as build_frame, tx_airtime_s
 from .store import PageRow, Store
 from .txlog import TxLog, title_of
@@ -127,6 +131,9 @@ class Carousel:
         self.heard_from = ""
         self.connected_at = 0.0                # ... of the last foreign connected-mode frame
         self.connected_who = ""
+        # statistics (stats.py): why the time since the last step was held, if it was
+        self.stats: Stats | None = None
+        self._hold_state: str | None = None
 
     def wake(self) -> None:
         self._wake.set()
@@ -297,6 +304,8 @@ class Carousel:
             return False
         air = airtime_s(len(frame), self.cfg.baud, self.cfg.txdelay_ms)
         self.budget.add(now, air)
+        if self.stats is not None:
+            self.stats.own(self.clock(), air, 1, beacon=True)
         self._count_frame()
         self.beacon_next = now + self.beacon_interval_s
         if self.txlog:
@@ -309,9 +318,16 @@ class Carousel:
         log.info("Bake gesendet (%s Bytes)", len(frame))
         return True
 
+    def _tick(self, now: float) -> None:
+        """Statistics: the time since the last step, with the state it had."""
+        if self.stats is not None:
+            self.stats.tick(now, self.level()[0], self._hold_state, self.budget.spent(now))
+        self._hold_state = None
+
     async def step(self) -> float:
         """Send what is due. Returns seconds until the next useful step."""
         now = self.clock()
+        self._tick(now)
         for row in self.store.expired_pages(int(now)):
             log.info("Seite %s (%s/%s) abgelaufen, entfernt", row.id, row.provider, row.pkey)
             self.store.delete_page(row.pid)
@@ -331,12 +347,14 @@ class Carousel:
                              "waiting": len(self.store.due_pages(int(now)))})
                 if any(r.pri >= EMERGENCY for r in self.store.due_pages(int(now))):
                     continue                               # an emergency further down: send it
+                self._hold_state = reason
                 return min(max(wait, 1.0), MAX_SLEEP)
             if row.pri < EMERGENCY and not self.budget.allows(now, needed):
                 wait = self.budget.free_at(now, needed) - now
                 log.debug("Airtime-Budget erschöpft, warte %.0f s", wait)
                 self._block({"reason": "budget", "until": now + wait, "page": row.id,
                              "waiting": len(self.store.due_pages(int(now)))})
+                self._hold_state = "budget"
                 return min(max(wait, 1.0), MAX_SLEEP)
             typ, title = title_of(row.content)
             dest = "BROCST" + ("," + ",".join(self.cfg.path) if self.cfg.path else "")
@@ -354,6 +372,7 @@ class Carousel:
                     log.debug("Direwolf nicht verbunden, Senden verschoben")
                     self._done("paused")
                     self._block({"reason": "link", "until": self.clock() + 5, "page": row.id})
+                    self._hold_state = "link"
                     return 5.0
                 self.blocked = None
                 cur = self.current
@@ -367,6 +386,12 @@ class Carousel:
                                       row.provider, row.pkey, title,
                                       withdrawn=row.state == "withdrawn")
             self.budget.add(now, needed)
+            if self.stats is not None:
+                done = self.clock()
+                self.stats.own(done, needed, len(frames))
+                if row.next_tx < RESTING:              # how late against the plan
+                    started = (self.current or {}).get("started", now)
+                    self.stats.late(done, started - row.next_tx)
             self.sent_pages += 1
             self.day_pages += 1
             self._done("withdrawn" if row.state == "withdrawn" else "ok")
@@ -380,6 +405,7 @@ class Carousel:
             self.blocked_since = None                      # nothing waits for the traffic any more
         if not await self._beacon(self.clock()):
             log.debug("Direwolf nicht verbunden, Bake verschoben")
+            self._hold_state = "link"
             return 5.0
         nxt = self.store.next_due()
         if self.beacon_build is not None and self.beacon_interval_s > 0:

@@ -270,6 +270,28 @@ Frames in der Direwolf-Queue), dem Budget, den nächsten Seiten und den zuletzt 
 Zeit = Übergabe an Direwolf wie im Sendeprotokoll; bei KISS ist die Restzeit berechnet. Die
 Oberfläche fragt jede Sekunde, solange gesendet wird, sonst alle 5 s.
 
+**Statistik (Station, 13.11.2026):** „Statistik“ in der Seitenleiste wertet die letzten 24 h
+aus und schlägt vor, wie Sendungen und Karussell besser eingestellt wären – nur als Empfehlung,
+`brocastd.conf` ändert der Sysop selbst (Zeilen zum Kopieren). Quellen: das Sendeprotokoll
+(jede eigene Aussendung) und ein Zähler in brocastd, der je Stunde fremden Verkehr (UI und
+Verbindungen, geschätzte Sendezeit), Zurückstellungen nach Grund (Betrieb, Kanal, Budget,
+Direwolf), TinyBox-Stufen, Verspätung gegen den Plan und die Budget-Spitze sammelt
+(`data/statistik.json`, 48 h, geschrieben mit `db_flush_sec`). Kern ist eine Nachrechnung:
+mit den Seiten und Revisionen der letzten 24 h wird für den jetzigen Takt und andere Werte von
+`repeat_minutes`, `max_interval_min` und `aging` gerechnet, wie viel gesendet worden wäre und wie
+lange ein Hörer, der zu einem beliebigen Zeitpunkt einschaltet, im Schnitt auf eine Seite wartet
+(neue und ältere Inhalte getrennt). Vorgeschlagen wird „ausgewogen“ (weniger Sendezeit,
+Wartezeiten höchstens 15 % länger, jede neue Revision mindestens dreimal in der ersten Stunde),
+bei vollem Kanal „sparsam“. Dazu Hinweise zu Budget, `quiet_s`, Bake, `burst_frames`, großen
+Verbrauchern und Seiten, die sehr oft neu geliefert werden. Ohne Laufzeit-Daten (erste 24 h nach
+dem Update) ist die Auswertung als vorläufig markiert. Als Text auf der Konsole:
+
+```
+py -3 -m brocast statistik                 Bericht (liest Sendeprotokoll, data\statistik.json, DB nur lesend)
+py -3 -m brocast statistik --json          alles als JSON
+py -3 -m brocast statistik --stunden 12    anderer Zeitraum (1..48 h)
+```
+
 **Bake (Station):** `[beacon]` in `brocastd.conf` sendet alle `interval_min` Minuten (Standard
 30, mindestens 5, 0 = aus; die erste beim Start) einen UI-Frame im Klartext an `dest` (Standard
 `BEACON`), z. B. „OE3GAS-5: brocast - Teletext-Seiten ueber Packet Radio …“ – so sieht jeder am

@@ -67,3 +67,83 @@ def title_of(content_json: str) -> tuple[str, str]:
     except ValueError:
         return "?", ""
     return str(content.get("typ", "?")), str(content.get("ti", ""))
+
+
+# --- reading (statistics, advisor.py) ------------------------------------------
+
+def files_for(directory: Path, since: float, until: float) -> list[Path]:
+    """The monthly files that cover since..until (UTC), existing ones only."""
+    months, t = [], since
+    while True:
+        m = time.strftime("%Y-%m", time.gmtime(t))
+        if m not in months:
+            months.append(m)
+        if t >= until:
+            break
+        t = min(until, t + 20 * 86400)
+    out = [Path(directory) / f"Sendeprotokoll_{m}.txt" for m in months]
+    return [p for p in out if p.exists()]
+
+
+def read_lines(paths: list[Path], since: float, until: float) -> list[dict]:
+    """Frames of the Sendeprotokoll between since and until (UTC), oldest first.
+    Lines that do not parse (header, damaged) are skipped."""
+    import calendar
+    out = []
+    for path in paths:
+        try:
+            fh = open(path, encoding="utf-8", errors="replace")
+        except OSError as exc:
+            log.warning("Sendeprotokoll nicht lesbar (%s): %s", path, exc)
+            continue
+        with fh:
+            for line in fh:
+                if line.startswith("#") or "|" not in line:
+                    continue
+                cols = [c.strip() for c in line.rstrip("\n").split("|", 10)]
+                if len(cols) < 11:
+                    continue
+                try:
+                    ts = calendar.timegm(time.strptime(cols[0].rstrip("Z"), "%Y-%m-%d %H:%M:%S"))
+                    if ts < since or ts > until:
+                        continue
+                    sub, _, total = cols[5].partition("/")
+                    provider, _, key = cols[9].partition("/")
+                    title = cols[10]
+                    withdrawn = title.startswith("[zurückgezogen]")
+                    out.append({"t": ts, "dest": cols[2], "page": int(cols[3]),
+                                "rev": int(cols[4]), "sub": int(sub), "total": int(total),
+                                "typ": cols[6], "bytes": int(cols[7]),
+                                "air0": float(cols[8]), "provider": provider, "key": key,
+                                "title": title[len("[zurückgezogen]"):].strip() if withdrawn
+                                else title, "withdrawn": withdrawn,
+                                "beacon": cols[6] == "beacon" or cols[2].startswith("BEACON")})
+                except (ValueError, IndexError):
+                    continue
+    out.sort(key=lambda r: r["t"])
+    return out
+
+
+def group_sends(lines: list[dict]) -> list[dict]:
+    """Frames -> sends: one entry per page handed to Direwolf (all its parts)."""
+    sends: list[dict] = []
+    open_: dict[tuple, dict] = {}
+    for ln in lines:
+        k = (ln["provider"], ln["key"], ln["page"])
+        cur = open_.get(k)
+        if (cur is None or ln["sub"] <= cur["last_sub"] or ln["rev"] != cur["rev"]
+                or ln["t"] - cur["t_end"] > 600 or ln["beacon"]):
+            cur = {"t": ln["t"], "t_end": ln["t"], "page": ln["page"], "rev": ln["rev"],
+                   "provider": ln["provider"], "key": ln["key"], "typ": ln["typ"],
+                   "title": ln["title"], "withdrawn": ln["withdrawn"], "beacon": ln["beacon"],
+                   "total": ln["total"], "frames": 0, "bytes": 0, "air0": 0.0, "last_sub": 0}
+            sends.append(cur)
+            open_[k] = cur
+        cur["frames"] += 1
+        cur["bytes"] += ln["bytes"]
+        cur["air0"] += ln["air0"]
+        cur["last_sub"] = ln["sub"]
+        cur["t_end"] = ln["t"]
+    for s in sends:
+        del s["last_sub"]
+    return sends
