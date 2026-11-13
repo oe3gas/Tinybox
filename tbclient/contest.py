@@ -64,9 +64,9 @@ class ContestSlot:
     def _done(self, before: str, g: contest.Game) -> None:
         s = g.s
         if before != "end" and s["st"] == "end":
-            res = {"win": "you won", "loss": "you lost", "draw": "a draw",
-                   "resigned": "you resigned", "they resigned": f"{s['opp']} resigned - you won"}
-            self._note(f"📻 CQ contest: {res.get(s['res'], 'over')} "
+            res = {"win": "gewonnen", "loss": "verloren", "draw": "unentschieden",
+                   "resigned": "aufgegeben", "they resigned": f"{s['opp']} hat aufgegeben - gewonnen"}
+            self._note(f"📻 CQ Contest: {res.get(s['res'], 'vorbei')} "
                        f"({g.worked()}:{g.lost()})")
             self._report(s)
 
@@ -95,7 +95,7 @@ class ContestSlot:
             self._save(state)
             self._send([f"NEW h={1 if hints else 0}" + (f" c={center}" if center else "")
                         + (f" id={gid}" if gid else "")])
-            self._note(f"📻 new CQ contest with {self._opp()} - place your stations")
+            self._note(f"📻 neuer CQ Contest mit {self._opp()} - Stationen setzen")
             return True
         state = self.state
         if state is None:
@@ -108,7 +108,7 @@ class ContestSlot:
             else:
                 self._save(None)
                 self._send(["NO"])
-                self._note("📻 CQ contest declined")
+                self._note("📻 CQ Contest abgelehnt")
             return True
         if act == "close":
             if state["st"] == "invited":
@@ -172,14 +172,14 @@ class ContestSlot:
             if len(gid) == 16 and all(ch in "0123456789abcdef" for ch in gid):
                 state["gid"] = gid                # CR127: the id of the game for the box
             self._save(state)
-            self._note(f"📻 {self._opp()} invites you to a CQ contest")
+            self._note(f"📻 {self._opp()} lädt zum CQ Contest ein")
             return
         if word == "NO":
             state = self.state
             if state is not None and state["first"] and state["st"] == "setup":
                 self._save(None)
-                self.err = f"{self._opp()} declined the CQ contest."
-                self._note(f"📻 {self._opp()} declined the CQ contest")
+                self.err = f"{self._opp()} hat den CQ Contest abgelehnt."
+                self._note(f"📻 {self._opp()} hat den CQ Contest abgelehnt")
             return
         state = self.state
         if state is None:

@@ -693,7 +693,7 @@ function renderPeople() {
       if (c !== S.mycall && S.contest && S.contest.rel_ok) {   // CR122: through the box
         const g = el("button", "icon-btn pdirect", "📻");
         g.type = "button";
-        g.title = `CQ contest with ${c} through the TinyBox (if ${c} has a TBClient that plays)`;
+        g.title = Contest.t("memberTip", c);
         g.onclick = (ev) => { ev.stopPropagation(); contestInvite(c.split("-")[0]); };
         row.append(g);
       }
@@ -2948,7 +2948,7 @@ function peerFunRow(f, c) {
     btn("Speed test", "1 kB each way, net bytes per second", () => speedConfirm(c, f.last && f.last.st),
         f.st && f.st.state === "running"),
     btn("♟ Chess", "Play chess over packet", () => { chessOpen = !chessOpen; render(); }),
-    ...(f.ct ? [btn("📻 CQ contest", "Battleships with contest stations (CR122)",
+    ...(f.ct ? [btn("📻 " + Contest.t("name"), Contest.t("tip"),
                     () => { contestOpen = !contestOpen; render(); })] : []),
     btn("QSL", "Send a digital QSL card (into the chat)", () => sendQsl(c)));
   const res = [];
@@ -2968,7 +2968,7 @@ function peerFunRow(f, c) {
     }
     if (ctMove) {
       if (res.length || move) d.append(" · ");
-      d.append(el("span", "ph-move", "📻 your move"));
+      d.append(el("span", "ph-move", Contest.t("moveChip")));
     }
     row.append(d);
   }
@@ -3014,11 +3014,11 @@ function renderPeerSide(c, p) {
     sec.append(item("♟ Chess", "Play chess over packet", () => { chessOpen = !chessOpen; render(); }, false, cres));
     if (f.ct) {                                                  // CR122
       const k = f.contest;
-      const kres = k && k.my_turn ? line("", el("span", "ph-move", "📻 your move"))
-        : k && k.st === "setup" && !k.ready ? line("", "place your stations")
-        : k && k.st !== "end" ? line("muted", `waiting for ${c.target}`)
-        : k ? line("muted", `${k.worked}:${k.lost} · ${k.res}`) : null;
-      sec.append(item("📻 CQ contest", "Battleships with contest stations", () => { contestOpen = !contestOpen; render(); },
+      const kres = k && k.my_turn ? line("", el("span", "ph-move", Contest.t("moveChip")))
+        : k && k.st === "setup" && !k.ready ? line("", Contest.t("placeShort"))
+        : k && k.st !== "end" ? line("muted", Contest.t("waitingFor", c.target))
+        : k ? line("muted", `${k.worked}:${k.lost} · ${Contest.t("res")[k.res] || k.res}`) : null;
+      sec.append(item("📻 " + Contest.t("name"), Contest.t("tip"), () => { contestOpen = !contestOpen; render(); },
                       false, kres));
     }
     sec.append(item("QSL", "Send a digital QSL card (into the chat)", () => sendQsl(c), false));
@@ -3227,8 +3227,6 @@ function renderPeerContest(c, p) {
 
 /* ... and in the chat channel: against the TinyBox, or against another client of
  * the box (handed on by it, CTR) - one block per game in the panel */
-const REL_ERR = { offline: "is not connected to the TinyBox with a TBClient that plays through it.",
-  no_game: "has no game with you any more.", no_locator: "- the TinyBox has no locator set.", bad: "- refused by the TinyBox." };
 function renderBoxContest() {
   const k = S.contest || {};
   const can = S.state === "online" && S.mode === "tinybox" && k.ok;
@@ -3238,7 +3236,7 @@ function renderBoxContest() {
   nb.classList.toggle("hidden", !can && !any);
   nb.classList.toggle("active", boxContestOpen);
   const move = (k.game && k.game.my_turn) || rel.some((r) => r.game && r.game.my_turn);
-  $("nav-contest-st").replaceChildren(move ? el("span", "ph-move ct-navmove", "your move") : "");
+  $("nav-contest-st").replaceChildren(move ? el("span", "ph-move ct-navmove", Contest.t("moveShort")) : "");
   const pk = $("pick-contest");
   if (pk) pk.classList.toggle("hidden", !can);
   const box = $("box-contest");
@@ -3262,7 +3260,7 @@ function renderBoxContest() {
   }
   for (const r of rel) {                         // games with other clients first
     const d = part("rel:" + r.call);
-    const err = r.err ? `${r.call} ${REL_ERR[r.err.split(" ")[0]] || r.err}` : "";
+    const err = r.err ? `${r.call} ${Contest.t("relErr")[r.err.split(" ")[0]] || r.err}` : "";
     if (!r.game) {
       d.replaceChildren(el("div", "small ct-err", err));
       continue;
@@ -3272,7 +3270,7 @@ function renderBoxContest() {
       hide: () => { boxContestOpen = false; render(); } });
     if (err) d.append(el("div", "small ct-err", err));
   }
-  const err = k.err === "no_locator" ? "The TinyBox has no locator set - it cannot play." : k.err;
+  const err = k.err === "no_locator" ? Contest.t("boxNoLoc") : k.err;
   Contest.render(part("box"), k.game, { key: "box", mode: "box", opp: S.tinybox, on: can, err,
     act: (act, arg) => api("contest", { act, arg: arg || "" }),
     hide: () => { boxContestOpen = false; render(); } });
@@ -3343,7 +3341,7 @@ function renderInvites() {
   const id = `${c.n}:${c.target}:${g.c}`;
   if (!ctInviteSeen.has(id)) {
     ctInviteSeen.add(id);
-    if (notifyCfg.popup && canPopup() && Notification.permission === "granted" && document.hidden) showPopup(`CQ contest - ${c.target}`, `${c.target} invites you to a CQ contest`, c.n);
+    if (notifyCfg.popup && canPopup() && Notification.permission === "granted" && document.hidden) showPopup(`${Contest.t("name")} - ${c.target}`, Contest.t("popup", c.target), c.n);
     if (notifyCfg.tone && typeof playBK === "function") playBK();
   }
   box.replaceChildren(Contest.inviteCard(g, c.target, c.via, () => { c.act("accept"); c.open(); },
@@ -4137,6 +4135,9 @@ async function start() {
   $("bh-prefix").onclick = () => { prOpen = !prOpen; render(); };                       // CR123
   $("bh-top").onclick = () => api("games", (S.games || {}).lb ? { act: "close" } : { act: "top", arg: "" });  // CR126
   $("pick-contest").onclick = () => { boxContestOpen = true; render(); };
+  $("pick-contest").textContent = Contest.t("pickBox");
+  $("nav-contest").title = Contest.t("tip");
+  $("nav-contest").querySelector("span").lastChild.textContent = " " + Contest.t("name");
   $("bh-leave").onclick = () => api("leave");
   const openSheet = (focus) => {
     $("sheet").classList.remove("hidden"); renderSymbols(); loadConnlog();

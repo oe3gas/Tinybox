@@ -369,7 +369,7 @@ class SlotTests(unittest.TestCase):
                     self.assertTrue(slot.act("cq", g.pick()))
                     flush()
         self.assertEqual((a.state["check"], b.state["check"]), ("ok", "ok"))
-        self.assertTrue(any("CQ contest:" in n for n in notes))
+        self.assertTrue(any("CQ Contest:" in n for n in notes))
         summ = a.summary()
         self.assertEqual(len(summ["cells"]), 64)
         self.assertTrue(a.act("close"))
@@ -392,7 +392,7 @@ class SlotTests(unittest.TestCase):
             to, line = q.pop(0)
             (a if to == "a" else b).take(line[5:])
         self.assertIsNone(a.state)
-        self.assertIn("declined", a.err)
+        self.assertIn("abgelehnt", a.err)
 
 
 class CoreRelayTests(unittest.TestCase):

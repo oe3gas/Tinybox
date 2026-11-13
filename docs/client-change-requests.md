@@ -5062,3 +5062,13 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
   „<Call> lädt zum CQ Contest“, „Annehmen / Ablehnen“.
 - Foto `tbclient/web/contest-room.jpg` (ca. 115 kB), Entwurf vorab als Bild abgestimmt.
 
+### Nachtrag 6 (OE3GAS, 14.11.2026): Spieltexte deutsch – umgesetzt (Client 2026.11.14) ✅
+
+- Alle Texte des Spiels (Kopf, Stand, Setzen, Rufen, Meldungen, Log, Ende, Einladung, Hinweise in
+  der rechten Spalte und links unter Station, Fehler, Popup, Chat-Notizen) deutsch.
+- Die Texte stehen in **einer Tabelle** in `contest.js` (`TX.de` und `TX.en`), die englische Fassung
+  bleibt erhalten; `Contest.setLang("en")` schaltet um. Das Protokoll (`//CT`, `//CTR`) hat keine
+  Sprache – Vorbereitung für die Sprachwahl je Spiel in der Konfiguration (Frage von OE3GAS, noch
+  zu entscheiden). Die Chat-Notizen in `tbclient/contest.py` sind vorerst nur deutsch.
+- Funk-Jargon bleibt: „QRZ?“, „5NN“, „73 de … · gl next time“, „tnx fer the contest“, „QRV“.
+
