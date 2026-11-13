@@ -103,7 +103,8 @@ with its text, everything else only as a header (CR40).
 CT = the CQ contest with the box as the opponent (CR122, see contest.py):
     //CT NEW h=<0|1> -> //CT OK c=<loc> h=.. and //CT READY <hash>, then the moves.
 CTR = two clients of the box play each other through it: //CTR <call> <line>.
-GAMES = the leaderboards (CR126, see games.py): //GAMES TOP [game].
+GAMES = the leaderboards (CR126, see games.py): //GAMES TOP [game]; and //GAME RES / ST:
+    signed results of chess and CQ contest (CR127, see gamereport.py).
 PR = Prefix raten in a board (CR123, see prefixgame.py): //PR START|JOIN|A|B|C|STOP,
     the game comes as system events "#<seq> !PR ..." to everybody in the board.
 
@@ -137,7 +138,7 @@ from prcore import profile as pf
 from prcore.release import RELEASE
 from prcore.text import isnum
 
-from . import clientnews, clientsync, contest, games, prefixgame, profiles
+from . import clientnews, clientsync, contest, gamereport, games, prefixgame, profiles
 from .addressing import base_call
 
 if TYPE_CHECKING:
@@ -152,7 +153,7 @@ REQUIRE_AUTH = True
 
 PROTO = "TB1"
 KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
-              "HSEQ", "ADM", "BFILE", "LOTW", "CT", "CTR", "PR", "GAMES")
+              "HSEQ", "ADM", "BFILE", "LOTW", "CT", "CTR", "PR", "GAMES", "GAME")
 IMG_COMMANDS = ("IMGPUT", "IMG")
 FILE_COMMANDS = ("FPUT", "FGET")          # CR86: files in a board
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
@@ -201,6 +202,8 @@ def critical(cmd: str, parts: list[str]) -> bool:
         return parts[1:] != ["?"]
     if cmd == "SYNC":
         return any(p.lower().startswith("k=") for p in parts[1:])
+    if cmd == "GAME":                       # CR127: a result counts only signed
+        return len(parts) > 1 and parts[1].upper() == "RES"
     return False
 
 
@@ -230,13 +233,15 @@ def check_signed(s: Session, plain: str, counter: int | None, sig: str | None,
     return reason
 
 
-def _refuse(s: Session, cmd: str, reason: str) -> None:
+def _refuse(s: Session, cmd: str, reason: str, gid: str = "") -> None:
     if cmd == "KILL":
         s.out(f"//ERR kill {reason}", "//KEND")
     elif cmd == "PROF":
         s.out(f"//PROF ERR {reason}")
     elif cmd == "ADM":
         s.out(f"//ADMEND {reason}")
+    elif cmd == "GAME":                     # CR127
+        s.out(f"//GAME ERR {gid or '-'} unsigned")
     else:
         s.out(f"//ERR {cmd.lower()} {reason}")
 
@@ -252,7 +257,8 @@ def handle(s: Session, line: str) -> None:
         # //SEND is checked when its text is in: the lines must be read anyway
         reason = check_signed(s, line, counter, sig)
         if reason:
-            _refuse(s, cmd, reason)
+            gid = next((p[3:] for p in parts if p.lower().startswith("id=")), "")[:16]
+            _refuse(s, cmd, reason, gid)
             return
     if cmd == "TB?":
         tb_probe(s)
@@ -302,6 +308,8 @@ def handle(s: Session, line: str) -> None:
             s.out("//ERR CTR needs CTR")
         else:
             contest.relay(s, line[2:][3:].strip())
+    elif cmd == "GAME":                     # CR127: signed results of chess / CQ contest
+        gamereport.command(s, line[2:][4:].strip())
     elif cmd == "GAMES":                    # CR126: leaderboards
         games.top_command(s, line[2:][5:].strip())
     elif cmd == "PR":                       # CR123: Prefix raten in the board

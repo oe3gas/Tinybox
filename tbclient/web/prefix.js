@@ -332,6 +332,10 @@ const Prefix = (() => {
     else if (!d || d.game !== lb.want) inner.append(mk("div", "pr-hint", "Wird von der Box geholt …"));
     else if (d.game === "") {                          // LB1: all games, the best 3 each
       inner.append(mk("div", "pr-big", "Leaderboard der Box"));
+      const rp = o.reports;                            // CR127: own results of chess / CQ contest
+      if (rp && (rp.counted || rp.waiting || rp.not))
+        inner.append(mk("div", "pr-hint", `Deine Schach- und Contest-Ergebnisse: ${rp.counted} gezählt` +
+          (rp.waiting ? ` · ${rp.waiting} warten auf den Gegner` : "") + (rp.not ? ` · ${rp.not} nicht gezählt` : "")));
       for (const [g, [ic, name, unit]] of Object.entries(GAME)) {
         const x = d.games[g];
         if (!x) continue;

@@ -1,0 +1,3 @@
+- Schach und CQ Contest zaehlen in der Bestenliste:
+  beide Spieler melden signiert, nur gleiche
+  Ergebnisse zaehlen.

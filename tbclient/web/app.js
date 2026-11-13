@@ -3300,6 +3300,7 @@ function renderLeaderboard() {
   if (!g.lb) return;
   Prefix.renderLB(box, g.lb, {
     me: baseCall(S.mycall),
+    reports: g.reports,
     show: (game) => api("games", { act: "top", arg: game }),
     close: () => api("games", { act: "close" }),
   });

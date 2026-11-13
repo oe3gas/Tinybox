@@ -164,6 +164,19 @@ CREATE TABLE IF NOT EXISTS game_totals (              -- CR126: games played per
     game   TEXT PRIMARY KEY,
     games  INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS game_reports (             -- CR127: signed results of client games
+    id       TEXT NOT NULL,                           -- the game id both clients know
+    call     TEXT NOT NULL,                           -- who reports (without SSID)
+    game     TEXT NOT NULL,
+    vs       TEXT NOT NULL,
+    result   TEXT NOT NULL,                           -- win | loss | draw
+    hash     TEXT NOT NULL,
+    moves    INTEGER NOT NULL,
+    ended    INTEGER NOT NULL,                        -- unix time, end of the game
+    received TEXT NOT NULL,
+    status   TEXT NOT NULL,                           -- pending | counted | mismatch | limit | expired
+    PRIMARY KEY (id, call)
+);
 CREATE TABLE IF NOT EXISTS sync_seq (                 -- change counter of the messages (CR26)
     k     INTEGER PRIMARY KEY CHECK (k = 1),
     v     INTEGER NOT NULL,
@@ -783,6 +796,39 @@ class Store:
                 else:
                     self._db.execute("DELETE FROM game_totals")
         return n
+
+    # --- CR127: signed game results -------------------------------------------------------
+
+    def report_get(self, gid: str, call: str) -> dict | None:
+        r = self._db.execute("SELECT * FROM game_reports WHERE id = ? AND call = ?",
+                             (gid, call)).fetchone()
+        return dict(r) if r else None
+
+    def report_put(self, r: dict) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO game_reports (id, call, game, vs, result, hash, moves, ended, received,"
+                " status) VALUES (:id, :call, :game, :vs, :result, :hash, :moves, :ended, :received,"
+                " :status)", r)
+
+    def report_status(self, gid: str, status: str) -> None:
+        with self._db:
+            self._db.execute("UPDATE game_reports SET status = ? WHERE id = ?", (status, gid))
+
+    def report_pair_day(self, a: str, b: str, day: str) -> int:
+        """Counted games of the pair a/b that ended on day (UTC, YYYY-MM-DD)."""
+        return self._db.execute(
+            "SELECT COUNT(*) FROM game_reports WHERE status = 'counted' AND call = ? AND vs = ?"
+            " AND date(ended, 'unixepoch') = ?", (a, b, day)).fetchone()[0]
+
+    def report_expire(self, before: str) -> int:
+        with self._db:
+            return self._db.execute("UPDATE game_reports SET status = 'expired'"
+                                    " WHERE status = 'pending' AND received < ?", (before,)).rowcount
+
+    def report_list(self, status: str) -> list[dict]:
+        return [dict(r) for r in self._db.execute(
+            "SELECT * FROM game_reports WHERE status = ? ORDER BY received", (status,))]
 
     def purge_counts(self, base: str) -> dict[str, int]:
         """What PURGE would delete of base (all SSIDs). Mail, bulletins and the

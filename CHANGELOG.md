@@ -14,6 +14,11 @@
   `game_stats` für alle Spiele (Prefix raten zählt jetzt; Schach und CQ Contest mit CR127), Leaderboards
   `//GAMES TOP [spiel]` (Fähigkeit `GAMES`, Terminal `/TOP`), Sysop `GAMES` / `GAMES CLEAR <spiel|ALL> [call]
   [CONFIRM]` (auch über `//ADM`); PURGE löscht die Spielstände mit. Client 2026.11.13.3.
+- **Signierte Spielergebnisse (CR127):** Schach und CQ Contest (Client gegen Client) melden ihr Ergebnis mit
+  `//GAME RES …` signiert (Geräteschlüssel, CR93) an die Box; gezählt wird nur, wenn beide Spieler dasselbe
+  melden (Spiel-ID, Ergebnis über Kreuz, Hash über den Verlauf, Zügezahl, Ende ±10 min). Höchstens 50 Spiele
+  je Paar und Tag, Meldungen verfallen nach 7 Tagen, strittige sieht der Sysop bei `GAMES`. Fähigkeit `GAME`,
+  Tabelle `game_reports`. Client 2026.11.13.5.
 
 - **CQ contest (CR122):** Schiffe versenken mit Amateurfunk-Touch – 8 × 8 Großfelder um die Box bzw. den
   Einladenden, je 5 Conteststationen mit passenden Rufzeichen, Zug `CQ <Großfeld>`, Ausbreitungshinweis

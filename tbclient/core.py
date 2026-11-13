@@ -31,6 +31,7 @@ from .mailstore import MailStore
 from . import peerfile
 from .contest import ContestSlot
 from .prefixgame import Leaderboard, PrefixGame
+from .gamereport import Reports
 from .peerchat import PeerChat
 from .boardfiles import BoardFiles
 from .peerfile import FileStore
@@ -196,6 +197,7 @@ class ClientCore:
         self.relay_contests: dict[str, ContestSlot] = {}      # CR122: through the box
         self.prefix = PrefixGame(self._send, lambda: self.cfg.mycall.upper())   # CR123
         self.leaderboard = Leaderboard(self._send)                                 # CR126
+        self.reports = Reports(self)                                               # CR127
 
     # --- settings --------------------------------------------------------
 
@@ -982,7 +984,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR,GAMES" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR,GAMES,GAME" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -1400,6 +1402,7 @@ class ClientCore:
             self._update_info(rest)
             self._send("//BOARDS")
             self.profiles.on_ok(rest)                # CR73: profile only if it differs
+            self.reports.on_login()                  # CR127: results of chess / CQ contest
             if self.cfg.sync_on_login and "SYNC" in self.caps and self.at_home \
                     and not self.sync.running:
                 # CR40: headers of mail and subscribed rubrics after every login,
@@ -1497,6 +1500,8 @@ class ClientCore:
                 self.console.append("*** " + text)
         elif cmd == "CT":                  # CR122: the box plays the CQ contest
             self.box_contest.take(rest)
+        elif cmd == "GAME":                # CR127: the box answers a result
+            self.reports.answer(rest)
         elif cmd == "GAMES":               # CR126: leaderboards
             self.leaderboard.line(rest)
             self._touch()
@@ -1765,7 +1770,8 @@ class ClientCore:
                         "rel_ok": "CTR" in self.caps, "rel": self._relay_summary()},
             "prefix": {"ok": "PR" in self.caps and bool(self.board), "err": self.prefix.err,  # CR123
                        "game": self.prefix.summary()},
-            "games": {"ok": "GAMES" in self.caps, "lb": self.leaderboard.summary()},   # CR126
+            "games": {"ok": "GAMES" in self.caps, "lb": self.leaderboard.summary(),   # CR126
+                      "reports": self.reports.summary()},                           # CR127
         }
 
     def _image_refs(self, ch: int | None = None) -> set[str]:

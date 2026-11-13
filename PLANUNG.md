@@ -2040,6 +2040,8 @@ Die Stufen dürfen sich überschneiden.
 - CR126: Tippzeit beim Start 5–30 s; nach jedem Call „x von y richtig“; Übersicht am Spielende für
   alle; Spielstände auf der Box (`game_stats`, alle Spiele) mit Leaderboards ab dem 1. Spiel; der
   Sysop löscht Spielstände mit `GAMES CLEAR`.
+- CR127: Schach und CQ Contest kommen in die Spielstände, wenn beide Spieler das Ergebnis signiert an
+  dieselbe Box melden und die Meldungen übereinstimmen; höchstens 50 Spiele je Paar und Tag.
 - CR124: Der Starter kann die Anmeldung vorzeitig beenden („Alle da? Jetzt starten“, `//PR GO`).
   Oberfläche deutsch, Weltkarte als Hintergrund – nur Stimmung, im Spiel gedämpft und unscharf,
   keine Hilfe beim Raten.

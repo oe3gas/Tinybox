@@ -136,7 +136,9 @@ def console(store, arg: str) -> list[str]:
         for g, name in GAMES.items():
             rows = store.game_rows(g)
             out.append(f"{g:<8} {name:<13} {store.game_total(g):>5} games {len(rows):>4} players")
-        return out + ["GAMES CLEAR <game|ALL> [call]  deletes scores (shows first, then ... CONFIRM)"]
+        from . import gamereport
+        return out + gamereport.disputed(store) + [
+            "GAMES CLEAR <game|ALL> [call]  deletes scores (shows first, then ... CONFIRM)"]
     if w[0].upper() != "CLEAR" or len(w) < 2:
         return ["Usage: GAMES | GAMES CLEAR <" + "|".join(GAMES) + "|ALL> [call] [CONFIRM]"]
     confirm = w[-1].upper() == "CONFIRM"

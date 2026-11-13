@@ -60,6 +60,9 @@ Zuletzt dazugekommen
   CR126: Tippzeit 5-30 s, nach jedem Call x von y richtig, Uebersicht am
   Spielende (Teilnehmer, Calls). Bestenliste der Box (alle Spiele, Top 3)
   und je Spiel (Top 10), Knopf im Board-Kopf.
+- Ergebnisse von Schach und CQ Contest (CR127) gehen signiert an die
+  Heimat-Box; sie zaehlen in der Bestenliste, wenn beide Spieler dasselbe
+  melden (Spiel-ID, Verlauf-Hash). Hinweis im Peer-Chat.
 - TBClient-Ansicht in drei Spalten (CR80, PC ab 1000 px): rechts Ping, Speed
   test, Chess, QSL, Heard there, Delete history untereinander, unter jedem
   der letzte Wert - je Gegenstation gemerkt, auch nach neuem Connect - oder

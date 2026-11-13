@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 from prcore.text import isnum
 
-from . import budget
+from . import budget, gamereport
 from .contest import ContestSlot, my_center
 
 if TYPE_CHECKING:
@@ -157,9 +157,10 @@ class PeerFun:
             return False
         if act == "new":
             white = arg != "b"
+            gid = gamereport.new_id()                         # CR127: the id for the box
             self._save({"white": "me" if white else "them", "moves": [], "result": "",
-                        "at": int(time.time())})
-            self.peer._send(f"//CHESS NEW {'w' if white else 'b'}")
+                        "at": int(time.time()), "id": gid})
+            self.peer._send(f"//CHESS NEW {'w' if white else 'b'} id={gid}")
             self._note(f"♟ new chess game - you play {'white' if white else 'black'}")
             return True
         g = self.game
@@ -173,12 +174,20 @@ class PeerFun:
         if act == "resign" and not g.get("result"):
             g["result"] = "you resigned"
             self._save(g)
+            self._report(g, "loss")
             self.peer._send("//CHESS RESIGN")
             self._note("♟ you resigned")
             return True
         if act == "end" and arg in ("mate", "stalemate"):     # the GUI saw it on the board
+            if g.get("result"):
+                return True
             g["result"] = arg
             self._save(g)
+            if arg == "stalemate":
+                self._report(g, "draw")
+            else:                                  # who moved last has mated
+                white_last = len(g["moves"]) % 2 == 1
+                self._report(g, "win" if white_last == (g["white"] == "me") else "loss")
             return True
         if act == "close":
             self._save(None)
@@ -192,8 +201,11 @@ class PeerFun:
         word = p[0].upper()
         if word == "NEW" and len(p) > 1 and p[1] in ("w", "b"):
             they_white = p[1] == "w"
+            gid = next((x[3:].lower() for x in p[2:] if x.lower().startswith("id=")), "")
+            if not (len(gid) == 16 and all(c in "0123456789abcdef" for c in gid)):
+                gid = ""                             # an older client: not reported (CR127)
             self._save({"white": "them" if they_white else "me", "moves": [], "result": "",
-                        "at": int(time.time())})
+                        "at": int(time.time()), "id": gid})
             self._note(f"♟ {self.ch.target} started a chess game - you play "
                        f"{'black' if they_white else 'white'}")
         elif word == "M" and len(p) > 1 and UCI_RE.match(p[1]):
@@ -206,7 +218,15 @@ class PeerFun:
             if g and not g.get("result"):
                 g["result"] = "they resigned"
                 self._save(g)
+                self._report(g, "win")
                 self._note(f"♟ {self.ch.target} resigned - you win")
+
+    def _report(self, g: dict, result: str) -> None:
+        """CR127: the finished game to the leaderboard of the box (signed, at the next login)."""
+        reports = getattr(self.core, "reports", None)
+        if reports is not None and g.get("id"):
+            reports.add("chess", g["id"], self.peer.call, result,
+                        gamereport.chess_hash(g["moves"]), len(g["moves"]))
 
     # --- lines ----------------------------------------------------------------------
 

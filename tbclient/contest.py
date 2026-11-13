@@ -15,6 +15,8 @@ from typing import Callable
 
 from prcore import contest
 
+from . import gamereport
+
 PREFIX = "//CT "
 
 
@@ -66,6 +68,17 @@ class ContestSlot:
                    "resigned": "you resigned", "they resigned": f"{s['opp']} resigned - you won"}
             self._note(f"📻 CQ contest: {res.get(s['res'], 'over')} "
                        f"({g.worked()}:{g.lost()})")
+            self._report(s)
+
+    def _report(self, s: dict) -> None:
+        """CR127: a game against another TBClient goes to the leaderboard of the box."""
+        result = {"win": "win", "loss": "loss", "draw": "draw", "resigned": "loss",
+                  "they resigned": "win"}.get(s["res"])
+        reports = getattr(self.core, "reports", None)
+        if not s.get("gid") or result is None or reports is None or self._key().startswith("box:"):
+            return
+        h, n = gamereport.contest_hash(s)
+        reports.add("contest", s["gid"], self._opp(), result, h, n)
 
     # --- from the GUI
     def act(self, act: str, arg: str = "") -> bool:
@@ -76,8 +89,12 @@ class ContestSlot:
                 return False
             self.err = ""
             state = contest.new_state(center, hints, first=True, opp=self._opp())
+            gid = "" if self._key().startswith("box:") else gamereport.new_id()   # CR127
+            if gid:
+                state["gid"] = gid
             self._save(state)
-            self._send([f"NEW h={1 if hints else 0}" + (f" c={center}" if center else "")])
+            self._send([f"NEW h={1 if hints else 0}" + (f" c={center}" if center else "")
+                        + (f" id={gid}" if gid else "")])
             self._note(f"📻 new CQ contest with {self._opp()} - place your stations")
             return True
         state = self.state
@@ -151,6 +168,9 @@ class ContestSlot:
             hints = a.get("h", "1") != "0"
             state = contest.new_state(center, hints, first=False, opp=self._opp())
             state["st"] = "invited"              # the user accepts or declines first
+            gid = a.get("id", "").lower()
+            if len(gid) == 16 and all(ch in "0123456789abcdef" for ch in gid):
+                state["gid"] = gid                # CR127: the id of the game for the box
             self._save(state)
             self._note(f"📻 {self._opp()} invites you to a CQ contest")
             return

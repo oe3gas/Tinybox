@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.11.2026 (CR127 erfasst; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 13.11.2026 (CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -99,7 +99,7 @@ Stand: 13.11.2026 (CR127 erfasst; CR126; CR124; CR123; CR122; CR87–CR100 aus d
 | 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig, Weltkarte als Hintergrund | ✅ 13.11.2026 (Client 2026.11.13, Funktest offen) – siehe unten |
 | 125 | TinyBox: bis zu 5 gleichberechtigte Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste, Post an den Sysop geht an `SYSOP` (alle) | offen – siehe unten |
 | 126 | Prefix raten: Antwortzeit 5–30 s einstellbar, Ergebnis nach jedem Call, Übersicht am Spielende, Spielerliste auf der Box (Spiele, richtige/alle Tipps), Sysop löscht Scores – für alle Spiele | ✅ 13.11.2026 (Client 2026.11.13.3, Funktest offen) – siehe unten |
-| 127 | Spielergebnisse (Schach, CQ Contest) vom Client signiert an die Box melden – zählt nur, wenn beide Spieler dasselbe Ergebnis signiert melden | offen – siehe unten |
+| 127 | Spielergebnisse (Schach, CQ Contest) vom Client signiert an die Box melden – zählt nur, wenn beide Spieler dasselbe Ergebnis signiert melden | ✅ 13.11.2026 (Client 2026.11.13.5, Funktest offen) – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4940,7 +4940,7 @@ Mit Rückfrage („wirklich? J/N“) und Eintrag im Log. Andere Spiele schreiben
   und am Spielende: LB1 (alle Spiele, Top 3) und LB2 (je Spiel Top 10, eigene Zeile darunter).
 - Tests `tests/test_cr126.py`.
 
-## CR127 – Spielergebnisse signiert an die Box melden (Schach, CQ Contest) (offen)
+## CR127 – Spielergebnisse signiert an die Box melden (Schach, CQ Contest) (✅ 13.11.2026, Client 2026.11.13.5)
 
 ### Erfassung (OE3GAS, 13.11.2026)
 
@@ -5014,3 +5014,17 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
 - Nachtrag (OE3GAS, 13.11.2026): die Ankündigung zum Spielstart („New CQ contest …“) blau hinterlegt,
   damit sie sich vom Chat abhebt – Client 2026.11.13.4 ✅
 
+### Umsetzung (13.11.2026, Client 2026.11.13.5)
+
+- TinyBox `gamereport.py` (neu), Tabelle `game_reports`: `//GAME RES` gehört zu den signierten Befehlen
+  (`clientproto.critical`), ohne Signatur `//GAME ERR <id> unsigned`, ohne Login mit Schlüssel `nokey`.
+  Abgleich wie oben beschrieben, dann `games.record()` (Schach: Remis in `draws`). `//GAME ST <id>` für den
+  Stand. Strittige Meldungen zeigt `GAMES` an der Konsole. Fähigkeit `GAME`.
+- TBClient `gamereport.py` (neu): Spiel-ID beim Einladen (`//CHESS NEW w id=…`, `//CT NEW … id=…`, auch über
+  `//CTR`), Hash über den Verlauf (Schach: Züge; CQ Contest: Zusagen der Aufstellungen und die Calls beider
+  Seiten, der Einladende zuerst), Warteschlange in den Einstellungen, Versand signiert beim Login an der
+  Heimat-Box, offene Meldungen werden bei jedem Login nachgefragt. Ergebnis als Hinweis im Peer-Chat
+  („📊 …“), Summe in der Bestenliste („Deine Schach- und Contest-Ergebnisse …“).
+- Nicht gemeldet: Spiele gegen die TinyBox selbst, Spiele mit einem älteren Client ohne Spiel-ID,
+  abgebrochene Spiele.
+- Tests `tests/test_cr127.py`.
