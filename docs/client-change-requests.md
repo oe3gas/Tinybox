@@ -4954,7 +4954,7 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
     //GAME RES g=<chess|contest> id=<16 hex> vs=<call> r=<win|loss|draw> h=<16 hex> n=<züge> t=<ende unix> c=<n> sig=..
     -> //GAME OK <id> pending      erste Meldung, wartet auf den Gegner
     -> //GAME OK <id> counted      beide Meldungen passen: eingetragen
-    -> //GAME ERR <id> nokey|unsigned|mismatch|dup|old|self|bad
+    -> //GAME ERR <id> nokey|unsigned|mismatch|dup|old|self|limit|bad
 
 **Abgleich auf der Box** (neue Tabelle `game_reports`, Schlüssel id + call):
 
@@ -4984,7 +4984,7 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
 - Beide müssen an **dieselbe** Box melden. Haben die Spieler verschiedene Heimat-Boxen, zählt das Spiel
   dort nicht (später ggf. über Forwarding).
 
-### Offen
+### Entschieden (OE3GAS, 13.11.2026)
 
-- Grenze je Paar und Tag (Vorschlag 10) – ja/nein?
-- Spiele zwischen Spielern verschiedener Boxen: vorerst nicht zählen?
+- Höchstens 10 gezählte Spiele je Spielerpaar und Tag (UTC); weitere Meldungen: `//GAME ERR <id> limit`.
+- Spiele zwischen Spielern verschiedener Heimat-Boxen zählen vorerst nicht (später ggf. über Forwarding).
