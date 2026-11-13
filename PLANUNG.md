@@ -2090,6 +2090,54 @@ Für andere Stationen ein Production-Release als ZIP (INSTALL.md):
   `git pull` später nur die Release-Dateien. Der Direwolf-Fork kommt nur mit einem neuen Paket.
 - Gebaut wird mit `release/build_release.sh <direwolf-tinybox.exe>` aus `main` auf GitHub.
 
+## 33. Spiel „Funk-Quiz“ (Idee und Entwurf, 13.11.2026)
+
+**Entschieden (13.11.2026) – gilt für alle Spiele (Prefix raten, CQ Contest, Funk-Quiz):**
+
+- **Keine Spiele für Terminal-User.** Gespielt wird nur mit dem TBClient. Es gibt keinen
+  Volltext-Rückfall für Terminal-Teilnehmer.
+- Übertragung so kurz wie möglich – je kürzer, je besser.
+
+**Idee:** Ablauf wie Prefix raten (31): Start im Chatboard, Anmeldung, Frage mit drei Antworten
+A/B/C, Tippzeit, Auflösung, Sieger = meiste richtige Antworten. Inhalt: Fragen aus der
+Amateurfunktechnik.
+
+**Entwurf (noch nicht entschieden):**
+
+- Name: Funk-Quiz, QSO-Quiz oder Elmer.
+- Kategorien statt IARU-Regionen, beim Start einzeln oder kombiniert wählbar: Rechnen
+  (Wellenlänge, Ohm, dB, SWR, Schwingkreis), Begriffe (Q-Gruppen, CW-Abkürzungen), Technik
+  (Bauteile, Antennen, Ausbreitung), Geschichte, Kurioses.
+- Stufen wie bei Prefix raten: Newcomer (etwa Einsteigerprüfung), OM (volle Lizenz), Pro, DX-God.
+- Wissensfragen in `prcore/funkquiz.csv`: `id;kat;stufe;frage;a;b;c;richtig;info;quelle`.
+  Die Spalte `quelle` ist Pflicht (Geschichte und Kurioses prüfen). Frage höchstens etwa
+  80 Zeichen, Antwort höchstens etwa 20, `info` = eine kurze Zeile nach der Auflösung.
+- Rechenaufgaben aus Vorlagen erzeugt: Zufallswerte, falsche Antworten aus typischen Fehlern
+  (Faktor 2, λ/4 statt λ/2, falsche Einheit). Werte so wählen, dass die drei Antworten klar
+  auseinanderliegen. Optional als Rundenabschluss eine Schätzfrage (am nächsten dran gewinnt).
+
+**Übertragung (Entwurf):**
+
+- Der Fragekatalog liegt beim Client (kommt mit dem Repo bzw. einmalig als Bulletin). Über Funk
+  gehen nur Fragen-ID und Reihenfolge der Antworten (z. B. `Q 427 CAB`, ~9 Bytes statt ~140),
+  der Tipp ist ein Buchstabe, die Auflösung der richtige Buchstabe plus Stand.
+- Rechenaufgaben: ein Zufalls-Seed beim Rundenstart, der Client erzeugt die Aufgaben selbst.
+- LZHUF pro Frage bringt bei 100–150 Bytes praktisch nichts (kein Wörterbuch, Huffman noch nicht
+  eingelernt, Längen-Header). Sinnvoll nur für die Verteilung des Katalogs als Bulletin.
+- Gegen Mitlesen: Im Katalog stehen die Antworten in neutraler Reihenfolge ohne Kennzeichnung
+  der richtigen; nur die Box kennt sie und schickt sie erst mit der Auflösung. Bei erzeugten
+  Rechenaufgaben geht das nicht ganz (der Client kennt die Formel) – für ein Hobbyspiel vertretbar.
+- Katalogkennung (z. B. 4 Hex-Zeichen) beim Rundenstart; passt sie nicht, weist die Box den
+  Client ab, er muss den Katalog aktualisieren.
+
+**Offen:**
+
+- Name.
+- Rechenaufgaben erzeugen oder fest in der CSV.
+- Was Terminal-Teilnehmer im selben Board von laufenden Spielen sehen (bei Prefix raten heute
+  „Zuschauer“, 31).
+- Erste Fragensammlung (etwa 50 geprüfte Fragen) mit Quellen.
+
 ## Quellen
 
 - Security-Advisory TinyBox (9V1NE, 09.11.2026): https://gist.github.com/nnamon/3d93af6dd520d5f4b392c3fb57407d63
