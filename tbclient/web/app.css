@@ -1073,6 +1073,9 @@ button.pr-more { border: none; background: transparent; color: var(--accent); fo
 .ct-panel { padding: 10px max(14px, calc((100% - 760px) / 2)); background: var(--surface);
   border-bottom: 1px solid var(--line); font-size: 14px; }
 .box-contest { overflow-y: auto; max-height: 75vh; }
+.ct-start { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border: 1px solid var(--accent);
+  border-radius: 12px; padding: 10px 14px; }
+.ct-start .ct-rules { color: var(--text); opacity: .8; }
 .ct-new { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .ct-hint { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); }
 .ct-rules { margin-top: 6px; }

@@ -93,10 +93,12 @@ const Contest = (() => {
     const cb = mk("input"); cb.type = "checkbox"; cb.checked = true;
     lab.append(cb, " propagation hint");
     r.append(lab, btn("Start", () => o.act("new", cb.checked ? "1" : "0"), !o.on, "primary-sm"));
-    box.append(r, mk("div", "small muted ct-rules",
+    const card = mk("div", "ct-start");               // blue, so it stands out of the chat
+    card.append(r, mk("div", "small ct-rules",
       "8 x 8 grid squares, 5 hidden contest stations each. Call CQ into a square - a station " +
       "there answers and is worked. You call first; the round is played out; all 5 first wins."));
-    if (o.err) box.append(mk("div", "small ct-err", o.err));
+    if (o.err) card.append(mk("div", "small ct-err", o.err));
+    box.append(card);
   }
 
   function lastMsg(g) {

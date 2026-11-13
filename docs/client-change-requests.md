@@ -5011,4 +5011,6 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
 - Im Spiel beide Bretter gleich groß.
 - Meldung zum letzten Ruf: „no answer“ mit 😢, QSO mit 😍.
 - Ende: verloren mit 😢, gewonnen mit 🎆 (Unentschieden 🤝).
+- Nachtrag (OE3GAS, 13.11.2026): die Ankündigung zum Spielstart („New CQ contest …“) blau hinterlegt,
+  damit sie sich vom Chat abhebt – Client 2026.11.13.4 ✅
 
