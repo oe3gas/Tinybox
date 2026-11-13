@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.11.2026 (CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 13.11.2026 (CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -100,6 +100,7 @@ Stand: 13.11.2026 (CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Secur
 | 125 | TinyBox: bis zu 5 gleichberechtigte Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste, Post an den Sysop geht an `SYSOP` (alle) | offen – siehe unten |
 | 126 | Prefix raten: Antwortzeit 5–30 s einstellbar, Ergebnis nach jedem Call, Übersicht am Spielende, Spielerliste auf der Box (Spiele, richtige/alle Tipps), Sysop löscht Scores – für alle Spiele | ✅ 13.11.2026 (Client 2026.11.13.3, Funktest offen) – siehe unten |
 | 127 | Spielergebnisse (Schach, CQ Contest) vom Client signiert an die Box melden – zählt nur, wenn beide Spieler dasselbe Ergebnis signiert melden | ✅ 13.11.2026 (Client 2026.11.13.5, Funktest offen) – siehe unten |
+| 128 | Spiele: keine Terminal-User; Zuschauer sehen nur, dass ein Spiel läuft (Prefix raten, Elmer Quiz) | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -5028,3 +5029,24 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
 - Nicht gemeldet: Spiele gegen die TinyBox selbst, Spiele mit einem älteren Client ohne Spiel-ID,
   abgebrochene Spiele.
 - Tests `tests/test_cr127.py`.
+
+## CR128 – Spiele: keine Terminal-User, Zuschauer sehen nur „Spiel läuft“ (offen)
+
+### Erfassung (OE3GAS, 13.11.2026)
+
+- Keine Spiele für Terminal-User (gilt für alle Spiele, PLANUNG 33).
+- Zuschauer sehen nur, **dass** ein Spiel läuft – keine Fragen, Antworten, Auflösungen oder Stände.
+  „Wer nicht mitspielt, interessiert sich eh nicht für die Ergebnisse.“ Gilt für Prefix raten (heute
+  sehen Zuschauer alles, CR123) und das geplante Elmer Quiz.
+
+### Vorschlag (noch nicht entschieden)
+
+- **Box:** `/PR …` von Terminal-Usern mit Hinweis ablehnen („Spiele nur mit TBClient“). Terminals bekommen
+  keine `!PR`-Ereignisse mehr als Text, nur eine Zeile beim Start („Prefix raten läuft“) und eine beim Ende.
+- **Client:** Für Zuschauer statt Panel und Spielzeilen nur ein Hinweis „🎯 Prefix raten läuft (x Spieler)“
+  mit „Mitspielen“ (Einstieg ab dem nächsten Call bleibt).
+- **Über Funk:** Die Ereignisse gehen weiter einmal als UI-Frame an alle im Board; der Client des
+  Zuschauers blendet sie aus. Sie nur an die Spieler zu schicken hieße je Spieler eigene I-Frames –
+  bei mehreren Spielern mehr Bytes, nicht weniger. Mitlesen mit einem Monitor bleibt möglich (Funk ist
+  offen); für ein Spiel unerheblich.
+

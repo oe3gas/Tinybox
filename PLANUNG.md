@@ -2025,8 +2025,9 @@ Die Stufen dürfen sich überschneiden.
 
 - Start im Chatboard mit Stufe, Regionen und Anzahl der Calls (beim Start wählbar).
 - Anmeldung: Die Box öffnet eine Anmeldezeit; wer „mit“ sagt (oder im Client klickt),
-  spielt. Alle anderen sind Zuschauer: Sie sehen Call, A/B/C, Auflösung und Stand, ihre
-  Zeilen bleiben normaler Chat. Ein Zuschauer kann jederzeit einsteigen und spielt ab dem
+  spielt. Alle anderen sind Zuschauer, ihre Zeilen bleiben normaler Chat. ~~Zuschauer sehen
+  Call, A/B/C, Auflösung und Stand.~~ Geändert 13.11.2026 (33, CR128): Zuschauer sehen nur,
+  **dass** ein Spiel läuft; Terminal-User spielen nicht mit. Ein Zuschauer kann jederzeit einsteigen und spielt ab dem
   nächsten Call mit. Verlässt ein Spieler das Board, wartet die Box nicht mehr auf ihn, sein
   Stand bleibt in der Wertung.
 - Tipps gehen nur an die Box (Protokollzeile, wie `//CT` bei CQ Contest), nicht an alle – kein
@@ -2097,13 +2098,14 @@ Für andere Stationen ein Production-Release als ZIP (INSTALL.md):
 - **Keine Spiele für Terminal-User.** Gespielt wird nur mit dem TBClient. Es gibt keinen
   Volltext-Rückfall für Terminal-Teilnehmer.
 - Übertragung so kurz wie möglich – je kürzer, je besser.
+- Zuschauer (Prefix raten, Elmer Quiz) sehen nur, **dass** ein Spiel läuft – keine Fragen,
+  Antworten, Auflösungen oder Stände. Wer nicht mitspielt, interessiert sich nicht für die
+  Ergebnisse. Für Prefix raten nachzuziehen: CR128.
 
 **Entschieden (13.11.2026) – Elmer Quiz:**
 
 - Name: **Elmer Quiz** (Elmer = im US-Slang der Mentor, der Neulingen das Funken beibringt).
 - Rechenaufgaben werden **erzeugt** (Vorlagen mit Zufallswerten), nicht fest in der CSV.
-- Zuschauer sehen nur, **dass** ein Quiz läuft – keine Fragen, Antworten oder Auflösungen.
-  Anders als bei Prefix raten (31), wo Zuschauer alles sehen.
 
 **Idee:** Ablauf wie Prefix raten (31): Start im Chatboard, Anmeldung, Frage mit drei Antworten
 A/B/C, Tippzeit, Auflösung, Sieger = meiste richtige Antworten. Inhalt: Fragen aus der
