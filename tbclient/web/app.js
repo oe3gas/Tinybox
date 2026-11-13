@@ -3867,7 +3867,12 @@ function setActbar(on) {
 function actChip(c, isPhase) {
   const s = el("span", `ac ${c.c}` + (isPhase ? " ph" : ""));
   if (c.busy) s.append(el("span", "dot"));
-  s.append(c.t);
+  if (c.id === "q") {                        // link quality: filled bars green, empty grey
+    for (const part of c.t.split(/(\u25ae+|\u25af+)/)) {
+      if (!part) continue;
+      s.append(part[0] === "\u25ae" ? el("span", "bf", part) : part[0] === "\u25af" ? el("span", "be", part) : part);
+    }
+  } else s.append(c.t);
   if (typeof c.p === "number") {
     const b = el("span", "pb"), i = el("i");
     i.style.width = c.p + "%";

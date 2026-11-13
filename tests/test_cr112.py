@@ -92,7 +92,7 @@ class Fork(unittest.TestCase):
         texts = {x["id"]: (x["t"], x["c"]) for x in bar(self.core)["link"]}
         self.assertEqual(texts["retry"], ("Retry 8/10", "red"))
         self.assertEqual(texts["l2"], ("v2.2 · k=32", "grey"))
-        self.assertEqual(texts["load"], ("Channel 45 %", "amber"))
+        self.assertEqual(texts["load"], ("QRG used last 60s 45 % · own 5 %", "amber"))
 
     def test_ptt_dcd_light_tx_rx(self):
         self.ev("ptt ch=0 on=1 load=3 load_tx=3")

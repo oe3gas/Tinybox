@@ -241,7 +241,8 @@ def _link(core: "ClientCore", c: "Channel", mono: float) -> list[dict]:
                         (f" · k={l2['k']}" if l2.get("k") else ""), "grey"))
     ld = core.load
     if ld and time.time() - ld.get("at", 0) < 120 and kind not in ("axudp", "telnet"):
-        out.append(chip("load", f"Channel {ld['load']} %",
+        own = f" · own {ld['tx']} %" if ld.get("tx") is not None else ""
+        out.append(chip("load", f"QRG used last 60s {ld['load']} %{own}",
                         "red" if ld["load"] >= 70 else "amber" if ld["load"] >= 40 else "grey"))
     if core.chan is c and c.mode == "tinybox":
         if core.board and kind not in ("axudp", "telnet"):

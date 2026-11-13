@@ -1,0 +1,3 @@
+- Aktivitaetsleiste: Kanalbelegung jetzt als
+  'QRG used last 60s x % . own y %'.
+- Link-Qualitaetsbalken in gruen.

@@ -37,7 +37,8 @@ Zuletzt dazugekommen
   Vertrauen. Nur am PC selbst; .p12 und Passwort werden nicht gespeichert.
 - Mit dem Direwolf-Fork ab 2026.11.11 (CR112): Statusleiste zeigt die
   SABM-Versuche ("Connecting - SABM 3/10"), Retry bei stehender
-  Verbindung, AX.25-Version und Fenster, Kanalauslastung; TX/RX folgen
+  Verbindung, AX.25-Version und Fenster, Kanalauslastung der letzten 60 s mit eigenem Anteil
+  ("QRG used last 60s"), Link-Qualitaetsbalken gruen; TX/RX folgen
   PTT und DCD; Monitor mit Pegel je Frame und den eigenen Frames;
   Abbruch wegen Retry-out rot.
 - Statusleiste (CR110) ueber Chat, Mail, TBClient und Monitor: Phase
