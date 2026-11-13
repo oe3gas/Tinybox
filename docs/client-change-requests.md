@@ -4871,8 +4871,9 @@ Zusätzlich:
 (5, 10 … 30, Standard 30); die geschätzte Spieldauer rechnet sie mit. Protokoll: `//PR START … t=<5-30>`;
 `!PR OPEN` bekommt die Zeit als 7. Wert, `!PR Q` trägt sie schon. Die Box nimmt weiter 5 s länger an.
 
-**2 Nach jedem Call:** In der Auflösung „VP2EAU = Anguilla · 2 von 3 richtig“, dazu „Richtig: …“ und
-„daneben: …“ (ohne den getippten Buchstaben der anderen). Protokoll: `!PR RES <k> <buchstabe> <x>/<y> …`
+**2 Nach jedem Call:** In der Auflösung „VP2EAU = Anguilla · 2 von 3 richtig“ und die Chips mit dem Stand;
+wer richtig lag: grüner Chip mit Häkchen („✓ OE3GAS 3“). Keine eigene Zeile „Richtig: … / daneben: …“
+(entschieden 13.11.2026). Protokoll: `!PR RES <k> <buchstabe> <x>/<y> …`
 (y = Spieler, die gefragt waren, auch ohne Tipp).
 
 **3 Spielende:** Panel für alle im Board (Entwurf `prefix_raten_spielende.png`): Sieger mit Punkten,
@@ -4889,8 +4890,21 @@ aus den `RES`-Zeilen, die er gesehen hat (wer später kam, sieht die Calls ab se
 
 Prefix raten zählt am Spielende je Spieler: games +1, wins +1 für den/die Sieger (nur mit Punkten),
 hits = richtige Tipps, tries = abgegebene Tipps, asked = Calls, bei denen er gefragt war. Abgebrochene
-Spiele zählen nicht. Abfrage für alle: `//PR TOP` (Client: Knopf „Bestenliste“, Terminal `/PR TOP`),
-sortiert nach Quote, ab 3 Spielen; dazu die eigene Zeile.
+Spiele zählen nicht.
+
+**Leaderboards (entschieden 13.11.2026, Entwurf `leaderboards.png`)** – für alle, sortiert nach Quote,
+mit Anzahl der Spiele:
+
+- **LB1 – Leaderboard der Box:** alle Spiele der Box in Sektionen, je Spiel die Top 3 (Call, Spiele,
+  Quote als Balken), Kopf der Sektion: Spiele gesamt, Anzahl Spieler, was die Quote bedeutet;
+  „Alle anzeigen →“ öffnet LB2.
+- **LB2 – Leaderboard je Spiel:** Top 10 mit Spiele und Quote; die eigene Zeile hervorgehoben (ist man
+  nicht in den Top 10, steht die eigene Zeile darunter). Prefix raten zusätzlich „richtig / Tipps“.
+- Quote: Prefix raten = richtige Tipps / Tipps; CQ Contest = gewonnene / gespielte Spiele;
+  Schach = Punkte (Sieg 1, Remis ½) / Spiele.
+- Abfrage: `//GAMES TOP` (LB1) und `//GAMES TOP <spiel>` (LB2), Antwort nur an den Fragenden;
+  Client: Knopf „Bestenliste“ (im Board-Kopf und am Spielende), Terminal `/TOP` bzw. `/TOP <spiel>`.
+- Ab wie vielen Spielen jemand erscheint: Vorschlag 3.
 
 **5 Sysop löscht:** Konsolenbefehl der Box, auch über die Fernverwaltung im TBClient (`//ADM`):
 
@@ -4903,9 +4917,9 @@ Mit Rückfrage („wirklich? J/N“) und Eintrag im Log. Andere Spiele schreiben
 
 ### Offen
 
-- **Schach und CQ Contest:** Die Box sieht deren Ergebnisse heute nicht – Schach läuft direkt zwischen den
-  Clients, CQ Contest auch, über die Box nur weitergereicht (`//CTR`). Für die Liste müssten die Clients das
-  Ergebnis melden (z.B. `//GAME RES contest win OE3TEC`) – das wäre Selbstauskunft. Vorschlag: Tabelle und
-  Löschen jetzt für alle Spiele, das Melden von Schach/Contest als eigener CR.
-- Bestenliste: ab wie vielen Spielen jemand darin erscheint (Vorschlag 3), und ob nach Quote oder nach
-  richtigen Tipps gesamt sortiert wird.
+- Entschieden: „nach jeder Runde“ = nach jedem Call.
+- Entschieden: Tabelle, Leaderboards und Löschen jetzt für alle Spiele; dass Schach und CQ Contest ihre
+  Ergebnisse an die Box melden (die Box sieht sie heute nicht – Schach direkt zwischen den Clients, CQ
+  Contest nur weitergereicht; wäre Selbstauskunft), kommt als eigener CR. Bis dahin zeigen deren
+  Sektionen „noch keine Spiele“.
+- Offen: Mindestzahl Spiele für die Leaderboards (Vorschlag 3).
