@@ -5050,3 +5050,15 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
   bei mehreren Spielern mehr Bytes, nicht weniger. Mitlesen mit einem Monitor bleibt möglich (Funk ist
   offen); für ein Spiel unerheblich.
 
+### Nachtrag 5 (OE3GAS, 13.11.2026): Startseite im Stil von „Prefix raten“ – umgesetzt (Client 2026.11.13.7) ✅
+
+- Karte mit Gerhards Contest-Foto (eigener Fundus, ohne Copyright) rechts im Hintergrund,
+  links überblendet: 📻, „CQ Contest“, „Schiffe versenken mit Contest-Stationen – wer loggt zuerst
+  alle fünf?“, Gegner und Zentrum, Ausbreitungshinweis „Ein | Aus“, Knopf „Contest starten“ (Box)
+  bzw. „Einladung senden“ (Station, Board-Teilnehmer) und „Abbrechen“. Gegen die Box dazu die Regeln
+  als Chips. Texte der Startseite deutsch wie bei Prefix raten.
+- 📻 neben einem Teilnehmer im Board öffnet jetzt diese Startseite (statt sofort einzuladen).
+- Die Einladung beim anderen (Karte unten rechts und im Spiel-Panel) im selben Stil:
+  „<Call> lädt zum CQ Contest“, „Annehmen / Ablehnen“.
+- Foto `tbclient/web/contest-room.jpg` (ca. 115 kB), Entwurf vorab als Bild abgestimmt.
+

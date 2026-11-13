@@ -94,6 +94,7 @@ FILES = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js",
          "/chess.js": "chess.js",
          "/contest.js": "contest.js",
          "/prefix.js": "prefix.js", "/prefix-map.jpg": "prefix-map.jpg",
+         "/contest-room.jpg": "contest-room.jpg",
          "/aprsview.js": str(SHARED / "aprsview.js"), "/aprsview.css": str(SHARED / "aprsview.css")}
 # CR42: the icons of the connection in the top bar
 FILES.update({f"/conn/{p.name}": f"conn/{p.name}" for p in (STATIC / "conn").glob("*.png")})

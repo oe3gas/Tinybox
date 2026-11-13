@@ -4,7 +4,9 @@
  *
  * Contest.render(box, g, o)
  *   g  the game from the snapshot (null = none yet)
- *   o  { key, opp, on, act(act, arg), err, newText, hide() }   key: one per opponent
+ *   o  { key, mode, opp, via, center, on, act(act, arg), err, hide() }   key: one per opponent
+ *      mode "box" (the TinyBox), "peer" (TBClient view), "rel" (a member, through the box)
+ * Contest.inviteCard(g, opp, via, accept, decline, more)  the invitation as a card
  */
 "use strict";
 const Contest = (() => {
@@ -86,19 +88,68 @@ const Contest = (() => {
   }
   const kmOf = (g, loc) => (g.cells.find((c) => c.l === loc) || {}).km || 0;
 
+  // CR122: the start page in the style of Prefix raten (German, photo contest-room.jpg)
+  const hintOn = {};          // key -> propagation hint on the start page (default on)
+  function photoCard(cls) {
+    const c = mk("div", "pr-card ct-card" + (cls ? " " + cls : ""));
+    c.append(mk("div", "pr-bg ct-photo"), mk("div", "pr-veil"));
+    return c;
+  }
   function newGame(box, o) {
-    const r = mk("div", "ct-new");
-    r.append(mk("span", "", o.newText || `New CQ contest with ${o.opp}: `));
-    const lab = mk("label", "ct-hint");
-    const cb = mk("input"); cb.type = "checkbox"; cb.checked = true;
-    lab.append(cb, " propagation hint");
-    r.append(lab, btn("Start", () => o.act("new", cb.checked ? "1" : "0"), !o.on, "primary-sm"));
-    const card = mk("div", "ct-start");               // blue, so it stands out of the chat
-    card.append(r, mk("div", "small ct-rules",
-      "8 x 8 grid squares, 5 hidden contest stations each. Call CQ into a square - a station " +
-      "there answers and is worked. You call first; the round is played out; all 5 first wins."));
-    if (o.err) card.append(mk("div", "small ct-err", o.err));
-    box.append(card);
+    const key = o.key || "", on = hintOn[key] !== false;
+    const c = photoCard();
+    const inner = mk("div", "pr-in"), main = mk("div", "pr-main");
+    main.append(mk("div", "pr-big", "CQ Contest"),
+                mk("div", "pr-sub", "Schiffe versenken mit Contest-Stationen – wer loggt zuerst alle fünf?"));
+    const who = mk("div", "pr-who");
+    const via = o.via ? ` über die TinyBox ${o.via}` : "";
+    who.append(mk("b", "", o.mode === "box" ? `gegen die TinyBox ${o.opp}` : `mit ${o.opp}${via}`),
+               mk("span", "muted", "· Zentrum: " + (o.mode === "peer" ? (o.center ? `${o.center} (dein Locator)` : "dein Locator fehlt")
+                 : "Großfeld der Box") + " · du rufst zuerst"));
+    main.append(who);
+    if (o.mode === "box") {
+      main.append(mk("div", "pr-lab", "So geht's"));
+      const ch = mk("div", "pr-chips");
+      for (const t of ["8 × 8 Großfelder", "5 Stationen je Seite", "Zug = CQ <Großfeld>", "Runde wird fertig gespielt"])
+        ch.append(mk("span", "pr-chip", t));
+      main.append(ch);
+    }
+    main.append(mk("div", "pr-lab", "Ausbreitungshinweis"));
+    const row = mk("div", "pr-steprow"), seg = mk("div", "pr-seg");
+    for (const [v, t] of [[true, "Ein"], [false, "Aus"]])
+      seg.append(btn(t, () => { hintOn[key] = v; render(box, null, o); }, false, on === v ? "on" : ""));
+    row.append(seg, mk("span", "pr-hint", "„QRZ? weak sigs“, wenn nebenan eine Station steht, die du noch nicht gearbeitet hast"));
+    main.append(row);
+    const acts = mk("div", "pr-acts");
+    const go = mk("button", "pr-cta" + (o.on ? " pulse" : ""), o.mode === "box" ? "Contest starten" : "Einladung senden");
+    go.type = "button"; go.disabled = !o.on;
+    go.onclick = (ev) => { ev.stopPropagation(); o.act("new", on ? "1" : "0"); };
+    const no = mk("button", "pr-sec", "Abbrechen");
+    no.type = "button"; no.onclick = (ev) => { ev.stopPropagation(); if (o.hide) o.hide(); };
+    acts.append(go, no);
+    main.append(acts, mk("div", "pr-err", o.err || ""));
+    inner.append(mk("div", "pr-target", "📻"), main);
+    c.append(inner);
+    box.append(c);
+  }
+
+  // the invitation of another TBClient - in the panel and as the card at the bottom right
+  function inviteCard(g, opp, via, accept, decline, more) {
+    const c = photoCard("ct-inv");
+    const inner = mk("div", "pr-in"), main = mk("div", "pr-main");
+    main.append(mk("div", "pr-big", `${opp} lädt zum CQ Contest`),
+      mk("div", "pr-sub", `Zentrum ${g.c} · Ausbreitungshinweis ${g.h ? "ein" : "aus"} · ${opp} ruft zuerst`
+        + (via ? ` · über ${via}` : "") + (more ? ` · noch ${more} weitere` : "")));
+    const acts = mk("div", "pr-acts");
+    const yes = mk("button", "pr-cta", "Annehmen");
+    yes.type = "button"; yes.onclick = (ev) => { ev.stopPropagation(); accept(); };
+    const no = mk("button", "pr-sec", "Ablehnen");
+    no.type = "button"; no.onclick = (ev) => { ev.stopPropagation(); decline(); };
+    acts.append(yes, no);
+    main.append(acts);
+    inner.append(mk("div", "pr-target", "📻"), main);
+    c.append(inner);
+    return c;
   }
 
   function lastMsg(g) {
@@ -182,13 +233,7 @@ const Contest = (() => {
     if (!g) { newGame(box, o); return; }
     track(o.key || "", g);
     if (g.st === "invited") {
-      const r = mk("div", "ct-invite");
-      r.append(mk("b", "", `📻 ${g.opp} invites you to a CQ contest`),
-        mk("div", "small muted", `center ${g.c}` + (g.h ? " · propagation hint" : " · no propagation hint") + " · " + g.opp + " calls first"));
-      const acts = mk("div", "ct-acts");
-      acts.append(btn("Accept", () => o.act("accept"), !o.on, "primary-sm"), btn("Decline", () => o.act("decline"), false));
-      r.append(acts);
-      box.append(r);
+      box.append(inviteCard(g, g.opp, o.via, () => o.act("accept"), () => o.act("decline")));
       return;
     }
     const head = mk("div", "ct-head");
@@ -285,5 +330,5 @@ const Contest = (() => {
     if (g.st !== "setup") box.append(logs(g));
   }
 
-  return { render };
+  return { render, inviteCard };
 })();

@@ -1,0 +1,2 @@
+- CQ contest: neue Startseite mit Contest-Foto (wie
+  Prefix raten), Einladung als Karte.
