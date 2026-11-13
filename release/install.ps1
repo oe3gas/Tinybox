@@ -18,6 +18,31 @@ function Ask($t, $d) {
     $a = Read-Host "$t [$d]"
     if ([string]::IsNullOrWhiteSpace($a)) { return $d } else { return $a.Trim() }
 }
+function Conf-Value($file, $section, $key, $default) {
+    # one value from an INI-style .conf (inline comments after # or ; are cut off)
+    if (-not (Test-Path $file)) { return $default }
+    $in = $false
+    foreach ($l in Get-Content $file) {
+        if ($l -match '^\s*\[([^\]]+)\]') { $in = ($Matches[1].Trim() -eq $section); continue }
+        if ($in -and $l -match ('^\s*' + [regex]::Escape($key) + '\s*=\s*([^#;]*)')) {
+            $v = $Matches[1].Trim()
+            if ($v) { return $v } else { return $default }
+        }
+    }
+    return $default
+}
+function Show-Urls($root, $box, $bro) {
+    $c = Conf-Value (Join-Path $root 'tbclient.conf') 'web' 'port' '7744'
+    Say "  TBClient:         http://127.0.0.1:$c/" Green
+    if ($bro) {
+        $b = Conf-Value (Join-Path $root 'brocast\brocastd.conf') 'listener' 'web_port' '7733'
+        Say "  brocast-Listener: http://127.0.0.1:$b/" Green
+    }
+    if ($box) {
+        $t = Conf-Value (Join-Path $root 'tinybox.conf') 'web' 'port' '8080'
+        Say "  TinyBox (Sysop):  http://127.0.0.1:$t/  - Login-Link mit Token steht im TinyBox-Fenster" Green
+    }
+}
 function Refresh-Path {
     $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
                 [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -117,11 +142,15 @@ if ((Ask 'Verknuepfung "TinyBox Start" auf dem Desktop anlegen? (j/n)' 'j') -mat
     $lnk = $ws.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'TinyBox Start.lnk'))
     $lnk.TargetPath = Join-Path $target 'TinyBox-Start.bat'
     $lnk.WorkingDirectory = $target
+    $lnk.IconLocation = (Join-Path $target 'release\tinybox.ico') + ',0'
+    $lnk.Description = 'TinyBox: Update und Start von TBClient, TinyBox, brocast'
     $lnk.Save()
 }
 
 Say ''
 Say 'Installation fertig.' Green
 Say "Starten: $target\TinyBox-Start.bat (oder die Desktop-Verknuepfung)."
-Say 'Client im Browser: http://127.0.0.1:7744/'
+$st = Join-Path $target 'tbstart.conf'
+Say 'Im Browser (nach dem Start):'
+Show-Urls $target ((Conf-Value $st 'start' 'tinybox' 'no') -eq 'yes') ((Conf-Value $st 'start' 'brocast' 'no') -eq 'yes')
 Read-Host 'Enter zum Beenden'

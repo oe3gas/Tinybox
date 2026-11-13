@@ -13,13 +13,17 @@ Entwicklungswerkzeuge (Tests, Simulatoren, Planungsunterlagen).
    - installiert **Git** und **Python 3.12** über `winget`, falls sie fehlen,
    - kopiert die Dateien samt Git-Daten (für spätere Updates) und den Direwolf-Fork nach `direwolf\`,
    - installiert die Python-Pakete (`release\requirements.txt`),
-   - startet den **Konfigurationsdialog** und legt auf Wunsch die Desktop-Verknüpfung *TinyBox Start* an.
+   - startet den **Konfigurationsdialog** und legt auf Wunsch die Desktop-Verknüpfung *TinyBox Start*
+     (mit TinyBox-Logo, `release\tinybox.ico`) an,
+   - zeigt am Ende die Browser-Adressen von Client, brocast-Listener und TinyBox.
 
 ### Konfigurationsdialog
 
 `release\konfig.py` fragt Rufzeichen, Locator, QTH, was auf dem PC laufen soll (TinyBox ja/nein,
-brocast-Listener ja/nein), die SSIDs von Client und Mailbox und den Direwolf (Soundkarte,
-1200/9600 Bd, PTT). Daraus entstehen aus den `*.conf.example`:
+brocast-Listener ja/nein), die SSIDs von Client und Mailbox und den Direwolf. Für Direwolf
+listet er die Soundkarten (Eingang und Ausgang getrennt, mit den Windows-Nummern, die Direwolf
+in `ADEVICE` erwartet) und die COM-Schnittstellen für die PTT (RTS/DTR) zur Auswahl; dazu CM108
+und VOX. Außerdem fragt er 1200 oder 9600 Bd. Daraus entstehen aus den `*.conf.example`:
 
 | Datei | Inhalt |
 |---|---|

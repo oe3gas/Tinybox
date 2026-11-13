@@ -113,11 +113,13 @@ def write_conf(target: Path, template: Path, sections: dict[str, dict[str, str]]
     return True
 
 
-def direwolf_conf(call: str, adevice: str, baud: str, ptt: str) -> str:
+def direwolf_conf(call: str, adevice: str, baud: str, ptt: str, note: str = "") -> str:
     lines = [
         "# direwolf.conf - erstellt von release/konfig.py (TinyBox-Release).",
         "# Vollstaendige Beschreibung: Direwolf User Guide. Nach Aenderungen Direwolf neu starten.",
         "",
+        *([f"# {note}", "# (Windows-Nummern - nach Umstecken von USB-Geraeten pruefen,",
+           "#  Direwolf zeigt beim Start die Liste der Geraete)"] if note else []),
         f"ADEVICE {adevice}",
         "ACHANNELS 1",
         "CHANNEL 0",
@@ -129,6 +131,115 @@ def direwolf_conf(call: str, adevice: str, baud: str, ptt: str) -> str:
         lines.append("TXDELAY 20")
     lines += ["", "AGWPORT 8000", "KISSPORT 8001", ""]
     return "\n".join(lines)
+
+
+# --- sound cards and COM ports (Windows) ---------------------------------------
+
+def sound_devices() -> tuple[list[str], list[str]]:
+    """(inputs, outputs) in the order of Windows (winmm) - the numbers Direwolf
+    takes in ADEVICE. Empty lists outside Windows or on any error."""
+    if sys.platform != "win32":
+        return [], []
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class CAPS(ctypes.Structure):            # WAVEINCAPSW / WAVEOUTCAPSW (+ dwSupport)
+            _fields_ = [("wMid", wintypes.WORD), ("wPid", wintypes.WORD),
+                        ("vDriverVersion", wintypes.UINT), ("szPname", wintypes.WCHAR * 32),
+                        ("dwFormats", wintypes.DWORD), ("wChannels", wintypes.WORD),
+                        ("wReserved1", wintypes.WORD), ("dwSupport", wintypes.DWORD)]
+
+        winmm = ctypes.windll.winmm
+        out: list[list[str]] = []
+        for num, caps in ((winmm.waveInGetNumDevs, winmm.waveInGetDevCapsW),
+                          (winmm.waveOutGetNumDevs, winmm.waveOutGetDevCapsW)):
+            names = []
+            for i in range(num()):
+                c = CAPS()
+                names.append(c.szPname if caps(i, ctypes.byref(c), ctypes.sizeof(c)) == 0
+                             else f"(Geraet {i})")
+            out.append(names)
+        return out[0], out[1]
+    except Exception:
+        return [], []
+
+
+def com_ports() -> list[tuple[str, str]]:
+    """[(COM3, description), ...] - pyserial if there, else the registry."""
+    try:
+        from serial.tools import list_ports
+        ports = [(p.device, p.description or "") for p in list_ports.comports()]
+    except Exception:
+        ports = []
+        if sys.platform == "win32":
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DEVICEMAP\SERIALCOMM") as k:
+                    i = 0
+                    while True:
+                        try:
+                            name, value, _ = winreg.EnumValue(k, i)
+                        except OSError:
+                            break
+                        ports.append((str(value), name.rsplit("\\", 1)[-1]))
+                        i += 1
+            except OSError:
+                pass
+    return sorted(ports, key=lambda p: (len(p[0]), p[0]))
+
+
+def _pick(title: str, names: list[str]) -> str:
+    print(f"  {title}:")
+    for i, n in enumerate(names):
+        print(f"    {i:2}  {n}")
+    hint = next((i for i, n in enumerate(names)
+                 if re.search(r"usb|codec|signalink|digirig", n, re.I)), 0)
+    return ask("Nummer", str(hint), lambda a: a.isdigit() and int(a) < len(names),
+               f"Eine Zahl von 0 bis {len(names) - 1}.")
+
+
+def choose_audio() -> tuple[str, str]:
+    """(ADEVICE value, comment): 'in out' as numbers, the names for the comment line
+    (Direwolf takes comments only on lines of their own)."""
+    ins, outs = sound_devices()
+    if not ins or not outs:
+        print("  Soundkarten konnten nicht gelesen werden.")
+        print("  Soundkarte: Nummer (0, 1 ...) oder ein Teil des Namens ohne Leerzeichen, z. B. USB.")
+        return ask("Soundkarte", "USB"), ""
+    i = _pick("Eingang (Empfang: Funkgeraet -> PC)", ins)
+    o = _pick("Ausgang (Senden: PC -> Funkgeraet)", outs)
+    return f"{i} {o}", f"Eingang {i}: {ins[int(i)]} / Ausgang {o}: {outs[int(o)]}"
+
+
+def choose_ptt() -> str:
+    """PTT value for direwolf.conf, '' = VOX."""
+    ports = com_ports()
+    print("  PTT (Sendertastung):")
+    for i, (dev, desc) in enumerate(ports, 1):
+        print(f"    {i:2}  {dev:7} {desc}")
+    if not ports:
+        print("        (keine COM-Schnittstelle gefunden)")
+    print("     C  CM108/CM119-Soundkarte mit PTT-Ausgang (z. B. Digirig Lite)")
+    print("     V  VOX / das Funkgeraet bzw. Interface schaltet selbst")
+    print("        oder direkt eingeben, z. B. COM5 RTS")
+
+    def ok(a: str) -> bool:
+        a = a.strip().upper()
+        return (a in ("C", "V") or (a.isdigit() and 1 <= int(a) <= len(ports))
+                or bool(re.fullmatch(r"COM\d+( -?(RTS|DTR))*", a)))
+
+    a = ask("Auswahl", "V", ok, "Nummer, C, V oder z. B. COM5 RTS.").strip().upper()
+    if a == "V":
+        return ""
+    if a == "C":
+        return "CM108"
+    if a.startswith("COM") and " " in a:
+        return a
+    dev = ports[int(a) - 1][0] if a.isdigit() else a
+    line = ask(f"Leitung an {dev}: RTS oder DTR", "RTS", lambda x: x.upper() in ("RTS", "DTR"),
+               "RTS oder DTR.").upper()
+    return f"{dev} {line}"
 
 
 # --- the dialog -------------------------------------------------------------
@@ -188,14 +299,12 @@ def main() -> int:
                          lambda a: (dw_dir / a).is_file(), "Datei gibt es dort nicht.")
         dwc = dw_dir / "direwolf.conf"
         if not dwc.exists() or yes(f"{dwc} gibt es schon - neu erstellen?", False):
-            print("  Soundkarte: Nummer (0, 1 ...) oder ein Teil des Namens, z. B. USB.")
-            adev = ask("Soundkarte", "USB")
+            adev, adev_note = choose_audio()
             baud = ask("Baudrate (1200 oder 9600)", "1200", lambda a: a in ("1200", "9600"),
                        "1200 oder 9600.")
-            print("  PTT: z. B. COM3 RTS, COM3 DTR, CM108 - leer = VOX.")
-            ptt = ask("PTT", "")
+            ptt = choose_ptt()
             dw_dir.mkdir(parents=True, exist_ok=True)
-            dwc.write_text(direwolf_conf(call, adev, baud, ptt), encoding="utf-8")
+            dwc.write_text(direwolf_conf(call, adev, baud, ptt, adev_note), encoding="utf-8")
             print(f"    geschrieben: {dwc}")
     else:
         own = ask("Ordner der direwolf.conf deines eigenen Direwolf (leer = keiner)", "",

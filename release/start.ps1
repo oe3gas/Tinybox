@@ -13,6 +13,31 @@ $Host.UI.RawUI.WindowTitle = 'TinyBox Start'
 
 function Say($t, $c = 'Gray') { Write-Host $t -ForegroundColor $c }
 
+function Conf-Value($file, $section, $key, $default) {
+    # one value from an INI-style .conf (inline comments after # or ; are cut off)
+    if (-not (Test-Path $file)) { return $default }
+    $in = $false
+    foreach ($l in Get-Content $file) {
+        if ($l -match '^\s*\[([^\]]+)\]') { $in = ($Matches[1].Trim() -eq $section); continue }
+        if ($in -and $l -match ('^\s*' + [regex]::Escape($key) + '\s*=\s*([^#;]*)')) {
+            $v = $Matches[1].Trim()
+            if ($v) { return $v } else { return $default }
+        }
+    }
+    return $default
+}
+function Show-Urls($root, $box, $bro) {
+    $c = Conf-Value (Join-Path $root 'tbclient.conf') 'web' 'port' '7744'
+    Say "  TBClient:         http://127.0.0.1:$c/" Green
+    if ($bro) {
+        $b = Conf-Value (Join-Path $root 'brocast\brocastd.conf') 'listener' 'web_port' '7733'
+        Say "  brocast-Listener: http://127.0.0.1:$b/" Green
+    }
+    if ($box) {
+        $t = Conf-Value (Join-Path $root 'tinybox.conf') 'web' 'port' '8080'
+        Say "  TinyBox (Sysop):  http://127.0.0.1:$t/  - Login-Link mit Token steht im TinyBox-Fenster" Green
+    }
+}
 function Read-Ini($path) {
     $h = @{}
     if (Test-Path $path) {
@@ -144,9 +169,10 @@ if ($bro) { Start-Bat 'brocast.daemon' 'brocast-Listener' (Join-Path $root 'broc
 if ($box) { Start-Bat 'tinybox' 'TinyBox' $root 'tinybox_dauerbetrieb.bat'; Start-Sleep 3 }
 Start-Bat 'tbclient' 'TBClient' $root 'tbclient.bat'
 Start-Sleep 4
-Start-Process 'http://127.0.0.1:7744/'
-if ($bro) { Say '  brocast-Listener: http://127.0.0.1:7733/' }
+Start-Process ('http://127.0.0.1:' + (Conf-Value (Join-Path $root 'tbclient.conf') 'web' 'port' '7744') + '/')
+Say ''
+Show-Urls $root $box $bro
 
 Say ''
 Say 'Gestartet. Jedes Programm laeuft in einem eigenen Fenster (beenden: Fenster schliessen).' Green
-Start-Sleep 8
+Read-Host 'Enter schliesst dieses Fenster'
