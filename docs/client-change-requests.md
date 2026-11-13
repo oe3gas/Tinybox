@@ -4769,7 +4769,7 @@ nach der Auflösung wie bisher grün (richtig) bzw. rot (falsch).
   `not_open`); schließt die Anmeldung sofort.
 - Die News-Zeile zu Prefix raten fehlte in 2026.11.12.5 (vom CR122-Fix mit derselben Version
   überschrieben) – steht jetzt in `news/2026.11.13.txt`.
-- Offen: Herkunft und Lizenz der Karte festhalten (das Repo ist öffentlich).
+- Herkunft der Karte: von OE3GAS selbst erstellt (mit KI), keine fremden Rechte (13.11.2026).
 
 ## CR125 – Mehrere Sysops (bis zu 5) (offen)
 
