@@ -111,6 +111,7 @@ class Carousel:
         self.current: dict | None = None
         self.recent: deque[dict] = deque(maxlen=RECENT)
         self.blocked: dict | None = None      # {"reason": "budget"|"link", "until", "page"}
+        self.blocked_since: float | None = None   # clock() when the current hold began
         self.last_queue: int | None = None    # AGW: frames Direwolf still holds (last look)
         self.day = ""
         self.day_pages = self.day_frames = 0
@@ -315,6 +316,7 @@ class Carousel:
             log.info("Seite %s (%s/%s) abgelaufen, entfernt", row.id, row.provider, row.pkey)
             self.store.delete_page(row.pid)
 
+        held = False
         for row in self.store.due_pages(int(now)):
             frames = [build_frame(self.callsign, data, self.cfg.path, row.hdr)
                       for data in self.store.frames(row.pid)]
@@ -323,17 +325,18 @@ class Carousel:
             hold = self._hold(row, len(frames), needed, self.clock())
             if hold is not None:
                 wait, reason, why = hold
-                self.blocked = {"reason": reason, "why": why, "until": self.clock() + wait,
-                                "page": row.id, "level": self.level()[0],
-                                "waiting": len(self.store.due_pages(int(now)))}
+                held = True
+                self._block({"reason": reason, "why": why, "until": self.clock() + wait,
+                             "page": row.id, "level": self.level()[0],
+                             "waiting": len(self.store.due_pages(int(now)))})
                 if any(r.pri >= EMERGENCY for r in self.store.due_pages(int(now))):
                     continue                               # an emergency further down: send it
                 return min(max(wait, 1.0), MAX_SLEEP)
             if row.pri < EMERGENCY and not self.budget.allows(now, needed):
                 wait = self.budget.free_at(now, needed) - now
                 log.debug("Airtime-Budget erschöpft, warte %.0f s", wait)
-                self.blocked = {"reason": "budget", "until": now + wait, "page": row.id,
-                                "waiting": len(self.store.due_pages(int(now)))}
+                self._block({"reason": "budget", "until": now + wait, "page": row.id,
+                             "waiting": len(self.store.due_pages(int(now)))})
                 return min(max(wait, 1.0), MAX_SLEEP)
             typ, title = title_of(row.content)
             dest = "BROCST" + ("," + ",".join(self.cfg.path) if self.cfg.path else "")
@@ -350,7 +353,7 @@ class Carousel:
                     self._burst_count = 0
                     log.debug("Direwolf nicht verbunden, Senden verschoben")
                     self._done("paused")
-                    self.blocked = {"reason": "link", "until": self.clock() + 5, "page": row.id}
+                    self._block({"reason": "link", "until": self.clock() + 5, "page": row.id})
                     return 5.0
                 self.blocked = None
                 cur = self.current
@@ -373,6 +376,8 @@ class Carousel:
                      row.id, row.rev, len(frames), bursts, "en" if bursts > 1 else "", needed,
                      " [zurückgezogen]" if row.state == "withdrawn" else "")
 
+        if not held:
+            self.blocked_since = None                      # nothing waits for the traffic any more
         if not await self._beacon(self.clock()):
             log.debug("Direwolf nicht verbunden, Bake verschoben")
             return 5.0
@@ -382,6 +387,32 @@ class Carousel:
         if nxt is None:
             return MAX_SLEEP
         return min(max(nxt - self.clock(), 0.5), MAX_SLEEP)
+
+    def _block(self, blocked: dict) -> None:
+        """Remember why sending waits; the wait time runs from the first hold on."""
+        self.blocked = blocked
+        if self.blocked_since is None:
+            self.blocked_since = self.clock()
+
+    def pool(self, now: float, top: int = 3) -> dict:
+        """The due pages not sent yet: count, frames, bytes, airtime; the biggest first."""
+        pages, frames_n, size, air, emergency = 0, 0, 0, 0.0, 0
+        rows = []
+        for row in self.store.due_pages(int(now)):
+            lens = [len(build_frame(self.callsign, d, self.cfg.path, row.hdr))
+                    for d in self.store.frames(row.pid)]
+            typ, title = title_of(row.content)
+            pages += 1
+            frames_n += len(lens)
+            size += sum(lens)
+            air += tx_airtime_s(lens, self.cfg.baud, self.cfg.txdelay_ms, self._limit())
+            emergency += row.pri >= EMERGENCY
+            rows.append({"id": row.id, "title": title, "typ": typ, "pri": row.pri,
+                         "parts": len(lens), "bytes": sum(lens),
+                         "over_s": round(max(now - row.next_tx, 0))})
+        rows.sort(key=lambda r: r["bytes"], reverse=True)
+        return {"pages": pages, "frames": frames_n, "bytes": size, "air_s": round(air, 1),
+                "emergency": emergency, "top": rows[:top]}
 
     def _bursts(self, frames: int) -> int:
         limit = self._limit()
@@ -432,6 +463,8 @@ class Carousel:
         if self.day != time.strftime("%Y-%m-%d", time.localtime(now)):
             self.day, self.day_pages, self.day_frames = "", 0, 0
         return {"now": now, "current": cur, "blocked": blocked, "next": nxt,
+                "blocked_since": self.blocked_since if blocked else None,
+                "pool": self.pool(now),
                 "recent": list(self.recent), "queue": self.last_queue,
                 "agw": self.queue_len is not None,
                 "budget": {"used_s": round(b.spent(now), 1), "limit_s": round(b.limit, 1),

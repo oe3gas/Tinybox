@@ -212,6 +212,34 @@ class TrafficTests(unittest.IsolatedAsyncioTestCase):
         await self.car.step()
         self.assertEqual(self.store.get_page("tinybox", "1").tx_count, 1)
 
+    async def test_wait_time_and_pool(self):
+        self.car.set_hint(2, "Forward OE1XAB")
+        self.st.put("tinybox", "1", BULLETIN)
+        self.st.put("tinybox", "3", {**BULLETIN, "ti": "Zweite"})
+        t0 = self.clock()
+        await self.car.step()
+        self.clock.t += 40
+        self.st.put("tinybox", "2", {**BULLETIN, "ti": "Sturm", "pri": 3})
+        await self.car.step()                                     # the emergency goes ...
+        self.assertEqual(len(self.sent), 1)
+        await self.car.step()
+        tx = self.car.tx_state()
+        self.assertEqual(tx["blocked_since"], t0)                 # ... the wait time keeps running
+        p = tx["pool"]
+        self.assertEqual((p["pages"], p["emergency"]), (2, 0))
+        self.assertGreaterEqual(p["frames"], 2)
+        self.assertGreater(p["bytes"], 0)
+        self.assertGreater(p["air_s"], 0)
+        self.assertEqual(len(p["top"]), 2)
+        self.assertGreaterEqual(p["top"][0]["bytes"], p["top"][1]["bytes"])
+        self.assertGreaterEqual(p["top"][0]["over_s"], 40)
+        self.car.set_hint(0)
+        await self.car.step()
+        tx = self.car.tx_state()
+        self.assertIsNone(self.car.blocked_since)                 # all sent: the wait is over
+        self.assertIsNone(tx["blocked_since"])
+        self.assertEqual(tx["pool"]["pages"], 0)
+
     async def test_channel_heard(self):
         self.st.put("tinybox", "1", BULLETIN)
         self.car.heard("OE1ABC", "OE3XYZ-1", "I")                 # a connection is running

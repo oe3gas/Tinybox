@@ -2455,6 +2455,47 @@ function partChips(cur) {
   return row;
 }
 
+// held back: how long already, the next try, what waits in the pool
+function txWait(tx, bl) {
+  const box = el("div", "txwait");
+  const cards = el("div", "wcards");
+  const card = (k, v, s, cls) => {
+    const c = el("div", "wc");
+    c.append(el("div", "k", k), el("div", "v" + (cls ? " " + cls : ""), v), el("div", "s", s));
+    return c;
+  };
+  const since = tx.blocked_since;
+  cards.append(
+    card("wartet seit", since ? mmss(tx.now - since) : "–", since ? `seit ${hms(since)}` : "", "y"),
+    card("nächster Versuch", bl.until > tx.now ? mmss(bl.until - tx.now) : "gleich",
+      bl.reason === "budget" ? "wenn Airtime frei ist" : `um ${hms(bl.until)}`));
+  box.append(cards);
+  const p = tx.pool;
+  if (p && p.pages) {
+    box.append(el("div", "plbl", "Im Pool wartend (fällig, nicht gesendet)"
+      + (p.emergency ? ` · davon ${p.emergency} Notfall` : "")));
+    const sums = el("div", "psum");
+    const sum = (v, k, cls) => { const c = el("div"); c.append(el("div", "v" + (cls ? " " + cls : ""), v), el("div", "k", k)); return c; };
+    sums.append(sum(p.pages, p.pages === 1 ? "Seite" : "Seiten"), sum(p.frames, "Frames"),
+      sum(p.bytes.toLocaleString("de-AT"), "Bytes"), sum(`≈ ${secs(p.air_s)} s`, "Airtime", "y"));
+    box.append(sums);
+    const list = el("div", "plist");
+    for (const r of p.top) {
+      const row = el("div", "pr");
+      row.append(el("span", "id", `P${r.id}`), el("span", "ti", r.title || r.typ),
+        el("span", "m", `${r.parts} Teil${r.parts === 1 ? "" : "e"}`),
+        el("span", "b", `${r.bytes.toLocaleString("de-AT")} B`),
+        el("span", "m o", mmss(r.over_s)));
+      list.append(row);
+    }
+    if (p.pages > p.top.length) list.append(el("div", "more", `… ${p.pages - p.top.length} weitere`));
+    box.append(list);
+  } else {
+    box.append(el("div", "plbl", "Im Pool wartet nichts."));
+  }
+  return box;
+}
+
 function renderTxView() {
   const tx = state.tx, v = $("view");
   if (!tx) { v.replaceChildren(el("p", "empty", "Nur eine Station sendet.")); return; }
@@ -2469,7 +2510,9 @@ function renderTxView() {
   const now = el("section", "txnow");
   const cur = tx.current;
   const nh = el("div", "nh");
-  nh.append(el("span", cur ? "rec" : "rec off", cur ? "JETZT AUF SENDUNG" : (tx.connected ? "KEINE AUSSENDUNG" : "DIREWOLF GETRENNT")),
+  const held = !cur && tx.blocked && tx.connected;
+  nh.append(el("span", cur ? "rec" : held ? "rec off hold" : "rec off",
+    cur ? "JETZT AUF SENDUNG" : !tx.connected ? "DIREWOLF GETRENNT" : held ? "ZURÜCKGESTELLT" : "KEINE AUSSENDUNG"),
     el("span", "grow"), el("span", "c", hms(tx.now)));
   now.append(nh);
   const nb = el("div", "nb");
@@ -2497,6 +2540,7 @@ function renderTxView() {
       : !tx.connected ? "Direwolf ist nicht verbunden – die Sendung wartet."
         : n ? `Als Nächstes: P${n.id} ${n.title || n.typ} ${n.next_tx <= tx.now ? "gleich" : "in " + mmss(n.next_tx - tx.now)}`
           : "Im Karussell ist nichts geplant."));
+    if (bl) nb.append(txWait(tx, bl));
   }
   now.append(nb);
   // budget
