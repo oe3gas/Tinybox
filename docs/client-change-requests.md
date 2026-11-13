@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.11.2026 (CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 13.11.2026 (CR126 erfasst; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -98,6 +98,7 @@ Stand: 13.11.2026 (CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfa
 | 123 | Prefix raten im Chatboard: die Box nennt ein Rufzeichen, Spieler tippen die DXCC-Entität (A/B/C); Stufen, IARU-Regionen, Anzahl Calls, Anmeldung, Zuschauer, 30-s-Timer, einklappbar | ✅ 12.11.2026 (Client 2026.11.12.5, Funktest offen) – siehe unten |
 | 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig, Weltkarte als Hintergrund | ✅ 13.11.2026 (Client 2026.11.13, Funktest offen) – siehe unten |
 | 125 | TinyBox: bis zu 5 gleichberechtigte Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste, Post an den Sysop geht an `SYSOP` (alle) | offen – siehe unten |
+| 126 | Prefix raten: Antwortzeit 5–30 s einstellbar, Ergebnis nach jedem Call, Übersicht am Spielende, Spielerliste auf der Box (Spiele, richtige/alle Tipps), Sysop löscht Scores – für alle Spiele | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -4852,3 +4853,59 @@ Zusätzlich:
   gemeinsam, wie ein geteiltes Postfach; Löschen wirkt für alle.
 - Bestehende Post an das Rufzeichen des bisherigen Sysops bleibt, wie sie ist (keine Migration),
   oder auf `SYSOP` umschreiben? Vorschlag: bleibt.
+
+## CR126 – Prefix raten: Antwortzeit, Ergebnisse, Spielerliste; Scores aller Spiele löschen (offen)
+
+### Erfassung (OE3GAS, 13.11.2026)
+
+1. Antwortzeit beim Start einstellbar, 5 bis 30 Sekunden.
+2. Nach jedem Call eine Ergebnisübersicht: Call – richtige Tipps gesamt in diesem Call.
+3. Am Ende eines Spiels eine Übersicht der Ergebnisse aller Teilnehmer, für alle sichtbar.
+4. Gespeicherte Spielerliste auf der TinyBox: Anzahl gespielter Spiele, richtige Tipps gegen alle Tipps.
+5. Der Sysop kann Scores und Spielerlisten löschen – so gebaut, dass auch die anderen Spiele
+   (Schach, CQ Contest und kommende) dazugehören.
+
+### Vorschlag
+
+**1 Antwortzeit:** im Setup eine Zeile „Wie lange darf getippt werden?“ mit −/+ in 5-s-Schritten
+(5, 10 … 30, Standard 30); die geschätzte Spieldauer rechnet sie mit. Protokoll: `//PR START … t=<5-30>`;
+`!PR OPEN` bekommt die Zeit als 7. Wert, `!PR Q` trägt sie schon. Die Box nimmt weiter 5 s länger an.
+
+**2 Nach jedem Call:** In der Auflösung „VP2EAU = Anguilla · 2 von 3 richtig“, dazu „Richtig: …“ und
+„daneben: …“ (ohne den getippten Buchstaben der anderen). Protokoll: `!PR RES <k> <buchstabe> <x>/<y> …`
+(y = Spieler, die gefragt waren, auch ohne Tipp).
+
+**3 Spielende:** Panel für alle im Board (Entwurf `prefix_raten_spielende.png`): Sieger mit Punkten,
+Summe (Spieler, Tipps, richtig, Quote); Tabelle Teilnehmer (Platz mit Medaille, richtig/gefragt, Quote
+als Balken, „insgesamt“ = alle Spiele dieses Spielers auf der Box); Tabelle der Calls (#, Call, Lösung,
+richtig x/y, 0 rot). Knöpfe „Neues Spiel“ und „Bestenliste“. Protokoll: `!PR END <call>=<richtig>/<gefragt> …`
+und danach `!PR ALL <call>=<spiele>/<quote %> …` aus der Spielerliste. Die Liste der Calls baut der Client
+aus den `RES`-Zeilen, die er gesehen hat (wer später kam, sieht die Calls ab seinem Einstieg).
+
+**4 Spielerliste auf der Box:** neue Tabelle für alle Spiele
+
+    game_stats(game, call, games, wins, hits, tries, asked, last)   Schlüssel (game, call)
+    game = "prefix" | "chess" | "contest" | …   call ohne SSID
+
+Prefix raten zählt am Spielende je Spieler: games +1, wins +1 für den/die Sieger (nur mit Punkten),
+hits = richtige Tipps, tries = abgegebene Tipps, asked = Calls, bei denen er gefragt war. Abgebrochene
+Spiele zählen nicht. Abfrage für alle: `//PR TOP` (Client: Knopf „Bestenliste“, Terminal `/PR TOP`),
+sortiert nach Quote, ab 3 Spielen; dazu die eigene Zeile.
+
+**5 Sysop löscht:** Konsolenbefehl der Box, auch über die Fernverwaltung im TBClient (`//ADM`):
+
+    GAMES                         Übersicht: je Spiel Anzahl Spieler und Spiele
+    GAMES CLEAR <spiel|ALL>       Liste eines Spiels bzw. aller Spiele löschen
+    GAMES CLEAR <spiel|ALL> <call>  nur diesen Spieler
+
+Mit Rückfrage („wirklich? J/N“) und Eintrag im Log. Andere Spiele schreiben über dieselbe Funktion
+`games.record(game, call, …)` in die Tabelle.
+
+### Offen
+
+- **Schach und CQ Contest:** Die Box sieht deren Ergebnisse heute nicht – Schach läuft direkt zwischen den
+  Clients, CQ Contest auch, über die Box nur weitergereicht (`//CTR`). Für die Liste müssten die Clients das
+  Ergebnis melden (z.B. `//GAME RES contest win OE3TEC`) – das wäre Selbstauskunft. Vorschlag: Tabelle und
+  Löschen jetzt für alle Spiele, das Melden von Schach/Contest als eigener CR.
+- Bestenliste: ab wie vielen Spielen jemand darin erscheint (Vorschlag 3), und ob nach Quote oder nach
+  richtigen Tipps gesamt sortiert wird.
