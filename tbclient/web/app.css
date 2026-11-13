@@ -1040,6 +1040,34 @@ button.pr-opt.wrong { background: color-mix(in srgb, var(--bad) 15%, var(--surfa
 .pr-ok { color: var(--ok) !important; }
 .pr-result { font: 800 22px system-ui; margin: 12px 0 10px; }
 .pr-line { font-size: 12px; }
+/* CR126: results, overview at the end, leaderboards */
+.pr-sol { font-size: 18px; font-weight: 700; }
+.pr-cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; margin-top: 4px; }
+.pr-cols table.pr-tab { font-size: 13px; }
+.pr-cols table.pr-tab td, .pr-cols table.pr-tab th { padding: 5px 5px; }
+.pr-cols .pr-qbar { width: 36px; margin-right: 5px; }
+@media (max-width: 760px) { .pr-cols { grid-template-columns: minmax(0, 1fr); } }
+table.pr-tab { border-collapse: collapse; width: 100%; font-size: 14px; }
+table.pr-tab th { font-size: 12px; font-weight: 600; color: var(--muted); text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+table.pr-tab td { white-space: nowrap; padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+table.pr-tab .n { text-align: right; font-variant-numeric: tabular-nums; }
+table.pr-tab tr.me td { background: color-mix(in srgb, var(--accent) 10%, transparent); font-weight: 700; }
+table.pr-tab tr.pr-sep td { color: var(--muted); border-bottom: none; padding: 0 8px; }
+.pr-medal { width: 30px; font-size: 16px; color: var(--muted); font-weight: 700; }
+.pr-b { font-weight: 600; }
+.pr-mono { font: 700 14px ui-monospace, Consolas, monospace; letter-spacing: 1px; }
+.pr-bad { color: var(--bad); }
+.pr-qbar { display: inline-block; width: 60px; height: 8px; border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: 8px;
+  background: color-mix(in srgb, var(--line) 70%, transparent); }
+.pr-qbar i { display: block; height: 100%; background: var(--ok); }
+.pr-q .pr-qbar { width: 140px; }
+.pr-card.lb { border-color: var(--accent); }
+.pr-tabs { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.pr-tabs button { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--surface); }
+.pr-tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+.pr-lbsec { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
+button.pr-more { border: none; background: transparent; color: var(--accent); font-weight: 600; font-size: 12px; float: right; padding: 4px 0; }
+.pr-card.lb .pr-big { margin: 10px 0 2px; }
 
 /* CR122: CQ contest - battleships with contest stations (contest.js) */
 .ct-panel { padding: 10px max(14px, calc((100% - 760px) / 2)); background: var(--surface);

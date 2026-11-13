@@ -6,6 +6,7 @@
  * Prefix.render(box, k, o)
  *   k  S.prefix from the snapshot: { ok, err, game }
  *   o  { act(act, arg) -> Promise, hide(), newGame(), redraw() }
+ * Prefix.renderLB(box, lb, o)  CR126: the leaderboards (o: { show(game), close() })
  * Prefix.line(text)  a game event as a line in the chat
  * Prefix.folded()    true: panel and game lines in the chat are folded (per browser)
  */
@@ -40,7 +41,9 @@ const Prefix = (() => {
     not_starter: "Das kann nur, wer das Spiel gestartet hat.", not_open: "Die Anmeldung ist schon vorbei.",
     no_board: "Zuerst einem Board beitreten.",
   };
-  const SIGNUP_SEC = 60, PER_CALL_SEC = 40;   // 30 s + 5 s grace + 5 s pause
+  const SIGNUP_SEC = 60, EXTRA_SEC = 10;      // + 5 s grace + 5 s pause per call
+  const GAME = { prefix: ["🎯", "Prefix raten", "richtige Tipps"], contest: ["📡", "CQ Contest", "gewonnene Spiele"],
+                 chess: ["♟️", "Schach", "Punkte (Sieg 1, Remis ½)"] };
 
   let fold = false;
   try { fold = localStorage.getItem("tbc-pr-fold") === "1"; } catch (e) { /* ok */ }
@@ -49,7 +52,7 @@ const Prefix = (() => {
     try { localStorage.setItem("tbc-pr-fold", on ? "1" : "0"); } catch (e) { /* ok */ }
   };
   // the setup survives the redraws of the page
-  const setup = { stage: "OM", regions: new Set(["1", "2", "3"]), calls: 10, msg: "" };
+  const setup = { stage: "OM", regions: new Set(["1", "2", "3"]), calls: 10, tip: 30, msg: "" };
 
   let off = 0;                    // clock of the client core - clock of the browser
   const left = (until) => Math.max(0, Math.ceil(until - (Date.now() / 1000 + off)));
@@ -116,14 +119,21 @@ const Prefix = (() => {
     const set = (d) => { setup.calls = Math.max(1, Math.min(50, setup.calls + d)); o.redraw(); };
     step.append(btn("−", () => set(-1), "pr-stepb"), mk("span", "pr-stepn", String(setup.calls)),
                 btn("+", () => set(1), "pr-stepb"));
-    const min = Math.round((SIGNUP_SEC + setup.calls * PER_CALL_SEC) / 60);
-    row.append(step, mk("span", "pr-hint", `je 30 s · ca. ${min} Minute${min === 1 ? "" : "n"}`));
-    main.append(row);
+    row.append(step);
+    main.append(row, mk("div", "pr-lab", "Wie lange darf getippt werden?"));
+    const row2 = mk("div", "pr-steprow");
+    const step2 = mk("div", "pr-step");
+    const setT = (d) => { setup.tip = Math.max(5, Math.min(30, setup.tip + d)); o.redraw(); };
+    step2.append(btn("−", () => setT(-5), "pr-stepb"), mk("span", "pr-stepn", setup.tip + " s"),
+                 btn("+", () => setT(5), "pr-stepb"));
+    const min = Math.max(1, Math.round((SIGNUP_SEC + setup.calls * (setup.tip + EXTRA_SEC)) / 60));
+    row2.append(step2, mk("span", "pr-hint", `5 bis 30 s je Call · Spiel ca. ${min} Minute${min === 1 ? "" : "n"}`));
+    main.append(row2);
     const acts = mk("div", "pr-acts");
     acts.append(btn("Einladung senden", () => {
       if (!setup.regions.size) { setup.msg = "Bitte mindestens eine Region wählen."; o.redraw(); return; }
       setup.msg = "";
-      o.act("start", `${setup.stage} ${r} ${setup.calls}`);
+      o.act("start", `${setup.stage} ${r} ${setup.calls} ${setup.tip}`);
     }, "pr-cta"), btn("Abbrechen", () => o.hide()));
     main.append(acts, mk("div", "pr-err", setup.msg || ERR[k.err] || k.err || ""));
     inner.append(target(), main);
@@ -169,7 +179,8 @@ const Prefix = (() => {
   function headBar(g, o) {
     const h = mk("div", "pr-bar");
     const t = mk("span", "pr-bartitle");
-    t.append(mk("b", "", "🎯 Prefix raten"), ` · ${STAGE[g.stage] || g.stage} · ${regs(g.regions)}`);
+    t.append(mk("b", "", "🎯 Prefix raten"), ` · ${STAGE[g.stage] || g.stage} · ${regs(g.regions)}` +
+             (g.phase === "over" ? ` · ${g.calls} Calls · ${g.tip} s` : ""));
     const tools = mk("span", "pr-tools");
     if (g.k) tools.append(mk("b", "", `Call ${g.k} von ${g.calls}`));
     if (fold && g.phase === "ask" && g.q) tools.append(ring(g.q.until, g.q.secs, "mini"));
@@ -186,12 +197,18 @@ const Prefix = (() => {
     const inner = mk("div", "pr-gin");
     inner.append(headBar(g, o));
     const q = g.q;
+    const res = g.phase === "wait" ? g.res : null;
     const top = mk("div", "pr-qrow");
     top.append(mk("div", "pr-call", q.call));
     if (g.phase === "ask") top.append(ring(q.until, q.secs, "big"));
+    if (res) {                                       // CR126: the solution and how many were right
+      const i = "ABC".indexOf(res.letter);
+      top.append(mk("div", "pr-sol", "= " + (q.options[i] || res.letter)));
+      if (res.n_asked) top.append(mk("span", "pr-chip" + (res.n_right ? " ok" : ""),
+                                     `${res.n_right} von ${res.n_asked} richtig`));
+    }
     inner.append(top);
     const opts = mk("div", "pr-opts");
-    const res = g.phase === "wait" ? g.res : null;
     q.options.forEach((name, i) => {
       const L = "ABC"[i];
       const mine = g.mytip.toUpperCase() === L;
@@ -207,10 +224,7 @@ const Prefix = (() => {
     inner.append(opts);
     const foot = mk("div", "pr-foot");
     const info = mk("span", "");
-    if (res) {
-      const ok = g.me_plays && g.mytip.toUpperCase() === res.letter;
-      info.append(mk("b", ok ? "pr-ok" : "", ok ? "Richtig! " : `Richtig war ${res.letter}. `));
-    } else {
+    if (!res) {
       const waiting = Object.keys(g.scores).filter((c) => !g.tipped.includes(c));
       if (g.tipped.length) { info.append("Getippt: "); info.append(mk("b", "", g.tipped.join(", "))); }
       else info.append("Noch kein Tipp");
@@ -220,30 +234,147 @@ const Prefix = (() => {
       info.append(" ");
       info.append(btn("Ab dem nächsten Call mitspielen", () => o.act("join"), "pr-sec small"));
     }
-    const sc = chips(ranked(g).map(([c, n]) => `${c} ${n}`));
-    if (res) [...sc.children].forEach((ch, i) => {
-      if (res.right.includes(ranked(g)[i][0])) ch.classList.add("ok");
-    });
+    const rk = ranked(g);                            // CR126: the right ones green with a tick
+    const sc = chips(rk.map(([c, n]) => (res && res.right.includes(c) ? "✓ " : "") + `${c} ${n}`));
+    if (res) [...sc.children].forEach((ch, i) => { if (res.right.includes(rk[i][0])) ch.classList.add("ok"); });
     foot.append(info, sc);
     inner.append(foot, mk("div", "pr-err", ERR[k.err] || k.err || ""));
     c.append(inner);
     box.append(c);
   }
 
-  function drawOver(box, g, k, o) {
+  const pct = (a, b) => (b ? Math.round(100 * a / b) : 0);
+  function bar(q) {
+    const b = mk("span", "pr-qbar");
+    const i = mk("i"); i.style.width = q + "%"; b.append(i);
+    return b;
+  }
+  function table(head, rows) {
+    const t = mk("table", "pr-tab");
+    const tr = mk("tr");
+    for (const [h, cls] of head) tr.append(mk("th", cls || "", h));
+    t.append(tr);
+    for (const r of rows) t.append(r);
+    return t;
+  }
+  const MEDAL = ["🥇", "🥈", "🥉"];
+
+  function drawOver(box, g, k, o) {                  // CR126: the overview at the end, for everybody
     const c = card("game");
     const inner = mk("div", "pr-gin");
     inner.append(headBar(g, o));
-    let msg;
-    if (g.stopped) msg = g.stopped === "no_players" ? "Abgebrochen – niemand spielt mit."
-      : "Abgebrochen" + (g.stopped.startsWith("by ") ? " von " + g.stopped.slice(3) : "") + ".";
-    else msg = (g.winners || []).length ? `🏆 Sieger: ${g.winners.join(" und ")}` : "Keine Punkte vergeben.";
-    inner.append(mk("div", "pr-result", msg), chips(ranked(g).map(([c, n]) => `${c} ${n}`)));
+    const rk = ranked(g);
+    const asked = g.asked || {};
+    if (g.stopped) {
+      inner.append(mk("div", "pr-result", g.stopped === "no_players" ? "Abgebrochen – niemand spielt mit."
+        : "Abgebrochen" + (g.stopped.startsWith("by ") ? " von " + g.stopped.slice(3) : "") + "."));
+    } else {
+      const w = g.winners || [];
+      const best = w.length ? g.scores[w[0]] : 0;
+      inner.append(mk("div", "pr-result", w.length
+        ? `🏆 Sieger: ${w.join(" und ")} – ${best} von ${asked[w[0]] || g.calls}` : "Keine Punkte vergeben."));
+      const sumR = rk.reduce((a, [, n]) => a + n, 0), sumA = rk.reduce((a, [c]) => a + (asked[c] || 0), 0);
+      inner.append(mk("div", "pr-hint", `${rk.length} Spieler · ${sumR} von ${sumA} richtig (${pct(sumR, sumA)} %)`));
+    }
+    const cols = mk("div", "pr-cols");
+    const left = mk("div", "");
+    left.append(mk("div", "pr-lab", "Teilnehmer"));
+    left.append(table([["", ""], ["Call", ""], ["richtig", "n"], ["Quote", ""], ["insgesamt", "n"]],
+      rk.map(([call, n], i) => {
+        const tr = mk("tr", call === g.self ? "me" : "");
+        const a = asked[call] || 0, q = pct(n, a), tot = (g.totals || {})[call];
+        const qc = mk("td", "");
+        qc.append(bar(q), `${q} %`);
+        tr.append(mk("td", "pr-medal", MEDAL[i] || `${i + 1}.`), mk("td", "pr-b", call),
+                  mk("td", "n", `${n} / ${a}`), qc,
+                  mk("td", "n pr-hint", tot ? `${tot.games} Spiel${tot.games === 1 ? "" : "e"} · ${tot.quote} %` : ""));
+        return tr;
+      })));
+    if (g.totals && Object.keys(g.totals).length)
+      left.append(mk("div", "pr-hint", "„insgesamt“: alle Prefix-raten-Spiele auf dieser Box, inkl. diesem"));
+    cols.append(left);
+    if ((g.log || []).length) {
+      const right = mk("div", "");
+      right.append(mk("div", "pr-lab", "Die Calls"));
+      right.append(table([["#", ""], ["Call", ""], ["Lösung", ""], ["richtig", "n"]],
+        g.log.map((x) => {
+          const tr = mk("tr");
+          tr.append(mk("td", "", String(x.k)), mk("td", "pr-mono", x.call), mk("td", "", x.name),
+                    mk("td", "n" + (x.right ? "" : " pr-bad"), x.asked ? `${x.right} / ${x.asked}` : String(x.right)));
+          return tr;
+        })));
+      cols.append(right);
+    }
+    inner.append(cols);
     const acts = mk("div", "pr-acts");
     acts.append(btn("Neues Spiel", () => o.act("close").then(() => o.newGame()), "pr-cta"));
+    if (o.board) acts.append(btn("Bestenliste", () => o.board()));
     inner.append(acts);
     c.append(inner);
     box.append(c);
+  }
+
+  // --- CR126: leaderboards ---------------------------------------------------------------
+  function renderLB(box, lb, o) {
+    box.replaceChildren();
+    const c = mk("div", "pr-card lb");
+    const inner = mk("div", "pr-gin");
+    const head = mk("div", "pr-bar");
+    const tabs = mk("span", "pr-tabs");
+    const all = btn("🏆 Alle Spiele", () => o.show(""), lb.want === "" ? "on" : "");
+    tabs.append(all);
+    for (const [g, [ic, name]] of Object.entries(GAME))
+      tabs.append(btn(`${ic} ${name}`, () => o.show(g), lb.want === g ? "on" : ""));
+    head.append(tabs, btn("✕", () => o.close(), "pr-sec small"));
+    inner.append(head);
+    const d = lb.data;
+    if (lb.err) inner.append(mk("div", "pr-err", "Die Box kennt diese Bestenliste nicht (" + lb.err + ")."));
+    else if (!d || d.game !== lb.want) inner.append(mk("div", "pr-hint", "Wird von der Box geholt …"));
+    else if (d.game === "") {                          // LB1: all games, the best 3 each
+      inner.append(mk("div", "pr-big", "Leaderboard der Box"));
+      for (const [g, [ic, name, unit]] of Object.entries(GAME)) {
+        const x = d.games[g];
+        if (!x) continue;
+        const sec = mk("div", "pr-lbsec");
+        const sh = mk("div", "pr-bar");
+        const tt = mk("span", ""); tt.append(mk("b", "", `${ic} ${name}`));
+        sh.append(tt, mk("span", "pr-hint", `${x.total} Spiele · ${x.players} Spieler · Quote = ${unit}`));
+        sec.append(sh);
+        if (!x.rows.length) sec.append(mk("div", "pr-hint", "noch keine Spiele"));
+        else sec.append(table([], x.rows.map((r) => lbRow(r, false))));
+        if (x.rows.length) {
+          const more = btn("Alle anzeigen →", () => o.show(g), "pr-more");
+          sec.append(more);
+        }
+        inner.append(sec);
+      }
+    } else {                                           // LB2: one game, the best 10
+      const [ic, name, unit] = GAME[d.game] || ["", d.game, ""];
+      const x = d.games[d.game] || { rows: [], total: 0, players: 0 };
+      const h = mk("div", "pr-bar");
+      const tt = mk("span", ""); tt.append(mk("span", "pr-big", `${ic} Leaderboard ${name}`));
+      h.append(tt, mk("span", "pr-hint", `Top 10 · ${x.total} Spiele · ${x.players} Spieler`));
+      inner.append(h);
+      const pre = d.game === "prefix";
+      const heads = [["", ""], ["Call", ""], ["Spiele", "n"], [`Quote (${unit})`, ""]];
+      if (pre) heads.push(["richtig / Tipps", "n"]);
+      const rows = x.rows.map((r) => lbRow(r, pre));
+      if (x.me) { const sep = mk("tr", "pr-sep"); sep.append(mk("td", "", "…")); rows.push(sep, lbRow(x.me, pre, true)); }
+      if (!x.rows.length) inner.append(mk("div", "pr-hint", "noch keine Spiele"));
+      else inner.append(table(heads, rows));
+    }
+    c.append(inner);
+    box.append(c);
+
+    function lbRow(r, pre, mine) {
+      const tr = mk("tr", mine || r.call === o.me ? "me" : "");
+      const q = mk("td", "pr-q");
+      q.append(bar(r.quote), `${r.quote} %`);
+      tr.append(mk("td", "pr-medal", MEDAL[r.rank - 1] || `${r.rank}.`), mk("td", "pr-b", r.call),
+                mk("td", "n", lb.want === "" ? `${r.games} Spiel${r.games === 1 ? "" : "e"}` : String(r.games)), q);
+      if (pre) tr.append(mk("td", "n", `${r.hits ?? 0} / ${r.tries ?? 0}`));
+      return tr;
+    }
   }
 
   function render(box, k, o) {
@@ -286,8 +417,12 @@ const Prefix = (() => {
       case "Q": { const o = rest.split(" ").slice(3).join(" ").split("|");
                   return `🎯 ${p[0]}: ${p[1]}?  ` + o.map((n, i) => `${"ABC"[i]} ${n}`).join("  "); }
       case "TIP": return `🎯 ${p[0]} hat getippt`;
-      case "RES": return `🎯 ${p[0]}: richtig war ${p[1]} – ${tab(p.slice(2))}`;
+      case "RES": { const xy = p[2] && !p[2].includes("=") && p[2].includes("/") ? p[2] : "";
+                    return `🎯 ${p[0]}: richtig war ${p[1]}` + (xy ? ` (${xy.replace("/", " von ")})` : "") +
+                           ` – ${tab(p.slice(xy ? 3 : 2))}`; }
       case "END": return `🎯 Spielende – ${tab(p)}`;
+      case "ALL": return `🎯 Insgesamt auf der Box: ${p.map((x) => { const [c, v] = x.split("=");
+                    const [n, q] = (v || "").split("/"); return `${c} ${n} Spiel${n === "1" ? "" : "e"} ${q} %`; }).join(", ")}`;
       case "STOP": return "🎯 Prefix raten abgebrochen" +
         (rest === "no_players" ? " – niemand spielt mit" : rest.startsWith("by ") ? " von " + rest.slice(3) : "");
       default: return text;
@@ -297,5 +432,5 @@ const Prefix = (() => {
   // the countdowns run without a new snapshot
   setInterval(() => { for (const r of document.querySelectorAll(".pr-ring[data-until]")) paint(r); }, 200);
 
-  return { render, line, folded: () => fold };
+  return { render, renderLB, line, folded: () => fold };
 })();

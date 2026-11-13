@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.11.2026 (CR127 erfasst; CR126 erfasst; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 13.11.2026 (CR127 erfasst; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -98,7 +98,7 @@ Stand: 13.11.2026 (CR127 erfasst; CR126 erfasst; CR124; CR123; CR122; CR87–CR1
 | 123 | Prefix raten im Chatboard: die Box nennt ein Rufzeichen, Spieler tippen die DXCC-Entität (A/B/C); Stufen, IARU-Regionen, Anzahl Calls, Anmeldung, Zuschauer, 30-s-Timer, einklappbar | ✅ 12.11.2026 (Client 2026.11.12.5, Funktest offen) – siehe unten |
 | 124 | Prefix raten: Oberfläche auf Deutsch, Kreis-Timer (schrumpfende Fläche, Sekunden mittig) für Anmeldung und Tipp, Starter kann die Anmeldung vorzeitig beenden, attraktivere Einladung, gewählter Tipp farbig, Weltkarte als Hintergrund | ✅ 13.11.2026 (Client 2026.11.13, Funktest offen) – siehe unten |
 | 125 | TinyBox: bis zu 5 gleichberechtigte Sysops – `sysop_call` in `tinybox.conf` nimmt eine Liste, Post an den Sysop geht an `SYSOP` (alle) | offen – siehe unten |
-| 126 | Prefix raten: Antwortzeit 5–30 s einstellbar, Ergebnis nach jedem Call, Übersicht am Spielende, Spielerliste auf der Box (Spiele, richtige/alle Tipps), Sysop löscht Scores – für alle Spiele | offen – siehe unten |
+| 126 | Prefix raten: Antwortzeit 5–30 s einstellbar, Ergebnis nach jedem Call, Übersicht am Spielende, Spielerliste auf der Box (Spiele, richtige/alle Tipps), Sysop löscht Scores – für alle Spiele | ✅ 13.11.2026 (Client 2026.11.13.3, Funktest offen) – siehe unten |
 | 127 | Spielergebnisse (Schach, CQ Contest) vom Client signiert an die Box melden – zählt nur, wenn beide Spieler dasselbe Ergebnis signiert melden | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
@@ -4855,7 +4855,7 @@ Zusätzlich:
 - Bestehende Post an das Rufzeichen des bisherigen Sysops bleibt, wie sie ist (keine Migration),
   oder auf `SYSOP` umschreiben? Vorschlag: bleibt.
 
-## CR126 – Prefix raten: Antwortzeit, Ergebnisse, Spielerliste; Scores aller Spiele löschen (offen)
+## CR126 – Prefix raten: Antwortzeit, Ergebnisse, Spielerliste; Scores aller Spiele löschen (✅ 13.11.2026, Client 2026.11.13.3)
 
 ### Erfassung (OE3GAS, 13.11.2026)
 
@@ -4924,6 +4924,21 @@ Mit Rückfrage („wirklich? J/N“) und Eintrag im Log. Andere Spiele schreiben
   Contest nur weitergereicht; wäre Selbstauskunft), kommt als eigener CR. Bis dahin zeigen deren
   Sektionen „noch keine Spiele“.
 - Entschieden: Leaderboards ab dem 1. Spiel. Das Melden von Schach und CQ Contest: CR127.
+
+### Umsetzung (13.11.2026, Client 2026.11.13.3)
+
+- TinyBox `games.py` (neu): Tabelle `game_stats` (game, call ohne SSID, games, wins, draws, hits, tries,
+  asked, last) und `game_totals`; Quote je Spiel, Ränge, `//GAMES TOP [spiel]` (Antwort `//GAMES G/R/ME/END`),
+  Terminal `/TOP [spiel]` im Board, Sysop-Konsole `GAMES` und `GAMES CLEAR <spiel|ALL> [call]` – zeigt
+  zuerst, löscht mit `CONFIRM`; auch über `//ADM`. PURGE löscht die Spielstände des Calls mit.
+- `prefixgame.py`: `t=5..30` (Standard 30), `PR OPEN` mit der Tippzeit, `PR RES … x/y`,
+  `PR END call=richtig/gefragt`, danach `PR ALL call=spiele/quote`; ein fertiges Spiel geht in die
+  Spielstände (abgebrochene nicht). Quote Prefix raten = richtige / abgegebene Tipps.
+- Client: Setup mit „Wie lange darf getippt werden?“ (−/+ in 5-s-Schritten) und Spieldauer; nach jedem
+  Call „= Lösung“ und „x von y richtig“, Chips der Richtigen grün mit ✓; Übersicht am Spielende
+  (Sieger, Summe, Teilnehmer mit Quote und „insgesamt“, die Calls); Knopf „🏆 Bestenliste“ im Board-Kopf
+  und am Spielende: LB1 (alle Spiele, Top 3) und LB2 (je Spiel Top 10, eigene Zeile darunter).
+- Tests `tests/test_cr126.py`.
 
 ## CR127 – Spielergebnisse signiert an die Box melden (Schach, CQ Contest) (offen)
 

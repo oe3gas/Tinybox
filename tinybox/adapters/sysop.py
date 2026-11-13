@@ -541,6 +541,11 @@ class SysopConsole:
         ok = self.app.service.unban(call)
         self.out(f"{call.upper()}: may connect again." if ok else f"{call.upper()}: not banned.")
 
+    def cmd_games(self, arg: str) -> None:
+        """CR126: scores of the games - GAMES, GAMES CLEAR <game|ALL> [call] [CONFIRM]."""
+        from .. import games
+        self.out(*games.console(self.app.service.store, arg.strip()))
+
     def cmd_purge(self, arg: str) -> None:
         """CR115: PURGE call [reason] shows what goes; PURGE call CONFIRM [reason] does it."""
         from prcore import auth
@@ -663,7 +668,7 @@ class SysopConsole:
     # output to this window), B (closes the console), UPDATE (answers later).
     REMOTE = ("H", "?", "HELP", "INFO", "W", "WHO", "STATUS", "DISC", "BEACON", "FWD", "FWQ",
               "HOLD", "REL", "SHUTDOWN", "RESTART", "RELOAD", "USER", "TRUST",
-              "KILL", "MOVE", "COPY", "FILES", "BAN", "UNBAN", "PURGE")
+              "KILL", "MOVE", "COPY", "FILES", "BAN", "UNBAN", "PURGE", "GAMES")
 
     def remote(self, line: str) -> bool:
         """One console command from the admin channel; False if not allowed there."""
@@ -702,4 +707,5 @@ class SysopConsole:
         "BAN": cmd_ban,
         "UNBAN": cmd_unban,
         "PURGE": cmd_purge,
+        "GAMES": cmd_games,
     }

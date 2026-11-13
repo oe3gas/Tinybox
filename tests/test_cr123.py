@@ -141,14 +141,15 @@ class BoardTests(unittest.TestCase):
         type_lines(b, f"//PR {wrong}")                       # all tipped: the answer at once
         ev = self.events(tw)
         self.assertEqual(ev[0], "TIP OE3TEC")
-        self.assertEqual(ev[1], f"RES 1 {right} OE3GAS=1+ OE3TEC=0")
+        self.assertEqual(ev[1], f"RES 1 {right} 1/2 OE3GAS=1+ OE3TEC=0")
         self.timers.fire()                                   # the pause: question 2
         ev = self.events(tw)
         self.assertTrue(ev[0].startswith("Q 2/2 "))
         self.timers.fire()                                   # nobody tips: time is up
         ev = self.events(tw)
         self.assertTrue(ev[0].startswith("RES 2 "))
-        self.assertEqual(ev[1], "END OE3GAS=1 OE3TEC=0")
+        self.assertEqual(ev[1], "END OE3GAS=1/2 OE3TEC=0/2")
+        self.assertEqual(ev[2], "ALL OE3GAS=1/100 OE3TEC=1/0")     # CR126: games/quote (right of the tips)
         self.assertIsNone(box.game_in("TREFF"))
 
     def test_terminal_plays_and_reads_text(self):
@@ -163,7 +164,7 @@ class BoardTests(unittest.TestCase):
         type_lines(a, "/PR " + "ABC"[g.q.right])
         out = ta.take()
         self.assertIn("Tip", out)
-        self.assertIn("Prefix raten over: OE3GAS 1 - winner OE3GAS", out)
+        self.assertIn("Prefix raten over: OE3GAS 1/1 - winner OE3GAS", out)
 
     def test_errors_and_stop(self):
         a, ta = self.client("OE3GAS")
@@ -254,7 +255,7 @@ class ClientTests(unittest.TestCase):
             self.assertTrue(pg_.act("go"))
             self.assertEqual(sent[-1], "//PR GO")
             self.assertTrue(pg_.act("start", "PRO 2 2"))
-            self.assertEqual(sent[-1], "//PR START s=PRO r=2 n=2")
+            self.assertEqual(sent[-1], "//PR START s=PRO r=2 n=2 t=30")
             type_lines(s, sent[-1])
             feed()
             g = pg_.summary(1000.0)

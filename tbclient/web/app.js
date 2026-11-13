@@ -303,6 +303,7 @@ function render() {
   renderMessages();
   renderBoxContest();                               // CR122
   renderPrefix();                                   // CR123
+  renderLeaderboard();                              // CR126
   renderInvites();
 }
 
@@ -3285,6 +3286,22 @@ function renderPrefix() {
     hide: () => { prOpen = false; render(); },
     newGame: () => { prOpen = true; render(); },
     redraw: () => render(),
+    board: (S.games || {}).ok ? () => api("games", { act: "top", arg: "" }) : null,
+  });
+}
+
+/* CR126: the leaderboards of the box (LB1 all games, LB2 one game) */
+function renderLeaderboard() {
+  const g = S.games || {};
+  const bh = $("bh-top");
+  if (bh) { bh.classList.toggle("hidden", !g.ok); bh.classList.toggle("active", !!g.lb); }
+  const box = $("leaderboard");
+  box.classList.toggle("hidden", !g.lb);
+  if (!g.lb) return;
+  Prefix.renderLB(box, g.lb, {
+    me: baseCall(S.mycall),
+    show: (game) => api("games", { act: "top", arg: game }),
+    close: () => api("games", { act: "close" }),
   });
 }
 
@@ -4111,6 +4128,7 @@ async function start() {
   $("nav-terminal").onclick = openTerm;
   $("nav-contest").onclick = () => { boxContestOpen = !boxContestOpen; render(); };     // CR122
   $("bh-prefix").onclick = () => { prOpen = !prOpen; render(); };                       // CR123
+  $("bh-top").onclick = () => api("games", (S.games || {}).lb ? { act: "close" } : { act: "top", arg: "" });  // CR126
   $("pick-contest").onclick = () => { boxContestOpen = true; render(); };
   $("bh-leave").onclick = () => api("leave");
   const openSheet = (focus) => {

@@ -17,6 +17,7 @@ API:
   POST /api/peer/heard {"ch": n}             CR78: ask the TBClient there whom it hears
   POST /api/peer/fun  {"ch", "act", "arg"}   CR78: ping, speed, chess-new/move/resign/end/close,
                                               CR122: ct-new/place/random/ready/cq/resign/close
+  POST /api/games     {"act", "arg"}          CR126: leaderboards (top [game], close)
   POST /api/prefix    {"act", "arg"}          CR123: Prefix raten (start "OM 12 10", join, tip "A", stop, close)
   POST /api/contest   {"act", "arg", "to"}    CR122: the same against the TinyBox (new/place/...),
                                               with "to": against that client, through the box
@@ -315,6 +316,8 @@ class WebServer:
             elif path == "/api/contest":           # CR122: {"act", "arg"} CQ contest vs the box
                 ok = core.contest_act(str(data.get("act", "")), str(data.get("arg", "")),
                                       str(data.get("to", ""))[:12])
+            elif path == "/api/games":             # CR126: {"act": top|close, "arg": game} leaderboards
+                ok = core.games_act(str(data.get("act", "")), str(data.get("arg", ""))[:20])
             elif path == "/api/prefix":            # CR123: {"act", "arg"} Prefix raten in the board
                 ok = core.prefix_act(str(data.get("act", "")), str(data.get("arg", ""))[:40])
             elif path == "/api/peer/clear":        # CR78: {"ch": n} - delete the chat history

@@ -186,6 +186,7 @@ CHAT_HELP = [
     "  /H n       Show the last n stored lines",
     "  /PR START s=OM r=123 n=10   Prefix raten (s: NC OM PRO GOD, r: IARU regions)",
     "  /PR JOIN   Play along, /PR A|B|C your tip; who started: /PR GO, /PR STOP",
+    "  /TOP [game]  Leaderboards of the games (prefix, contest, chess)",
     "  /H         This help",
 ]
 
@@ -273,6 +274,8 @@ HELP_CONSOLE = [
     "  PURGE call [reason]  Ban AND delete his keys, profile, logins, chat lines, board",
     "                 files (mail, bulletins, connection log stay) - shows first, then",
     "                 PURGE call CONFIRM",
+    "  GAMES          Scores of the games (CR126) / GAMES CLEAR <game|ALL> [call]: delete",
+    "                 them (all players or one) - shows first, then ... CONFIRM",
 ]
 UPDATE_ASKING = "Asking GitHub for the newest release ..."
 UPDATE_UNKNOWN = "Update: no answer from GitHub (offline?)."

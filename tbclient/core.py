@@ -30,7 +30,7 @@ from .logbook import Logbook
 from .mailstore import MailStore
 from . import peerfile
 from .contest import ContestSlot
-from .prefixgame import PrefixGame
+from .prefixgame import Leaderboard, PrefixGame
 from .peerchat import PeerChat
 from .boardfiles import BoardFiles
 from .peerfile import FileStore
@@ -195,6 +195,7 @@ class ClientCore:
                                        lambda text: self.console.append("*** " + text))
         self.relay_contests: dict[str, ContestSlot] = {}      # CR122: through the box
         self.prefix = PrefixGame(self._send, lambda: self.cfg.mycall.upper())   # CR123
+        self.leaderboard = Leaderboard(self._send)                                 # CR126
 
     # --- settings --------------------------------------------------------
 
@@ -576,6 +577,17 @@ class ClientCore:
         if not offline_ok and (self.state != "online" or "CT" not in self.caps):
             return False
         return self.box_contest.act(act, arg)
+
+    def games_act(self, act: str, arg: str = "") -> bool:
+        """CR126: leaderboards - top (arg: game or empty) / close."""
+        if act == "close":
+            self.leaderboard.close()
+        elif act == "top" and self.state == "online" and "GAMES" in self.caps:
+            self.leaderboard.ask(arg.strip().lower())
+        else:
+            return False
+        self._touch()
+        return True
 
     def prefix_act(self, act: str, arg: str = "") -> bool:
         """CR123: Prefix raten in the board (start / join / tip / stop / close)."""
@@ -970,7 +982,7 @@ class ClientCore:
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
         caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
+        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR,GAMES" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
         self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
 
@@ -1485,6 +1497,9 @@ class ClientCore:
                 self.console.append("*** " + text)
         elif cmd == "CT":                  # CR122: the box plays the CQ contest
             self.box_contest.take(rest)
+        elif cmd == "GAMES":               # CR126: leaderboards
+            self.leaderboard.line(rest)
+            self._touch()
         elif cmd == "PR":                  # CR123: the box answers a Prefix raten command
             self.prefix.answer(rest)
             self._touch()
@@ -1750,6 +1765,7 @@ class ClientCore:
                         "rel_ok": "CTR" in self.caps, "rel": self._relay_summary()},
             "prefix": {"ok": "PR" in self.caps and bool(self.board), "err": self.prefix.err,  # CR123
                        "game": self.prefix.summary()},
+            "games": {"ok": "GAMES" in self.caps, "lb": self.leaderboard.summary()},   # CR126
         }
 
     def _image_refs(self, ch: int | None = None) -> set[str]:

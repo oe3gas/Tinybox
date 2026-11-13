@@ -148,6 +148,22 @@ CREATE TABLE IF NOT EXISTS chat_files (               -- files in a board (CR86)
     call    TEXT NOT NULL,                            -- who uploaded it
     created TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS game_stats (               -- CR126: leaderboards of the games, per base call
+    game   TEXT NOT NULL,                             -- prefix | contest | chess | ...
+    call   TEXT NOT NULL,                             -- without SSID
+    games  INTEGER NOT NULL DEFAULT 0,
+    wins   INTEGER NOT NULL DEFAULT 0,
+    draws  INTEGER NOT NULL DEFAULT 0,
+    hits   INTEGER NOT NULL DEFAULT 0,                -- prefix: right tips
+    tries  INTEGER NOT NULL DEFAULT 0,                -- prefix: tips given
+    asked  INTEGER NOT NULL DEFAULT 0,                -- prefix: calls asked while playing
+    last   TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (game, call)
+);
+CREATE TABLE IF NOT EXISTS game_totals (              -- CR126: games played per game
+    game   TEXT PRIMARY KEY,
+    games  INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS sync_seq (                 -- change counter of the messages (CR26)
     k     INTEGER PRIMARY KEY CHECK (k = 1),
     v     INTEGER NOT NULL,
@@ -712,7 +728,61 @@ class Store:
               ("profile", "profiles", "base = ?", False),
               ("logins", "users", "call = ? OR call LIKE ?", True),
               ("chat lines", "chat_lines", "call = ? OR call LIKE ?", True),
-              ("files", "chat_files", "call = ? OR call LIKE ?", True))
+              ("files", "chat_files", "call = ? OR call LIKE ?", True),
+              ("game scores", "game_stats", "call = ?", False))                # CR126
+
+    # --- CR126: game scores -------------------------------------------------------------
+
+    def game_record(self, game: str, rows: list[dict]) -> None:
+        """One finished game: per player (base call) games +1 and the counters in the row
+        (wins, draws, hits, tries, asked); the game counter +1."""
+        now = utc_now()
+        with self._db:
+            for r in rows:
+                self._db.execute(
+                    "INSERT INTO game_stats (game, call, games, wins, draws, hits, tries, asked, last)"
+                    " VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT (game, call) DO UPDATE SET"
+                    " games = games + 1, wins = wins + excluded.wins, draws = draws + excluded.draws,"
+                    " hits = hits + excluded.hits, tries = tries + excluded.tries,"
+                    " asked = asked + excluded.asked, last = excluded.last",
+                    (game, r["call"], r.get("wins", 0), r.get("draws", 0), r.get("hits", 0),
+                     r.get("tries", 0), r.get("asked", 0), now))
+            self._db.execute("INSERT INTO game_totals (game, games) VALUES (?, 1)"
+                             " ON CONFLICT (game) DO UPDATE SET games = games + 1", (game,))
+
+    def game_rows(self, game: str) -> list[dict]:
+        return [dict(r) for r in self._db.execute(
+            "SELECT * FROM game_stats WHERE game = ?", (game,))]
+
+    def game_total(self, game: str) -> int:
+        r = self._db.execute("SELECT games FROM game_totals WHERE game = ?", (game,)).fetchone()
+        return r[0] if r else 0
+
+    def game_counts(self, game: str | None, call: str | None) -> int:
+        """How many score rows GAMES CLEAR would delete."""
+        q, a = "SELECT COUNT(*) FROM game_stats WHERE 1", []
+        if game:
+            q += " AND game = ?"; a.append(game)
+        if call:
+            q += " AND call = ?"; a.append(call)
+        return self._db.execute(q, a).fetchone()[0]
+
+    def game_clear(self, game: str | None, call: str | None) -> int:
+        """Delete scores: of one game or all (game None), of one player or all (call None).
+        Without a call the game counters go too."""
+        q, a = "DELETE FROM game_stats WHERE 1", []
+        if game:
+            q += " AND game = ?"; a.append(game)
+        if call:
+            q += " AND call = ?"; a.append(call)
+        with self._db:
+            n = self._db.execute(q, a).rowcount
+            if not call:
+                if game:
+                    self._db.execute("DELETE FROM game_totals WHERE game = ?", (game,))
+                else:
+                    self._db.execute("DELETE FROM game_totals")
+        return n
 
     def purge_counts(self, base: str) -> dict[str, int]:
         """What PURGE would delete of base (all SSIDs). Mail, bulletins and the

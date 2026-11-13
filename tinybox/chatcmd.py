@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 from prcore.profile import short as profile_short
 from prcore.text import isnum
 
-from . import clientnews, clientproto, prefixgame, texts
+from . import clientnews, clientproto, games, prefixgame, texts
 from .config import ChatBoard
 
 if TYPE_CHECKING:
@@ -279,6 +279,8 @@ def handle(s: Session, line: str) -> None:
                 pass
             if not ok:
                 s.out("//ERR react" if s.client else texts.CHAT_UNKNOWN)
+        elif cmd == "TOP":                # CR126: leaderboards
+            games.top_text(s, arg)
         elif cmd == "PR":                 # CR123: Prefix raten (terminal users)
             prefixgame.command(s, arg)
         elif cmd in ("H", "HELP", "?") and isnum(arg.strip()):

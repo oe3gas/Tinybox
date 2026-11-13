@@ -9,6 +9,11 @@
   CR124 (Client 2026.11.13): Oberfläche deutsch, Weltkarte als Hintergrund (im Spiel gedämpft und unscharf),
   Kreis-Timer für Anmeldung und Tipp, Einladung als Karte, gewählter Tipp farbig; der Starter beendet die
   Anmeldung vorzeitig mit `//PR GO` (Terminal `/PR GO`).
+- **Spielstände und Leaderboards (CR126):** Prefix raten mit Tippzeit 5–30 s (`t=`), Ergebnis je Call
+  (`RES … x/y`), Übersicht am Spielende (`END call=richtig/gefragt`, `ALL call=spiele/quote`). Neue Tabelle
+  `game_stats` für alle Spiele (Prefix raten zählt jetzt; Schach und CQ Contest mit CR127), Leaderboards
+  `//GAMES TOP [spiel]` (Fähigkeit `GAMES`, Terminal `/TOP`), Sysop `GAMES` / `GAMES CLEAR <spiel|ALL> [call]
+  [CONFIRM]` (auch über `//ADM`); PURGE löscht die Spielstände mit. Client 2026.11.13.3.
 
 - **CQ contest (CR122):** Schiffe versenken mit Amateurfunk-Touch – 8 × 8 Großfelder um die Box bzw. den
   Einladenden, je 5 Conteststationen mit passenden Rufzeichen, Zug `CQ <Großfeld>`, Ausbreitungshinweis

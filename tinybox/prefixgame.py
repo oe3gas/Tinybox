@@ -4,7 +4,7 @@ The box names a made-up call and three entities A, B, C; whoever plays tips
 one. One game per board at a time. Commands of a board member - a TBClient
 sends //PR ..., a terminal user types /PR ...:
 
-    PR START s=<NC|OM|PRO|GOD> r=<1|2|3 combined, e.g. 12> n=<calls 1-50>
+    PR START s=<NC|OM|PRO|GOD> r=<1|2|3 combined, e.g. 12> n=<calls 1-50> [t=<5-30 s>]
     PR JOIN              play along (a chat line "mit" or "join" does the same)
     PR GO                only the one who started: end the signup now (CR124)
     PR A | B | C         the tip - only to the box, nobody else sees it
@@ -16,18 +16,22 @@ Answers only to the sender: //PR OK START|JOIN|GO|STOP, //PR OK TIP <k> <letter>
 The game itself goes to everybody in the board as system events (#<seq> !PR ...),
 so older clients show readable text; terminals get human text:
 
-    PR OPEN <starter> <stage> R<regions> <calls> <entities> <signup sec>
+    PR OPEN <starter> <stage> R<regions> <calls> <entities> <signup sec> <tip sec>
     PR IN <call>                 plays (in the signup, or from the next call on)
     PR GO <call> ...             signup over, the players
     PR Q <k>/<n> <call> <sec> <A>|<B>|<C>      the question; the client counts down
     PR TIP <call>                has tipped (without the letter)
-    PR RES <k> <letter> <call>=<score>[+] ...  the right answer, + = right this time
-    PR END <call>=<score> ...    the game is over
+    PR RES <k> <letter> <right>/<asked> <call>=<score>[+] ...  the right answer, + = right
+                                 this time; right/asked: how many of the players asked
+    PR END <call>=<right>/<asked> ...   the game is over (CR126)
+    PR ALL <call>=<games>/<quote %> ... all games of the players on this box (CR126)
     PR STOP <reason>             called off (by <call> | no_players)
 
 The time goes over the air once with the question; the box's clock decides and
 takes tips GRACE_SEC longer (the frames need their time). The answer comes when
-every player still in the board has tipped, at the latest after TIP_SEC + GRACE_SEC.
+every player still in the board has tipped, at the latest after the tip time + GRACE_SEC.
+The tip time is chosen at the start, TIP_MIN..TIP_SEC (CR126). A finished game goes
+into the scores of the box (games.py); one called off does not.
 """
 
 from __future__ import annotations
@@ -37,7 +41,10 @@ import logging
 import random
 from typing import TYPE_CHECKING, Callable
 
+from prcore import auth
 from prcore import prefixgame as pg
+
+from . import games
 
 if TYPE_CHECKING:
     from .session import Session
@@ -45,7 +52,8 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 SIGNUP_SEC = 60
-TIP_SEC = 30
+TIP_SEC = 30                      # the most and the default (CR126)
+TIP_MIN = 5
 GRACE_SEC = 5
 PAUSE_SEC = 5
 MAX_CALLS = 50
@@ -69,11 +77,14 @@ rng_factory: Callable[[], random.Random] = random.Random
 
 class Game:
     def __init__(self, hub, board: str, starter: str, stage: str, regions: str,
-                 calls: int, pool: list[pg.Entity], rng: random.Random) -> None:
+                 calls: int, pool: list[pg.Entity], rng: random.Random,
+                 tip_sec: int = TIP_SEC) -> None:
         self.hub, self.board, self.starter = hub, board, starter
         self.stage, self.regions, self.calls = stage, regions, calls
-        self.pool, self.rng = pool, rng
+        self.pool, self.rng, self.tip_sec = pool, rng, tip_sec
         self.scores: dict[str, int] = {starter: 0}
+        self.stat: dict[str, dict] = {starter: {"asked": 0, "tries": 0, "hits": 0}}   # CR126
+        self.asked_now: set[str] = set()
         self.phase = "signup"            # signup | ask | wait | over
         self.k = 0
         self.q: pg.Question | None = None
@@ -117,9 +128,9 @@ class Game:
     def open(self) -> None:
         reg = "+".join(self.regions)
         self.emit(f"OPEN {self.starter} {self.stage} R{self.regions} {self.calls} "
-                  f"{len(self.pool)} {SIGNUP_SEC}",
+                  f"{len(self.pool)} {SIGNUP_SEC} {self.tip_sec}",
                   f"Prefix raten: {self.starter} starts {pg.STAGE_NAME[self.stage]}, IARU R{reg}, "
-                  f"{self.calls} calls from {len(self.pool)} entities. "
+                  f"{self.calls} calls from {len(self.pool)} entities, {self.tip_sec} s per call. "
                   f"Play along: /PR JOIN or 'mit' ({SIGNUP_SEC} s)")
         self._set_timer(SIGNUP_SEC, self.go)
 
@@ -127,6 +138,7 @@ class Game:
         if call in self.scores:
             return "twice"
         self.scores[call] = 0
+        self.stat[call] = {"asked": 0, "tries": 0, "hits": 0}
         if self.phase == "ask":
             self.late.add(call)
         self.emit(f"IN {call}", f"Prefix raten: {call} plays along.")
@@ -148,12 +160,15 @@ class Game:
         self.k += 1
         self.q = pg.question(self.pool, self.used, self.rng)
         self.tips, self.late, self.phase = {}, set(), "ask"
+        self.asked_now = set(self.players_here())
+        for c in self.asked_now:
+            self.stat[c]["asked"] += 1
         names = [e.name for e in self.q.options]
-        self.emit(f"Q {self.k}/{self.calls} {self.q.call} {TIP_SEC} " + "|".join(names),
+        self.emit(f"Q {self.k}/{self.calls} {self.q.call} {self.tip_sec} " + "|".join(names),
                   f"Prefix raten {self.k}/{self.calls}: {self.q.call}?  " +
                   "  ".join(f"{LETTERS[i]} {n}" for i, n in enumerate(names)) +
-                  f"  ({TIP_SEC} s, /PR A|B|C)")
-        self._set_timer(TIP_SEC + GRACE_SEC, self.resolve)
+                  f"  ({self.tip_sec} s, /PR A|B|C)")
+        self._set_timer(self.tip_sec + GRACE_SEC, self.resolve)
 
     def tip(self, call: str, letter: str) -> str:
         if self.phase != "ask" or self.q is None:
@@ -168,6 +183,7 @@ class Game:
         if not 0 <= i < len(self.q.options):
             return "bad"
         self.tips[call] = i
+        self.stat[call]["tries"] += 1
         self.emit(f"TIP {call}", None)
         waiting = [c for c in self.players_here() if c not in self.tips and c not in self.late]
         if not waiting:
@@ -182,9 +198,11 @@ class Game:
         right = {c for c, i in self.tips.items() if i == q.right}
         for c in right:
             self.scores[c] += 1
+            self.stat[c]["hits"] += 1
         letter, name = LETTERS[q.right], q.options[q.right].name
-        self.emit(f"RES {self.k} {letter} {self._table(right)}",
-                  f"Prefix raten {self.k}: {q.call} is {letter} {name}. " +
+        n_right, n_asked = len(right & self.asked_now), len(self.asked_now)
+        self.emit(f"RES {self.k} {letter} {n_right}/{n_asked} {self._table(right)}",
+                  f"Prefix raten {self.k}: {q.call} is {letter} {name}, {n_right} of {n_asked} right. " +
                   ", ".join(f"{c} {n}" for c, n in self._ranked()))
         if self.k >= self.calls:
             self.end()
@@ -197,11 +215,29 @@ class Game:
         ranked = self._ranked()
         best = ranked[0][1] if ranked else 0
         winners = [c for c, n in ranked if n == best]
-        self.emit("END " + self._table(),
-                  "Prefix raten over: " + ", ".join(f"{c} {n}" for c, n in ranked) +
+        self.emit("END " + " ".join(f"{c}={n}/{self.stat[c]['asked']}" for c, n in ranked),
+                  "Prefix raten over: " + ", ".join(f"{c} {n}/{self.stat[c]['asked']}" for c, n in ranked) +
                   (f" - winner {' and '.join(winners)}" if best else ""))
         _games.pop(self.board, None)
+        self._record(winners if best else [])
         log.info("prefix game in %s over: %s", self.board, self._table())
+
+    def _record(self, winners: list[str]) -> None:
+        """CR126: the finished game into the scores of the box, then everybody's totals."""
+        played = [c for c in self.scores if self.stat[c]["asked"]]
+        if not played:
+            return
+        store = self.hub.store
+        games.record(store, "prefix", [dict(self.stat[c], call=c, wins=int(c in winners))
+                                       for c in played])
+        rows = {r["call"]: r for r in games.ranked(store, "prefix")}
+        tot = []
+        for c in played:
+            r = rows.get(auth.base(c.upper()))
+            if r:
+                tot.append(f"{c}={r['games']}/{r['quote']}")
+        if tot:
+            self.emit("ALL " + " ".join(tot), None)
 
     def stop(self, reason: str) -> None:
         self._cancel()
@@ -217,7 +253,7 @@ _HUMAN_ERR = {
     "busy": "A game is already running in this board.",
     "no_game": "No Prefix raten game in this board.",
     "no_board": "Join a board first.",
-    "bad": "Usage: /PR START s=NC|OM|PRO|GOD r=123 n=10, /PR JOIN, /PR GO, /PR A|B|C, /PR STOP",
+    "bad": "Usage: /PR START s=NC|OM|PRO|GOD r=123 n=10 t=30, /PR JOIN, /PR GO, /PR A|B|C, /PR STOP",
     "no_pool": "No entities for these regions and this stage.",
     "not_open": "The signup is over.",
     "not_player": "You do not play - /PR JOIN first.",
@@ -246,9 +282,10 @@ def _start(s: "Session", args: list[str]) -> None:
     regions = "".join(sorted(set(kv.get("r", "123")) & set("123")))
     try:
         calls = int(kv.get("n", "10"))
+        tip = int(kv.get("t", str(TIP_SEC)))
     except ValueError:
-        calls = 0
-    if stage is None or not regions or not 1 <= calls <= MAX_CALLS:
+        calls = tip = 0
+    if stage is None or not regions or not 1 <= calls <= MAX_CALLS or not TIP_MIN <= tip <= TIP_SEC:
         _answer(s, err="bad")
         return
     rng = rng_factory()
@@ -256,7 +293,7 @@ def _start(s: "Session", args: list[str]) -> None:
     if len(pool) < 3:
         _answer(s, err="no_pool")
         return
-    g = Game(s.service.chat, board, s.call, stage, regions, calls, pool, rng)
+    g = Game(s.service.chat, board, s.call, stage, regions, calls, pool, rng, tip)
     _games[board] = g
     _answer(s, ok="START")
     g.open()
