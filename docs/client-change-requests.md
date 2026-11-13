@@ -101,6 +101,7 @@ Stand: 13.11.2026 (CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus de
 | 126 | Prefix raten: Antwortzeit 5–30 s einstellbar, Ergebnis nach jedem Call, Übersicht am Spielende, Spielerliste auf der Box (Spiele, richtige/alle Tipps), Sysop löscht Scores – für alle Spiele | ✅ 13.11.2026 (Client 2026.11.13.3, Funktest offen) – siehe unten |
 | 127 | Spielergebnisse (Schach, CQ Contest) vom Client signiert an die Box melden – zählt nur, wenn beide Spieler dasselbe Ergebnis signiert melden | ✅ 13.11.2026 (Client 2026.11.13.5, Funktest offen) – siehe unten |
 | 128 | Spiele: keine Terminal-User; Zuschauer sehen nur, dass ein Spiel läuft (Prefix raten, Elmer Quiz) | offen – siehe unten |
+| 129 | Spiele in der Sprache der Box (`[games] language` in tinybox.conf), jeder Client darf eine eigene wählen; Prefix raten schickt DXCC-Nummern statt Ländernamen | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -5071,4 +5072,89 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
   Sprache – Vorbereitung für die Sprachwahl je Spiel in der Konfiguration (Frage von OE3GAS, noch
   zu entscheiden). Die Chat-Notizen in `tbclient/contest.py` sind vorerst nur deutsch.
 - Funk-Jargon bleibt: „QRZ?“, „5NN“, „73 de … · gl next time“, „tnx fer the contest“, „QRV“.
+
+## CR129 – Sprache der Spiele: die Box gibt sie vor, jeder Client darf eine eigene wählen; Prefix raten mit DXCC-Nummern (offen)
+
+### Erfassung (OE3GAS, 14.11.2026)
+
+Frage: Sind die Spiele so gebaut, dass sie leicht deutsch oder englisch angeboten werden können –
+festgelegt in `tinybox.conf` bzw. `tbclient.conf`? Entscheidungen:
+
+1. **Eine Sprache für alle Spiele einer Box** – sie hängt vom Standort der Box ab.
+2. **Jeder Client darf seine eigene Sprache haben**, auch innerhalb eines Spiels (einer spielt
+   deutsch, der andere englisch). Ohne eigene Einstellung übernimmt der Client die Sprache der Box.
+3. Die **übrige Oberfläche** des Clients bleibt englisch. Die TinyBox selbst ins Englische zu
+   übersetzen, ist ein späteres Thema (nicht Teil dieses CR).
+4. **Prefix raten wird gleich mit umgestellt:** die Box schickt DXCC-Nummern statt Ländernamen.
+
+### Stand vor dem CR (14.11.2026)
+
+- Jedes Spiel hat schon eigene Module: Regeln/Box (`prcore/contest.py`, `tinybox/contest.py`,
+  `tinybox/prefixgame.py`), Client (`tbclient/contest.py`, `tbclient/prefixgame.py`), Oberfläche
+  (`contest.js`, `prefix.js`, `chess.js`).
+- **CQ Contest:** Protokoll ohne Sprache (`//CT …`), Texte als Tabelle `TX.de` / `TX.en` in
+  `contest.js` (CR122 Nachtrag 6) – fehlt nur die Auswahl. Die Chat-Notizen in
+  `tbclient/contest.py` sind nur deutsch.
+- **Schach:** Protokoll ohne Sprache, Oberfläche nur englisch, wenig Text.
+- **Prefix raten:** Oberfläche nur deutsch (CR124). Die Box schickt die Ländernamen als Text:
+  `PR Q <k>/<n> <call> <sec> <A>|<B>|<C>` (Spalte `anzeige` in `prcore/prefixraten.csv`, deutsch) –
+  alle sehen die Sprache der Box.
+- **Elmer Quiz** (PLANUNG 33): noch in Planung.
+- In den conf-Dateien gibt es noch nichts zu Spielen.
+
+### Vorschlag zur Umsetzung (Claude)
+
+**Konfiguration**
+
+- `tinybox.conf`, neuer Abschnitt:
+
+      [games]
+      language = de          # de | en – die Sprache aller Spiele dieser Box (Standort)
+
+  Die Box meldet sie dem Client beim Verbinden (z. B. `lang=de` in der `//OK`-Zeile des
+  Handshakes) – ältere Clients ignorieren das. Sie gilt überall, wo die Box selbst Text erzeugt.
+- `tbclient.conf`, neuer Abschnitt:
+
+      [games]
+      language =             # leer = die Sprache der Box übernehmen; de | en = immer diese
+
+  Leer ist der Normalfall (niemand muss etwas einstellen); `de`/`en` z. B. für Gäste an einer
+  anderssprachigen Box. Bei Client↔Client-Spielen (Schach, CQ Contest direkt) gilt die eigene
+  Einstellung, ohne sie die Sprache der Box, an der der Client zuletzt war, sonst `en`.
+- Im Snapshot `S.lang` (die gültige Sprache); `app.js` setzt damit `Contest.setLang`, `Prefix.setLang`,
+  `Chess.setLang`.
+
+**Spiele**
+
+- **CQ Contest:** Auswahl verdrahten; die Chat-Notizen in `tbclient/contest.py` ebenfalls als
+  kleine Tabelle de/en.
+- **Schach:** Texte als Tabelle de/en wie beim Contest (wenig Aufwand).
+- **Prefix raten – DXCC-Nummern statt Namen:**
+  - Die Box schickt `PR Q <k>/<n> <call> <sec> <dxcc A>|<dxcc B>|<dxcc C>`, z. B. `…|497|499|296`.
+    Das spart auch Bytes über Funk (eine Zahl statt „Bundesrepublik Deutschland“).
+  - Der Client schlägt den Namen in `prcore/prefixraten.csv` nach (liegt im selben Repo, kommt
+    mit dem Client mit) – in seiner Sprache.
+  - `prefixraten.csv` bekommt eine zweite Namensspalte (`anzeige_en`, englische Namen nach der
+    ARRL-DXCC-Liste); `anzeige` bleibt die deutsche.
+  - Wo die Antwort in Zeilen vorkommt (`PR RES …`), ebenfalls nur Buchstabe/Nummer.
+  - Oberfläche `prefix.js`: Texte als Tabelle de/en (heute nur deutsch, CR124).
+  - **Box und Clients müssen gemeinsam aktualisiert werden** (die Zeile `PR Q` ändert sich). Damit
+    ein älterer Client nicht falsche Antworten sieht: neue Fähigkeit (z. B. `PR2`) – die Box schickt
+    Nummern nur an Clients mit `PR2`, älteren weiter die Namen (deutsch) oder lässt sie nicht
+    mitspielen (zu entscheiden bei der Umsetzung).
+  - Achtung: Ein Client mit einer **älteren CSV** kennt eine neue DXCC-Nummer nicht – dann zeigt er
+    die Nummer mit dem Präfix aus der Box-Zeile als Rückfall (selten: neue Entitäten).
+- **Elmer Quiz:** gleich mit Nummern planen – die Box schickt die Nummer der Frage (bzw. bei den
+  erzeugten Rechenaufgaben nur die Zahlen), Fragen und Antworten liegen in beiden Sprachen beim
+  Client. Neue Fragen brauchen dann ein Client-Update (Nachtrag in PLANUNG 33).
+
+**Was die Box selbst noch an Text erzeugt** (Hinweise an Terminal-User, Konsole) bleibt in der
+Sprache aus `[games] language` – mit CR128 spielen Terminal-User ohnehin nicht mehr mit.
+
+**Tests**
+
+- Handshake meldet `lang`; Client ohne eigene Einstellung übernimmt sie, mit Einstellung nicht.
+- Prefix raten: zwei Clients mit `de` und `en` im selben Spiel bekommen dieselbe `PR Q`-Zeile und
+  zeigen die Namen in ihrer Sprache; älterer Client ohne `PR2` (Verhalten wie entschieden).
+- Jede DXCC-Nummer der CSV hat einen deutschen und einen englischen Namen.
 
