@@ -4980,11 +4980,11 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
 ### Grenzen
 
 - Zwei Spieler, die sich absprechen, können gemeinsam ein ausgedachtes Spiel melden – beide müssten
-  dafür ihren eigenen Schlüssel einsetzen. Vorschlag: höchstens 10 gezählte Spiele je Paar und Tag.
+  dafür ihren eigenen Schlüssel einsetzen. Begrenzt auf höchstens 50 gezählte Spiele je Paar und Tag.
 - Beide müssen an **dieselbe** Box melden. Haben die Spieler verschiedene Heimat-Boxen, zählt das Spiel
   dort nicht (später ggf. über Forwarding).
 
 ### Entschieden (OE3GAS, 13.11.2026)
 
-- Höchstens 10 gezählte Spiele je Spielerpaar und Tag (UTC); weitere Meldungen: `//GAME ERR <id> limit`.
+- Höchstens 50 gezählte Spiele je Spielerpaar und Tag (UTC); weitere Meldungen: `//GAME ERR <id> limit`.
 - Spiele zwischen Spielern verschiedener Heimat-Boxen zählen vorerst nicht (später ggf. über Forwarding).
