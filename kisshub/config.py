@@ -7,6 +7,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
+from prcore.conf import ConfigError     # one error class for all programs (R7)
 from prcore import direwolfconf, kiss, release, termcolor
 
 from . import modem73 as m73
@@ -20,10 +21,6 @@ AX25_KEYS = {"paclen": (int, 16, 256), "maxframe": (int, 1, 7), "maxframe_ext": 
              "t2_sec": (float, 0, 3600), "t3_sec": (float, 0, 3600)}
 AX25_CORE = ("paclen", "maxframe", "maxframe_ext", "t1_min_sec", "t1_max_sec", "t2_sec")
 assert set(AX25_KEYS) == set(_AX25_NAMES)
-
-
-class ConfigError(Exception):
-    pass
 
 
 @dataclass(frozen=True)

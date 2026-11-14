@@ -1461,6 +1461,15 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   bekommen keine I-Frame-Kopie mehr. Bewusst gelassen: der Client versteht weiter beide Formen
   und die Antwort einer älteren TinyBox hinter dem Prompt (kostet wenig, schützt bei einer Box,
   die noch nicht aktualisiert ist).
+- R7 Config-Unterbau ✅ als Grundlage (15.11.), Umstellung schrittweise: `prcore/conf.py` –
+  `setting()` deklariert ein Feld (Schlüssel, Standard, Bereich, `live` für RELOAD, eigene
+  Prüfung), `load_section()` liest einen Abschnitt, `live_fields()` liefert, was RELOAD übernimmt;
+  dazu `get_value`, `check_range`, `check_port` und **eine** `ConfigError` für TinyBox, Client,
+  kisshub und dxfeed. Umgestellt: TinyBox `[mailbox]` und `[telnet]`; `reload.LIVE["mailbox"]`
+  kommt aus der Deklaration. **Offen:** die übrigen Abschnitte (TinyBox `[station]`, `[web]`,
+  `[chat]`, `[brocast]` …, Client, kisshub) – je Abschnitt ein kleiner Schritt, wenn ein CR ihn
+  ohnehin berührt (z. B. CR125 `[station]`, CR129 `[games]`). Danach kann der Installer
+  (`release/konfig.py`) die Beschreibung mitnutzen.
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 

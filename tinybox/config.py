@@ -14,6 +14,9 @@ from urllib.parse import urlsplit
 from prcore import release, termcolor
 from prcore.ax25.link import parse_calls
 from prcore.calls import CALL_RE, base_call, is_valid_call, normalize_call
+from prcore.conf import ConfigError, load_section, setting
+from prcore.conf import check_port as _check_port, check_range as _check_range
+from prcore.conf import get_value as _get
 from prcore.text import isnum
 
 # Bulletin destination, e.g. ALL, DX, WX
@@ -22,10 +25,6 @@ NEWS_RUBRIC = "TBNEWS"
 MOTD_MAX = 120              # characters of a board's message of the day (CR3)      # system rubric of the client feature bulletin (CR18/CR19)
 
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
-
-
-class ConfigError(Exception):
-    """Raised when tinybox.conf is missing or invalid."""
 
 
 @dataclass
@@ -179,23 +178,29 @@ class Ax25Cfg:
     v20_digi_paclen: int = 128      # longest I field over such a digi (they drop long frames)
 
 
+def _tcp_port(port: int) -> str | None:
+    return None if 1 <= port <= 65535 else f"{port} is not a valid TCP port"
+
+
 @dataclass
 class MailboxCfg:
-    welcome_enabled: bool
-    welcome_text: str
-    third_party: bool
-    max_users: int
-    max_msg_bytes: int
-    idle_timeout_min: int
-    bulletin_expire_days: int
-    ask_profile: bool = True        # CR73: terminal asks for name, locator, home BBS
+    """[mailbox] - declared (Refactoring R7): default, range and RELOAD in one place."""
+    welcome_enabled: bool = setting(True, live=True)
+    welcome_text: str = setting("", live=True)
+    third_party: bool = setting(True, live=True)
+    max_users: int = setting(3, lo=1, hi=50, live=True)
+    max_msg_bytes: int = setting(8192, lo=256, hi=65536, live=True)
+    idle_timeout_min: int = setting(10, lo=1, hi=240, live=True)
+    bulletin_expire_days: int = setting(30, lo=0, hi=3650, live=True)
+    ask_profile: bool = setting(True, live=True)   # CR73: terminal asks for name, locator, home BBS
 
 
 @dataclass
 class TelnetCfg:
-    enabled: bool
-    host: str
-    port: int
+    """[telnet] - declared (R7); the host must be a loopback address (checked in load)."""
+    enabled: bool = setting(True)
+    host: str = setting("127.0.0.1")
+    port: int = setting(6300, check=_tcp_port)
 
 
 @dataclass
@@ -446,19 +451,6 @@ def _color(value: str) -> str:
         raise ConfigError(str(exc)) from None
 
 
-def _get(cp: configparser.ConfigParser, sec: str, key: str, default, kind=str):
-    try:
-        if kind is bool:
-            return cp.getboolean(sec, key, fallback=default)
-        if kind is int:
-            return cp.getint(sec, key, fallback=default)
-        if kind is float:
-            return cp.getfloat(sec, key, fallback=default)
-        return cp.get(sec, key, fallback=default)
-    except ValueError as exc:
-        raise ConfigError(f"[{sec}] {key}: {exc}") from None
-
-
 def _steps(value: str) -> tuple[float, ...]:
     """quality_steps: five rising loss limits in % up to which 5 / 4 / 3 / 2 / 1
     bars are shown; above the last one a single red bar."""
@@ -478,16 +470,6 @@ def _require_call(sec: str, key: str, value) -> str:
     if not is_valid_call(call):
         raise ConfigError(f"[{sec}] {key}: '{value}' is not a valid callsign")
     return call
-
-
-def _check_port(sec: str, key: str, port: int) -> None:
-    if not 1 <= port <= 65535:
-        raise ConfigError(f"[{sec}] {key}: {port} is not a valid TCP port")
-
-
-def _check_range(sec: str, key: str, value: int, lo: int, hi: int) -> None:
-    if not lo <= value <= hi:
-        raise ConfigError(f"[{sec}] {key}: {value} must be between {lo} and {hi}")
 
 
 def _debug_components(value: str) -> list[str]:
@@ -730,27 +712,8 @@ def load(path: str | Path) -> Config:
 
     direwolf, radio, kiss, ax25, rad, kiss_fixed = _load_radio(cp, path.parent)
 
-    mailbox = MailboxCfg(
-        welcome_enabled=_get(cp, "mailbox", "welcome_enabled", True, bool),
-        welcome_text=_get(cp, "mailbox", "welcome_text", ""),
-        third_party=_get(cp, "mailbox", "third_party", True, bool),
-        max_users=_get(cp, "mailbox", "max_users", 3, int),
-        max_msg_bytes=_get(cp, "mailbox", "max_msg_bytes", 8192, int),
-        idle_timeout_min=_get(cp, "mailbox", "idle_timeout_min", 10, int),
-        bulletin_expire_days=_get(cp, "mailbox", "bulletin_expire_days", 30, int),
-        ask_profile=_get(cp, "mailbox", "ask_profile", True, bool),
-    )
-    _check_range("mailbox", "max_users", mailbox.max_users, 1, 50)
-    _check_range("mailbox", "max_msg_bytes", mailbox.max_msg_bytes, 256, 65536)
-    _check_range("mailbox", "idle_timeout_min", mailbox.idle_timeout_min, 1, 240)
-    _check_range("mailbox", "bulletin_expire_days", mailbox.bulletin_expire_days, 0, 3650)
-
-    telnet = TelnetCfg(
-        enabled=_get(cp, "telnet", "enabled", True, bool),
-        host=_get(cp, "telnet", "host", "127.0.0.1"),
-        port=_get(cp, "telnet", "port", 6300, int),
-    )
-    _check_port("telnet", "port", telnet.port)
+    mailbox = load_section(cp, "mailbox", MailboxCfg)
+    telnet = load_section(cp, "telnet", TelnetCfg)
     if telnet.host not in LOOPBACK_HOSTS:
         raise ConfigError("[telnet] host must be a loopback address (127.0.0.1)")
 

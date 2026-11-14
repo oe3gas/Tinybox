@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from prcore.conf import ConfigError     # one error class for all programs (R7)
+
 from .cty import DEFAULT_URL
 from .dxcc import DEFAULT_PATH as DICT_PATH
 from .mostwanted import DEFAULT_URL as MW_URL
@@ -31,10 +33,6 @@ DEFAULT_EXCLUDE = (
 DEFAULT_BANDS = "160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 70cm"
 # on these bands every DXCC counts: 2m/70cm DX from here is mostly Europe
 DEFAULT_ALL_DXCC_BANDS = "2m 70cm"
-
-
-class ConfigError(Exception):
-    pass
 
 
 @dataclass(frozen=True)

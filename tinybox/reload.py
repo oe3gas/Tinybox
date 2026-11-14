@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from prcore import aprs
+from prcore.conf import live_fields
 
 from . import config
 
@@ -46,7 +47,7 @@ ALL = "*"
 # attribute of Config -> the fields taken over at runtime (ALL = every field)
 LIVE: dict[str, Any] = {
     "station": {"haddress", "qth", "freq", "locator", "sysop_via_radio"},
-    "mailbox": ALL,
+    "mailbox": live_fields(config.MailboxCfg),     # declared in config.py (R7)
     "logging": {"level", "debug", "keep_days"},
     "brocast": ALL,                 # but publish, see NOT_LIVE
     "inbox": {"poll_sec"},
