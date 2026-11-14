@@ -2457,7 +2457,41 @@ function partChips(cur) {
   return row;
 }
 
-// held back: how long already, the next try, what waits in the pool
+// why sending is held back, in plain words, and when it goes on:
+// a countdown only where there is a real end (quiet channel, budget, reconnect);
+// otherwise the condition - a new page or the TinyBox's report wakes brocast anyway
+function holdInfo(tx, bl) {
+  const left = Math.max(0, bl.until - tx.now);
+  const hint = bl.hint ? ` (${bl.hint})` : "";
+  const users = `Die TinyBox meldet Benutzer${hint}.`;
+  const after = { v: "wenn alle abgemeldet sind", txt: true };
+  switch (bl.kind) {
+    case "forward":
+      return { text: `Die TinyBox meldet Forward${hint}. Solange er läuft, gehen nur Notfall-Seiten hinaus.`,
+        next: { v: "wenn der Forward endet", txt: true } };
+    case "channel":
+      return { text: `Verkehr auf dem Kanal: ${bl.why}. brocast sendet erst, wenn es eine Weile ruhig ist – Notfall-Seiten gehen trotzdem.`,
+        next: { v: mmss(left), s: "Kanal ruhig – länger, wenn wieder etwas zu hören ist" } };
+    case "repeats":
+      return { text: `${users} Solange jemand verbunden ist, ruhen die Wiederholungen. Neue Seiten gehen gedrosselt hinaus, Notfall-Seiten immer.`,
+        next: after };
+    case "big":
+      return { text: `${users} Solange jemand verbunden ist, ruhen Seiten mit mehr als ${bl.busy_max_parts} Teilen. Notfall-Seiten gehen immer.`,
+        next: after };
+    case "busybudget":
+      return { text: `${users} Solange jemand verbunden ist, darf brocast nur ${num(bl.busy_percent)} % Airtime nutzen – das ist aufgebraucht. Notfall-Seiten gehen immer.`,
+        next: { v: "Abmeldung oder Budget frei", txt: true } };
+  }
+  if (bl.reason === "budget")
+    return { text: `Airtime-Budget aufgebraucht – frei in ${mmss(left)}. Notfall-Seiten gehen trotzdem.`,
+      next: { v: mmss(left), s: "Airtime wieder frei" } };
+  if (bl.reason === "link")
+    return { text: "Direwolf ist nicht verbunden – die Sendung wartet.",
+      next: { v: mmss(left), s: `neuer Verbindungsversuch um ${hms(bl.until)}` } };
+  return { text: `Zurückgestellt: ${bl.why}.`, next: { v: mmss(left), s: `um ${hms(bl.until)}` } };
+}
+
+// held back: how long already, when it goes on, what waits in the pool
 function txWait(tx, bl) {
   const box = el("div", "txwait");
   const cards = el("div", "wcards");
@@ -2469,8 +2503,8 @@ function txWait(tx, bl) {
   const since = tx.blocked_since;
   cards.append(
     card("wartet seit", since ? mmss(tx.now - since) : "–", since ? `seit ${hms(since)}` : "", "y"),
-    card("nächster Versuch", bl.until > tx.now ? mmss(bl.until - tx.now) : "gleich",
-      bl.reason === "budget" ? "wenn Airtime frei ist" : `um ${hms(bl.until)}`));
+    card("geht weiter", holdInfo(tx, bl).next.v, holdInfo(tx, bl).next.s || "",
+      holdInfo(tx, bl).next.txt ? "txt" : ""));
   box.append(cards);
   const p = tx.pool;
   if (p && p.pages) {
@@ -2535,10 +2569,7 @@ function renderTxView() {
   } else {
     const bl = tx.blocked;
     const n = tx.next.find((p) => p.next_tx);
-    nb.append(el("div", "nidle", bl && (bl.reason === "busy" || bl.reason === "channel")
-      ? `Zurückgestellt: ${bl.why}. brocast wartet, bis der Betrieb ruhiger ist – Notfall-Seiten gehen trotzdem.`
-      : bl && bl.reason === "budget"
-      ? `Airtime-Budget aufgebraucht – frei in ${mmss(bl.until - tx.now)}. Notfall-Seiten gehen trotzdem.`
+    nb.append(el("div", "nidle", bl ? holdInfo(tx, bl).text
       : !tx.connected ? "Direwolf ist nicht verbunden – die Sendung wartet."
         : n ? `Als Nächstes: P${n.id} ${n.title || n.typ} ${n.next_tx <= tx.now ? "gleich" : "in " + mmss(n.next_tx - tx.now)}`
           : "Im Karussell ist nichts geplant."));

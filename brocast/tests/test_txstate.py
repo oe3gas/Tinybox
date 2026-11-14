@@ -246,6 +246,7 @@ class TrafficTests(unittest.IsolatedAsyncioTestCase):
         await self.car.step()
         self.assertEqual(self.sent, [])
         self.assertEqual(self.car.tx_state()["blocked"]["reason"], "channel")
+        self.assertEqual(self.car.tx_state()["blocked"]["kind"], "channel")
         self.clock.t += self.car.traffic.quiet_s + 1
         await self.car.step()
         self.assertEqual(self.sent, [])                           # connected: longer
@@ -267,6 +268,8 @@ class TrafficTests(unittest.IsolatedAsyncioTestCase):
         await self.car.step()
         self.assertEqual(len(self.sent), 1)                       # repeat: waits
         self.assertIn("Wiederholungen", self.car.tx_state()["blocked"]["why"])
+        bl = self.car.tx_state()["blocked"]
+        self.assertEqual((bl["kind"], bl["hint"]), ("repeats", "verbunden: OE3TEC"))
         self.car.set_hint(0)
         await self.car.step()
         self.assertEqual(len(self.sent), 2)

@@ -182,24 +182,29 @@ class Carousel:
             lim = min(lim, self.traffic.busy_burst_frames) if lim > 0 else self.traffic.busy_burst_frames
         return lim
 
-    def _hold(self, row: PageRow, frames: int, needed: float, now: float) -> tuple[float, str, str] | None:
-        """Why this page waits for the real traffic -> (seconds, reason, why) or None."""
+    def _hold(self, row: PageRow, frames: int, needed: float,
+              now: float) -> tuple[float, str, str, str] | None:
+        """Why this page waits for the real traffic -> (seconds, reason, why, kind) or None.
+
+        kind: forward / channel (a countdown until it is quiet) / repeats / big / busybudget
+        (these wait for the TinyBox's report; a new page or a lower report wakes us anyway,
+        the seconds are only the fallback check)."""
         if row.pri >= EMERGENCY:
             return None                                    # emergencies always go
         level, why = self.level()
         if level >= 2:
-            return 10.0, "busy", why or "Forward"
+            return 10.0, "busy", why or "Forward", "forward"
         wait, heard = self.channel_wait()
         if wait > 0:
-            return wait, "channel", heard
+            return wait, "channel", heard, "channel"
         if level == 1 and row.state == "active":
             if row.tx_count > 0:
-                return 30.0, "busy", (why or "Betrieb") + " – Wiederholungen warten"
+                return 30.0, "busy", (why or "Betrieb") + " – Wiederholungen ruhen", "repeats"
             if frames > self.traffic.busy_max_parts:
-                return 30.0, "busy", (why or "Betrieb") + f" – große Seite ({frames} Teile) wartet"
+                return 30.0, "busy", (why or "Betrieb") + f" – große Seite ({frames} Teile) ruht", "big"
             limit = self.budget.window * self.traffic.busy_percent / 100
             if self.budget.spent(now) + needed > limit:
-                return 30.0, "busy", (why or "Betrieb") + f" – Budget {self.traffic.busy_percent:g} %"
+                return 30.0, "busy", (why or "Betrieb") + f" – Budget {self.traffic.busy_percent:g} %", "busybudget"
         return None
 
     def gap_min(self, sends_done: int, age_s: float = 0.0) -> int:
@@ -340,9 +345,12 @@ class Carousel:
                                   self.cfg.txdelay_ms, self._limit())
             hold = self._hold(row, len(frames), needed, self.clock())
             if hold is not None:
-                wait, reason, why = hold
+                wait, reason, why, kind = hold
                 held = True
                 self._block({"reason": reason, "why": why, "until": self.clock() + wait,
+                             "kind": kind, "hint": self.level()[1],
+                             "busy_percent": self.traffic.busy_percent,
+                             "busy_max_parts": self.traffic.busy_max_parts,
                              "page": row.id, "level": self.level()[0],
                              "waiting": len(self.store.due_pages(int(now)))})
                 if any(r.pri >= EMERGENCY for r in self.store.due_pages(int(now))):
