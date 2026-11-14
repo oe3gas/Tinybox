@@ -7,6 +7,7 @@ import re
 import unittest
 
 from tinybox import games
+from tinybox import boardgame
 from tinybox import prefixgame as box
 from tests.test_chat import chat_app
 from tests.test_cr123 import Timers
@@ -67,13 +68,13 @@ class ScoreTests(unittest.TestCase):
 class OnAirTests(unittest.TestCase):
     def setUp(self):
         self.app = chat_app()
-        box._games.clear()
+        boardgame.GAMES.clear()
         self.timers = Timers()
-        box.schedule, box.rng_factory = self.timers, (lambda: random.Random(3))
+        boardgame.schedule, box.rng_factory = self.timers, (lambda: random.Random(3))
 
     def tearDown(self):
-        box.schedule, box.rng_factory = box._later, random.Random
-        box._games.clear()
+        boardgame.schedule, box.rng_factory = boardgame._later, random.Random
+        boardgame.GAMES.clear()
 
     def client(self, call):
         s, t = login(self.app, call)

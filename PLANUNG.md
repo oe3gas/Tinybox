@@ -1417,6 +1417,17 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   Komplexität 90). **Verhaltensänderung:** `//PR`, `//GAMES`, `//GAME` prüfen jetzt ihre Cap wie
   `//CT` und `//IMG` (Lücke aus der Analyse); der aktuelle Client sendet sie immer.
 
+**Etappe 2 – Stand:**
+- R3 Spiele-Rahmen ✅ (15.11.): `tinybox/boardgame.py` – `BoardGame` (ein Spiel je Board,
+  Registry `GAMES` statt Modul-Globalen je Spiel, Ereignisse über `ChatHub.deliver`, Timer) und
+  `QuizGame` (Anmeldung → Frage → Tipps → Auflösung → Ende, Punkte, Statistik für die
+  Bestenliste). Prefix raten bringt nur noch Fragen und Texte mit (`prefixgame.Game`). Ohne
+  Verhaltensänderung. Das Elmer Quiz wird eine zweite `QuizGame`-Klasse; CR128 (Zuschauer:
+  `emit(..., audience=...)`) und CR129 (Sprache, Nummern) setzen am Rahmen an.
+  Bewusst nicht im Rahmen: der CQ Contest gegen die Box (`contest.py`) – ein Spiel je Station,
+  nicht je Board. Client-Seite (gemeinsamer Ereignis-Parser für Quiz-Spiele) kommt mit dem
+  Elmer Quiz, wenn es ein zweites Quiz gibt.
+
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 
 Anlass: Die Wetterseite trug bei jeder Aussendung den Text „GeoSphere Austria, TAWES

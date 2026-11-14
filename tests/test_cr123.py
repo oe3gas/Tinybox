@@ -7,6 +7,7 @@ import re
 import unittest
 
 from prcore import prefixgame as pg
+from tinybox import boardgame
 from tinybox import prefixgame as box
 from tests.test_chat import chat_app
 from tests.test_tinybox import login, type_lines
@@ -115,15 +116,15 @@ class Handle:
 class BoardTests(unittest.TestCase):
     def setUp(self):
         self.app = chat_app()
-        box._games.clear()
+        boardgame.GAMES.clear()
         self.timers = Timers()
-        box.schedule = self.timers
+        boardgame.schedule = self.timers
         box.rng_factory = lambda: random.Random(7)
 
     def tearDown(self):
-        box.schedule = box._later
+        boardgame.schedule = boardgame._later
         box.rng_factory = random.Random
-        box._games.clear()
+        boardgame.GAMES.clear()
 
     def client(self, call):
         s, t = login(self.app, call)
@@ -262,9 +263,9 @@ class ClientTests(unittest.TestCase):
     def test_client_follows_a_game(self):
         from tbclient.prefixgame import PrefixGame
         app = chat_app()
-        box._games.clear()
+        boardgame.GAMES.clear()
         timers = Timers()
-        box.schedule, box.rng_factory = timers, (lambda: random.Random(9))
+        boardgame.schedule, box.rng_factory = timers, (lambda: random.Random(9))
         try:
             sent = []
             s, t = login(app, "OE3GAS")
@@ -314,5 +315,5 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(g["winners"], ["OE3GAS"])
             self.assertIsNone(pg_.summary(1100.0 + 16 * 60))     # gone after a while
         finally:
-            box.schedule, box.rng_factory = box._later, random.Random
-            box._games.clear()
+            boardgame.schedule, box.rng_factory = boardgame._later, random.Random
+            boardgame.GAMES.clear()
