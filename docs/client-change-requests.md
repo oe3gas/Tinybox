@@ -5419,6 +5419,25 @@ Deutsch (Referenz, falls die GUI später übersetzt wird):
   auf Kontakt zum Sysop; Terminal-Button ebenso.
 - Konsole und Sync-Fehlertext sinngemäß anpassen (kurz).
 
+### Nachtrag (OE3GAS, 14.11.2026): Name, Locator, Home-BBS bei der ersten Anmeldung
+
+- Bei der ersten Anmeldung mit dem Client fehlt die **Abfrage von Name, Locator und Home-BBS**.
+- Befund: CR73 hat beides – die Box fragt Terminal-User nach dem Login, der Client zeigt den
+  Balken „Introduce yourself …“. Im Zustand `wait`/`refused` greift **keines** davon:
+  - Die Box beendet ihre Fragen still, sobald `//CLIENT` kommt (CR73).
+  - Der Client-Balken erscheint nur bei aktivem Client-Modus mit `PROF` – den gibt es vor der
+    Bestätigung durch den Sysop nicht.
+  - Ergebnis: Ein neuer User wird gar nicht gefragt.
+- Vorschlag: Die Willkommens-Karte fragt die drei Felder gleich mit ab (Formular „My profile“
+  eingebettet, Locator vorbelegt aus `[station] locator`, Home-BBS vorbelegt mit der Box).
+  - Gespeichert wird zunächst **im Client**; gesendet (`//PROF`) wird automatisch, sobald der
+    Sysop bestätigt hat und der Client-Modus läuft (Abgleich wie CR73, die neuere Fassung gilt).
+  - Optional schon vorher übers Terminal (`N`, `NL`, `NH`), damit der Sysop beim Bestätigen sieht,
+    wer das ist (Name/Locator in der Stationsliste der Sysop-Web-GUI).
+  - Text-Vorschlag über dem Formular: „Tell the others who you are – your first name, your
+    locator and your home BBS. You can change it any time under Settings > My profile.“
+- Zu entscheiden: Pflicht oder überspringbar (CR73: überspringbar, Erinnerung nach einer Woche).
+
 ### Offen
 
 - **CR130** sperrt das Terminal „vor dem Handshake“. Im Zustand `wait`/`refused` gibt es keinen
