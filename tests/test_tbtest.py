@@ -4,6 +4,7 @@ tinybox.conf, the command line, and one short real run against a test box."""
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 import socket
 import tempfile
@@ -19,6 +20,9 @@ from tbtest import channel as CH
 from tbtest import report
 from tbtest.runner import Options, Run
 from tinybox import config
+
+# runs of 1-2 minutes in real time: only with TB_LONG_TESTS=1 (runtests.bat lang)
+LONG = os.environ.get("TB_LONG_TESTS") == "1"
 
 
 def free_ports(n: int, udp: bool) -> list[int]:
@@ -296,6 +300,7 @@ class RunTests(unittest.TestCase):
         bed.save()
         return bed_mod.init(Path(d))[0]
 
+    @unittest.skipUnless(LONG, "long test (about 100 s): TB_LONG_TESTS=1")
     def test_short_run_on_the_simulated_channel(self):
         """9600 Bd so it stays short; good quality for both, nobody hidden."""
         with tempfile.TemporaryDirectory() as d:

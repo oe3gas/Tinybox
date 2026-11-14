@@ -139,10 +139,6 @@ class PeerFun:
         self.core._save_settings()
         self.core._touch()
 
-    def _mine_white(self) -> bool:
-        g = self.game
-        return bool(g) and g["white"] == "me"
-
     def _my_turn(self) -> bool:
         g = self.game
         return bool(g) and not g.get("result") and \

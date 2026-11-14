@@ -100,10 +100,6 @@ def relay(s: "Session", rest: str) -> None:
         log.info("%s: CQ contest with %s through the box", s.call, to)
 
 
-def game_of(call: str) -> dict | None:
-    return _games.get(base_call(call))
-
-
 def handle(s: "Session", rest: str) -> None:
     """One //CT line of a client session."""
     p = rest.split()

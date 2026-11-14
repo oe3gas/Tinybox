@@ -27,11 +27,11 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from prcore import aprs, termcolor
+from prcore import aprs, connlog, linkq, termcolor
 from prcore.calls import base_call, normalize_call
 from prcore.text import isnum
 
-from .. import VERSION, config, connlog, framemon, linkq, logsetup
+from .. import VERSION, config, framemon, logsetup
 from ..app import App
 from ..service import ServiceError
 from ..session import State
@@ -219,6 +219,8 @@ class WebServer:
             framemon.flog.removeHandler(self._log_handler)
         if self.server:
             self.server.close()
+        for q in list(self.hub.subscribers):       # end the open live feeds: else the
+            q.put_nowait(None)                     # server waits up to SSE_PING_SEC for them
 
     # --- HTTP plumbing ---------------------------------------------------------
 
@@ -767,6 +769,8 @@ class WebServer:
             while True:
                 try:
                     item = await asyncio.wait_for(q.get(), SSE_PING_SEC)
+                    if item is None:                # close(): the server stops
+                        break
                     writer.write(f"data: {json.dumps(item)}\n\n".encode("utf-8"))
                 except asyncio.TimeoutError:
                     writer.write(b": ping\n\n")

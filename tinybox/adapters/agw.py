@@ -28,11 +28,12 @@ import struct
 import time
 from collections import deque
 
+from prcore import linkq
 from prcore.agw import PID_NO_L3, AgwProtocolError, Frame, read_frame, via_data
 from prcore.calls import is_valid_call, normalize_call, plausible_call
 from prcore.termcolor import OK
 
-from .. import chatimg, framemon, linkguard, linkq, logsetup, texts
+from .. import chatimg, framemon, linkguard, logsetup, texts
 from ..app import App
 from ..session import MAX_LINE, Session
 

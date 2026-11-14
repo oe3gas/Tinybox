@@ -6,7 +6,7 @@ import asyncio
 import dataclasses
 import unittest
 
-from tinybox import linkq
+from prcore import linkq
 from tinybox.adapters import agw
 from tinybox.adapters.agw import Frame
 

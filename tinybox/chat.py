@@ -41,10 +41,11 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable
 
+from prcore import linkq
 from prcore.chatimg import terminal_text
 from prcore.text import clean_text, isnum
 
-from . import chatfile, chatimg, linkq, texts
+from . import chatfile, chatimg, texts
 from .config import ChatBoard, Config
 from .events import EventBus
 from .store import ChatLine, Store, utc_now

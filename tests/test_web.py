@@ -10,9 +10,9 @@ import time
 import unittest
 from pathlib import Path
 
+from prcore import linkq
 from tinybox.adapters import web
 from tests.test_tinybox import login as radio_login, make_app
-from tinybox import linkq
 
 
 async def request(port, method, path, *, host=None, cookie=None, csrf=None,

@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tinybox import connlog
+from prcore import connlog
 from tinybox.adapters import web
 from tests.test_tinybox import login, make_app, type_lines
 from tests import test_web

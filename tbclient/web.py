@@ -72,8 +72,7 @@ import time
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from tinybox import connlog                # CSV and ADIF of the connection log (CR44)
-
+from prcore import connlog                 # CSV and ADIF of the connection log (CR44)
 from prcore.text import isnum
 
 from . import VERSION, peerfile, webguard

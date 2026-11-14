@@ -122,6 +122,11 @@ def _refused(answer: bytes, sent: bytes) -> bool:
 
 
 class Tnc:
+    # leaving KISS on stop: wait after the KISS exit, then after each exit line
+    # (a real TNC needs this; tests set them small)
+    exit_wait_sec = 1.5
+    exit_step_sec = 0.5
+
     def __init__(self, profile: Profile, transport, on_frame: Callable[[int, bytes], None],
                  *, reconnect_sec: float = 10, params: dict[int, int] | None = None,
                  on_state: Callable[[str], None] | None = None) -> None:
@@ -468,10 +473,10 @@ class Tnc:
             log.info("leaving KISS mode")
             self.state = "init"
             self._write(KISS_EXIT, "leave KISS")
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(self.exit_wait_sec)
             for step in self.profile.exit_lines:
                 self._write(step.send)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(self.exit_step_sec)
             await self.transport.drain()
         self.transport.close()
         self._set_state("down")

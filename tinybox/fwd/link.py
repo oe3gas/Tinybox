@@ -120,10 +120,6 @@ class Link:
             return data
         return await asyncio.wait_for(get(), timeout)
 
-    def partial(self) -> bytes:
-        """Bytes received but not read yet (for logging an aborted transfer)."""
-        return bytes(self._buf)
-
     # --- writing ----------------------------------------------------------------------
 
     def write_lines(self, *lines: str) -> None:

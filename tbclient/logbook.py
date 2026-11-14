@@ -1,6 +1,6 @@
 """Connection logbook of the client (CR44): one row per connection - station,
 way, connect, disconnect, duration, bytes in/out. No contents. Kept forever in
-data/tbclient/connlog.db; export as CSV or ADIF (tinybox.connlog)."""
+data/tbclient/connlog.db; export as CSV or ADIF (prcore.connlog)."""
 
 from __future__ import annotations
 

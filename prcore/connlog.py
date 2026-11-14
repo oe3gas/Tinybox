@@ -22,7 +22,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime, timezone
-from prcore.calls import base_call
+from .calls import base_call
 
 CSV_FIELDS = ("start", "end", "secs", "call", "via", "freq", "rx", "tx", "air_tx", "air_rx",
               "ended")

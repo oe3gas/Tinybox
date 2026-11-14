@@ -292,9 +292,6 @@ class BrocastPublisher:
     def bulletins(self) -> list[Message]:
         return [m for m in self.app.store.list_messages() if wanted(m, self.app)]
 
-    def full_list(self) -> dict[str, Any]:
-        return {str(m.id): to_page(m, self.app) for m in self.bulletins()}
-
     # --- busy report: brocast steps back for the real traffic (08.11.2026) ---------
 
     def busy_level(self) -> tuple[int, str]:

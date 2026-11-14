@@ -176,8 +176,10 @@ class HubTestBase(unittest.IsolatedAsyncioTestCase):
         params = {kiss.CMD_TXDELAY: 30, kiss.CMD_P: 63}
 
         def factory(on_frame):
-            return Tnc(self.profile, TcpTransport("127.0.0.1", tport), on_frame,
-                       reconnect_sec=0.2, params=params)
+            tnc = Tnc(self.profile, TcpTransport("127.0.0.1", tport), on_frame,
+                      reconnect_sec=0.2, params=params)
+            tnc.exit_wait_sec, tnc.exit_step_sec = 0.05, 0.02     # no real TNC to wait for
+            return tnc
 
         hubkw.setdefault("status_port", -1)            # -1 = any free port (tests)
         cfg = HubCfg(port=0, air_baud=hubkw.pop("air_baud", 1_000_000),

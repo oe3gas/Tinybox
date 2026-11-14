@@ -6,11 +6,12 @@ import logging
 import re
 from typing import TYPE_CHECKING, Callable
 
+from prcore import linkq
 from prcore.calls import base_call
 from prcore.profile import CALL_RE as BASE_CALL_RE, ProfileError
 from prcore.text import client_safe, isnum
 
-from . import addressing, chatcmd, dictfile, linkq, profiles, rights, texts
+from . import addressing, chatcmd, dictfile, profiles, rights, texts
 from .service import ServiceError
 from .store import Message
 
@@ -100,7 +101,7 @@ def cmd_qso(s: Session, arg: str) -> None:
     """CR44: the connection log. Everybody sees his own connects (all SSIDs of
     his call); the sysop also QSO ALL and QSO <call>."""
     from prcore.calls import base_call
-    from .connlog import duration, kb
+    from prcore.connlog import duration, kb
     words = arg.upper().split()
     base, n, which = base_call(s.call), QSO_DEFAULT, ""
     if words and not isnum(words[0]):

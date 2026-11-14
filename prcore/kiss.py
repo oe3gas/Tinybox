@@ -242,10 +242,3 @@ class KissTcpClient:
         self.tx_frames += 1
         self.tx_bytes += len(ax25)
         return True
-
-    def send_param(self, command: int, value: int) -> bool:
-        writer = self._writer
-        if writer is None or writer.is_closing():
-            return False
-        writer.write(encode_param(command, value, self.kiss_port))
-        return True

@@ -10,7 +10,7 @@ import dataclasses
 import random
 import unittest
 
-from tinybox import linkq
+from prcore import linkq
 from prcore.ax25 import frame as ax
 from prcore.ax25.link import Ax25Link, LinkCfg, State
 

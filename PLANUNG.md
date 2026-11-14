@@ -1385,7 +1385,21 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   `prcore/auth.base`, `axudp`, `kissport`, `tbclient` (profiles, budget, mailstore, config)
   und `tbtest`. `base_call` wandelt jetzt immer in Großschrift. Eigene Kopien behalten
   bewusst: brocast, fwdsim, dxfeed, `release/konfig.py` (eigenständig, 17.1).
-- Offen: R14 Tests schneller (ein Test schlägt gelegentlich fehl – suchen), R16 Kleinigkeiten.
+- R14 Tests schneller ✅ (14.11.): Suite von 346 s auf rund 180 s.
+  - Web-Live-Feed (`/api/feed`): beim Schließen des Web-Servers enden offene Feeds sofort;
+    vorher hielt jeder offene Browser-Feed das Beenden bis zu 30 s auf (echter Fehler, auch
+    beim Stoppen der TinyBox).
+  - kisshub: die Wartezeiten beim Verlassen des KISS-Modus (1,5 s + 0,5 s je Zeile) sind
+    Attribute von `Tnc` (`exit_wait_sec`, `exit_step_sec`); die Tests setzen sie klein.
+  - Langer tbtest-Lauf auf dem simulierten Kanal (~100 s) nur noch mit `runtests.bat lang`
+    (Umgebungsvariable `TB_LONG_TESTS=1`).
+- R16 Kleinigkeiten ✅ (14.11.): Umleitungsmodul `tinybox/linkq.py` entfernt (alle nutzen
+  `prcore.linkq`); `connlog` nach `prcore/connlog.py` – der Client importiert damit kein
+  Python-Modul aus `tinybox/` mehr (nur noch die geteilten Web-Dateien); toter Code entfernt
+  (`kiss.send_param`, `contest.game_of`, `fwd/link.partial`, brocast-Adapter `full_list`,
+  `peerfun._mine_white`).
+- Ein Test schlug am 14.11. einmal ohne Code-Änderung fehl (welcher, ist nicht erfasst); in
+  fünf weiteren Läufen nicht wieder aufgetreten. Bei Auftreten den Namen notieren.
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 
