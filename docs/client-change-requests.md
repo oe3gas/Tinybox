@@ -5205,7 +5205,10 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
   ohne Meldung oder Erklärung – in diesen Fällen:
   - solange der Box-Kanal nicht online ist (Fall 10) und vor dem Handshake (Fall 8),
   - **während der Teilnahme an einem Spiel** (CQ Contest gegen die Box, über die Box oder direkt,
-    Schach, Prefix raten als Mitspieler, später Elmer Quiz).
+    Schach, Prefix raten als Mitspieler, später Elmer Quiz),
+  - während ein Bild oder eine Datei hinausgeht (Fall 6).
+- Grundsatz (OE3GAS): Kein Wechsel ins Terminal mitten in einer Aktivität, die dabei Probleme machen
+  kann – eine lineare Abfolge ist keine Einschränkung, sie macht das Arbeiten strukturierter.
 - Erlaubt bleibt das Terminal bei laufendem Sync (5) und aus den lokalen Ansichten (9).
 
 ### Vorschlag zur Umsetzung (noch nicht entschieden)
@@ -5224,11 +5227,11 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
 - Button-Zustand aus dem Snapshot (online, Handshake fertig, Spiel läuft).
 - Wird das Terminal gesperrt, während es offen ist (Spiel startet, Verbindung weg): Eingabezeile
   deaktivieren bzw. zurück in den Chat.
-- **Offen:** Fall 6 (Upload läuft) – erlauben wie heute (Zeile wartet) oder ebenfalls sperren.
 
 **Tests**
 
 - Im Board: `//CMD L` liefert die Liste, nichts geht an die anderen im Board, die Sitzung bleibt drin.
 - `//CMD S OE3XYZ` im Client-Modus: abgelehnt wie heute (CR93).
 - Box ohne `CMD`: Client sperrt das Terminal im Board.
-- Button deaktiviert: offline, vor dem Handshake, während CQ Contest / Schach / Prefix raten (Mitspieler).
+- Button deaktiviert: offline, vor dem Handshake, während CQ Contest / Schach / Prefix raten (Mitspieler),
+  während eines Bild-/Datei-Uploads.
