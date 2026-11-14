@@ -5354,3 +5354,82 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
   „CQ contest“ nicht mehr in „Station“.
 - Box offline / vor dem Handshake: Karte verschwindet.
 - Laufendes Spiel: Eintrag hervorgehoben, „du bist dran“ wie bisher.
+
+
+## CR133 – Freundlicher Hinweis, wenn der Schlüssel auf den Sysop wartet; Terminal anbieten (offen)
+
+### Erfassung (OE3GAS, 14.11.2026)
+
+- Der grüne Banner „Your key waits for the sysop of OE3GAS-1: tell him the fingerprint 0C57-91A4-1C39
+  (by voice or on paper). Until then: no client mode there.“ sagt einem **neuen User nichts**.
+- Gewünscht: ein **freundlicher Hinweis**, dass der Client auf dieser TinyBox eine **Absicherung**
+  braucht, damit das **Rufzeichen nicht missbraucht** werden kann.
+- Dazu **anbieten, aufs Terminal umzuschalten**, damit der User inzwischen herumprobieren kann –
+  sonst sitzt er vor einem leeren Schirm („nix da!“).
+- Nur aufnehmen, **noch nicht umsetzen**.
+
+### Stand vor dem CR (14.11.2026)
+
+- `tbclient/web/app.js` `authText()` (CR93): Banner oben, Zustände `wait` und `refused`.
+- Die Mitte bleibt leer, Chat Boards „No boards“, rechts „Not in a board“.
+- Konsole (`core.py`) und Sync (`sync.py`) haben eigene, ebenso knappe Meldungen.
+
+### Vorschlag zur Umsetzung (noch nicht entschieden)
+
+Statt des Banners eine **Willkommens-Karte in der Mitte** (solange `S.auth.state == "wait"` und kein
+Board/keine andere Ansicht offen ist); der Banner oben entfällt oder wird ein kurzer Einzeiler
+„Waiting for the sysop – details“.
+
+Text (Client-GUI englisch):
+
+> **Welcome to OE3GAS-1 – one more step**
+>
+> To protect your callsign, this TinyBox lets your client in only after the sysop has confirmed that
+> this client really is yours. That way nobody else can use your call here.
+>
+> **Your part:** give the sysop of OE3GAS-1 this code – on the air, by phone or on paper:
+>
+> `0C57-91A4-1C39`  [Copy]
+>
+> Until the sysop has confirmed it, chat boards and games stay closed. Meanwhile, have a look around
+> in the terminal: list and read bulletins, check your mail, try the commands.
+>
+> [▸ Open TinyBox terminal]   [Why is this needed?]
+
+Deutsch (Referenz, falls die GUI später übersetzt wird):
+
+> **Willkommen bei OE3GAS-1 – noch ein Schritt**
+>
+> Damit niemand dein Rufzeichen missbrauchen kann, lässt diese TinyBox deinen Client erst herein,
+> wenn der Sysop bestätigt hat, dass dieser Client wirklich dir gehört.
+>
+> **Dein Teil:** Sag dem Sysop von OE3GAS-1 diesen Code – über Funk, am Telefon oder auf Papier:
+> `0C57-91A4-1C39`
+>
+> Bis zur Bestätigung bleiben Chat Boards und Spiele zu. Schau dich inzwischen im Terminal um:
+> Bulletins listen und lesen, Mail ansehen, Befehle ausprobieren.
+>
+> [▸ TinyBox-Terminal öffnen]   [Warum ist das nötig?]
+
+- „Why is this needed?“ klappt 2–3 Zeilen auf: eigener Schlüssel je Client, der Sysop vergleicht den
+  Code einmal, danach meldet sich der Client automatisch an.
+- Sobald der Sysop bestätigt: Karte verschwindet, kurzer grüner Hinweis „OE3GAS-1 has confirmed your
+  client – welcome!“.
+- Zustand `refused`: gleiche Karte, Titel „OE3GAS-1 did not accept this client“, Grund, Code, Hinweis
+  auf Kontakt zum Sysop; Terminal-Button ebenso.
+- Konsole und Sync-Fehlertext sinngemäß anpassen (kurz).
+
+### Offen
+
+- **CR130** sperrt das Terminal „vor dem Handshake“. Im Zustand `wait`/`refused` gibt es keinen
+  Client-Modus – das Terminal muss hier **erlaubt** sein (Box im normalen Terminalbetrieb). Regel in
+  CR130 entsprechend präzisieren.
+- Was funktioniert im Zustand `wait` tatsächlich (Mail-/Bulletin-Sync bricht heute mit `SyncError` ab)?
+  Text danach ausrichten.
+
+### Test
+
+- Neuer Client, Schlüssel unbestätigt: Karte in der Mitte, Code kopierbar, Terminal-Button öffnet das
+  Terminal, dort funktionieren L/R.
+- Sysop bestätigt: Karte weg, Bestätigungshinweis, Boards erscheinen.
+- `refused`: Karte mit Grund.
