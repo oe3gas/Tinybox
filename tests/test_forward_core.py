@@ -130,7 +130,7 @@ class StandaloneTests(unittest.TestCase):
     def test_version_says_standalone(self):
         s, t = login(self.app, "OE1ABC")
         t.take()
-        type_lines(s, "V")
+        type_lines(s, "VER")
         self.assertIn("no forwarding", t.take())
 
 

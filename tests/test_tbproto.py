@@ -19,10 +19,10 @@ class Caps(unittest.TestCase):
 
     def test_client_caps_as_before(self):
         self.assertEqual(tbproto.client_caps(ui=False, binary=False),
-                         "CHAT,SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR,GAMES,GAME")
+                         "CHAT,SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR,GAMES,GAME,PRM")
         self.assertEqual(tbproto.client_caps(ui=True, binary=True),
                          "CHAT,UI,SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR,"
-                         "GAMES,GAME,Z,IMG,BFILE")
+                         "GAMES,GAME,PRM,Z,IMG,BFILE")
 
     def test_command_table_names_known_caps(self):
         for name, c in clientproto.COMMANDS.items():

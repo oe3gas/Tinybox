@@ -64,7 +64,7 @@ class TerminalQuestionTests(unittest.TestCase):
         type_lines(s, "jn88ep", "")                          # home BBS skipped
         out = t.take()
         self.assertIn("Thank you", out)
-        self.assertTrue(out.endswith("TinyBox (A,B,C,F,H,J,K,L,R,S,V,?) > "))
+        self.assertTrue(out.endswith("TinyBox (A,B,C,F,H,J,K,L,R,S,?) > "))
         p = profiles.get(self.app.store, "OE3ABC")          # one profile for all SSIDs
         self.assertEqual((p["name"], p["loc"], p["home"]), ("Gerhard", "JN88EP", ""))
         # the next login: the home BBS is still missing, but asked only every 30 days
@@ -76,7 +76,7 @@ class TerminalQuestionTests(unittest.TestCase):
         s, t = login(self.app, "OE3ABC")
         self.assertTrue(t.take().endswith("Your home BBS (e.g. OE3XSR): "))
         type_lines(s, "/AB")
-        self.assertIn("Set it later with N name", t.take())
+        self.assertIn("Set it later with MYName name", t.take())
         self.assertEqual(s.state, State.COMMAND)
 
     def test_client_line_ends_the_questions(self):
@@ -109,15 +109,15 @@ class TerminalCommandTests(unittest.TestCase):
     def test_n_nl_nh_i(self):
         s, t = login(self.app, "OE3ABC-2")
         t.take()
-        type_lines(s, "N")
+        type_lines(s, "MYNAME")
         self.assertIn("No profile for OE3ABC.", t.take())
-        type_lines(s, "N Hans Peter")
+        type_lines(s, "MYN Hans Peter")
         self.assertIn("OE3ABC: name Hans Peter, locator -, home BBS -", t.take())
-        type_lines(s, "NL jn88yy")
+        type_lines(s, "myloc jn88yy")
         self.assertIn("Locator: 4 or 6", t.take())          # YY is not a subsquare
-        type_lines(s, "NL jn88ep", "NH oe3xsr.#noe.aut.eu")
+        type_lines(s, "MYL jn88ep", "MYHOMEBBS oe3xsr.#noe.aut.eu")
         self.assertIn("locator JN88EP, home BBS OE3XSR.#NOE.AUT.EU", t.take())
-        type_lines(s, "NH -")
+        type_lines(s, "myh -")
         self.assertIn("home BBS -", t.take())
         u, ut = login(self.app, "OE3XYZ")
         ut.take()

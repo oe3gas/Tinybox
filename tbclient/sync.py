@@ -517,8 +517,8 @@ class Syncer:
                 raise Aborted()
             a = self.core.auth                     # CR93: no client mode without the login
             if a.get("state") == "wait":
-                raise SyncError(f"your key {a.get('fp', '')} waits for the sysop of "
-                                f"{a.get('box') or self.core.target} (USER OK)")
+                raise SyncError(f"the sysop of {a.get('box') or self.core.target} still has to "
+                                f"confirm this client (code {a.get('fp', '')})")
             if a.get("state") == "refused":
                 raise SyncError(f"login with your key refused: {a.get('reason') or 'refused'}")
             if self.core.state == "offline" and time.monotonic() - start > 1:

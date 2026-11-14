@@ -263,6 +263,7 @@ function render() {
   $("off-reason").textContent = endedText() || S.reason || "";
   $("offline").classList.toggle("hidden", S.state !== "offline");
   $("pick").classList.toggle("hidden", !(S.state === "online" && S.mode === "tinybox" && !S.board && S.boards.length));
+  renderWelcome();                                  // CR133
   const STATE = { online: "Connected", offline: "Not connected", connecting: "Connecting",
                   disconnecting: "Disconnecting" };
   $("conn-info").textContent = `${STATE[S.state] || S.state}: ${S.mycall} → ${S.tinybox} via ${S.link}` +
@@ -304,6 +305,7 @@ function render() {
   renderBoxContest();                               // CR122
   renderPrefix();                                   // CR123
   renderLeaderboard();                              // CR126
+  renderGamesCard();                                // CR132
   renderInvites();
 }
 
@@ -419,14 +421,55 @@ let sysDismissed = 0;
 let authDismissed = "";
 function authText(a) {                             // CR93: login with the user's key
   if (!a || !a.state) return "";
-  if (a.state === "wait")
-    return `Your key waits for the sysop of ${a.box || S.tinybox}: tell him the fingerprint ` +
-      `${a.fp} (by voice or on paper). Until then: no client mode there.`;
+  if (a.state === "wait")                          // CR133: the welcome card says the rest
+    return `Waiting for the sysop of ${a.box || S.tinybox} to confirm this client (code ${a.fp}).`;
   if (a.state === "refused")
-    return `${a.box || S.tinybox} refused the login with your key (${a.reason}). ` +
-      `Fingerprint of your key: ${a.fp}.`;
+    return `${a.box || S.tinybox} did not accept this client (${a.reason}). Code of your client: ${a.fp}.`;
+  if (a.state === "ok" && a.confirmed && Date.now() / 1000 - a.confirmed < 120)
+    return `${a.box || S.tinybox} has confirmed your client – welcome!`;
   return "";
 }
+// CR133: the welcome card in the middle while the key waits for the sysop (or was refused)
+function welcomeShown() {
+  const a = S.auth || {};
+  return S.state === "online" && (a.state === "wait" || a.state === "refused") && view === "chat";
+}
+let wlFilled = "";
+function renderWelcome() {
+  const show = welcomeShown();
+  $("welcome").classList.toggle("hidden", !show);
+  if (!show) return;
+  const a = S.auth, box = a.box || S.tinybox;
+  if (a.state === "wait") {
+    $("wl-title").textContent = `Welcome to ${box} – one more step`;
+    $("wl-text").textContent = "To protect your callsign, this TinyBox lets your client in only after the sysop " +
+      "has confirmed that this client really is yours. That way nobody else can use your call here.";
+    $("wl-part").innerHTML = "";
+    $("wl-part").append(el("b", "", "Your part: "),
+      `give the sysop of ${box} this code – on the air, by phone or on paper:`);
+  } else {
+    $("wl-title").textContent = `${box} did not accept this client`;
+    $("wl-text").textContent = `Reason: ${a.reason || "refused"}. Please get in touch with the sysop of ${box}.`;
+    $("wl-part").textContent = "The code of this client:";
+  }
+  $("wl-fp").textContent = a.fp || "-";
+  $("wl-meanwhile").classList.toggle("hidden", a.state !== "wait");
+  const p = S.profile || {}, key = [p.name, p.loc, p.home].join("|");
+  if (key !== wlFilled && document.activeElement && !$("wl-prof").contains(document.activeElement)) {
+    wlFilled = key;                                // fill in once, never under the user's fingers
+    $("wl-name").value = p.name || "";
+    $("wl-loc").value = p.loc || "";
+    $("wl-home").value = p.home || baseCall(box);
+  }
+}
+async function saveWelcomeProfile(e) {
+  e.preventDefault();
+  const r = await postJson("profile", { name: $("wl-name").value, loc: $("wl-loc").value,
+                                        home: $("wl-home").value });
+  $("wl-prof-msg").textContent = r.ok ? "Saved – it goes to the TinyBox as soon as the sysop has confirmed."
+    : `Check the ${PROF_FIELDS[r.data.error] || "input"}.`;
+}
+
 // CR104: login state at the home BBS on the settings page
 function renderAuthInfo() {
   const a = S.auth || {}, h = S.auth_home || {};
@@ -462,7 +505,7 @@ function renderSys() {
   const show = !!m && m.at !== sysDismissed &&
     !(m.left < 0 && Date.now() / 1000 - m.at > 60);        // "called off" for one minute
   const at = authText(S.auth), akey = S.auth ? S.auth.state + S.auth.reason : "";
-  if (!show && at && akey !== authDismissed) {
+  if (!show && at && akey !== authDismissed && !welcomeShown()) {
     $("sys-banner").classList.remove("hidden");
     $("sys-banner").classList.add("info");
     $("sys-text").textContent = at;
@@ -3281,8 +3324,11 @@ function renderBoxContest() {
 let prOpen = false;
 function renderPrefix() {
   const k = S.prefix || {};
-  const bh = $("bh-prefix");
-  if (bh) { bh.classList.toggle("hidden", !k.ok); bh.classList.toggle("active", prOpen || !!k.game); }
+  const nb = $("nav-prefix");                     // CR132: in the card "Spiele"
+  nb.classList.toggle("hidden", !k.ok && !k.game);
+  nb.classList.toggle("active", (prOpen && view === "chat") || !!k.game);
+  $("nav-prefix-st").replaceChildren(k.game ? el("span", "ph-move ct-navmove", "läuft") : "");
+  $("pick-prefix").classList.toggle("hidden", !(prOpen && k.ok && !S.board));
   const box = $("prefix");
   const show = !!S.board && (!!k.game || (prOpen && k.ok));
   box.classList.toggle("hidden", !show);
@@ -3299,8 +3345,9 @@ function renderPrefix() {
 /* CR126: the leaderboards of the box (LB1 all games, LB2 one game) */
 function renderLeaderboard() {
   const g = S.games || {};
-  const bh = $("bh-top");
-  if (bh) { bh.classList.toggle("hidden", !g.ok); bh.classList.toggle("active", !!g.lb); }
+  const nb = $("nav-top");                        // CR132: in the card "Spiele"
+  nb.classList.toggle("hidden", !g.ok);
+  nb.classList.toggle("active", !!g.lb);
   const box = $("leaderboard");
   box.classList.toggle("hidden", !g.lb);
   if (!g.lb) return;
@@ -3310,6 +3357,21 @@ function renderLeaderboard() {
     show: (game) => api("games", { act: "top", arg: game }),
     close: () => api("games", { act: "close" }),
   });
+}
+
+/* CR132: the card "Spiele" below "Station" - only when the box offers a game */
+function renderGamesCard() {
+  const any = ["nav-contest", "nav-prefix", "nav-top"].some((id) => !$(id).classList.contains("hidden"));
+  $("nav-games").classList.toggle("hidden", !any);
+}
+function openPrefix() {                           // Prefix raten runs in a board
+  prOpen = !(prOpen && view === "chat");
+  if (view !== "chat") setView("chat"); else render();
+}
+function openTop() {
+  const g = S.games || {}, shown = view === "chat";
+  if (!shown) setView("chat");
+  api("games", g.lb && shown ? { act: "close" } : { act: "top", arg: "" });
 }
 
 /* CR122: invite a member of the board - the box hands the game on */
@@ -4052,6 +4114,14 @@ async function start() {
   initMail();
   $("sys-disc").onclick = () => api("disconnect");
   $("pb-fill").onclick = openProfile;                         // CR73
+  $("wl-prof").onsubmit = saveWelcomeProfile;                 // CR133
+  $("wl-term").onclick = openTerm;
+  $("wl-why").onclick = () => $("wl-more").classList.toggle("hidden");
+  $("wl-copy").onclick = () => {
+    try { navigator.clipboard.writeText($("wl-fp").textContent); } catch (e) { /* ok */ }
+    $("wl-copy").textContent = "Copied";
+    setTimeout(() => { $("wl-copy").textContent = "Copy"; }, 1500);
+  };
   $("pb-later").onclick = () => api("profile/later");
   $("prof-edit").onclick = openProfile;
   $("adm-send").onclick = sendAdmin;                          // CR94
@@ -4131,9 +4201,12 @@ async function start() {
   $("freq-skip").onclick = async () => { await api("freq", { freq: "" }); $("freqdlg").classList.add("hidden"); };
   $("freq-change").onclick = () => { $("sheet").classList.add("hidden"); openFreq(); };
   $("nav-terminal").onclick = openTerm;
-  $("nav-contest").onclick = () => { boxContestOpen = !boxContestOpen; render(); };     // CR122
-  $("bh-prefix").onclick = () => { prOpen = !prOpen; render(); };                       // CR123
-  $("bh-top").onclick = () => api("games", (S.games || {}).lb ? { act: "close" } : { act: "top", arg: "" });  // CR126
+  $("nav-contest").onclick = () => {                                                  // CR122
+    boxContestOpen = !(boxContestOpen && view === "chat");
+    if (view !== "chat") setView("chat"); else render();
+  };
+  $("nav-prefix").onclick = openPrefix;                                                 // CR123/CR132
+  $("nav-top").onclick = openTop;                                                       // CR126/CR132
   $("pick-contest").onclick = () => { boxContestOpen = true; render(); };
   $("pick-contest").textContent = Contest.t("pickBox");
   $("nav-contest").title = Contest.t("tip");

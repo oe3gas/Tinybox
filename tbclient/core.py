@@ -1359,6 +1359,7 @@ class ClientCore:
         "PR": "_c_pr",
         "CTR": "_c_ctr",
         "ERR": "_c_err",
+        "P": "_c_prompt",
     }
 
     def _c_auth_ask(self, cmd: str, rest: str, line: str) -> None:
@@ -1396,11 +1397,23 @@ class ClientCore:
         self.asking.pop("cert", None)
         self._store_cert(rest.strip())
 
+    def _c_prompt(self, cmd: str, rest: str, line: str) -> None:
+        """CR134: the box answered a terminal command - show its prompt here
+        (the prompt itself does not go over the air)."""
+        if self.chan is not None:
+            self.chan.term_line("rx", tbproto.TERM_PROMPT)
+        self._touch()
+
     def _c_authwait(self, cmd: str, rest: str, line: str) -> None:
         self.auth.update(state="wait", reason="")
         self._note_home_auth("wait")
-        self.console.append(f"*** your key ({self.identity.fp}) waits for the sysop of "
-                            f"{self.auth['box'] or self.target} - tell him the fingerprint")
+        box = base_call(self.auth["box"] or self.target)
+        waited = self.settings.setdefault("auth_waited", [])     # CR133: "confirmed" later
+        if box not in waited:
+            waited.append(box)
+            self._save_settings()
+        self.console.append(f"*** {self.auth['box'] or self.target}: the sysop still has to confirm "
+                            f"this client (protects your callsign) - give him the code {self.identity.fp}")
         self._lotw_ask()                     # CR113: LoTW may release it
         self._touch()
 
@@ -1411,6 +1424,12 @@ class ClientCore:
     def _c_ok(self, cmd: str, rest: str, line: str) -> None:
         self.auth.update(state="ok", reason="")
         self._note_home_auth("ok")
+        waited = self.settings.get("auth_waited") or []
+        box = base_call(self.auth.get("box") or self.target)
+        if box in waited:                    # CR133: the sysop has confirmed it - say welcome
+            waited.remove(box)
+            self._save_settings()
+            self.auth["confirmed"] = int(time.time())
         if self._cert_due():
             self.asking["cert"] = time.time()
             self._send("//CERT?")            # stage 3: for logins at other TinyBoxen

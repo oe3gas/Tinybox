@@ -71,7 +71,7 @@ class LoginAnswers(unittest.TestCase):
     def test_key_waits_for_sysop(self):
         a, st, n, secs = run(None)
         self.assertEqual(a["state"], "wait")
-        self.assertIn("waits for the sysop", st["error"])
+        self.assertIn("still has to confirm", st["error"])
         self.assertIn(a["fp"], st["error"])
         self.assertEqual(n, 0)
         self.assertLess(secs, 5)                   # at once, not after 90 s

@@ -3,6 +3,8 @@
 Lines are joined with CR by the session; adapters translate line endings.
 """
 
+from prcore.tbproto import TERM_PROMPT
+
 from . import VERSION
 
 BANNER = "TinyBox {version} - {mailbox}"
@@ -10,8 +12,8 @@ HELLO = "Welcome to TinyBox {mailbox}, hello {call}."
 NEW_MSGS = "You have {n} new message(s)."
 NO_NEW_MSGS = "No new messages."
 
-PROMPT = "TinyBox (A,B,C,F,H,J,K,L,R,S,V,?) > "
-PROMPT_SYSOP = "TinyBox SYSOP (A,B,C,E,H,J,K,L,R,S,V,?) > "
+PROMPT = TERM_PROMPT + " "
+PROMPT_SYSOP = "TinyBox SYSOP (A,B,C,E,H,J,K,L,R,S,?) > "
 
 HELP = [
     "TinyBox commands:",
@@ -26,16 +28,16 @@ HELP = [
     "  J          Recently connected stations",
     "  K n        Kill message n (K n n ... for several)",
     "  KM         Kill all read messages to you",
-    "  L          List messages",
-    "             TS = Type (P private, B bulletin) + Status (N new, Y read)",
-    "             3rd letter: $ waiting for forward, F forwarded, H held",
+    "  L          List messages. TSF = Type (P private, B bulletin),",
+    "             Status (N new, Y read), Forward ($ waiting to go to",
+    "             another BBS, F gone to another BBS, H held by the sysop)",
     "  LB / LP    List bulletins / private messages only",
     "  L@ area    List messages @ area or mailbox, e.g. L@ WW",
     "  L> call    List messages to call (L< call: from call)",
     "  LM         List messages to you",
-    "  N name     Your first name (N - clears it, N alone shows your profile)",
-    "  NL loc     Your locator, 4 or 6 characters, e.g. NL JN88EP",
-    "  NH call    Your home BBS, e.g. NH OE3XSR or NH OE3XSR.#NOE.AUT.EU",
+    "  MYName name    Your first name (MYN - clears it, MYN alone shows your profile)",
+    "  MYLoc loc      Your locator, 4 or 6 characters, e.g. MYL JN88EP",
+    "  MYHomebbs bbs  Your home BBS, e.g. MYH OE3XSR or MYH OE3XSR.#NOE.AUT.EU",
     "  R n        Read message n (R n n ... for several)",
     "  RM         Read all unread messages to you",
     "  S call     Send private message (same as SP call)",
@@ -43,7 +45,8 @@ HELP = [
     "             e.g. SP OE1ABC @ OE1XAB.#WIE.AUT.EU",
     "  QSO        Your last connects to this mailbox (QSO 30: the last 30)",
     "  STAT       Link quality of your radio connection (STAT ALL: all stations)",
-    "  V          Version",
+    "  VERsion    Version of this TinyBox",
+    "Capital letters: enough to type, e.g. MYL for MYLoc (CR134).",
 ]
 # CR119: only for whom may write bulletins (sysop, login with key) - a guest
 # on the terminal cannot (CR92), so he does not see the command at all
@@ -92,7 +95,7 @@ USAGE_SB = "Usage: SB topic [@ area] [$BID]"                    # CR119
 USAGE_E = "Usage: E n field value  (field = TO, FROM, TYPE, STATUS, SUBJ, AT)"
 
 NO_MESSAGES = "No messages."
-LIST_HEADER = " MSG# TS   SIZE TO        @BBS    FROM      DATE   UTC   SUBJECT"
+LIST_HEADER = " MSG# TSF  SIZE TO        @BBS    FROM      DATE   UTC   SUBJECT"
 LIST_ROW = ("{id:>5} {type}{status}{fwd} {size:>5} {to:<9} {at:<7} {frm:<9} {date} {time} "
             "{subject}")
 
@@ -134,9 +137,9 @@ PROFILE_GREET = ("Hello {name}, great to copy you!",
                  "Hi {name}, glad you found your way to us!",
                  "Nice to meet you, {name}!",
                  "Hello {name}, thanks for dropping in!")
-PROFILE_THANKS = "Thank you. Change it any time with N, NL and NH."
+PROFILE_THANKS = "Thank you. Change it any time with MYName, MYLoc and MYHomebbs."
 PROFILE_HOME_HERE = "Thank you for choosing {box} as your home!"
-PROFILE_LATER = "OK. Set it later with N name, NL locator, NH home BBS."
+PROFILE_LATER = "OK. Set it later with MYName name, MYLoc locator, MYHomebbs BBS."
 PROFILE_SHOW = "{call}: name {name}, locator {loc}, home BBS {home}"
 PROFILE_NONE = "No profile for {call}."
 USAGE_I = "Usage: I [call]"

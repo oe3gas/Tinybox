@@ -60,9 +60,14 @@
     <section class="navsec sec-station">
       <div class="nav-h sync-h"><span>Station</span><button id="nav-settings" class="sec-gear" aria-label="Settings" title="Settings">⚙&#xFE0E;</button></div>
       <button id="nav-terminal" class="nav-item" title="Type TinyBox commands (L, R, F, QSO ...) directly - the TinyBox of the chat channel"><span><span class="ic">▸</span> TinyBox terminal</span></button>
-      <button id="nav-contest" class="nav-item hidden" title="CQ contest against the TinyBox - battleships with contest stations"><span><span class="ic">▸</span> CQ contest</span><span id="nav-contest-st"></span></button>
       <button id="nav-monitor" class="nav-item" title="Monitor: everything heard (Alt+0)"><span><span class="ic">▸</span> Monitor</span></button>
       <button id="nav-stats" class="nav-item" title="APRS statistics of the channel: stations, devices, digipeaters, sins"><span><span class="ic">▸</span> APRS statistics</span></button>
+    </section>
+    <section id="nav-games" class="navsec sec-games hidden" aria-label="Spiele">
+      <div class="nav-h"><span>Spiele</span></div>
+      <button id="nav-contest" class="nav-item hidden" title="CQ contest against the TinyBox - battleships with contest stations"><span><span class="ic">▸</span> CQ contest</span><span id="nav-contest-st"></span></button>
+      <button id="nav-prefix" class="nav-item hidden" title="Prefix raten: Welches Land steckt hinter dem Rufzeichen? Spiel im Board"><span><span class="ic">▸</span> Prefix raten</span><span id="nav-prefix-st"></span></button>
+      <button id="nav-top" class="nav-item hidden" title="Bestenliste: die Leaderboards der Spiele auf dieser Box"><span><span class="ic">▸</span> Bestenliste</span></button>
     </section>
   </aside>
 
@@ -72,9 +77,7 @@
   <nav id="boards" class="boards" aria-label="Chat boards"></nav>
   <div id="board-head" class="board-head hidden">
     <div class="bh-text"><b id="bh-name"></b> <span id="bh-desc" class="muted"></span></div>
-    <span class="row nowrap"><button id="bh-prefix" class="sm hidden" title="Prefix raten: Welches Land steckt hinter dem Rufzeichen? Spiel im Board">🎯 Prefix raten</button>
-    <button id="bh-top" class="sm hidden" title="Bestenliste: die Leaderboards der Spiele auf dieser Box">🏆 Bestenliste</button>
-    <button id="bh-leave" class="leave-btn" title="Leave this board">Leave</button></span>
+    <span class="row nowrap"><button id="bh-leave" class="leave-btn" title="Leave this board">Leave</button></span>
   </div>
 
   <div id="prof-banner" class="mail-banner prof-banner hidden" role="status">
@@ -95,10 +98,29 @@
       <p id="off-reason" class="muted"></p>
       <button id="btn-connect" class="primary">Connect</button>
     </section>
+    <section id="welcome" class="card welcome hidden" aria-label="Welcome">
+      <h2 id="wl-title"></h2>
+      <p id="wl-text" class="muted"></p>
+      <p id="wl-part"></p>
+      <div class="row wl-code"><span id="wl-fp" class="mono"></span><button id="wl-copy" type="button" class="sm">Copy</button></div>
+      <p id="wl-meanwhile" class="muted">Until the sysop has confirmed it, chat boards and games stay closed. Meanwhile, have a look around in the terminal: list and read bulletins, try the commands.</p>
+      <form id="wl-prof" class="wl-prof" autocomplete="off">
+        <p><b>Tell the others who you are</b> – you can change it any time under Settings &gt; My profile.</p>
+        <div class="wl-fields">
+          <label>First name<input id="wl-name" type="text" maxlength="12" placeholder="Gerhard"></label>
+          <label>Locator<input id="wl-loc" type="text" maxlength="6" placeholder="JN88EP" class="mono"></label>
+          <label>Home BBS<input id="wl-home" type="text" maxlength="40" placeholder="OE3XSR" class="mono"></label>
+        </div>
+        <div class="row"><button type="submit" class="sm">Save</button><span id="wl-prof-msg" class="small muted"></span></div>
+      </form>
+      <div class="row"><button id="wl-term" type="button" class="primary">▸ Open TinyBox terminal</button><button id="wl-why" type="button">Why is this needed?</button></div>
+      <p id="wl-more" class="muted small hidden">Every client has its own key. On the air a password could be read by anyone - so instead the sysop compares this code once. After that your client logs in by itself, and a stranger with your callsign gets no client access.</p>
+    </section>
     <section id="pick" class="card center hidden">
       <p class="big">Choose a board</p>
       <p class="muted">Tap a board above to join.</p>
       <button id="pick-contest" class="sm hidden">📻 CQ contest against the TinyBox</button>
+      <p id="pick-prefix" class="muted hidden">🎯 Prefix raten läuft in einem Board – wähle eins aus.</p>
     </section>
     <ol id="messages" class="messages"></ol>
   </main>
@@ -278,10 +300,8 @@
 <div id="profdlg" class="sheet hidden" role="dialog" aria-label="My profile">
   <form id="prof-form" class="sheet-body profdlg" autocomplete="off">
     <h2>My profile</h2>
-    <p class="muted small">Kept by the TinyBox for your call (all SSIDs) and shown to everybody: in the chat, in the terminal (I call) and in other clients. Sent only when it changes.</p>
     <label>First name<input id="prof-name" type="text" maxlength="12" placeholder="Gerhard"></label>
     <label>Locator<input id="prof-loc" type="text" maxlength="6" placeholder="JN88EP" class="mono"></label>
-    <p class="muted small">4 characters (JN88, about 150 × 110 km) or 6 (JN88EP, about 5 × 2.5 km) - the others see exactly what you enter.</p>
     <label><span>Home BBS <span class="muted">(optional)</span></span><input id="prof-home" type="text" maxlength="40" placeholder="OE3XSR" class="mono"></label>
     <p id="prof-err" class="hint hidden"></p>
     <div class="row"><button type="submit" class="primary">Save</button><button type="button" id="prof-cancel">Cancel</button></div>

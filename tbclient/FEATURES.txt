@@ -51,7 +51,7 @@ Zuletzt dazugekommen
   Grossfeldern um die Box bzw. den Einladenden, 5 Stationen je Spieler mit
   passenden Rufzeichen, Zug = CQ <Grossfeld>, Ausbreitungshinweis "QRZ?".
   Gegen einen TBClient (TBClient-Ansicht) oder gegen die TinyBox (links
-  unter Station). Pruefung am Ende ueber Hash.
+  in der Karte Spiele). Pruefung am Ende ueber Hash.
 - Prefix raten (CR123): im Chatboard nennt die Box ein Rufzeichen, die
   Spieler tippen die DXCC-Entitaet (A/B/C), 30 s je Call mit Countdown.
   Start mit Stufe (Newcomer, OM, Pro, DX-God), IARU-Regionen und Anzahl
@@ -60,7 +60,12 @@ Zuletzt dazugekommen
   Einladung als Karte, Starter kann die Anmeldung vorzeitig beenden.
   CR126: Tippzeit 5-30 s, nach jedem Call x von y richtig, Uebersicht am
   Spielende (Teilnehmer, Calls). Bestenliste der Box (alle Spiele, Top 3)
-  und je Spiel (Top 10), Knopf im Board-Kopf.
+  und je Spiel (Top 10).
+- Karte Spiele (CR132) links unter Station: CQ Contest, Prefix raten,
+  Bestenliste - nur wenn die Box Spiele anbietet.
+- Neuer Schluessel (CR133): Willkommens-Karte statt Banner - warum, Code
+  fuer den Sysop, Profil-Formular, Knopf ins Terminal.
+- Terminal (CR134): Prompt nach jeder Antwort der Box (lokal, //P).
 - Ergebnisse von Schach und CQ Contest (CR127) gehen signiert an die
   Heimat-Box; sie zaehlen in der Bestenliste, wenn beide Spieler dasselbe
   melden (Spiel-ID, Verlauf-Hash). Hinweis im Peer-Chat.

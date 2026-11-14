@@ -335,7 +335,7 @@ def _show_profile(s: Session, call: str) -> None:
 
 
 def _set_profile(s: Session, field: str, arg: str) -> None:
-    """N / NL / NH: without an argument the own profile, '-' clears the field."""
+    """MYName / MYLoc / MYHomebbs: without an argument the own profile, '-' clears the field."""
     if not arg:
         _show_profile(s, s.call)
         return
@@ -396,9 +396,9 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "LB": cmd_list_bulletins,
     "LM": cmd_list_mine,
     "LP": cmd_list_private,
-    "N": cmd_name,
-    "NH": cmd_home,
-    "NL": cmd_locator,
+    "MYNAME": cmd_name,
+    "MYHOMEBBS": cmd_home,
+    "MYLOC": cmd_locator,
     "R": cmd_read,
     "RM": cmd_read_mine,
     "S": cmd_send,
@@ -406,11 +406,26 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "SB": cmd_send_bulletin,
     "QSO": cmd_qso,
     "STAT": cmd_stat,
-    "V": cmd_version,
+    "VERSION": cmd_version,
 }
 
+# CR134: long commands with their shortest form (the capitals in the help: MYLoc =
+# MYL, MYLO, MYLOC) - every longer beginning of the word works too
+ABBREV = {"MYNAME": 3, "MYLOC": 3, "MYHOMEBBS": 3, "VERSION": 3}
 
-SIGNED_IN_CLIENT = {"S", "SP", "SB", "K", "KM", "E", "N", "NH", "NL"}
+
+def command_word(word: str) -> str:
+    """The command a typed word stands for ("MYL" -> "MYLOC"), or "" if none."""
+    word = word.upper()
+    if word in COMMANDS:
+        return word
+    for full, least in ABBREV.items():
+        if len(word) >= least and full.startswith(word):
+            return full
+    return ""
+
+
+SIGNED_IN_CLIENT = {"S", "SP", "SB", "K", "KM", "E", "MYNAME", "MYHOMEBBS", "MYLOC"}
 
 
 def dispatch(s: Session, line: str) -> None:
@@ -424,7 +439,7 @@ def dispatch(s: Session, line: str) -> None:
     if not m:
         s.out(texts.UNKNOWN_CMD)
         return
-    word = m.group(1).upper()
+    word = command_word(m.group(1))
     handler = COMMANDS.get(word)
     if handler is None:
         s.out(texts.UNKNOWN_CMD)

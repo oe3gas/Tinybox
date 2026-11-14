@@ -5307,7 +5307,7 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
 - Forward über AXUDP: keine Stufe 2.
 
 
-## CR132 – Spiele und Bestenliste in eigener Karte „Spiele“ links statt im Header (offen)
+## CR132 – Spiele und Bestenliste in eigener Karte „Spiele“ links statt im Header (✅ 14.11.2026, Client 2026.11.14.5)
 
 ### Erfassung (OE3GAS, 14.11.2026)
 
@@ -5355,8 +5355,19 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
 - Box offline / vor dem Handshake: Karte verschwindet.
 - Laufendes Spiel: Eintrag hervorgehoben, „du bist dran“ wie bisher.
 
+### Umsetzung (14.11.2026, Client 2026.11.14.5)
 
-## CR133 – Freundlicher Hinweis, wenn der Schlüssel auf den Sysop wartet; Terminal anbieten (offen)
+- Entschieden bei der Umsetzung: Bestenliste ist ein **Eintrag** der Karte. Prefix raten außerhalb
+  eines Boards: Klick öffnet die Chat-Ansicht mit „Prefix raten läuft in einem Board – wähle eins
+  aus“; nach dem Betreten eines Boards erscheint die Startseite (Variante c).
+- `index.html`: Karte `#nav-games` („Spiele“, eigene Farbe) unter „Station“ mit `nav-contest`
+  (aus „Station“ verschoben), `nav-prefix` (Hinweis „läuft“ bei laufender Runde), `nav-top`;
+  `bh-prefix`/`bh-top` im Board-Kopf entfallen, dort bleibt „Leave“.
+- `app.js`: `renderGamesCard()` – Karte nur, wenn mindestens ein Eintrag sichtbar ist (die Box meldet
+  `CT`, `PR` bzw. `GAMES`). Ein Klick aus einer anderen Ansicht wechselt in den Chat.
+- Die Sperre bei offenem Terminal folgt mit CR130.
+
+## CR133 – Freundlicher Hinweis, wenn der Schlüssel auf den Sysop wartet; Terminal anbieten (✅ 14.11.2026, Client 2026.11.14.5)
 
 ### Erfassung (OE3GAS, 14.11.2026)
 
@@ -5459,8 +5470,21 @@ Deutsch (Referenz, falls die GUI später übersetzt wird):
 - Sysop bestätigt: Karte weg, Bestätigungshinweis, Boards erscheinen.
 - `refused`: Karte mit Grund.
 
+### Umsetzung (14.11.2026, Client 2026.11.14.5)
 
-## CR134 – Terminal-UI der Box: Prompt nach jeder Antwort, neue Befehlsnamen MY…/VERsion, Liste verständlicher (offen)
+- `index.html`/`app.js`: Willkommens-Karte `#welcome` in der Mitte bei `auth.state` `wait` oder
+  `refused` (Chat-Ansicht, verbunden) mit Text wie oben, Code + Copy, Profil-Formular (vorbelegt:
+  eigenes Profil bzw. Locator aus der Konfiguration, Home-BBS = diese Box), „Open TinyBox terminal“,
+  „Why is this needed?“ (klappt auf). Gespeichert wird im Client; an die Box geht das Profil nach der
+  Bestätigung mit dem Abgleich aus CR73.
+- Banner oben: bei sichtbarer Karte keiner, sonst Einzeiler „Waiting for the sysop …“. Nach der
+  Bestätigung (der Client merkt sich die Boxen, bei denen er gewartet hat: `auth_waited`) zwei Minuten
+  „… has confirmed your client – welcome!“.
+- Konsole und Sync-Fehler: „the sysop still has to confirm this client (code …)“.
+- Formular „My profile“: beide Erklärtexte entfernt.
+- Terminal im Zustand `wait`: funktioniert, mit Prompt (CR134). CR130 muss das beim Sperren beachten.
+
+## CR134 – Terminal-UI der Box: Prompt nach jeder Antwort, neue Befehlsnamen MY…/VERsion, Liste verständlicher (✅ 14.11.2026, Client 2026.11.14.5)
 
 ### Erfassung (OE3GAS, 14.11.2026)
 
@@ -5543,3 +5567,16 @@ Hilfetext-Vorschlag:
 - Client-Terminal: nach jeder Antwort erscheint der Prompt (lokal), keine Prompt-Bytes über Funk.
 - `myl jn88ep`, `MYLOC JN88EP`, `myloc jn88ep` wirken gleich; `my` allein: „Unknown command“.
 - `ver`, `VERSION` liefern die Version; `L` zeigt Überschrift `TSF`.
+
+### Umsetzung (14.11.2026, Client 2026.11.14.5)
+
+- Entschieden: `MYName` (nicht `MYCall`); `N`, `NL`, `NH`, `V` entfallen sofort.
+- **Box** `tinybox/commands.py`: `MYNAME`, `MYLOC`, `MYHOMEBBS`, `VERSION` mit Mindestabkürzung
+  (`ABBREV`, je 3 Zeichen, `command_word()`); `SIGNED_IN_CLIENT` angepasst. `texts.py`: Hilfe, Prompt
+  ohne `V`, Profiltexte, Überschrift `TSF`.
+- **Prompt im Client-Modus:** neue Fähigkeit `PRM` (`prcore/tbproto.py`). Nach einer Terminal-Zeile
+  (keine `//`-Zeile) im Befehlsmodus sendet die Box statt des Prompts `//P` (4 Byte) – auch, solange
+  der Schlüssel auf den Sysop wartet. Der Client zeigt dann `tbproto.TERM_PROMPT` im Terminal
+  (`_c_prompt`). Ältere Clients ohne `PRM` bekommen wie bisher nichts.
+- Tests: `tests/test_cr134.py` (Abkürzungen, alte Befehle weg, Prompt, `//P`, Client-Seite, CR133
+  „confirmed“); bestehende Tests auf die neuen Befehle und Caps umgestellt.

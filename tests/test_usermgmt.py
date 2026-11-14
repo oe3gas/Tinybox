@@ -33,7 +33,7 @@ class HomeThanks(unittest.TestCase):
         type_lines(s, "/AB")
         t.take()
         base = base_call(self.box)
-        type_lines(s, f"NH {base}.#NOE.AUT.EU")
+        type_lines(s, f"MYH {base}.#NOE.AUT.EU")
         self.assertIn("as your home", t.take())
 
     def test_home_is(self):

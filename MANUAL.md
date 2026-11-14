@@ -722,8 +722,9 @@ Alle Benutzer sehen diese Angaben.
 
 - **Terminal:** Nach dem Login fragt die TinyBox nach den fehlenden Angaben. Enter
   überspringt eine Frage, `/AB` alle. Ist das Profil unvollständig, fragt sie höchstens
-  alle 30 Tage wieder. Ändern mit `N name`, `NL JN88EP`, `NH OE3XSR` (`-` löscht ein Feld),
-  ansehen mit `N` (eigenes) oder `I call`. Im Chat zeigt `/W` Name und Locator.
+  alle 30 Tage wieder. Ändern mit `MYName name`, `MYLoc JN88EP`, `MYHomebbs OE3XSR` (`-` löscht ein Feld;
+  Großbuchstaben = Mindestabkürzung, also `MYN`, `MYL`, `MYH`, CR134), ansehen mit `MYN` (eigenes)
+  oder `I call`. Version: `VERsion` (`VER`). Im Chat zeigt `/W` Name und Locator.
   Abschalten der Fragen: `[mailbox] ask_profile = no` in `tinybox.conf`.
 - **Client:** Fehlen Name oder Locator, erscheint über dem Chat ein Balken
   „Introduce yourself“ – *Fill in* öffnet das Formular, *Later* fragt in einer Woche wieder.
@@ -750,7 +751,9 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   **Fingerabdruck** (z. B. `7F3A-91C2-44E0`) zeigt der Client im Startblock („Your key“).
 - **Erster Login:** die TinyBox schickt eine Zufallszahl, der Client antwortet mit Signatur und
   öffentlichem Schlüssel. Ein neuer Schlüssel wartet auf den Sysop; der Client zeigt
-  „Your key waits for the sysop … fingerprint …“, der Sysop bekommt eine persönliche Nachricht.
+  in der Mitte eine Willkommens-Karte (CR133): warum die Bestätigung nötig ist, den Code für den
+  Sysop, ein Formular für Name/Locator/Home-BBS und den Knopf ins Terminal. Der Sysop bekommt eine
+  persönliche Nachricht. Nach der Bestätigung: kurzer Hinweis „… has confirmed your client“.
 - **Web-GUI „User management“** (früher „Keys“): vier Karten in zwei Spalten – **Users** (jede Station mit
   Name, Locator, Heimat-BBS, erstem/letztem Connect und Zahl der Connects aus dem JLOG, Ban/Purge; darunter ihre Schlüssel mit Release/Revoke/Delete und
   „✓ LoTW“) und **Banned stations**, darunter **Trusted TinyBoxen** und **LoTW**. **Neue Schlüssel** stehen
@@ -818,7 +821,7 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   Lesen, Chat und Abgleich ohne Löschen sind nicht signiert. Fehlt die Unterschrift oder stimmt sie
   nicht, weist die Box ab (`sig_missing`, `sig_bad`, `sig_replay`) und schreibt eine Warnung ins Log.
 - Im Client-Modus nimmt die Box die **Terminal-Befehle zum Schreiben und Löschen** (`S`, `SP`,
-  `SB`, `K`, `KM`, `E`, `N`, `NH`, `NL`) nicht an: „Not in client mode …“ – das macht der Client,
+  `SB`, `K`, `KM`, `E`, `MYName`, `MYHomebbs`, `MYLoc`) nicht an: „Not in client mode …“ – das macht der Client,
   signiert. In einer normalen Terminal-Verbindung gilt 3.7b.
 
 - **Client zu Client (CR99):** zwei TBClients prüfen beim Connect gegenseitig ihre Schlüssel

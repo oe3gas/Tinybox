@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Protocol
 
 from prcore.calls import base_call
+from prcore import tbproto
 from prcore.profile import ProfileError
 
 from . import logsetup, profiles, rights, texts
@@ -336,6 +337,7 @@ class Session:
             else:
                 log.info("< %s", line)
         started = time.monotonic()
+        term = self.state == State.COMMAND and bool(line.strip()) and not line.lstrip().startswith("//")
         try:
             if self.state == State.PROFILE and line.strip().upper().startswith("//TB?"):
                 # CR76: a TBClient asks what it reached - answer, the question stays
@@ -387,7 +389,16 @@ class Session:
             if slow:
                 logging.getLogger("tinybox.commands").debug("%r took %s", line, slow)
         if self.state == State.COMMAND:
-            self.prompt()
+            if term and self._prompt_mark():
+                self.out(tbproto.PROMPT_MARK)     # CR134: the client shows the prompt
+            else:
+                self.prompt()
+
+    def _prompt_mark(self) -> bool:
+        """CR134: a TinyBox client (logged in or waiting for the sysop) that wants
+        the prompt mark instead of the prompt."""
+        info = self.client if self.client is not None else self._client_wait
+        return info is not None and "PRM" in info.caps
 
     # --- client protocol: take the next n lines as they are --------------
 

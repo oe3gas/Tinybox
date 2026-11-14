@@ -37,10 +37,16 @@ CAPS = {
     "PR": "Prefix raten in the board (CR123)",
     "GAMES": "leaderboards (CR126)",
     "GAME": "signed game results (CR127)",
+    "PRM": "//P after a terminal command: the client shows the prompt (CR134)",
     "Z": "compressed texts (binary: AX.25 only)",
     "IMG": "images in a board (binary)",
     "BFILE": "files in a board (binary, CR86)",
 }
+
+# CR134: in client mode the box does not send its prompt over the air - after a
+# command typed in the terminal only this short mark; the client shows TERM_PROMPT
+PROMPT_MARK = "//P"
+TERM_PROMPT = "TinyBox (A,B,C,F,H,J,K,L,R,S,?) >"
 
 # what a client offers: CHAT, UI where it wants UI frames, the rest, the binary ones on AX.25
 UI_CAP = "UI"

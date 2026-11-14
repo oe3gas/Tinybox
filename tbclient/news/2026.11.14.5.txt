@@ -1,0 +1,4 @@
+Karte Spiele links: CQ Contest, Prefix raten, Bestenliste
+Neuer Schluessel: Willkommens-Karte mit Code, Profil, Terminal
+Terminal: Prompt nach jeder Antwort der Box
+Box-Befehle neu: MYName MYLoc MYHomebbs VERsion
