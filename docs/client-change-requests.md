@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 13.11.2026 (CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 14.11.2026 (CR131; CR130; CR129; CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -102,6 +102,7 @@ Stand: 13.11.2026 (CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus de
 | 127 | Spielergebnisse (Schach, CQ Contest) vom Client signiert an die Box melden – zählt nur, wenn beide Spieler dasselbe Ergebnis signiert melden | ✅ 13.11.2026 (Client 2026.11.13.5, Funktest offen) – siehe unten |
 | 128 | Spiele: keine Terminal-User; Zuschauer sehen nur, dass ein Spiel läuft (Prefix raten, Elmer Quiz) | offen – siehe unten |
 | 129 | Spiele in der Sprache der Box (`[games] language` in tinybox.conf), jeder Client darf eine eigene wählen; Prefix raten schickt DXCC-Nummern statt Ländernamen | offen – siehe unten |
+| 130 | TinyBox-Terminal (Client-Modus): Eingaben gehen als `//CMD` immer an die Mailbox, auch im Board; Terminal gesperrt ohne Verbindung, vor dem Handshake, bei Spielen und Uploads – und umgekehrt kein Spiel bei offenem Terminal | offen – entschieden (A: `//CMD`, B: Sperren), Umsetzung nicht entschieden – siehe unten |
 | 131 | brocastd: Wiederholungen auch bei Benutzerbetrieb (Stufe 1) gedrosselt senden – Schalter `busy_repeats` in `[traffic]`; Verbindungen über AXUDP belegen den Funkkanal nicht und zählen für brocast nicht | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
