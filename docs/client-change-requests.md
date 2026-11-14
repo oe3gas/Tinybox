@@ -5458,3 +5458,88 @@ Deutsch (Referenz, falls die GUI später übersetzt wird):
   Terminal, dort funktionieren L/R.
 - Sysop bestätigt: Karte weg, Bestätigungshinweis, Boards erscheinen.
 - `refused`: Karte mit Grund.
+
+
+## CR134 – Terminal-UI der Box: Prompt nach jeder Antwort, neue Befehlsnamen MY…/VERsion, Liste verständlicher (offen)
+
+### Erfassung (OE3GAS, 14.11.2026)
+
+1. Nach `?` kommt **kein Prompt** mehr. Der Standard-Prompt `TinyBox (A,B,C,F,H,J,K,L,R,S,V,?) >`
+   soll **immer** kommen, wenn eine Eingabe erwartet wird.
+2. Befehle umbenennen (Großbuchstaben = Mindestabkürzung, das ganze Wort wird auch akzeptiert):
+   - `N name` → `MYCall name` (`myc` genügt, `mycall` geht auch) – siehe Offen
+   - `NL loc` → `MYLoc loc`
+   - `NH call` → `MYHomebbs bbs`
+   - `V` (Version) → `VERsion`
+3. Hilfe zu `L`: „3rd letter: $ waiting for forward, F forwarded, H held“ ist unverständlich
+   („was heißt third letter?“).
+
+### Stand vor dem CR (14.11.2026)
+
+- **Prompt:** `session.prompt()` schreibt den Prompt nach jedem Befehl – **außer im Client-Modus**
+  (`self.client is not None`: „a client program needs no prompt“) und während des Logins mit Schlüssel
+  (CR93). Im „TinyBox terminal“ des TBClient ist man im Client-Modus → nach `?` (und nach jedem anderen
+  Befehl) kein Prompt. Im normalen Terminal (ohne Client) kommt er.
+- **Befehle:** Tabelle `COMMANDS` in `tinybox/commands.py`, nur exakte Wörter (keine Abkürzungen).
+  `N`, `NL`, `NH` stehen auch in `SIGNED_IN_CLIENT` (CR93). Hilfetexte in `tinybox/texts.py` (`HELP`),
+  Fragen nach dem Login (CR73) und `CLIENT_SIGNS` verweisen auf das Profil.
+- **Liste:** Spalte `TS` hat bis zu **drei** Zeichen: Typ (P/B), Status (N/Y) und der
+  **Forward-Zustand** (`fwd`, `service.FWD_STATES`): `$` = wartet auf Weiterleitung an eine andere
+  BBS, `F` = weitergeleitet, `H` = zurückgehalten (Mail eines Gasts an eine andere BBS, bis der Sysop
+  freigibt). Beispiel `PN$` = privat, neu, wartet auf Forward. Die Überschrift heißt nur `TS`.
+
+### Vorschlag zur Umsetzung (noch nicht entschieden)
+
+**1 – Prompt**
+
+- Im Client-Modus kommt der Prompt der Box nicht über Funk (Bytes). Stattdessen zeigt das
+  **Client-Terminal selbst** den Prompt `TinyBox (…) >`, sobald die Antwort der Box vollständig ist –
+  Null Bytes auf dem Kanal.
+- Dafür braucht der Client das Ende der Antwort: mit CR130 (`//CMD <Zeile>`) schickt die Box nach der
+  Antwort eine kurze Endmarke (z. B. `//CMDEND`, wenige Bytes statt ~37 für den Prompt).
+- Alternative: Die Box sendet auf `//CMD` den echten Prompt (einfach, aber ~37 Byte je Befehl).
+- Normales Terminal: Prüfen, dass nach **jedem** Befehl und nach jeder Unterbrechung (Systemmeldung,
+  abgebrochene Ausgabe, Fehler, Ende der Profilfragen, Verlassen eines Boards) der Prompt kommt.
+
+**2 – Befehlsnamen**
+
+- Abkürzungs-Regel wie bei FBB/BPQ: Großbuchstaben im Hilfetext = Mindestlänge, jedes längere
+  Präfix des Worts wird akzeptiert (`MYL`, `MYLO`, `MYLOC`). Mehrdeutigkeiten beim Ausbau prüfen.
+- Neu: `MYCall`/`MYName` (siehe Offen), `MYLoc`, `MYHomebbs`, `VERsion`.
+- `SIGNED_IN_CLIENT`, Hilfe, Login-Fragen (CR73), `CLIENT_SIGNS`, Handbuch (`MANUAL.md`) und Tests
+  anpassen. Der Client nutzt `//PROF` (CR73) und ist nicht betroffen.
+- Prompt: `V` fällt aus der Liste – neuer Prompt z. B. `TinyBox (A,B,C,F,H,J,K,L,R,S,?) >`.
+
+Hilfetext-Vorschlag:
+
+```
+  MYName name    Your first name (MYN - clears it, MYN alone shows your profile)
+  MYLoc loc      Your locator, 4 or 6 characters, e.g. MYL JN88EP
+  MYHomebbs bbs  Your home BBS, e.g. MYH OE3XSR or MYH OE3XSR.#NOE.AUT.EU
+  VERsion        Version of this TinyBox
+```
+
+**3 – Liste verständlicher**
+
+- Überschrift `TS` → `TSF` (Typ, Status, Forward), Hilfetext:
+
+```
+  L          List messages. TSF = Type (P private, B bulletin),
+             Status (N new, Y read), Forward ($ waiting to go to
+             another BBS, F gone to another BBS, H held by the sysop)
+```
+
+### Offen
+
+- **`MYCall` für den Namen?** Der Befehl setzt den **Vornamen**, nicht das Rufzeichen – `MYCall`
+  würde man eher als „mein Rufzeichen“ lesen. Vorschlag `MYName` (`myn`). Zu entscheiden.
+- Alte Befehle `N`, `NL`, `NH`, `V` noch eine Zeit als Alias behalten (Gewohnheit, Skripte) oder
+  sofort entfernen?
+- Endmarke vs. echter Prompt im Client-Modus (siehe 1).
+
+### Test
+
+- Normales Terminal: nach `?`, `L`, `R n`, `C`/Board verlassen, `A`, Fehler – jedes Mal der Prompt.
+- Client-Terminal: nach jeder Antwort erscheint der Prompt (lokal), keine Prompt-Bytes über Funk.
+- `myl jn88ep`, `MYLOC JN88EP`, `myloc jn88ep` wirken gleich; `my` allein: „Unknown command“.
+- `ver`, `VERSION` liefern die Version; `L` zeigt Überschrift `TSF`.
