@@ -22,7 +22,7 @@ script, but nothing that can trick a reader or a program:
   with a Cyrillic O) - for marking, never in protocol fields.
 
 Protocol fields (calls, BIDs, routes, rubrics, commands) stay strictly ASCII;
-their own checks (config.is_valid_call, addressing.BID_RE ...) do that.
+their own checks (calls.is_valid_call, addressing.BID_RE ...) do that.
 """
 
 from __future__ import annotations

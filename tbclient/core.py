@@ -17,11 +17,12 @@ from prcore.agw import PID_NO_L3, via_data
 from prcore.ax25.frame import AX25Error, split_call
 from prcore.ax25.frame import ui_frame as ax25_ui_frame
 from prcore import auth
+from prcore.calls import AX25_CALL_RE, base_call
 from prcore.text import isnum
 
 from . import VERSION, activity, airq, proto
 from . import target as tgt
-from .config import CALL_RE, Config
+from .config import Config
 from .images import Images, ImageStore
 from .channels import TERM_SNAPSHOT, Channel
 from .kisslink import AxudpPort, KissLink, KissPort
@@ -110,7 +111,7 @@ class ClientCore:
         self.nochat = Channel(self, 0, self._new_link())
         last = self.settings.get("target", "")
         first = self.open_channel(1)
-        first.target = last if CALL_RE.match(last or "") and last != cfg.mycall else self.home
+        first.target = last if AX25_CALL_RE.match(last or "") and last != cfg.mycall else self.home
         self.chan: Channel = first
         self.monitor: deque[tuple[int, str]] = deque(maxlen=MONITOR_MAX)   # (n, line)
         self.monitor_n = 0
@@ -571,7 +572,7 @@ class ClientCore:
         offline_ok = act in ("close", "decline", "place", "random")
         if to:
             to = to.upper().split("-")[0]
-            if not CALL_RE.match(to) or to == self.cfg.mycall.upper().split("-")[0]:
+            if not AX25_CALL_RE.match(to) or to == self.cfg.mycall.upper().split("-")[0]:
                 return False
             if not offline_ok and (self.state != "online" or "CTR" not in self.caps):
                 return False
@@ -1134,7 +1135,7 @@ class ClientCore:
     def _cert_due(self) -> bool:
         """At the home BBS: no certificate of it yet, or one that runs out soon."""
         box = self.auth.get("box") or self.target
-        if self._login is None or auth.base(box) != auth.base(self.home):
+        if self._login is None or base_call(box) != base_call(self.home):
             return False
         try:
             until = auth.parse_cert(self._certs().get(box.upper(), ""))["until"]
@@ -1149,7 +1150,7 @@ class ClientCore:
         except auth.AuthError:
             return                                   # '-': this box issues none
         box = (self.auth.get("box") or self.target).upper()
-        if c["call"] != auth.base(self.cfg.mycall) or c["pub"] != self.identity.pub \
+        if c["call"] != base_call(self.cfg.mycall) or c["pub"] != self.identity.pub \
                 or c["issuer"] != box:
             log.warning("certificate from %s not for this key - ignored", box)
             return
@@ -1160,7 +1161,7 @@ class ClientCore:
 
     def _trust_due(self) -> bool:
         box = self.auth.get("box") or self.target
-        if self._login is None or auth.base(box) != auth.base(self.home):
+        if self._login is None or base_call(box) != base_call(self.home):
             return False
         tr = self.settings.get("trust")
         return not isinstance(tr, dict) or time.time() - tr.get("at", 0) > 86400
@@ -1168,7 +1169,7 @@ class ClientCore:
     def _store_trust(self, rest: str) -> None:
         """//TRUST box=key ...: from the home BBS (the first one is the home BBS itself)."""
         box = (self.auth.get("box") or self.target).upper()
-        if self._login is None or auth.base(box) != auth.base(self.home):
+        if self._login is None or base_call(box) != base_call(self.home):
             return
         keys = {}
         for part in rest.split()[:21]:
@@ -1212,7 +1213,7 @@ class ClientCore:
 
     def lotw_status(self) -> dict:
         from prcore import lotw
-        out = {"available": lotw.available(), "call": auth.base(self.cfg.mycall),
+        out = {"available": lotw.available(), "call": base_call(self.cfg.mycall),
                "box": {k: v for k, v in self.lotw_box.items() if k != "asked"}}
         proof = self.lotw_proof()
         if proof:
@@ -1231,7 +1232,7 @@ class ClientCore:
         The .p12 and the password are only used here and not kept."""
         import json
         from prcore import lotw
-        proof = lotw.sign_binding(p12, password, auth.base(self.cfg.mycall), self.identity.pub)
+        proof = lotw.sign_binding(p12, password, base_call(self.cfg.mycall), self.identity.pub)
         tmp = self._lotw_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(proof, indent=1), encoding="utf-8")
         tmp.replace(self._lotw_path)
@@ -1315,7 +1316,7 @@ class ClientCore:
 
     def _note_home_auth(self, state: str, reason: str = "") -> None:
         """CR104: the last login answer of the home BBS, kept for the settings page."""
-        if auth.base(self.auth.get("box") or self.target) != auth.base(self.home):
+        if base_call(self.auth.get("box") or self.target) != base_call(self.home):
             return
         new = {"state": state, "reason": reason, "at": int(time.time())}
         old = self.settings.get("auth_home") or {}
@@ -1511,7 +1512,7 @@ class ClientCore:
         elif cmd == "CTR":                 # CR122: another client, handed on by the box
             call, _, line = rest.partition(" ")
             call = call.upper()
-            if CALL_RE.match(call) and line:
+            if AX25_CALL_RE.match(call) and line:
                 self._relay_slot(call).take(line)
         elif cmd == "ERR":
             self.console.append(line)

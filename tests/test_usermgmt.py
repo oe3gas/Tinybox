@@ -8,6 +8,7 @@ import unittest
 from tinybox import keys, profiles
 
 from tests.test_tinybox import login, make_app, type_lines
+from prcore.calls import base_call
 
 
 class HomeThanks(unittest.TestCase):
@@ -31,7 +32,7 @@ class HomeThanks(unittest.TestCase):
         s, t = login(self.app, "OE1ABC")
         type_lines(s, "/AB")
         t.take()
-        base = profiles.base_call(self.box)
+        base = base_call(self.box)
         type_lines(s, f"NH {base}.#NOE.AUT.EU")
         self.assertIn("as your home", t.take())
 

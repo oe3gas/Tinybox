@@ -16,6 +16,8 @@ EU and EURO (TAPR continent code) count as the same.
 
 from __future__ import annotations
 
+from prcore.calls import base_call
+
 from .. import addressing
 from ..config import ForwardCfg, PartnerCfg
 from ..store import Message
@@ -33,7 +35,7 @@ def score(addr: str, pattern: str, partner_call: str) -> float:
         return 0
     if p == ["WW"]:
         return 0.5
-    if len(p) == 1 and addressing.base_call(a[0]) == p[0] and p[0] == partner_call:
+    if len(p) == 1 and base_call(a[0]) == p[0] and p[0] == partner_call:
         return 100
     if len(p) <= len(a) and a[-len(p):] == p:
         return len(p)

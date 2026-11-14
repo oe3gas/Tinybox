@@ -135,11 +135,11 @@ from typing import TYPE_CHECKING
 
 from prcore import auth
 from prcore import profile as pf
+from prcore.calls import base_call
 from prcore.release import RELEASE
 from prcore.text import isnum
 
 from . import clientnews, clientsync, contest, gamereport, games, prefixgame, profiles
-from .addressing import base_call
 
 if TYPE_CHECKING:
     from .session import Session
@@ -397,7 +397,7 @@ def _auth(s: Session, parts: list[str]) -> None:
     except auth.AuthError:
         s.out("", "//ERR auth syntax")
         return
-    box, call = s.cfg.station.mailbox_call, auth.base(s.call)
+    box, call = s.cfg.station.mailbox_call, base_call(s.call)
     if not auth.verify(pub, auth.login_message(box, call, nonce), sig):
         log.warning("%s: client login with a wrong signature", s.call)
         s.out("", "//ERR auth bad_signature")
@@ -490,7 +490,7 @@ def admin_allowed(s: Session) -> bool:
     if not s.auth or s.auth_cert or s.auth_pub is None \
             or not s.service.is_sysop_call(s.call):
         return False
-    row = s.service.store.key_get(auth.base(s.call), auth.b64e(s.auth_pub))
+    row = s.service.store.key_get(base_call(s.call), auth.b64e(s.auth_pub))
     return row is not None and row["status"] == "active"
 
 
@@ -532,7 +532,7 @@ def _trust_list(s: Session) -> None:
 def _cert(s: Session) -> None:
     """//CERT?: the certificate of this box for the key the user logged in with -
     only at his home BBS (the key released here, not via a certificate)."""
-    row = s.service.store.key_get(auth.base(s.call), auth.b64e(s.auth_pub)) \
+    row = s.service.store.key_get(base_call(s.call), auth.b64e(s.auth_pub)) \
         if s.auth_pub is not None else None
     if not s.auth or row is None or row["status"] != "active":
         s.out("//CERT -")

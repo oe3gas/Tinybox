@@ -26,9 +26,10 @@ from datetime import datetime
 from typing import Any
 
 from prcore import termcolor
+from prcore.calls import normalize_call
 
 from ..app import App
-from ..config import LOOPBACK_HOSTS, PartnerCfg, normalize_call
+from ..config import LOOPBACK_HOSTS, PartnerCfg
 from ..fwd.link import AgwLink, TcpLink
 from ..linkguard import guard
 from ..fwd.router import Router

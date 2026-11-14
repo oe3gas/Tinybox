@@ -6,6 +6,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Callable
 
+from prcore.calls import base_call
 from prcore.profile import CALL_RE as BASE_CALL_RE, ProfileError
 from prcore.text import client_safe, isnum
 
@@ -98,7 +99,8 @@ QSO_DEFAULT, QSO_MAX = 10, 100
 def cmd_qso(s: Session, arg: str) -> None:
     """CR44: the connection log. Everybody sees his own connects (all SSIDs of
     his call); the sysop also QSO ALL and QSO <call>."""
-    from .connlog import base_call, duration, kb
+    from prcore.calls import base_call
+    from .connlog import duration, kb
     words = arg.upper().split()
     base, n, which = base_call(s.call), QSO_DEFAULT, ""
     if words and not isnum(words[0]):
@@ -174,7 +176,7 @@ def cmd_list(s: Session, arg: str) -> None:
             return
         if op == "@":
             msgs = [m for m in msgs if value in addressing.parts(m.at_addr)
-                    or addressing.addr_call(m.at_addr) == addressing.base_call(value)]
+                    or addressing.addr_call(m.at_addr) == base_call(value)]
         elif op == ">":
             msgs = [m for m in msgs if m.to_call == value]
         else:
@@ -323,7 +325,7 @@ def cmd_edit(s: Session, arg: str) -> None:
 
 def _show_profile(s: Session, call: str) -> None:
     p = profiles.get(s.service.store, call)
-    base = addressing.base_call(call)
+    base = base_call(call)
     if p is None:
         s.out(texts.PROFILE_NONE.format(call=base))
         return
@@ -366,7 +368,7 @@ def cmd_info(s: Session, arg: str) -> None:
         s.out(texts.USAGE_I)
         return
     call = words[0].upper() if words else s.call
-    if not BASE_CALL_RE.match(addressing.base_call(call)):
+    if not BASE_CALL_RE.match(base_call(call)):
         s.out(texts.INVALID_CALL.format(call=call))
         return
     _show_profile(s, call)

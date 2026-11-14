@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 
 from prcore import axudp
 from prcore.ax25 import frame as ax
+from prcore.calls import base_call, norm_call
 
 log = logging.getLogger("tbtest.channel")
 
@@ -124,16 +125,16 @@ class Channel:
         return self.air_baud > 0
 
     def add(self, station: Station) -> None:
-        self.stations[axudp.norm_call(station.call)] = station
+        self.stations[norm_call(station.call)] = station
 
     def find(self, call: str) -> Station | None:
-        call = axudp.norm_call(call)
+        call = norm_call(call)
         st = self.stations.get(call)
         if st is not None:
             return st
-        base = axudp.base_call(call)
+        base = base_call(call)
         return next((s for s in self.stations.values()
-                     if "-" not in s.call and axudp.base_call(s.call) == base), None)
+                     if "-" not in s.call and base_call(s.call) == base), None)
 
     # --- life cycle ----------------------------------------------------------------------
 

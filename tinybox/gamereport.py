@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from prcore import auth
+from prcore.calls import base_call, BASE_CALL_RE
 
 from . import games
 
@@ -39,7 +39,6 @@ KEEP_DAYS = 7
 MATCH_SEC = 600
 PAIR_DAY = 50
 HEX16 = re.compile(r"^[0-9a-f]{16}$")
-CALL = re.compile(r"^(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{3,6}$")
 OTHER = {"win": "loss", "loss": "win", "draw": "draw"}
 
 
@@ -60,7 +59,7 @@ def command(s: "Session", rest: str) -> None:
 
 
 def _status(s: "Session", gid: str) -> None:
-    r = s.service.store.report_get(gid, auth.base(s.call.upper()))
+    r = s.service.store.report_get(gid, base_call(s.call))
     if r is None:
         s.out(f"//GAME ERR {gid} unknown")
     elif r["status"] in ("pending", "counted"):
@@ -79,8 +78,8 @@ def _report(s: "Session", args: list[str]) -> None:
     if not s.auth or s.auth_pub is None:            # only with a released key
         s.out(f"//GAME ERR {gid} nokey")
         return
-    me = auth.base(s.call.upper())
-    vs = auth.base(kv.get("vs", "").upper())
+    me = base_call(s.call)
+    vs = base_call(kv.get("vs", ""))
     try:
         game, res, h = kv["g"], kv["r"], kv["h"].lower()
         moves, ended = int(kv["n"]), int(kv["t"])
@@ -88,7 +87,7 @@ def _report(s: "Session", args: list[str]) -> None:
         s.out(f"//GAME ERR {gid} bad")
         return
     if game not in GAMES or res not in OTHER or not HEX16.match(h) or moves < 0 \
-            or not CALL.match(vs):
+            or not BASE_CALL_RE.match(vs):
         s.out(f"//GAME ERR {gid} bad")
         return
     if vs == me:

@@ -28,11 +28,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from prcore import aprs, termcolor
+from prcore.calls import base_call, normalize_call
 from prcore.text import isnum
 
 from .. import VERSION, config, connlog, framemon, linkq, logsetup
 from ..app import App
-from ..config import base_call, normalize_call
 from ..service import ServiceError
 from ..session import State
 
@@ -530,9 +530,8 @@ class WebServer:
                 n = self.app.store.lotw_root_delete(str(data.get("fp", "")))
                 return {"text": f"{n} certificate(s) removed."}
             if parts == ["purge"]:
-                from prcore import auth
                 if not data.get("confirm"):
-                    return {"counts": self.app.store.purge_counts(auth.base(call))}
+                    return {"counts": self.app.store.purge_counts(base_call(call))}
                 res = svc.ban(call, str(data.get("reason", "")), purge=True)
                 return {"text": f"{res['base']}: purged and banned - deleted " +
                         ", ".join(f"{n} {k}" for k, n in res["deleted"].items()) + "."}

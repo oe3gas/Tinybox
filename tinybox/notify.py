@@ -17,7 +17,7 @@ import asyncio
 import logging
 import time
 
-from .config import base_call
+from prcore.calls import base_call
 
 log = logging.getLogger(__name__)
 

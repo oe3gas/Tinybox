@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from prcore import auth
+from prcore.calls import base_call
 from tinybox import clientproto, gamereport, games
 
 from tests.test_tinybox import login, make_app, type_lines
@@ -28,7 +29,7 @@ class BoxTests(unittest.TestCase):
     def logon(self, call):
         key = auth.Identity(Path(self.tmp.name) / f"{call}.key")
         self.keys[call] = key
-        self.app.store.key_put(auth.base(call), key.pub, "active")
+        self.app.store.key_put(base_call(call), key.pub, "active")
         s, t = login(self.app, call)
         type_lines(s, "//CLIENT TB1 v=2026.11.13 caps=CHAT,SYNC,GAME,GAMES")
         n = t.take().split("//AUTH? n=", 1)[1].split()[0]

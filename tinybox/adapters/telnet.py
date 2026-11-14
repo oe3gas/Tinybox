@@ -11,11 +11,10 @@ import asyncio
 import logging
 
 from prcore import termcolor
-from prcore.kissport import plausible_call
+from prcore.calls import is_valid_call, normalize_call, plausible_call
 
 from .. import logsetup, texts
 from ..app import App
-from ..config import is_valid_call, normalize_call
 from ..session import MAX_LINE, Session
 
 log = logging.getLogger(__name__)

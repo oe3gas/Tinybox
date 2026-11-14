@@ -13,6 +13,7 @@ import time
 from enum import Enum
 from typing import Protocol
 
+from prcore.calls import base_call
 from prcore.profile import ProfileError
 
 from . import logsetup, profiles, rights, texts
@@ -217,7 +218,7 @@ class Session:
             lines.append(texts.PROFILE_INTRO)
         self.out(*lines)
         if ask:
-            self.service.store.profile_asked(profiles.base_call(self.call))
+            self.service.store.profile_asked(base_call(self.call))
             self._ask_fields, self._ask_answers = ask, {}
             self._ask_next()
         else:
@@ -545,8 +546,8 @@ class SessionRegistry:
     def add(self, session: Session) -> bool:
         active = self._active()
         # CR97 (TB-17): one call with several SSIDs must not take every slot
-        base = profiles.base_call(session.call)
-        same = sum(1 for s in active if profiles.base_call(s.call) == base)
+        base = base_call(session.call)
+        same = sum(1 for s in active if base_call(s.call) == base)
         if same >= MAX_PER_CALL and not session.sysop:
             return False
         if len(active) >= self.max_users and not self._make_room(session.call):

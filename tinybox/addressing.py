@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 import secrets
 from datetime import datetime, timezone
+from prcore.calls import base_call
 
 MAX_BID = 12
 BID_RE = re.compile(r"^[A-Z0-9_\-/]{1,12}$")
@@ -38,10 +39,6 @@ CONTINENTS = {"EU", "EURO", "NA", "NOAM", "SA", "SOAM", "AS", "ASIA", "AF", "AFR
 
 class AddressError(ValueError):
     pass
-
-
-def base_call(call: str) -> str:
-    return call.upper().split("-", 1)[0]
 
 
 def parts(addr: str) -> list[str]:

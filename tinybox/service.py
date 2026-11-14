@@ -11,20 +11,14 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from prcore.calls import base_call, is_valid_call, normalize_call
 from prcore.profile import plausible_station
 from prcore.text import clean_text, defuse_lines
 
 from . import addressing, rights
 from .addressing import AddressError
 from .chat import ChatHub
-from .config import (
-    DEST_RE,
-    NEWS_RUBRIC,
-    Config,
-    base_call,
-    is_valid_call,
-    normalize_call,
-)
+from .config import DEST_RE, NEWS_RUBRIC, Config
 from .events import EventBus
 from .store import Message, Store, utc_now
 
@@ -140,8 +134,7 @@ class MessageService:
 
     def ban_of(self, call: str) -> dict | None:
         """The ban of call (any SSID), None = may connect. The sysop call is never banned."""
-        from prcore import auth
-        base = auth.base(call.upper())
+        base = base_call(call)
         if self.is_sysop_call(base):
             return None
         return self.store.ban_get(base)
@@ -150,8 +143,7 @@ class MessageService:
         """BAN: shut call out (all SSIDs), the data stays - UNBAN lets him back.
         PURGE: the same, and his keys, profile, logins, chat lines and board files
         go; mail, bulletins and the connection log stay. Sessions of call end now."""
-        from prcore import auth
-        base = auth.base(call.strip().upper())
+        base = base_call(call)
         if not base or not (3 <= len(base) <= 7) or not base.isalnum() or not base.isascii():
             raise ServiceError("bad_call", f"{call}: not a call")
         if self.is_sysop_call(base):
@@ -165,21 +157,19 @@ class MessageService:
         return {"base": base, "deleted": gone, "sessions": n}
 
     def unban(self, call: str) -> bool:
-        from prcore import auth
-        base = auth.base(call.strip().upper())
+        base = base_call(call)
         ok = self.store.ban_delete(base)
         if ok:
             log.warning("sysop: %s no longer banned", base)
         return ok
 
     def _end_sessions(self, base: str) -> int:
-        from prcore import auth
         app = getattr(self, "app", None)
         if app is None:
             return 0
         n = 0
         for s in list(app.registry):
-            if auth.base(s.call) == base and not getattr(s, "closed", False):
+            if base_call(s.call) == base and not getattr(s, "closed", False):
                 from . import texts
                 s.out(texts.BANNED.format(call=s.call))
                 s.close()
@@ -281,7 +271,7 @@ class MessageService:
         Returns the normalized destination."""
         to_call = normalize_call(to_call)
         if type == "P" and to_call == "SYSOP":      # CR118: S SYSOP = the sysop of this box
-            to_call = base_call(self.cfg.station.sysop_call.upper())
+            to_call = base_call(self.cfg.station.sysop_call)
         if type == "P":
             if not is_valid_call(to_call):
                 raise ServiceError("invalid_call", to_call)

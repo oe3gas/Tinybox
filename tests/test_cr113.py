@@ -13,6 +13,7 @@ import tempfile
 import unittest
 
 from prcore import auth, lotw
+from prcore.calls import base_call
 
 try:
     from cryptography import x509
@@ -131,7 +132,7 @@ class Client(unittest.TestCase):
         from tests.test_tbclient import client_cfg
         self._tmp = tempfile.TemporaryDirectory()
         self.core = ClientCore(client_cfg(self._tmp.name))
-        call = auth.base(self.core.cfg.mycall)
+        call = base_call(self.core.cfg.mycall)
         k = dt.datetime.now(dt.timezone.utc)
         self.key, self.leaf, self.inter, self.root = make_lotw(
             call, start=k - dt.timedelta(days=10), end=k + dt.timedelta(days=500))

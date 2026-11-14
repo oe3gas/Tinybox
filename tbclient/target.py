@@ -14,8 +14,8 @@ The same rules are in web/app.js (parseTarget) for the preview under the field.
 from __future__ import annotations
 
 import re
+from prcore.calls import AX25_CALL_RE
 
-from .config import CALL_RE
 
 MAX_VIA = 8               # AX.25: at most 8 digipeaters in the address field
 VIA_WORDS = ("V", "VIA")
@@ -31,7 +31,7 @@ def parse(text: str, mycall: str = "") -> tuple[str, list[str]]:
     if not words:
         raise TargetError("no call")
     call, rest = words[0], words[1:]
-    if not CALL_RE.match(call):
+    if not AX25_CALL_RE.match(call):
         raise TargetError(f"{call}: not a call (e.g. OE3XYZ-8)")
     if mycall and call == mycall.upper():
         raise TargetError("that is your own call")
@@ -44,7 +44,7 @@ def parse(text: str, mycall: str = "") -> tuple[str, list[str]]:
     if len(rest) > MAX_VIA:
         raise TargetError(f"at most {MAX_VIA} digipeaters")
     for d in rest:
-        if not CALL_RE.match(d):
+        if not AX25_CALL_RE.match(d):
             raise TargetError(f"{d}: not a digipeater call")
         if d == call or (mycall and d == mycall.upper()):
             raise TargetError(f"{d} cannot be its own digipeater")

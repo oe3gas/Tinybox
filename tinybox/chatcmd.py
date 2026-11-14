@@ -198,7 +198,7 @@ def enter(s: Session, board: ChatBoard) -> None:
 def _who_line(s: Session) -> str:
     """'In this board: OE3ABC (Hans, JN88), OE3XYZ' - with name and locator
     of the profile, where the station gave one (CR73)."""
-    from .addressing import base_call
+    from prcore.calls import base_call
     others = [m.call for m in s.service.chat.members(s.chat_board or "") if m is not s]
     if not others:
         return texts.CHAT_ALONE

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from prcore import aprs
 from prcore import profile as pf
+from prcore.calls import base_call
 
 if TYPE_CHECKING:
     from .core import ClientCore
@@ -28,10 +29,6 @@ STALE_SEC = 7 * 86400        # profiles of others: fetched again after a week
 SNOOZE_SEC = 7 * 86400       # "Later" on the invitation: asked again after a week
 CACHE_MAX = 300              # profiles of others kept at most
 WHOIS_MAX = 10               # calls per //WHOIS (limit of the TinyBox)
-
-
-def base(call: str) -> str:
-    return call.upper().split("-", 1)[0]
 
 
 class Profiles:
@@ -156,7 +153,7 @@ class Profiles:
         if fields.strip() != "-":
             p = pf.decode(fields)
             entry |= {f: p[f] for f in pf.FIELDS}
-        cache[base(call)] = entry
+        cache[base_call(call)] = entry
         if len(cache) > CACHE_MAX:
             for old in sorted(cache, key=lambda c: cache[c].get("at", 0))[:len(cache) - CACHE_MAX]:
                 del cache[old]
@@ -175,9 +172,9 @@ class Profiles:
             return
         cache = self.core.settings.get("profiles", {})
         now = time.time()
-        me = base(self.core.cfg.mycall)
+        me = base_call(self.core.cfg.mycall)
         for c in calls:
-            b = base(c)
+            b = base_call(c)
             if b == me or b in self._asked or b.startswith("TBCHAT"):
                 continue
             if now - cache.get(b, {}).get("at", 0) > STALE_SEC:
@@ -211,7 +208,7 @@ class Profiles:
         cache = self.core.settings.get("profiles", {})
         others = {}
         for c in calls:
-            p = cache.get(base(c))
+            p = cache.get(base_call(c))
             if not p or pf.empty(p):
                 continue
             row = {"name": p.get("name", ""), "loc": p.get("loc", ""), "home": p.get("home", "")}

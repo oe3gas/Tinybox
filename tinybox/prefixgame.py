@@ -41,8 +41,8 @@ import logging
 import random
 from typing import TYPE_CHECKING, Callable
 
-from prcore import auth
 from prcore import prefixgame as pg
+from prcore.calls import base_call
 
 from . import games
 
@@ -233,7 +233,7 @@ class Game:
         rows = {r["call"]: r for r in games.ranked(store, "prefix")}
         tot = []
         for c in played:
-            r = rows.get(auth.base(c.upper()))
+            r = rows.get(base_call(c))
             if r:
                 tot.append(f"{c}={r['games']}/{r['quote']}")
         if tot:

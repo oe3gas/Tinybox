@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from .config import base_call
+from prcore.calls import base_call
 
 log = logging.getLogger(__name__)
 

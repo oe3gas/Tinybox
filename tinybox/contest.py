@@ -33,8 +33,7 @@ import time
 from typing import TYPE_CHECKING
 
 from prcore import contest
-
-from .addressing import base_call
+from prcore.calls import base_call
 
 if TYPE_CHECKING:
     from .session import Session
@@ -68,7 +67,7 @@ def relay(s: "Session", rest: str) -> None:
     p = rest.split()
     if len(p) < 2:
         return
-    me, to, word, now = base_call(s.call), base_call(p[0].upper())[:9], p[1].upper(), time.time()
+    me, to, word, now = base_call(s.call), base_call(p[0])[:9], p[1].upper(), time.time()
     for pair in [k for k, t in _pairs.items() if now - t > KEEP_SEC]:
         del _pairs[pair]
     if word not in RELAY_WORDS or to == me or len(rest) > 200:

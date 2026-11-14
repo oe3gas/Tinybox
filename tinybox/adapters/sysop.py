@@ -15,11 +15,11 @@ import threading
 import time
 from typing import Callable
 
+from prcore.calls import base_call, normalize_call
 from prcore.text import isnum, visible
 
 from .. import VERSION, commands, config, logsetup, texts
 from ..app import App
-from ..config import base_call, normalize_call
 from ..session import Session, State
 from ..service import ServiceError
 
@@ -463,10 +463,9 @@ class SysopConsole:
         call, sel = words[1], words[2] if len(words) > 2 else ""
         try:
             if word == "SHOW":
-                from prcore import auth
-                rows = [r for r in keys.users(svc) if r["call"] == auth.base(call)]
+                rows = [r for r in keys.users(svc) if r["call"] == base_call(call)]
                 if not rows:
-                    self.out(f"{auth.base(call)}: no client key.")
+                    self.out(f"{base_call(call)}: no client key.")
                 for r in rows:
                     self.out(f"{r['call']}: {r['status']}, fingerprint {r['fp']}, device "
                              f"{r['device'] or '-'}, since {r['changed'][:16]}"
@@ -548,7 +547,6 @@ class SysopConsole:
 
     def cmd_purge(self, arg: str) -> None:
         """CR115: PURGE call [reason] shows what goes; PURGE call CONFIRM [reason] does it."""
-        from prcore import auth
         from ..service import ServiceError
         svc = self.app.service
         words = arg.strip().split()
@@ -558,7 +556,7 @@ class SysopConsole:
         call = words[0]
         confirm = len(words) > 1 and words[1].upper() == "CONFIRM"
         reason = " ".join(words[2:] if confirm else words[1:])
-        base = auth.base(call.upper())
+        base = base_call(call)
         counts = svc.store.purge_counts(base)
         what = ", ".join(f"{n} {k}" for k, n in counts.items())
         if not confirm:

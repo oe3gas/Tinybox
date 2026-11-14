@@ -43,7 +43,8 @@ import time
 from prcore.ax25 import frame as ax
 from prcore.ax25.frame import AX25Error, Frame
 from prcore.ax25.link import Ax25Link, LinkCfg
-from prcore.kissport import KissPort, describe_changes, norm_call, poll_hub
+from prcore.calls import norm_call
+from prcore.kissport import KissPort, describe_changes, poll_hub
 
 from .. import chanmon, framemon, linkguard, logsetup
 from ..app import App

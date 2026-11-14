@@ -88,10 +88,10 @@ import zlib
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from prcore.calls import base_call
 from prcore.text import isnum
 
 from . import logsetup, rights
-from .config import base_call
 from .service import ServiceError
 from .store import Message
 

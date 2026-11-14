@@ -1363,6 +1363,30 @@ Die kisshub-Werte gelten für jede neue Verbindung ab dem ersten Status (alle 30
 Verbindung, die schon läuft, behält ihre Werte.
 Passt zu Schritt 3 oben (gemeinsamer Config-Lader).
 
+### 17.3 Refactoring-Analyse und Etappen (14.11.2026)
+
+Analyse des ganzen Codes mit den offenen CRs: Bericht „TinyBox – Refactoring-Analyse“
+(Claude-Doc). 17 Maßnahmen R1–R17 in sechs Etappen; zuerst Basis und Protokoll, dann
+setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
+
+**Entscheidungen (14.11.2026):**
+- **Keine Rücksicht auf alte Clients (R15).** Es gilt der aktuelle Stand, jeder User holt
+  ihn sich. Die Kompatibilitätszweige für ältere Clients/Boxen werden entfernt.
+- **Ed25519 bleibt mit beiden Wegen** (`cryptography` und reines Python in `prcore/auth.py`).
+  Seitenkanal-Angriffe sind im Amateurfunk praktisch ausgeschlossen; der Python-Weg hält
+  die Anmeldung am Laufen, wenn das Paket fehlt oder nicht lädt.
+
+**Etappe 0 – Stand:**
+- Sofort-Funde ✅ (14.11.): `release/konfig.py` ohne `.isdigit()` (CR88),
+  brocast-Konfig-Test liest `brocastd.conf.example`.
+- R6 Rufzeichen-Helfer ✅ (14.11.): `prcore/calls.py` – `normalize_call`, `norm_call`,
+  `base_call`, `is_ax25_call`, `is_valid_call`, `plausible_call` und die Regexe an einer
+  Stelle. Ersetzt die Kopien in `tinybox/config.py`, `addressing.py`, `connlog.py`,
+  `prcore/auth.base`, `axudp`, `kissport`, `tbclient` (profiles, budget, mailstore, config)
+  und `tbtest`. `base_call` wandelt jetzt immer in Großschrift. Eigene Kopien behalten
+  bewusst: brocast, fwdsim, dxfeed, `release/konfig.py` (eigenständig, 17.1).
+- Offen: R14 Tests schneller (ein Test schlägt gelegentlich fehl – suchen), R16 Kleinigkeiten.
+
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 
 Anlass: Die Wetterseite trug bei jeder Aussendung den Text „GeoSphere Austria, TAWES

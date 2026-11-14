@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from prcore import calls
 from tinybox import config
 from tinybox.app import App
 from tinybox.adapters import telnet
@@ -68,9 +69,9 @@ class ConfigTests(unittest.TestCase):
 
     def test_callsigns(self):
         for ok in ("OE3GAS", "OE3GAS-1", "W1AW", "9A1AA", "DL0BN-15"):
-            self.assertTrue(config.is_valid_call(ok), ok)
+            self.assertTrue(calls.is_valid_call(ok), ok)
         for bad in ("ALL", "OE3GAS-16", "TOOLONG1", "OE3 GAS", "12345", ""):
-            self.assertFalse(config.is_valid_call(bad), bad)
+            self.assertFalse(calls.is_valid_call(bad), bad)
 
     def test_bad_config(self):
         with tempfile.TemporaryDirectory() as d:

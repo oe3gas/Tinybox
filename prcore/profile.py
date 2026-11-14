@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 import zlib
 
-from prcore.kissport import plausible_call
+from prcore.calls import plausible_call
 from prcore.text import isnum
 
 FIELDS = ("name", "loc", "home")

@@ -32,6 +32,7 @@ import time
 from typing import TYPE_CHECKING
 
 from prcore import auth
+from prcore.calls import base_call
 
 if TYPE_CHECKING:
     from .peer import Peer
@@ -127,7 +128,7 @@ class PeerAuth:
             c = auth.parse_cert(text)
         except auth.AuthError:
             return ""
-        if c["call"] != auth.base(self.peer.call) or c["pub"] != self.pub:
+        if c["call"] != base_call(self.peer.call) or c["pub"] != self.pub:
             return ""
         key = self.core.trusted_issuer(c["issuer"])
         if key is None:
@@ -144,12 +145,12 @@ class PeerAuth:
         return s
 
     def _known(self) -> list[str]:
-        rows = self._store().get(auth.base(self.peer.call), [])
+        rows = self._store().get(base_call(self.peer.call), [])
         return [r.get("pub") for r in rows if isinstance(r, dict)]
 
     def _remember(self) -> None:
         s = self._store()
-        call = auth.base(self.peer.call)
+        call = base_call(self.peer.call)
         rows = [r for r in s.get(call, []) if isinstance(r, dict) and r.get("pub") != self.pub]
         rows.append({"pub": self.pub, "dev": self.dev, "at": int(time.time())})
         s[call] = rows[-KEYS_PER_CALL:]

@@ -21,7 +21,8 @@ import logging
 from prcore.ax25.frame import Frame
 from prcore.ax25.link import Ax25Link, LinkCfg
 from prcore.kissport import KissPort as SharedKissPort
-from prcore.kissport import describe_changes, norm_call, poll_hub
+from prcore.calls import norm_call
+from prcore.kissport import describe_changes, poll_hub
 
 from . import radio
 from .config import Config, estimate_rate

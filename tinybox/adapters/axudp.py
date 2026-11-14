@@ -30,7 +30,8 @@ import logging
 from prcore import axudp as udp
 from prcore.ax25.frame import Frame
 from prcore.ax25.link import Ax25Link, LinkCfg
-from prcore.kissport import KissPort, norm_call
+from prcore.calls import norm_call
+from prcore.kissport import KissPort
 
 from .. import logsetup
 from ..app import App

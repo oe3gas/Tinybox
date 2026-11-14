@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from prcore import auth
+from prcore.calls import base_call
 
 if TYPE_CHECKING:
     from .session import Session
@@ -40,7 +40,7 @@ def record(store, game: str, rows: list[dict]) -> None:
     the calls go in without SSID (two SSIDs of one call count as one player)."""
     merged: dict[str, dict] = {}
     for r in rows:
-        base = auth.base(r["call"].upper())
+        base = base_call(r["call"])
         m = merged.setdefault(base, {"call": base})
         for k in ("wins", "draws", "hits", "tries", "asked"):
             m[k] = m.get(k, 0) + int(r.get(k, 0))
@@ -77,7 +77,7 @@ def _row(game: str, r: dict) -> str:
 
 def board(store, game: str | None, me: str) -> list[str]:
     """The answer lines (without //GAMES) for LB1 (game None) or LB2."""
-    me = auth.base(me.upper())
+    me = base_call(me)
     out = []
     for g in ([game] if game else list(GAMES)):
         rows = ranked(store, g)
@@ -148,7 +148,7 @@ def console(store, arg: str) -> list[str]:
     if which != "all" and which not in GAMES:
         return ["Unknown game: " + w[1] + " (" + ", ".join(GAMES) + ", ALL)"]
     game = None if which == "all" else which
-    call = auth.base(w[2].upper()) if len(w) > 2 else None
+    call = base_call(w[2]) if len(w) > 2 else None
     what = (GAMES[game] if game else "all games") + (f", player {call}" if call else ", all players")
     if not confirm:
         n = store.game_counts(game, call)

@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import configparser
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from prcore import release, termcolor
 from prcore.ax25.link import parse_calls
+from prcore.calls import AX25_CALL_RE
 
 from . import webguard
-
-CALL_RE = re.compile(r"^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$")
-
 
 class ConfigError(Exception):
     pass
@@ -306,7 +303,7 @@ def load(path: str | Path) -> Config:
         sources["direwolf.conf"] = dw.describe(cfg.radio_port)
 
     for name, call in (("[station] mycall", cfg.mycall), ("[tinybox] call", cfg.tinybox_call)):
-        if not CALL_RE.match(call):
+        if not AX25_CALL_RE.match(call):
             raise ConfigError(f"{name}: invalid call {call!r}")
     if cfg.link not in ("agw", "kiss", "telnet"):
         raise ConfigError("[radio] interface must be agw, kiss or telnet")

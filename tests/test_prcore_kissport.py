@@ -8,7 +8,8 @@ import unittest
 from prcore.ax25 import frame as ax
 from prcore.ax25.frame import Frame
 from prcore.ax25.link import LinkCfg
-from prcore.kissport import KissPort, norm_call
+from prcore.calls import norm_call
+from prcore.kissport import KissPort
 
 MYCALL = "OE3GAS-1"
 

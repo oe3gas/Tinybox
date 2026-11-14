@@ -22,6 +22,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime, timezone
+from prcore.calls import base_call
 
 CSV_FIELDS = ("start", "end", "secs", "call", "via", "freq", "rx", "tx", "air_tx", "air_rx",
               "ended")
@@ -33,10 +34,6 @@ BANDS = (("2190m", 0.1357, 0.1378), ("630m", 0.472, 0.479), ("160m", 1.8, 2.0),
          ("12m", 24.89, 24.99), ("10m", 28.0, 29.7), ("6m", 50.0, 54.0),
          ("4m", 70.0, 71.0), ("2m", 144.0, 148.0), ("1.25m", 222.0, 225.0),
          ("70cm", 420.0, 450.0), ("23cm", 1240.0, 1300.0))
-
-
-def base_call(call: str) -> str:
-    return (call or "").split("-", 1)[0].upper()
 
 
 def duration(secs: int | None) -> str:

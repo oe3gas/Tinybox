@@ -29,7 +29,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..config import normalize_call
+from prcore.calls import normalize_call
+
 from ..service import ServiceError
 
 if TYPE_CHECKING:

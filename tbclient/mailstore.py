@@ -12,6 +12,7 @@ import sqlite3
 import time
 import uuid
 from pathlib import Path
+from prcore.calls import base_call
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -53,7 +54,8 @@ COLS = ("id", "type", "status", "fwd", "size", "from_call", "to_call", "at_addr"
 
 
 def base(call: str) -> str:
-    return call.upper().split("-")[0].split("/")[0]
+    """Base call, also without a /P or /M (OE3GAS-1/P -> OE3GAS)."""
+    return base_call(call).split("/")[0]
 
 
 class MailStore:

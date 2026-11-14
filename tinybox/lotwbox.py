@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from prcore import auth, lotw
+from prcore.calls import base_call
 from prcore.text import isnum
 
 if TYPE_CHECKING:
@@ -144,7 +145,7 @@ def key_row(s: Session) -> dict | None:
     pub = s.auth_pub if s.auth_pub is not None else getattr(s, "_wait_pub", None)
     if pub is None:
         return None
-    return s.service.store.key_get(auth.base(s.call), auth.b64e(pub))
+    return s.service.store.key_get(base_call(s.call), auth.b64e(pub))
 
 
 def ask(s: Session) -> None:
@@ -206,7 +207,7 @@ def _check(s: Session, text: str) -> bool:
         s.out("//LOTW err damaged")
         return False
     if not isinstance(proof, dict) or proof.get("pub") != row["pub"] \
-            or proof.get("call") != auth.base(s.call):
+            or proof.get("call") != base_call(s.call):
         log.warning("%s: LoTW proof for another key or call refused", s.call)
         s.out("//LOTW err not for this key")
         return False

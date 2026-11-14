@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from prcore import auth
-from prcore.kissport import plausible_call
+from prcore.calls import plausible_call
 from tinybox import clientproto, rights
 from tinybox.adapters import brocast
 from tinybox.service import ServiceError

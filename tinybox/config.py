@@ -13,13 +13,9 @@ from urllib.parse import urlsplit
 
 from prcore import release, termcolor
 from prcore.ax25.link import parse_calls
+from prcore.calls import CALL_RE, base_call, is_valid_call, normalize_call
 from prcore.text import isnum
 
-# Amateur radio callsign as used in AX.25: 3-6 chars, letters and digits,
-# at least one digit and one letter, optional SSID 0-15.
-CALL_RE = re.compile(
-    r"^(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{3,6}(-([0-9]|1[0-5]))?$"
-)
 # Bulletin destination, e.g. ALL, DX, WX
 DEST_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 NEWS_RUBRIC = "TBNEWS"
@@ -30,19 +26,6 @@ LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 class ConfigError(Exception):
     """Raised when tinybox.conf is missing or invalid."""
-
-
-def normalize_call(call: str) -> str:
-    return call.strip().upper()
-
-
-def is_valid_call(call: str) -> bool:
-    return bool(CALL_RE.match(call))
-
-
-def base_call(call: str) -> str:
-    """OE3GAS-1 -> OE3GAS"""
-    return call.split("-", 1)[0]
 
 
 @dataclass
@@ -109,7 +92,7 @@ class ForwardCfg:
     partners: dict[str, PartnerCfg] = field(default_factory=dict)
 
     def partner(self, call: str) -> PartnerCfg | None:
-        return self.partners.get(base_call(call.strip().upper()))
+        return self.partners.get(base_call(call))
 
     def partner_by_radio_call(self, call: str) -> PartnerCfg | None:
         call = call.strip().upper()

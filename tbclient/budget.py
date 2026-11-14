@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
+from prcore.calls import base_call
 
 log = logging.getLogger(__name__)
 
@@ -21,10 +22,6 @@ PER_CALL_BYTES = 96 * 1024      # one station: a 64 KB file plus some pictures
 ALL_BYTES = 256 * 1024          # everybody together
 REFILL_SEC = 30 * 60            # ... per half hour
 MAX_KEYS = 500                  # remembered (call, thing) pairs
-
-
-def _base(call: str) -> str:
-    return call.upper().split("-", 1)[0]
 
 
 class Bucket:
@@ -56,11 +53,11 @@ class SendBudget:
 
     def allow(self, call: str, nbytes: int, what: str = "") -> bool:
         """May we send nbytes because call asked? Takes them if yes."""
-        b = self.calls.get(_base(call))
+        b = self.calls.get(base_call(call))
         if b is None:
             if len(self.calls) >= MAX_KEYS:
                 self.calls.clear()
-            b = self.calls[_base(call)] = Bucket(PER_CALL_BYTES, REFILL_SEC, self.clock)
+            b = self.calls[base_call(call)] = Bucket(PER_CALL_BYTES, REFILL_SEC, self.clock)
         if not (b.can(nbytes) and self.all.can(nbytes)):
             log.warning("%s: %s not sent - too much asked for (%d bytes)", call, what or "answer",
                         nbytes)
@@ -73,18 +70,18 @@ class SendBudget:
     def _refuse(self, call: str) -> None:
         if len(self.refused) >= MAX_KEYS:
             self.refused.clear()
-        self.refused[_base(call)] = self.clock()
+        self.refused[base_call(call)] = self.clock()
 
     def slowed(self, call: str, window_sec: float = 600) -> bool:
         """CR110: an answer to call was held back within window_sec."""
-        t = self.refused.get(_base(call))
+        t = self.refused.get(base_call(call))
         return t is not None and self.clock() - t < window_sec
 
     def often(self, call: str, key: str, times: int, window_sec: float) -> bool:
         """True if call asked for key `times` times within window_sec already
         (then it is not answered); otherwise counts this one."""
         now = self.clock()
-        k = (_base(call), key)
+        k = (base_call(call), key)
         hits = [t for t in self._seen.get(k, []) if now - t < window_sec]
         if len(hits) >= times:
             log.warning("%s: %s asked for too often - not answered", call, key)

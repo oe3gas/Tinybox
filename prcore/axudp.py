@@ -29,9 +29,8 @@ import socket
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
-from prcore.text import isnum
-
 from .ax25.frame import AX25Error, peek
+from .calls import base_call, is_ax25_call, norm_call
 from .kiss import FrameHandler
 from .termcolor import OK
 
@@ -88,16 +87,6 @@ def decode(datagram: bytes) -> bytes:
 
 # --- peers ---------------------------------------------------------------------------------
 
-def norm_call(call: str) -> str:
-    """OE3GAS-0 -> OE3GAS, upper case, no blanks (as kissport.norm_call)."""
-    call = call.strip().upper()
-    return call[:-2] if call.endswith("-0") else call
-
-
-def base_call(call: str) -> str:
-    return norm_call(call).split("-", 1)[0]
-
-
 @dataclass(frozen=True)
 class Peer:
     call: str                 # as configured: OE3GAS (every SSID) or OE3GAS-1 (only that one)
@@ -152,13 +141,6 @@ def is_loopback(host: str) -> bool:
         return False
 
 
-def _valid_call(call: str) -> bool:
-    base, _, ssid = call.partition("-")
-    if not (1 <= len(base) <= 6 and base.isalnum()):
-        return False
-    return not ssid or (isnum(ssid) and 0 <= int(ssid) <= 15)
-
-
 def parse_peers(peers: Mapping[str, str] | Iterable[str]) -> dict[str, Peer]:
     """Peers from a config section {call: 'ip:port'} or lines 'CALL ip:port' /
     'CALL = ip:port'. Returns {call: Peer}; AxudpError names the bad entry."""
@@ -177,7 +159,7 @@ def parse_peers(peers: Mapping[str, str] | Iterable[str]) -> dict[str, Peer]:
     out: dict[str, Peer] = {}
     for call, addr in items:
         call = norm_call(call)
-        if not _valid_call(call):
+        if not is_ax25_call(call):
             raise AxudpError(f"peer {call!r}: not a callsign")
         if call in out:
             raise AxudpError(f"peer {call}: listed twice")

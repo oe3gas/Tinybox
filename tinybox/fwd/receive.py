@@ -34,8 +34,9 @@ from __future__ import annotations
 
 import logging
 
+from prcore.calls import is_valid_call, normalize_call
+
 from .. import addressing
-from ..config import is_valid_call, normalize_call
 from ..service import NEW_RUBRIC_NOTE, MessageService, ServiceError
 from .protocol import Proposal, Sid
 

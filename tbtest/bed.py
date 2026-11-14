@@ -13,10 +13,10 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from prcore.calls import AX25_CALL_RE
 
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_DIR = REPO.parent / "tinybox-testbed"
-CALL_RE = re.compile(r"^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$")
 MAX_USERS = 30
 
 
@@ -271,7 +271,7 @@ quality = {self.guest_quality}         # good | medium | poor, optional "hidden"
 
     def check(self) -> None:
         for c in [self.box_call, self.sysop_call, self.guest_call, *self.users]:
-            if not CALL_RE.match(c):
+            if not AX25_CALL_RE.match(c):
                 raise BedError(f"tbtest.conf: '{c}' is not a callsign")
         if not 1 <= len(self.users) <= MAX_USERS:
             raise BedError(f"tbtest.conf: 1 to {MAX_USERS} users, not {len(self.users)}")

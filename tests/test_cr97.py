@@ -8,7 +8,8 @@ import unittest
 from kisshub import linkstats
 from prcore.ax25 import frame as ax
 from prcore.ax25.link import Ax25Link, LinkCfg
-from prcore.kissport import MAX_LINKS, plausible_call
+from prcore.calls import plausible_call
+from prcore.kissport import MAX_LINKS
 from tbclient.budget import ALL_BYTES, PER_CALL_BYTES, Bucket, SendBudget
 from tinybox.session import MAX_PER_CALL, SessionRegistry
 

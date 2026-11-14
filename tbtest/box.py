@@ -138,7 +138,7 @@ class TestBox:
         them right away (what the sysop does with USER OK)."""
         import sqlite3
 
-        from prcore.auth import base
+        from prcore.calls import base_call
         from tinybox import config as tcfg
         db = tcfg.load(self.conf).storage.data_dir / "tinybox.db"
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -146,7 +146,7 @@ class TestBox:
             for call, pub in keys.items():
                 con.execute("INSERT INTO client_keys (call, pub, status, created, changed, note)"
                             " VALUES (?, ?, 'active', ?, ?, 'tbtest') ON CONFLICT (call, pub) DO"
-                            " UPDATE SET status = 'active'", (base(call), pub, now, now))
+                            " UPDATE SET status = 'active'", (base_call(call), pub, now, now))
 
     async def start(self) -> None:
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",

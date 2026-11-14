@@ -23,6 +23,7 @@ import hmac
 import os
 from pathlib import Path
 
+from .calls import base_call
 from .text import isnum
 
 try:                                                      # the fast path
@@ -200,7 +201,7 @@ def fingerprint(public: bytes) -> str:
 def login_message(box: str, call: str, nonce: str) -> bytes:
     """What a client signs to log in (CR93): the challenge, for this mailbox and
     this call - a recorded answer is good for nothing else."""
-    return f"TINYBOX-AUTH1|{base(box)}|{base(call)}|{nonce}".encode("ascii")
+    return f"TINYBOX-AUTH1|{base_call(box)}|{base_call(call)}|{nonce}".encode("ascii")
 
 
 def command_message(box: str, call: str, nonce: str, counter: int, line: str,
@@ -208,7 +209,7 @@ def command_message(box: str, call: str, nonce: str, counter: int, line: str,
     """What a client signs for a critical command (CR93 stage 2): the command line
     (spaces as one), its number in this login and the lines that follow it (subject
     and text of //SEND) - bound to the login challenge, the mailbox and the call."""
-    text = (f"TINYBOX-CMD1|{base(box)}|{base(call)}|{nonce}|{counter}|"
+    text = (f"TINYBOX-CMD1|{base_call(box)}|{base_call(call)}|{nonce}|{counter}|"
             + " ".join(line.split()))
     if payload:
         text += "\n" + "\n".join(payload)
@@ -235,8 +236,8 @@ LEVELS = ("lotw",)          # CR113: TBC2 carries a level - "lotw" = confirmed w
 
 def cert_message(call: str, pub: str, issuer: str, until: str, level: str = "") -> bytes:
     if level:                                       # TBC2 (CR113)
-        return f"TINYBOX-CERT2|{base(call)}|{pub}|{issuer.upper()}|{until}|{level}".encode("ascii")
-    return f"TINYBOX-CERT1|{base(call)}|{pub}|{issuer.upper()}|{until}".encode("ascii")
+        return f"TINYBOX-CERT2|{base_call(call)}|{pub}|{issuer.upper()}|{until}|{level}".encode("ascii")
+    return f"TINYBOX-CERT1|{base_call(call)}|{pub}|{issuer.upper()}|{until}".encode("ascii")
 
 
 def make_cert(issuer_key: Identity, call: str, pub: str, issuer: str, until: str,
@@ -244,8 +245,8 @@ def make_cert(issuer_key: Identity, call: str, pub: str, issuer: str, until: str
     """TBC1 - or TBC2 with a level (CR113: "lotw"); older parsers know only TBC1."""
     sig = b64e(sign(issuer_key.secret, cert_message(call, pub, issuer, until, level)))
     if level:
-        return f"TBC2:{base(call)}:{pub}:{issuer.upper()}:{until}:{level}:{sig}"
-    return f"TBC1:{base(call)}:{pub}:{issuer.upper()}:{until}:{sig}"
+        return f"TBC2:{base_call(call)}:{pub}:{issuer.upper()}:{until}:{level}:{sig}"
+    return f"TBC1:{base_call(call)}:{pub}:{issuer.upper()}:{until}:{sig}"
 
 
 def parse_cert(text: str) -> dict:
@@ -280,11 +281,7 @@ def check_cert(cert: dict, issuer_pub: bytes, today: str) -> bool:
 def peer_message(signer: str, other: str, nonce: str) -> bytes:
     """What a TBClient signs for another TBClient (CR99): the other one's challenge,
     with both calls - a recorded answer is good for no other connection."""
-    return f"TINYBOX-PEER1|{base(signer)}|{base(other)}|{nonce}".encode("ascii")
-
-
-def base(call: str) -> str:
-    return call.strip().upper().split("-", 1)[0]
+    return f"TINYBOX-PEER1|{base_call(signer)}|{base_call(other)}|{nonce}".encode("ascii")
 
 
 def new_nonce() -> str:

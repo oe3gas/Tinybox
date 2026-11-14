@@ -13,8 +13,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from prcore import profile as pf
-
-from .addressing import base_call
+from prcore.calls import base_call
 
 ASK_AGAIN_DAYS = 30      # an incomplete profile: the terminal asks again after this
 WHOIS_MAX = 10           # calls per //WHOIS line
@@ -62,5 +61,5 @@ def check_field(field: str, text: str) -> str:
 def home_is(home: str, mailbox_call: str) -> bool:
     """The home BBS given (OE3GAS-1, OE3GAS or OE3GAS.#NOE.AUT.EU) is this box."""
     first = home.strip().upper().split(".", 1)[0]
-    return bool(first) and base_call(first) == base_call(mailbox_call.upper())
+    return bool(first) and base_call(first) == base_call(mailbox_call)
 

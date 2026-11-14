@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from prcore import auth
+from prcore.calls import base_call
 from tbclient.core import ClientCore
 from tinybox import clientproto
 
@@ -29,7 +30,7 @@ class AdminChannel(unittest.TestCase):
         self.ctr = 0
 
     def logon(self, call="OE3GAS-7", status="active"):
-        self.app.store.key_put(auth.base(call), self.key.pub, status)
+        self.app.store.key_put(base_call(call), self.key.pub, status)
         s, t = login(self.app, call)
         s.sysop = False                          # as over the radio: the call gives nothing
         type_lines(s, "//CLIENT TB1 v=2026.11.10 caps=CHAT,SYNC,ADM")

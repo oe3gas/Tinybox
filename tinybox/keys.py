@@ -17,6 +17,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from prcore import auth
+from prcore.calls import base_call
 
 if TYPE_CHECKING:
     from .service import MessageService
@@ -51,7 +52,7 @@ def people(svc: MessageService) -> list[dict]:
     bans, JLOG) per base call - name, locator, home BBS, first/last seen, connects,
     SSIDs, keys, ban.
     Stations with a key waiting for the sysop first."""
-    from .addressing import base_call
+    from prcore.calls import base_call
     st = svc.store
     keys_by: dict[str, list[dict]] = {}
     for k in users(svc):
@@ -91,7 +92,7 @@ def pick(svc: MessageService, word: str, call: str, sel: str = "") -> dict:
     """The key of call an action means: by its fingerprint (the first characters
     are enough, with or without '-'), or the only one that fits. One key per
     device - so with several keys the sysop names the one."""
-    call = auth.base(call)
+    call = base_call(call)
     rows = svc.store.keys_of(call)
     if not rows:
         raise KeysError(f"{call}: no client key.")
