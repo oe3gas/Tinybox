@@ -5607,5 +5607,24 @@ Hilfetext-Vorschlag:
 - Ohne Kennzeichnung gibt es zwei gleiche Texte (Comoros, Palestine): `question()` wählt nie zwei
   Antworten mit demselben Namen.
 - Tests in `tests/test_cr123.py`.
-- Hinweis: Unter Pro und darunter kommen gelöschte Entitäten derzeit gar nicht vor (Spalte `stufen`).
-  Sollen sie dort auftauchen, muss die Liste ergänzt werden.
+- Nachtrag (OE3GAS, 14.11.2026): gelöschte Entitäten **auch bei Pro**, dort gekennzeichnet. In
+  `prefixraten.csv` haben die 28 gelöschten Zeilen jetzt `Pro, DX-God` (Pro: 64 → 92 Entitäten).
+  Bei Pro steht „(alt)“ dahinter, bei DX-God nicht; Newcomer und OM kennen keine gelöschten.
+
+
+## CR136 – CQ Contest gegen die TinyBox zählt in der Bestenliste (✅ 14.11.2026, nur Box)
+
+### Erfassung (OE3GAS, 14.11.2026)
+
+- Spiele „CQ Contest gegen die TinyBox“ sollen in die Bestenliste (bisher nur Spiele zwischen zwei
+  Clients, CR127).
+
+### Umsetzung (14.11.2026)
+
+- `tinybox/contest.py` `_record()`: Ist ein Spiel gegen die Box zu Ende (beide Seiten offen gelegt),
+  trägt die Box das Ergebnis aus Sicht des Spielers selbst ein (`games.record(..., "contest", ...)`):
+  Box verloren → Sieg, Box gewonnen oder Spieler gibt auf → Niederlage, Gleichstand → Remis. Eine
+  Meldung des Clients ist nicht nötig – die Box kennt das Ergebnis selbst.
+- Nicht gezählt: wenn die Aufstellung des Spielers nicht zu seinem Hash passt (`check != ok`), ein Spiel
+  ohne Ergebnis, ein Spiel, das ohne Auflösung abbricht (Verbindung weg).
+- Tests: `tests/test_cr122.py` (ganzes Spiel, Aufgabe).

@@ -27,7 +27,7 @@ class ListTests(unittest.TestCase):
     def test_stage_sizes(self):
         rng = random.Random(1)
         n = {st: len([e for e in self.ents if st in e.stages]) for st in pg.STAGES}
-        self.assertEqual(n, {"NC": 125, "OM": 261, "PRO": 64, "GOD": 66})
+        self.assertEqual(n, {"NC": 125, "OM": 261, "PRO": 92, "GOD": 66})
         self.assertEqual(len(pg.pool(self.ents, "PRO", "2", rng)), 50)     # filled up from OM
         self.assertEqual(len(pg.pool(self.ents, "NC", "3", rng)), 16)      # no weaker stage
         self.assertEqual(len(pg.pool(self.ents, "OM", "123", rng)), 261)

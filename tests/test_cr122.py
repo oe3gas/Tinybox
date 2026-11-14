@@ -217,6 +217,27 @@ class BoxTests(unittest.TestCase):
         self.assertEqual(me.s["st"], "end")
         self.assertEqual(me.s["check"], "ok")
         self.assertNotIn("OE3ABC", boxcontest._games)          # done: forgotten
+        # CR136: the game is on the leaderboard of the box, from the player's side
+        from tinybox import games
+        rows = {r["call"]: r for r in games.ranked(self.app.service.store, "contest")}
+        self.assertEqual(rows["OE3ABC"]["games"], 1)
+        self.assertEqual(rows["OE3ABC"]["wins"], int(me.s["res"] == "win"))
+
+    def test_box_game_resigned_counts_as_loss(self):           # CR136
+        s, t = self.client("OE3ABC")
+        type_lines(s, "//CT NEW h=1")
+        out = self.lines(t)
+        me = C.Game(C.new_state("", True, True, "BOX"))
+        me.take(out[0])
+        me.take(out[1])
+        me.random_place()
+        type_lines(s, "//CT " + me.set_ready()[0])
+        self.lines(t)
+        for line in me.resign():
+            type_lines(s, "//CT " + line)
+        from tinybox import games
+        rows = {r["call"]: r for r in games.ranked(self.app.service.store, "contest")}
+        self.assertEqual((rows["OE3ABC"]["games"], rows["OE3ABC"]["wins"]), (1, 0))
 
     def test_two_games_at_once_and_no_locator(self):
         s1, t1 = self.client("OE3ABC")

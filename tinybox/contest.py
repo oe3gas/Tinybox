@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING
 from prcore import contest
 from prcore.calls import base_call
 
+from . import games
+
 if TYPE_CHECKING:
     from .session import Session
 
@@ -100,6 +102,23 @@ def relay(s: "Session", rest: str) -> None:
         log.info("%s: CQ contest with %s through the box", s.call, to)
 
 
+# CR136: the result of the box seen from the player (box "they resigned" = the player gave up)
+_PLAYER = {"win": "loss", "loss": "win", "draw": "draw", "they resigned": "loss"}
+
+
+def _record(s: "Session", state: dict) -> None:
+    """CR136: a game against the box goes to its leaderboard - the box knows the result
+    itself, no report needed. Not counted: a placement that does not match its hash,
+    a game that ended without a result."""
+    res = _PLAYER.get(state.get("res") or "")
+    if res is None or state.get("check") != "ok":
+        log.info("%s: CQ contest against the box not counted (%s, check %s)", s.call,
+                 state.get("res"), state.get("check"))
+        return
+    games.record(s.service.store, "contest",
+                 [{"call": s.call, "wins": int(res == "win"), "draws": int(res == "draw")}])
+
+
 def handle(s: "Session", rest: str) -> None:
     """One //CT line of a client session."""
     p = rest.split()
@@ -134,6 +153,7 @@ def handle(s: "Session", rest: str) -> None:
         if state["st"] == "end" and state.get("reveal") is not None:
             log.info("%s: CQ contest over - box %s, %s:%s", s.call, state["res"],
                      g.worked(), g.lost())
+            _record(s, state)
             del _games[call]                         # both sides laid open: done
     if call in _games:
         _games[call]["touch"] = now

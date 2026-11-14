@@ -277,31 +277,31 @@ dxcc;anzeige;status;muster;beispiel;arrl_praefix;kontinent;itu;cq;iaru;iaru_prue
 132;Paraguay;aktiv;ZP#;ZP1GNE ZP8P;ZP#;SA;14;11;2;;;geschaetzt;103-204;OM;
 462;South Africa;aktiv;Z[R-U][1-79];ZS5FZ ZT1Z;ZR-ZU#;AF;57;38;1;;;geschaetzt;205-340;Newcomer, OM;
 201;Prince Edward & Marion Is.;aktiv;ZS8;ZS8BAN ZS8WK;ZS8;AF;57;38;1;;20;gdxf Mixed 2025;1-34;Pro, DX-God;
-178;Minerva Reef (alt);geloescht;1M#;1M5QYI 1M9J;1M(1),(5);OC;62;32;3;;;;geloescht;DX-God;inoffiziell
-210;Saar (alt);geloescht;9S4;9S4DBH 9S4G;9S4(10);EU;28;14;1;;;;geloescht;DX-God;
-231;Sikkim (alt);geloescht;AC3;AC3WI AC3RN;AC3(1),(12);AS;41;22;3;;;;geloescht;DX-God;
-268;Tibet (alt);geloescht;AC4;AC4V AC4V;AC4(1),(13);AS;41;23;3;;;;geloescht;DX-God;
-200;Portuguese Timor (alt);geloescht;CR10;CR10ZHZ CR10YA;CR8,CR10(17);OC;54;28;3;;;;geloescht;DX-God;CR8 auch Goa/Damao
-39;Comoros (alt);geloescht;FB8;FB8EHX FB8M;FH,FB8(22);AF;53;39;1;;;;geloescht;DX-God;FH heute Mayotte
-59;French West Africa (alt);geloescht;FF8;FF8F FF8L;FF(21);AF;46;35;1;;;;geloescht;DX-God;
-58;French Indo-China (alt);geloescht;FI8;FI8CTL FI8BME;FI8(23);AS;49;26;3;;;;geloescht;DX-God;
-67;French India (alt);geloescht;FN8;FN8B FN8AM;FN8(24);AS;41;22;3;;;;geloescht;DX-God;
-57;French Equatorial Africa (alt);geloescht;FQ8;FQ8FD FQ8S;FQ8(25);AF;47,52;36;1;;;;geloescht;DX-God;
-184;Netherlands New Guinea (alt);geloescht;JZ0;JZ0RR JZ0XKC;JZ0(29);OC;51;28;3;;;;geloescht;DX-God;
-193;Okinawa (Ryukyu Is.) (alt);geloescht;KR6,KR8;KR6R KR6EPW;KR6,8,JR6,KA6(31);AS;45;25;3;;;;geloescht;DX-God;JR6/KA6 heute Japan
-28;Canal Zone (alt);geloescht;KZ5;KZ5SX KZ5Q;KZ5(33);NA;11;07;2;;;;geloescht;DX-God;
-119;Java (alt);geloescht;PK[1-3];PK1K PK1CKF;PK1-3(37);OC;54;28;3;;;;geloescht;DX-God;PK heute Indonesien
-258;Sumatra (alt);geloescht;PK4;PK4TC PK4JEX;PK4(37);OC;54;28;3;;;;geloescht;DX-God;PK heute Indonesien
-183;Netherlands Borneo (alt);geloescht;PK5;PK5IT PK5ST;PK5(37);OC;54;28;3;;;;geloescht;DX-God;PK heute Indonesien
-30;Celebe & Molucca Is. (alt);geloescht;PK6;PK6RAM PK6I;PK6(37);OC;54;28;3;;;;geloescht;DX-God;PK heute Indonesien
-151;Malyj Vysotskij I. (alt);geloescht;R1MV;R1MVK R1MVN;R1/M(52);EU;29;16;1;;;;geloescht;DX-God;
-307;Zanzibar (alt);geloescht;VQ1;VQ1GIB VQ1T;VQ1,5H1(41);AF;53;37;1;;;;geloescht;DX-God;5H1 heute Tansania
-26;British Somaliland (alt);geloescht;VQ6;VQ6WA VQ6QVX;VQ6(42);AF;48;37;1;;;;geloescht;DX-God;
-155;Malaya (alt);geloescht;VS2;VS2V VS2WKO;VS2,9M2(44);AS;54;28;3;;;;geloescht;DX-God;9M2 heute West Malaysia
-220;Sarawak (alt);geloescht;VS4;VS4TA VS4X;VS4(44);OC;54;28;3;;;;geloescht;DX-God;
-243;People's Democratic Rep. of Yemen (alt);geloescht;VS9A,VS9P,VS9S;VS9APD VS9AX;VS9A,P,S(45);AS;39;21;1;;;;geloescht;DX-God;
-139;Kuria Muria I. (alt);geloescht;VS9H;VS9HE VS9HZVO;VS9H(46);AS;39;21;1;;;;geloescht;DX-God;
-127;Kamaran Is. (alt);geloescht;VS9K;VS9KUB VS9KCS;VS9K(47);AS;39;21;1;;;;geloescht;DX-God;
-25;British North Borneo (alt);geloescht;ZC5;ZC5WCV ZC5OM;ZC5(44);OC;54;28;3;;;;geloescht;DX-God;
-196;Palestine (alt);geloescht;ZC6;ZC6WU ZC6WYV;ZC6,4X1(48);AS;39;20;1;;;;geloescht;DX-God;4X1 heute Israel
-102;Gold Coast, Togoland (alt);geloescht;ZD4;ZD4SQ ZD4MYV;ZD4(49);AF;46;35;1;;;;geloescht;DX-God;
+178;Minerva Reef (alt);geloescht;1M#;1M5QYI 1M9J;1M(1),(5);OC;62;32;3;;;;geloescht;Pro, DX-God;inoffiziell
+210;Saar (alt);geloescht;9S4;9S4DBH 9S4G;9S4(10);EU;28;14;1;;;;geloescht;Pro, DX-God;
+231;Sikkim (alt);geloescht;AC3;AC3WI AC3RN;AC3(1),(12);AS;41;22;3;;;;geloescht;Pro, DX-God;
+268;Tibet (alt);geloescht;AC4;AC4V AC4V;AC4(1),(13);AS;41;23;3;;;;geloescht;Pro, DX-God;
+200;Portuguese Timor (alt);geloescht;CR10;CR10ZHZ CR10YA;CR8,CR10(17);OC;54;28;3;;;;geloescht;Pro, DX-God;CR8 auch Goa/Damao
+39;Comoros (alt);geloescht;FB8;FB8EHX FB8M;FH,FB8(22);AF;53;39;1;;;;geloescht;Pro, DX-God;FH heute Mayotte
+59;French West Africa (alt);geloescht;FF8;FF8F FF8L;FF(21);AF;46;35;1;;;;geloescht;Pro, DX-God;
+58;French Indo-China (alt);geloescht;FI8;FI8CTL FI8BME;FI8(23);AS;49;26;3;;;;geloescht;Pro, DX-God;
+67;French India (alt);geloescht;FN8;FN8B FN8AM;FN8(24);AS;41;22;3;;;;geloescht;Pro, DX-God;
+57;French Equatorial Africa (alt);geloescht;FQ8;FQ8FD FQ8S;FQ8(25);AF;47,52;36;1;;;;geloescht;Pro, DX-God;
+184;Netherlands New Guinea (alt);geloescht;JZ0;JZ0RR JZ0XKC;JZ0(29);OC;51;28;3;;;;geloescht;Pro, DX-God;
+193;Okinawa (Ryukyu Is.) (alt);geloescht;KR6,KR8;KR6R KR6EPW;KR6,8,JR6,KA6(31);AS;45;25;3;;;;geloescht;Pro, DX-God;JR6/KA6 heute Japan
+28;Canal Zone (alt);geloescht;KZ5;KZ5SX KZ5Q;KZ5(33);NA;11;07;2;;;;geloescht;Pro, DX-God;
+119;Java (alt);geloescht;PK[1-3];PK1K PK1CKF;PK1-3(37);OC;54;28;3;;;;geloescht;Pro, DX-God;PK heute Indonesien
+258;Sumatra (alt);geloescht;PK4;PK4TC PK4JEX;PK4(37);OC;54;28;3;;;;geloescht;Pro, DX-God;PK heute Indonesien
+183;Netherlands Borneo (alt);geloescht;PK5;PK5IT PK5ST;PK5(37);OC;54;28;3;;;;geloescht;Pro, DX-God;PK heute Indonesien
+30;Celebe & Molucca Is. (alt);geloescht;PK6;PK6RAM PK6I;PK6(37);OC;54;28;3;;;;geloescht;Pro, DX-God;PK heute Indonesien
+151;Malyj Vysotskij I. (alt);geloescht;R1MV;R1MVK R1MVN;R1/M(52);EU;29;16;1;;;;geloescht;Pro, DX-God;
+307;Zanzibar (alt);geloescht;VQ1;VQ1GIB VQ1T;VQ1,5H1(41);AF;53;37;1;;;;geloescht;Pro, DX-God;5H1 heute Tansania
+26;British Somaliland (alt);geloescht;VQ6;VQ6WA VQ6QVX;VQ6(42);AF;48;37;1;;;;geloescht;Pro, DX-God;
+155;Malaya (alt);geloescht;VS2;VS2V VS2WKO;VS2,9M2(44);AS;54;28;3;;;;geloescht;Pro, DX-God;9M2 heute West Malaysia
+220;Sarawak (alt);geloescht;VS4;VS4TA VS4X;VS4(44);OC;54;28;3;;;;geloescht;Pro, DX-God;
+243;People's Democratic Rep. of Yemen (alt);geloescht;VS9A,VS9P,VS9S;VS9APD VS9AX;VS9A,P,S(45);AS;39;21;1;;;;geloescht;Pro, DX-God;
+139;Kuria Muria I. (alt);geloescht;VS9H;VS9HE VS9HZVO;VS9H(46);AS;39;21;1;;;;geloescht;Pro, DX-God;
+127;Kamaran Is. (alt);geloescht;VS9K;VS9KUB VS9KCS;VS9K(47);AS;39;21;1;;;;geloescht;Pro, DX-God;
+25;British North Borneo (alt);geloescht;ZC5;ZC5WCV ZC5OM;ZC5(44);OC;54;28;3;;;;geloescht;Pro, DX-God;
+196;Palestine (alt);geloescht;ZC6;ZC6WU ZC6WYV;ZC6,4X1(48);AS;39;20;1;;;;geloescht;Pro, DX-God;4X1 heute Israel
+102;Gold Coast, Togoland (alt);geloescht;ZD4;ZD4SQ ZD4MYV;ZD4(49);AF;46;35;1;;;;geloescht;Pro, DX-God;

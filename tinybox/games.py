@@ -1,7 +1,9 @@
 """The scores of the games on this box (CR126): one table for all games, the
 leaderboards, and what the sysop may delete.
 
-Every game writes its finished games with record(); abandoned ones not. The
+Every game writes its finished games with record(); abandoned ones not.
+CQ contest against the box: the box records it itself (CR136), between two
+clients only when both report it (CR127, gamereport.py). The
 quote of a game:
     prefix   right tips / tips given
     contest  games won / games played
