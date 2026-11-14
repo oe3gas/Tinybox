@@ -88,11 +88,10 @@ class ClientProtoTests(unittest.TestCase):
         type_lines(c, "C 1")
         out = ct.take().split("\r")
         self.assertRegex(out[0], r"^//IN 1 TREFF 7d 1 hist=1 last=\d+ now=\d+$")  # 0 = join, 1 = 'vorher'
-        # a client without v= (older than CR13) still gets the history at once
-        self.assertTrue(out[1].startswith("//H ") and out[1].endswith(" OE3XYZ: vorher"))
-        self.assertEqual(out[2], "//WHO OE3XYZ")
+        # R15: no history at once and no old forms any more - every client asks (//HIST)
+        self.assertEqual(out[1], "//WHO 1 OE3XYZ")
         self.assertEqual(self.ui[-1], ("TBCHAT-1", "#2 +2 OE3GAS /-"))   # UI: member numbers (CR33)
-        self.assertEqual(out[3], "#2 +OE3GAS /-")              # no NUM cap: old form as I-frame
+        self.assertEqual(out[2:], [""])                     # UI client: no I-frame copy
         self.assertIn("*** OE3GAS joined TREFF", tt.take())
         self.assertEqual(c.state, State.CHAT)
         # terminal user speaks: one UI frame, the UI client gets no I-frame
@@ -176,8 +175,8 @@ class ClientProtoTests(unittest.TestCase):
         tt.take(); ct.take(); ot.take()
         type_lines(c, "//SYM /k")
         self.assertEqual(self.ui[-1][1].split(" ", 1)[1], "=2 /k")
-        self.assertTrue(ot.take().endswith("=OE3GAS /k\r"))
-        self.assertTrue(ct.take().endswith("=OE3GAS /k\r"))    # old UI client: I-frame copy
+        self.assertTrue(ot.take().endswith("=2 /k\r"))      # I-frame client: member number
+        self.assertEqual(ct.take(), "")                    # UI client: the UI frame only
         self.assertEqual(tt.take(), "")                    # nothing for terminal users
         self.assertEqual(c.client.symbol, "/k")
         n = len(self.ui)
@@ -206,19 +205,19 @@ class ClientProtoTests(unittest.TestCase):
         self.assertEqual(out[1], "//WHO 1 OE3XYZ")
         self.assertEqual(self.ui[-1][1], "#1 +2 OE3GAS /-")
         self.assertEqual(out[2:], [""])                   # UI client with NUM: no I-frame copy
-        old, ot = login(self.app, "OE3TEC")               # client without NUM, no UI
+        old, ot = login(self.app, "OE3TEC")               # client without UI (and NUM): I-frames
         type_lines(old, "//CLIENT TB1 caps=CHAT", "C 1")
         self.assertEqual(self.ui[-1][1], "#2 +3 OE3TEC")
-        self.assertTrue(ot.take().endswith("//WHO OE3XYZ OE3GAS=/-\r#2 +OE3TEC\r"))
+        self.assertTrue(ot.take().endswith("//WHO 1 OE3XYZ 2 OE3GAS=/-\r#2 +3 OE3TEC\r"))
         type_lines(term, "/Q")                            # member 1 leaves
         self.assertEqual(self.ui[-1][1], "#3 -1")
-        self.assertTrue(ot.take().endswith("#3 -OE3XYZ\r"))
+        self.assertTrue(ot.take().endswith("#3 -1\r"))
         type_lines(term, "C TREFF")                       # gets 1 again
         self.assertEqual(self.ui[-1][1], "#4 +1 OE3XYZ")
         self.assertEqual(self.app.service.chat.member_no("TREFF", "OE3TEC"), 3)
         tt.take(); ct.take(); ot.take()
-        type_lines(old, "//RESEND 3-4")                   # old client: old form
-        self.assertEqual(ot.take(), "#3 -OE3XYZ\r#4 +OE3XYZ\r")
+        type_lines(old, "//RESEND 3-4")                   # R15: one form for every client
+        self.assertEqual(ot.take(), "#3 -1\r#4 +1 OE3XYZ\r")
 
     def test_non_ui_client_gets_iframes_incl_own(self):
         c, ct = login(self.app, "OE3GAS")
@@ -317,8 +316,6 @@ class ClientProtoTests(unittest.TestCase):
         type_lines(c, "//CLIENT TB1 caps=CHAT,UI", "C 1", "a")
         self.assertEqual([x[1] for x in self.ui], ["#FF +1 OE3GAS", "#0 OE3GAS: a"])
         self.assertEqual(hub.replay("TREFF", 0xFF, 0x0), ["#FF +1 OE3GAS", "#0 OE3GAS: a"])
-        self.assertEqual(hub.replay("TREFF", 0xFF, 0x0, legacy=True),
-                         ["#FF +OE3GAS", "#0 OE3GAS: a"])
         hub.boards[0:0] = [type(hub.boards[0])(f"B{i}", 1) for i in range(15)]
         self.ui.clear()
         type_lines(c, "b")          # TREFF is board 16 now

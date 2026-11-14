@@ -1454,6 +1454,13 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   TinyBox-Datenbank läuft jetzt wie brocastd mit `journal_mode=WAL`, `synchronous=NORMAL`
   (Punkt 9 / 11.9 erledigt). Neben `tinybox.db` liegen dann `tinybox.db-wal` und `-shm` – sie
   gehören dazu (beim Sichern bei gestoppter Box kopieren oder `VACUUM INTO`).
+- R15 Altlasten (Box) ✅ (15.11.): die TinyBox kennt nur noch eine Form der Board-Ereignisse –
+  mit Mitgliedsnummern (CR33) für jeden Client; weg sind die alte Form mit Rufzeichen für Clients
+  ohne `NUM` (in `deliver`, `//WHO`, `//RESEND`, `%`-Zeile), die History beim Betreten für
+  Clients ohne `v=` (vor CR13) und `ChatHub.history`. `%Q` geht an alle Clients. UI-Clients
+  bekommen keine I-Frame-Kopie mehr. Bewusst gelassen: der Client versteht weiter beide Formen
+  und die Antwort einer älteren TinyBox hinter dem Prompt (kostet wenig, schützt bei einer Box,
+  die noch nicht aktualisiert ist).
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 

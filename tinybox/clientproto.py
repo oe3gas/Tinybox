@@ -694,7 +694,6 @@ def _resend(s: Session, parts: list[str], replay: bool = True) -> None:
     if s.ui_rx is not None:                 # missed UI frames: receive quote (14.3)
         s.ui_rx.missed(first, last)
     if replay:
-        lines = s.service.chat.replay(s.chat_board, first, last,
-                                      legacy="NUM" not in s.client.caps)
+        lines = s.service.chat.replay(s.chat_board, first, last)
         if lines:
             s.out(*lines)

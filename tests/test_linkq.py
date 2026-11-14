@@ -306,19 +306,19 @@ class ChatQualityTests(unittest.TestCase):
         for i in range(25):
             self.b.handle_line(f"x{i}")
         self.ui.clear()
+        events = lambda: [t for _, t in self.ui if t.startswith("#")]    # %Q has no number
         self.hub.quality_tick(self.app.service, now=1000)
-        texts = [t for _, t in self.ui]
-        self.assertEqual(len(texts), 1)
-        self.assertRegex(texts[0], r"^#[0-9A-F]+ %1 5 2 5$")        # member numbers (CR33)
-        self.assertTrue(self.ta.take().endswith("%OE3TEC 5 OE1ABC 5\r"))  # old client: I-frame
+        self.assertEqual(len(events()), 1)
+        self.assertRegex(events()[0], r"^#[0-9A-F]+ %1 5 2 5$")      # member numbers (CR33)
+        self.assertNotIn("%", self.ta.take())            # UI client: no I-frame copy (R15)
         self.hub.quality_tick(self.app.service, now=1030)           # nothing changed
-        self.assertEqual(len(self.ui), 1)
+        self.assertEqual(len(events()), 1)
         self.a.handle_line("//LOST 0-9")                              # OE3TEC missed 10
         self.hub.quality_tick(self.app.service, now=1040)           # within the minute
-        self.assertEqual(len(self.ui), 1)
+        self.assertEqual(len(events()), 1)
         self.hub.quality_tick(self.app.service, now=1070)
-        self.assertEqual(len(self.ui), 2)
-        self.assertIn("%1 1 2 5", self.ui[-1][1])
+        self.assertEqual(len(events()), 2)
+        self.assertIn("%1 1 2 5", events()[-1])
         # not in the stored history
         self.assertNotIn("%", " ".join(c.text for c in self.app.store.chat_recent(
             "TREFF", "2000-01-01T00:00:00Z", 100)))

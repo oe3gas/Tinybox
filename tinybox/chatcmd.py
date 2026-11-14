@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 from prcore.profile import short as profile_short
 from prcore.text import isnum
 
-from . import clientnews, clientproto, games, prefixgame, texts
+from . import clientproto, games, prefixgame, texts
 from .config import ChatBoard
 
 if TYPE_CHECKING:
@@ -87,10 +87,6 @@ def _epoch(iso: str) -> int:
                .replace(tzinfo=timezone.utc).timestamp())
 
 
-# clients from this version on ask for the history themselves (//HIST)
-HIST_CLIENT = "2026.10.11.3"
-
-
 def history_rows(lines, seq: bool = False) -> list[str]:
     """//H lines. seq (client cap HSEQ): with the event number of the line,
     "//H <unix> #<n hex> <call>: <text>" - so a client shows the text of a quote
@@ -118,8 +114,6 @@ def _board_lines(s: Session, board: ChatBoard) -> list[str]:
         hist += f" file={flimit:x}"
     lines = [f"//IN {hub.number(board.name)} {board.name} {board.keep_label} "
              f"{hub.last_seq(board.name)}{hist}"]
-    if clientnews.version_key(s.client.version) < clientnews.version_key(HIST_CLIENT):
-        lines += history_rows(hub.history(board))       # older client: as before
     lines.append(hub.who_line(board.name, s))      # CR33: with member numbers (NUM)
     return lines
 

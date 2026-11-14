@@ -19,13 +19,12 @@ readable text form for TinyBox clients (PLANUNG.md 12.4):
     #55 !Connection to OE1ABC lost system text (after "-2" when the link broke)
 
 Member numbers (CR33): every station in a board gets the lowest free number
-1..n when it joins, //WHO lists "n call[=sym]". Clients without the NUM cap
-get the old form with calls instead ("+OE3GAS /-", "-OE3GAS", "%OE3GAS 4"):
-the UI frame carries the new form, old clients get the old line as I-frame.
+1..n when it joins, //WHO lists "n call[=sym]". Every client gets this form (the
+old one with calls for clients without NUM is gone: no old clients, 14.11.2026, R15).
 
     %Q 2 4 48 2 50 3 1 1 0 41 1 48 2 14;3 ...   link statistics of all members
                                    with data (CR33, 14.6): no sequence number,
-                                   never resent, NUM clients only
+                                   never resent, clients only
 
 Terminal users get the usual human text. Clients get the event line: if at
 least one client in the board hears the mailbox directly (UI mode), the line
@@ -128,30 +127,16 @@ class ChatHub:
         nums[call] = n
         return n
 
-    @staticmethod
-    def _num_client(s: Session) -> bool:
-        return bool(s.client) and "NUM" in s.client.caps
-
     def who_line(self, board: str, for_session: Session) -> str:
-        """//WHO for a joining client: 'n call[=sym] ...' (NUM) or 'call[=sym] ...'."""
+        """//WHO for a joining client: 'n call[=sym] ...'."""
         items = []
         for m in self.members(board):
             sym = m.client.symbol if m.client else ""
-            item = m.call + (f"={sym}" if sym else "")
-            if self._num_client(for_session):
-                item = f"{self.member_no(board, m.call)} {item}"
-            items.append(item)
+            items.append(f"{self.member_no(board, m.call)} {m.call}" + (f"={sym}" if sym else ""))
         return "//WHO " + " ".join(items) if items else "//WHO"
 
     def total_members(self) -> int:
         return sum(len(self.members(b.name)) for b in self.boards)
-
-    def history(self, board: ChatBoard) -> list[ChatLine]:
-        """The last history_lines lines (old clients get them when joining)."""
-        if board.live or self.cfg.chat.history_lines == 0:
-            return []
-        return self.store.chat_recent(board.name, _iso_hours_ago(board.keep_hours),
-                                      self.cfg.chat.history_lines)
 
     # History on request (CR13): joining only tells how much is stored.
 
@@ -198,7 +183,7 @@ class ChatHub:
         tail = f" {sym}" if sym else ""
         self.deliver(board.name, f"+{n} {session.call}{tail}",
                       texts.CHAT_JOINED.format(call=session.call, board=board.name),
-                      sender=session, legacy=f"+{session.call}{tail}")
+                      sender=session)
         self.bus.publish("chat.joined", board=board.name, call=session.call)
         log.info("%s joined chat %s", session.call, board.name)
 
@@ -218,8 +203,7 @@ class ChatHub:
         if not quiet:
             self.deliver(board, f"-{n}",
                           texts.CHAT_LEFT.format(call=session.call, board=board,
-                                                 reason=reason), sender=session,
-                          legacy=f"-{session.call}")
+                                                 reason=reason), sender=session)
             if lost:
                 self.deliver(board, "!" + texts.CHAT_LOST_SYS.format(call=session.call), None,
                               sender=session)
@@ -296,45 +280,38 @@ class ChatHub:
         sym = session.client.symbol
         tail = f" {sym}" if sym else ""
         self.deliver(board, f"={self.member_no(board, session.call)}{tail}", None,
-                      sender=session, legacy=f"={session.call}{tail}")
+                     sender=session)
 
-    def replay(self, board: str, first: int, last: int, legacy: bool = False) -> list[str]:
-        """Events first..last (inclusive, may wrap) still in memory; legacy = the
-        form for clients without member numbers."""
+    def replay(self, board: str, first: int, last: int) -> list[str]:
+        """Events first..last (inclusive, may wrap) still in memory."""
         count = (last - first) % SEQ_MOD + 1
         wanted = {(first + i) % SEQ_MOD for i in range(min(count, 64))}
-        return [(old if legacy else line) for seq, line, old in self._recent.get(board, ())
-                if seq in wanted]
+        return [line for seq, line in self._recent.get(board, ()) if seq in wanted]
 
     # --- delivery -------------------------------------------------------
 
     def _line_of(self, board: str, ref: int) -> str:
-        for seq, line, _old in self._recent.get(board, ()):
+        for seq, line in self._recent.get(board, ()):
             if seq == ref:
                 text = line.split(" ", 1)[1] if " " in line else ""
                 return text if ":" in text.split(" ", 1)[0] else ""
         return ""
 
-    def _next_event(self, board: str, payload: str, legacy: str | None = None) -> tuple[str, str]:
+    def _next_event(self, board: str, payload: str) -> str:
         seq = (self._seq.get(board, -1) + 1) % SEQ_MOD
         self._seq[board] = seq
         line = f"#{seq:X} {payload}"
-        old = f"#{seq:X} {legacy}" if legacy is not None else line
-        self._recent.setdefault(board, deque(maxlen=SEQ_MOD)).append((seq, line, old))
-        return line, old
+        self._recent.setdefault(board, deque(maxlen=SEQ_MOD)).append((seq, line))
+        return line
 
     def deliver(self, board: str, payload: str, human: str | None, sender: Session | None,
-                legacy: str | None = None,
                 audience: Callable[[Session], bool] | None = None) -> None:
         """One event of the board to its members - the only place that fans out.
         human None: an event only for clients (terminals get nothing).
-        legacy: the same event with calls instead of member numbers, for clients
-        without the NUM cap - they get it as I-frame even in UI mode (the UI
-        frame carries the new form, which they cannot read).
         audience (Refactoring R4): only members it says True for get the event -
         as I-frame or text; the UI frame goes out once if one of them listens to UI
         (radio is open: the others' clients ignore it). None = every member."""
-        line, old = self._next_event(board, payload, legacy)
+        line = self._next_event(board, payload)
         members = self.members(board)
         if audience is not None:
             members = [s for s in members if audience(s)]
@@ -350,17 +327,16 @@ class ChatHub:
                     s.ui_rx.sent(seq)
         for s in members:
             if s.client:
-                mine = line if self._num_client(s) else old
-                if not (sent_ui and s.client.ui and mine == line):
-                    s.out(mine)            # clients get every event, also their own
+                if not (sent_ui and s.client.ui):
+                    s.out(line)            # clients get every event, also their own
             elif s is not sender and human is not None:   # a terminal shows what was typed
                 s.out(human)
 
     def _send_raw(self, board: str, text: str, ui: bool = True) -> None:
-        """A line outside the event sequence (no number, never resent) to the NUM
+        """A line outside the event sequence (no number, never resent) to the
         clients of a board: once as UI frame, I-frame to the others.
         ui False: I-frames only."""
-        members = [s for s in self.members(board) if self._num_client(s)]
+        members = [s for s in self.members(board) if s.client]
         n = self.number(board)
         sent_ui = False
         if ui and any(s.client.ui for s in members) and self.ui_send is not None \
@@ -387,7 +363,7 @@ class ChatHub:
             members = self.members(b.name)
             if not members or not any(s.client for s in members):
                 continue
-            items, legacy, stats, rated = [], [], [], False
+            items, stats, rated = [], [], False
             for s in members:
                 if linkq.is_local(s):                    # AXUDP: no bars for a local station
                     continue
@@ -395,7 +371,6 @@ class ChatHub:
                 n = self.member_no(b.name, s.call)
                 if r is not None or s.call in service.links:
                     items.append(f"{n} {linkq.bar_code(r)}")
-                    legacy.append(f"{s.call} {linkq.bar_code(r)}")
                 if r is not None:
                     stats.append(self._qstat_item(n, r))
                     rated = rated or r.bars is not None
@@ -405,9 +380,8 @@ class ChatHub:
             if text != self._q_text.get(b.name) \
                     and now - self._q_at.get(b.name, -1e9) >= self.QUALITY_MIN_SEC:
                 self._q_text[b.name], self._q_at[b.name] = text, now
-                self.deliver(b.name, text, None, sender=members[0],
-                              legacy="%" + " ".join(legacy))
-            if not stats or not any(self._num_client(s) for s in members):
+                self.deliver(b.name, text, None, sender=members[0])
+            if not stats or not any(s.client for s in members):
                 continue
             if not rated:                    # all bars still '?': only interim counts
                 continue
