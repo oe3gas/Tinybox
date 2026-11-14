@@ -5305,3 +5305,52 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
 - `busy_repeats = no`: Verhalten wie bisher.
 - Nur AXUDP-Verbindungen an der Box: TinyBox meldet Stufe 0, brocast sendet normal.
 - Forward über AXUDP: keine Stufe 2.
+
+
+## CR132 – Spiele und Bestenliste in eigener Karte „Spiele“ links statt im Header (offen)
+
+### Erfassung (OE3GAS, 14.11.2026)
+
+- Die Spiele werden über eine **neue Karte links** ausgewählt, **nicht mehr oben im Header** des Boards.
+- Ebenso die **Bestenliste**.
+- Die Karte steht **unter „Station“**.
+- Die Karte erscheint **nur, wenn die Box Spiele anbietet**.
+- Nur aufnehmen, **noch nicht umsetzen**.
+
+### Stand vor dem CR (14.11.2026, Client 2026.11.14.3)
+
+- Header des Boards (`index.html`, `bh-prefix`, `bh-top`): „🎯 Prefix raten“ (sichtbar bei `S.prefix.ok`)
+  und „🏆 Bestenliste“ (sichtbar bei `S.games.ok`), neben „Leave“. Nur sichtbar, solange man in einem
+  Board ist.
+- Karte „Station“: Eintrag „CQ contest“ (`nav-contest`, sichtbar bei `S.contest.ok`, online,
+  Client-Modus), mit Hinweis „du bist dran“.
+- Schach und CQ Contest direkt mit einer anderen Station: in der Peer-Ansicht (CR78) – betrifft dieser
+  CR nicht.
+
+### Vorschlag zur Umsetzung (noch nicht entschieden)
+
+- Neue Karte **„Spiele“** unter „Station“, gleicher Aufbau wie die anderen Karten. Einträge:
+  - **CQ Contest** – wandert aus „Station“ hierher (mit „du bist dran“).
+  - **Prefix raten** – öffnet die Startseite wie heute der Header-Button.
+  - **Bestenliste** – öffnet das Leaderboard wie heute der Header-Button.
+  - später **Elmer Quiz**.
+- Jeder Eintrag nur, wenn die Box das Spiel meldet (`contest.ok`, `prefix.ok`, `games.ok`); die Karte
+  nur, wenn mindestens ein Eintrag sichtbar ist (Box-Kanal online, Client-Modus, Handshake fertig).
+- Header des Boards: `bh-prefix` und `bh-top` entfallen; dort bleibt nur „Leave“.
+- Läuft ein Spiel, zeigt der Eintrag den Zustand (aktiv, „du bist dran“, Prefix raten: Runde läuft).
+- CR130: bei offenem Terminal sind die Spiel-Einträge deaktiviert (Bestenliste bleibt erlaubt).
+
+### Offen
+
+- **Prefix raten ist an ein Board gebunden** (Spiel im Board, die Box führt es dort). Was passiert beim
+  Klick, wenn man in keinem Board ist? Vorschläge: a) Eintrag nur aktiv im Board, b) Klick betritt ein
+  festes Board (z. B. RUNDE) und öffnet die Startseite, c) Auswahl des Boards auf der Startseite.
+- Gehört die Bestenliste als Eintrag in die Karte oder als eigener Knopf im Kartenkopf (wie das Zahnrad)?
+
+### Test
+
+- Box ohne Spiele: keine Karte „Spiele“; Header des Boards ohne Spiel-Buttons.
+- Box mit CQ Contest und Prefix raten: Karte unter „Station“ mit beiden Einträgen und „Bestenliste“;
+  „CQ contest“ nicht mehr in „Station“.
+- Box offline / vor dem Handshake: Karte verschwindet.
+- Laufendes Spiel: Eintrag hervorgehoben, „du bist dran“ wie bisher.
