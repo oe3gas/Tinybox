@@ -97,6 +97,7 @@ FILES = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js",
          "/aprsview.js": str(SHARED / "aprsview.js"), "/aprsview.css": str(SHARED / "aprsview.css")}
 # CR42: the icons of the connection in the top bar
 FILES.update({f"/conn/{p.name}": f"conn/{p.name}" for p in (STATIC / "conn").glob("*.png")})
+FILES.update({f"/app/{p.name}": f"app/{p.name}" for p in (STATIC / "app").glob("*.js")})   # R11
 # CR11: the sticker set (fixed files in the client, never sent over the air)
 FILES.update({f"/stickers/{p.name}": f"stickers/{p.name}"
               for p in (STATIC / "stickers").glob("*") if p.suffix in (".webp", ".json")})

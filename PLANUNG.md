@@ -1439,6 +1439,13 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
 - R13 Client-Logdatei ✅ (14.11.): `prcore/dailylog.py` – die Tagesdatei (vorher nur in
   `tinybox/logsetup.py`) für Box und Client. Der Client schreibt `data/tbclient/logs/
   tbclient-<Datum>.log`, 14 Tage, INFO (mit `-v` DEBUG); `logging_manual.md` Abschnitt 2.
+- R11 Web-GUI geteilt ✅ (14.11.): `tbclient/web/app.js` (4.290 Zeilen) nach seinen Abschnitten in
+  `tbclient/web/app/` – `base`, `chat`, `images`, `mailbox`, `channels`, `terminal`, `peer`,
+  `monitor`, `status`; `app.js` behält Polling und `start()` und lädt zuletzt. Klassische
+  Skripte wie bisher, kein Build-Schritt; die Reihenfolge steht in `index.html`. Geprüft: Inhalt
+  zeichengleich (nur verteilt), Laden und erstes Rendern gegen einen echten Client in jsdom ohne
+  Fehler. Die Node-Tests lesen die Teile über `tests/fixtures/appsrc.js`.
+  Offen (nicht gemacht): gemeinsame Teile der Box- und Client-GUI (Monitorzeile, Rufzeichenfarbe).
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 

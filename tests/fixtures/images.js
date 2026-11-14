@@ -1,7 +1,7 @@
 // CR12: blurhash encode/decode and the image reference parser of app.js, run by
 // tests/test_tbclient.py with node.
 const fs = require("fs");
-const src = fs.readFileSync(process.argv[2], "utf8");
+const src = require("./appsrc.js")(process.argv[2]);
 const a = src.indexOf("// ---------------------------------------------------------------- blurhash");
 const b = src.indexOf("// ---------------------------------------------------------------- mailbox (C3)");
 let S = null;

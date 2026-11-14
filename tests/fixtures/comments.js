@@ -1,7 +1,7 @@
 // CR31: the comment reference of app.js (quoteOf, quotedMessage, quotePrefix),
 // run by tests/test_tbclient.py with node.
 const fs = require("fs");
-const src = fs.readFileSync(process.argv[2], "utf8");
+const src = require("./appsrc.js")(process.argv[2]);
 const a = src.indexOf("// ---------------------------------------------------------------- comments (CR14, CR31)");
 const b = src.indexOf("// ---------------------------------------------------------------- bubbles");
 const el = () => ({ append() {}, style: {}, classList: { add() {} } });
