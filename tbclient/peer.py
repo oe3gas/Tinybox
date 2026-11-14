@@ -193,14 +193,14 @@ class Peer:
             done = sv["bytes"] * (sv["start"] - waiting) // sv["start"]
             if done > sv.get("done", 0):
                 sv["done"] = done
-                self.ch.core._touch()
+                self.ch.core.changed()
         if waiting == 0 and self.serving and time.monotonic() - self.serving["at"] > 2:
             self.serving = None                  # CR110: all of it is over there
-            self.ch.core._touch()
+            self.ch.core.changed()
         if waiting == 0 and self.pending and self.hist:
             self.store.delivered(self.call, self.pending)
             self.pending = []
-            self.ch.core._touch()
+            self.ch.core.changed()
 
     def serve(self, what: str, nbytes: int) -> None:
         """CR110: bytes go out because the other one asked (picture, file, speed test)."""
@@ -213,7 +213,7 @@ class Peer:
         self.store.note(self.call, "chat history removed")
         if self.ch.state == "online" and self.hist:
             self._send(f"//HIST DEL g={gen}")
-        self.ch.core._touch()
+        self.ch.core.changed()
 
     def _on_hist(self, rest: str) -> None:
         word, _, more = rest.partition(" ")
@@ -331,7 +331,7 @@ class Peer:
                 return False
         else:
             return False
-        self.ch.core._touch()
+        self.ch.core.changed()
         return True
 
     # --- profile ---------------------------------------------------------------------
@@ -345,7 +345,7 @@ class Peer:
         self.prof = checked
         cache = self.ch.core.settings.setdefault("profiles", {})   # as //WI (CR73)
         cache[self.ch.target.upper().split("-", 1)[0]] = {"at": int(time.time()), **checked}
-        self.ch.core._save_settings()
+        self.ch.core.save_settings()
         row = self.profile_row()
         text = ", ".join(x for x in (row.get("name"), row.get("loc"),
                                       f"{row['km']} km {_dir(row['deg'])}" if "km" in row else "",
@@ -375,7 +375,7 @@ class Peer:
         self.heard_wait = time.time()
         self._send("//HEARD?")
         self.ch.term_line("sys", f"*** asking {self.ch.target} who it hears ...")
-        self.ch.core._touch()
+        self.ch.core.changed()
         return True
 
     def _heard_line(self) -> str:

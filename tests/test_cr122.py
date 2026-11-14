@@ -343,10 +343,10 @@ class FakeCore:
         self.profiles = FakeProfiles(loc)
         self.cfg = type("Cfg", (), {"locator": ""})()
 
-    def _save_settings(self):
+    def save_settings(self):
         pass
 
-    def _touch(self):
+    def changed(self):
         pass
 
 
@@ -426,7 +426,7 @@ class CoreRelayTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             core = ClientCore(client_cfg(tmp))
             sent = []
-            core._send = sent.append
+            core.send_line = sent.append
             core.caps = {"CT", "CTR", "PR"}
             core._control("//CTR OE1XYZ NEW h=1 c=JN88")
             rel = core._relay_summary()

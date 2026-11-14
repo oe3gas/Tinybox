@@ -28,12 +28,15 @@ from .channels import TERM_SNAPSHOT, Channel
 from .kisslink import AxudpPort, KissLink, KissPort
 from .links import AgwLink, AgwPort, TelnetLink
 from .logbook import Logbook
+from .login import LoginMixin
 from .mailstore import MailStore
 from . import peerfile
 from .contest import ContestSlot
 from .prefixgame import Leaderboard, PrefixGame
+from .gameplay import GamesMixin
 from .gamereport import Reports
 from .peerchat import PeerChat
+from .board import BoardMixin
 from .boardfiles import BoardFiles
 from .peerfile import FileStore
 from .profiles import Profiles
@@ -46,8 +49,6 @@ log = logging.getLogger(__name__)
 HANDSHAKE_FALLBACK_SEC = 6
 LOGIN_SYNC_SEC = 1.5      # CR40: the sync after the login starts this much after //OK
 DIRECT_VALID_SEC = 30 * 60
-MAX_MESSAGES = 300
-MAX_GAP = 32
 RECENT_MAX = 10           # CR42: targets remembered for the "Connect to" field
 MONITOR_MAX = 500         # CR45: frames kept for the monitor (channel 0)
 OUTSTANDING_SEC = 3       # CR45: how often the send queues of the channels are asked
@@ -84,7 +85,7 @@ def ui_request(dest: str, via: str, text: str) -> tuple[str, list[str], bytes]:
     return dest, path, info
 
 
-class ClientCore:
+class ClientCore(LoginMixin, BoardMixin, GamesMixin):
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
         self.settings_path = cfg.data_dir / "settings.json"
@@ -192,11 +193,11 @@ class ClientCore:
         self.profiles = Profiles(self)
         # CR122: the CQ contest against the TinyBox of the chat channel
         self.box_contest = ContestSlot(self, lambda: "box:" + self.target.split("-")[0],
-                                       lambda: self.target, self._send, lambda: "",
+                                       lambda: self.target, self.send_line, lambda: "",
                                        lambda text: self.console.append("*** " + text))
         self.relay_contests: dict[str, ContestSlot] = {}      # CR122: through the box
-        self.prefix = PrefixGame(self._send, lambda: self.cfg.mycall.upper())   # CR123
-        self.leaderboard = Leaderboard(self._send)                                 # CR126
+        self.prefix = PrefixGame(self.send_line, lambda: self.cfg.mycall.upper())   # CR123
+        self.leaderboard = Leaderboard(self.send_line)                                 # CR126
         self.reports = Reports(self)                                               # CR127
 
     # --- settings --------------------------------------------------------
@@ -215,7 +216,7 @@ class ClientCore:
             return self.settings
         return self.settings.setdefault("targets", {}).setdefault(self.target, {})
 
-    def _save_settings(self) -> None:
+    def save_settings(self) -> None:
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         self.settings_path.write_text(json.dumps(self.settings, indent=1), encoding="utf-8")
 
@@ -239,7 +240,7 @@ class ClientCore:
                 self.settings["update"] = info
             else:
                 self.settings.pop("update", None)
-            self._save_settings()
+            self.save_settings()
 
     # --- new release on GitHub (PLANUNG 24) ----------------------------------------
 
@@ -252,7 +253,7 @@ class ClientCore:
             if info:
                 self.console.append(f"*** new TinyBox release {result.latest} on GitHub "
                                     f"(this is {result.current}): {result.url}")
-            self._touch()
+            self.changed()
 
     @property
     def update(self) -> dict | None:
@@ -276,15 +277,15 @@ class ClientCore:
         if symbol and not SYMBOL_RE.match(symbol):
             return False
         self.settings["symbol"] = symbol
-        self._save_settings()
+        self.save_settings()
         if self.state == "online" and self.caps:     # the board sees it at once (CR7)
-            self._send(f"//SYM {symbol or '-'}")
-        self._touch()
+            self.send_line(f"//SYM {symbol or '-'}")
+        self.changed()
         return True
 
     # --- change notification (long poll) -------------------------------------
 
-    def _touch(self) -> None:
+    def changed(self) -> None:
         self.version += 1
         self._changed.set()
         self._changed = asyncio.Event()
@@ -297,8 +298,6 @@ class ClientCore:
             await asyncio.wait_for(ev.wait(), timeout)
         except asyncio.TimeoutError:
             pass
-
-    # --- actions from the GUI -------------------------------------------------
 
     # --- channels (CR45) -------------------------------------------------------
 
@@ -350,7 +349,7 @@ class ClientCore:
         """CR75: the GUI shows channel n at once - an incoming connect (a TinyBox
         never calls a client, 07.11.2026)."""
         self.focus = {"n": n, "seq": self.focus["seq"] + 1}
-        self._touch()
+        self.changed()
 
     def open_channel(self, n: int) -> Channel:
         ch = self.channels.get(n)
@@ -374,7 +373,7 @@ class ClientCore:
         if ch is None or ch.state != "offline" or len(self.channels) == 1:
             return False
         self.drop_channel(ch)
-        self._touch()
+        self.changed()
         return True
 
     def can_attach(self, ch: Channel) -> bool:
@@ -394,14 +393,14 @@ class ClientCore:
         self._login = None
         if self.target != self.settings.get("target"):
             self.settings["target"] = self.target
-            self._save_settings()
+            self.save_settings()
         if welcome is not None:
             self._on_line(welcome)                # schedules the handshake
         elif handshake:
             self._handshake()
         else:                                     # telnet: Welcome follows, else after 6 s
             self._hs_task = asyncio.ensure_future(self._handshake_fallback())
-        self._touch()
+        self.changed()
 
     def detach(self) -> None:
         """The chat channel is no TinyBox after all (or went away)."""
@@ -486,7 +485,7 @@ class ClientCore:
         recent = [shown] + [c for c in self.settings.get("recent", [])
                             if isinstance(c, str) and c != shown]
         self.settings["recent"] = recent[:RECENT_MAX]
-        self._save_settings()
+        self.save_settings()
         await chan.connect(t, via)
         return True
 
@@ -524,7 +523,7 @@ class ClientCore:
                     except Exception:
                         log.exception("link counters of channel %s", c.n)
             if changed:
-                self._touch()
+                self.changed()
 
     def peer_image(self, ch: int, data: bytes, blurhash: str, caption: str) -> str | None:
         """CR78: a picture to the TBClient in channel ch (the reference as a chat line)."""
@@ -564,65 +563,6 @@ class ClientCore:
                 return False
             return chan.peer.fun.contest.act(act[3:], arg)
         return False
-
-    def contest_act(self, act: str, arg: str = "", to: str = "") -> bool:
-        """CR122: the CQ contest against the TinyBox of the chat channel - or,
-        with to=<call>, against another client of that box (handed on by it)."""
-        offline_ok = act in ("close", "decline", "place", "random")
-        if to:
-            to = to.upper().split("-")[0]
-            if not AX25_CALL_RE.match(to) or to == self.cfg.mycall.upper().split("-")[0]:
-                return False
-            if not offline_ok and (self.state != "online" or "CTR" not in self.caps):
-                return False
-            return self._relay_slot(to).act(act, arg)
-        if not offline_ok and (self.state != "online" or "CT" not in self.caps):
-            return False
-        return self.box_contest.act(act, arg)
-
-    def games_act(self, act: str, arg: str = "") -> bool:
-        """CR126: leaderboards - top (arg: game or empty) / close."""
-        if act == "close":
-            self.leaderboard.close()
-        elif act == "top" and self.state == "online" and "GAMES" in self.caps:
-            self.leaderboard.ask(arg.strip().lower())
-        else:
-            return False
-        self._touch()
-        return True
-
-    def prefix_act(self, act: str, arg: str = "") -> bool:
-        """CR123: Prefix raten in the board (start / join / tip / stop / close)."""
-        if act != "close" and (self.state != "online" or "PR" not in self.caps
-                               or not self.board):
-            return False
-        ok = self.prefix.act(act, arg)
-        self._touch()
-        return ok
-
-    def _relay_slot(self, call: str) -> ContestSlot:
-        """The game with <call> through the TinyBox of the chat channel."""
-        box = self.target.split("-")[0]
-        key = f"rel:{box}:{call}"
-        slot = self.relay_contests.get(key)
-        if slot is None:
-            slot = ContestSlot(self, lambda: key, lambda: call,
-                               lambda line: self._send(f"//CTR {call} {line[5:]}"), lambda: "",
-                               lambda text: self.console.append("*** " + text))
-            self.relay_contests[key] = slot
-        return slot
-
-    def _relay_summary(self) -> list[dict]:
-        box = self.target.split("-")[0]
-        prefix = f"rel:{box}:"
-        for key in self.settings.get("contest", {}):
-            if key.startswith(prefix):
-                self._relay_slot(key[len(prefix):])
-        out = []
-        for key, slot in sorted(self.relay_contests.items()):
-            if key.startswith(prefix) and (slot.state is not None or slot.err):
-                out.append({"call": key[len(prefix):], "game": slot.summary(), "err": slot.err})
-        return out
 
     def peer_accept(self, ch: int) -> bool:
         """CR99: the user takes the other key of the TBClient in channel ch."""
@@ -678,9 +618,9 @@ class ClientCore:
             if isnum(a.get("load", "")):
                 self.load = {"load": int(a["load"]), "tx": int(a.get("load_tx", "0") or 0),
                              "at": now}
-            self._touch()
+            self.changed()
         elif word == "link":
-            self._touch()                     # the link has its l2 already (AgwPort)
+            self.changed()                     # the link has its l2 already (AgwPort)
         elif word == "rx" and cfrom:
             lvl = {"lvl": int(a["lvl"]) if isnum(a.get("lvl", "").lstrip("-")) else None,
                    "fix": int(a["fix"]) if isnum(a.get("fix", "")) else 0,
@@ -714,7 +654,7 @@ class ClientCore:
             return
         if kind in ("I", "S") and nr is not None and q.ack(nr, mod):
             c.outstanding = q.y
-            self._touch()
+            self.changed()
 
     async def _poll_outstanding(self) -> None:
         """CR45: frames waiting in Direwolf per channel - all channels share the
@@ -731,7 +671,7 @@ class ClientCore:
                     l2 = c.link.l2()
                     if l2 != getattr(c, "_l2_shown", None):
                         c._l2_shown = l2
-                        self._touch()
+                        self.changed()
             for c in list(self.channels.values()):
                 if c.state == "online" and c.link.kind != "telnet" and c.n:
                     before = c.outstanding
@@ -742,157 +682,13 @@ class ClientCore:
                     c.airq.poll(c.outstanding)
                     busy = busy or bool(c.outstanding)
                     if c.outstanding != before:     # CR117: queue chip and TX follow at once
-                        self._touch()
+                        self.changed()
                     if c.peer is not None:
                         c.peer.outstanding(c.outstanding)       # CR78: the delivery tick
 
-    def join(self, n: int) -> bool:
-        if not self.handshake_done or not any(b["n"] == n for b in self.boards):
-            return False
-        self._send(f"/J {n}" if self.board else f"C {n}")
-        self._joining, self._early = n, []
-        return True
+    # --- sending -----------------------------------------------------------------
 
-    # --- history on request (CR13) ---------------------------------------------
-
-    HIST_MODES = ("missed", "none", "10", "20")
-    HIST_MISSED_MAX = 20
-
-    @property
-    def history_mode(self) -> str:
-        m = self.settings.get("history", "missed")
-        return m if m in self.HIST_MODES else "missed"
-
-    def set_history_mode(self, mode: str) -> bool:
-        if mode not in self.HIST_MODES:
-            return False
-        self.settings["history"] = mode
-        self._save_settings()
-        self._touch()
-        return True
-
-    def _history_on_join(self, in_line: str) -> None:
-        """//IN ... hist=<n> last=<unix> now=<unix>: ask for the history the way the
-        user wants it. A TinyBox without hist= sends the history by itself."""
-        args = dict(re.findall(r"\b(hist|last|now)=(\d+)", in_line))
-        if "hist" not in args:
-            return
-        if "now" in args:
-            self.clock_off = int(args["now"]) - int(time.time())
-        count, last = int(args["hist"]), int(args.get("last", 0))
-        self.board.update(hist=count, hist_last=last, older=count, loading=False)
-        mode = self.history_mode
-        if not count or mode == "none":
-            return
-        if mode == "missed":
-            since = self.tset.get("seen", {}).get(self.board["name"])
-            if since and last <= since:
-                return                                    # nothing new since the last visit
-            self._ask_history(self.HIST_MISSED_MAX, since=since)
-        else:
-            self._ask_history(int(mode))
-
-    @staticmethod
-    def _img_limit(in_line: str) -> int:
-        """//IN ... img | img=<hex>: images allowed here, max bytes (0 = none, CR12)."""
-        m = re.search(r"(?:^| )img(?:=([0-9a-fA-F]{1,5}))?(?= |$)", in_line)
-        if not m:
-            return 0
-        return int(m.group(1), 16) if m.group(1) else 8192
-
-    @staticmethod
-    def _file_limit(in_line: str) -> int:
-        """//IN ... file=<hex>: files allowed here, max bytes as sent (CR86)."""
-        m = re.search(r"(?:^| )file=([0-9a-fA-F]{1,5})(?= |$)", in_line)
-        return int(m.group(1), 16) if m else 0
-
-    def _motd_on_join(self, in_line: str) -> None:
-        """//IN ... motd=<crc> (CR3): the text is fetched only when it is new."""
-        m = re.search(r"\bmotd=([0-9a-f]{4})\b", in_line)
-        name = self.board["name"]
-        if not m:
-            self.board["motd"] = ""
-            return
-        known = self.tset.get("motd", {}).get(name)
-        if known and known.get("crc") == m.group(1):
-            self.board["motd"] = known.get("text", "")
-        else:
-            self.board["motd"] = ""
-            self._send("//MOTD")
-
-    def _add_history(self, lines: list[tuple], older: bool) -> None:
-        """History lines (oldest first) into the chat. Ordered by time, always before
-        the live events (ids >= 0); within the same second an older page goes in
-        front of what is shown, a newer one behind it."""
-        new = []
-        for x in lines:                          # inclusive limits: drop what is here
-            if len(x) == 3:
-                x = (*x, None)
-            if x[:3] not in self._hist_keys:     # (time, call, text), with or without number
-                self._hist_keys.add(x[:3])
-                new.append(x)
-        lines = new
-        if older:
-            self._hist_lo -= len(lines)
-            k0 = self._hist_lo
-        else:
-            k0 = self._hist_hi
-            self._hist_hi += len(lines)
-        for i, (t, call, text, qseq) in enumerate(lines):
-            m = {"id": -(2 ** 50) + t * 1000 + k0 + i, "seq": -1, "kind": "line",
-                 "call": call, "text": text, "time": t - self.clock_off,
-                 "history": True, "srv_time": t, "reactions": {}}
-            if qseq is not None:
-                m["qseq"] = qseq                 # its event number: quotes find it (HSEQ)
-            self._add(m)
-
-    def _ask_history(self, n: int, since: int | None = None, before: int | None = None) -> None:
-        self.board["loading"] = True
-        self._hist_buf, self._hist_older = [], before is not None
-        self._send(f"//HIST max={n}" + (f" since={since}" if since else "")
-                   + (f" before={before}" if before else ""))
-
-    def load_history(self, n: int) -> bool:
-        """Button "load 10 / load all": older lines than the ones shown."""
-        b = self.board
-        if not b or "hist" not in b or b.get("loading") or not b.get("older"):
-            return False
-        loaded = [m["srv_time"] for m in self.messages if "srv_time" in m]
-        # inclusive on the TinyBox side; lines we already have are dropped (_hist_keys)
-        before = min(loaded) if loaded else (b.get("hist_last") or None)
-        self._ask_history(max(1, min(n, 200)), before=before)
-        self._touch()
-        return True
-
-    def leave(self) -> None:
-        if self.board:
-            self._send("/Q")
-
-    def say(self, text: str) -> bool:
-        text = text.replace("\r", " ").replace("\n", " ").strip()
-        if not self.board or not text or text.startswith("/"):
-            return False
-        self._send(text[:200])
-        self.pending.append({"text": text[:200], "at": time.time()})
-        self._touch()
-        return True
-
-    def react(self, seq: int, emoji: str) -> bool:
-        if not self.board or not re.match(r"^[!-~]{1,8}$", emoji) or not 0 <= seq < 256:
-            return False
-        self._send(f"/R {seq:X} {emoji}")
-        # show it at once (CR8); the echo from the TinyBox confirms it
-        for m in reversed(self.messages):
-            if m.get("seq") == seq and m["kind"] == "line":
-                calls = m["reactions"].setdefault(emoji, [])
-                if self.cfg.mycall not in calls:
-                    calls.append(self.cfg.mycall)
-                    self.pending_reacts[(seq, emoji)] = time.time()
-                break
-        self._touch()
-        return True
-
-    def _send(self, line: str) -> None:
+    def send_line(self, line: str) -> None:
         if self._hold is not None:          # an image is going out: wait (CR12)
             self._hold.append(line)
             self.console.append("| " + line)
@@ -911,7 +707,7 @@ class ClientCore:
             return
         held, self._hold = self._hold or [], None
         for line in held:
-            self._send(line)
+            self.send_line(line)
 
     # --- link callbacks ---------------------------------------------------------
 
@@ -960,9 +756,9 @@ class ClientCore:
             whole, _, dec = f"{f:.6f}".rstrip("0").partition(".")
             freq = f"{whole}.{dec.ljust(3, '0')}"          # 144.8 -> 144.800
             self.settings["freq"] = freq
-            self._save_settings()
+            self.save_settings()
         self.freq, self.freq_asked = freq, True
-        self._touch()
+        self.changed()
         return True
 
     async def _handshake_fallback(self) -> None:
@@ -985,7 +781,7 @@ class ClientCore:
         self.chan.mode = "tinybox"
         caps = tbproto.client_caps(ui=self._want_ui(), binary=self.link.kind != "telnet")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
-        self._send(f"//CLIENT {tbproto.PROTO} v={VERSION} caps={caps}{sym}")
+        self.send_line(f"//CLIENT {tbproto.PROTO} v={VERSION} caps={caps}{sym}")
 
     def _on_line(self, line: str) -> None:
         if not self.caps and (m := AUTH_AFTER_PROMPT.match(line)):
@@ -1012,7 +808,7 @@ class ClientCore:
                 self._set_mail(int(m.group(1)) if m else 0)
             if not self.handshake_done and line.startswith("Welcome to TinyBox"):
                 asyncio.get_event_loop().call_later(1.0, self._handshake)
-        self._touch()
+        self.changed()
 
     def _on_frame(self, f: RawFrame) -> None:
         pair = frozenset((f.src, f.dest))        # CR45: channel 0, everything heard
@@ -1031,7 +827,7 @@ class ClientCore:
         self._air_count(f, pair)                 # CR117: queue / ack in real time
         if f.src == self.cfg.mycall:             # CR110: TX/RX in the top bar
             self.tx_at = time.time()
-            self._touch()                        # CR117: TX at once, not rate-limited
+            self.changed()                        # CR117: TX at once, not rate-limited
             if f.is_i and f.info and f.dest == self.target:   # CR117: upload progress
                 self.images.own_frame(len(f.info))
                 self.bfiles.own_frame(len(f.info))
@@ -1039,7 +835,7 @@ class ClientCore:
             self.rx_at = time.time()
             if time.monotonic() - self._io_touch >= IO_TOUCH_SEC:   # CR117: RX reaches the GUI
                 self._io_touch = time.monotonic()
-                self._touch()
+                self.changed()
         entry = monitor_entry(f, pair in self._mod128,
                               frozenset([self.home, *self.settings.get("tinyboxes", [])]),
                               self.aprs_memory, self.aprs_home)
@@ -1064,7 +860,7 @@ class ClientCore:
         u = self.uploads.get(f.src)
         if u is not None and f.is_i and f.dest == tb and f.info:
             u["got"] = min(u["size"], u["got"] + len(f.info))
-            self._touch()
+            self.changed()
         if f.src != self.cfg.mycall and not f.src.startswith("TBCHAT"):
             self.heard_at[f.src] = time.time()
             if len(self.heard_at) > 200:          # forget the oldest
@@ -1074,7 +870,7 @@ class ClientCore:
         sym = aprs_symbol(f.info)
         if sym:
             self.heard[f.src] = sym
-            self._touch()
+            self.changed()
         if f.src == self.home and f.dest == "TBMAIL":       # the mailbox is the home's
             self._mail_notice(f.info.decode("utf-8", "replace"))
             return
@@ -1092,236 +888,9 @@ class ClientCore:
             self._early = (self._early + [ev])[-20:]
         elif self.board and f.dest == f"TBCHAT-{self.board['n']}":
             self._event(ev)
-            self._touch()
+            self.changed()
 
-    # --- protocol lines -------------------------------------------------------------
-
-    def admin(self, command: str, refresh: str = "") -> bool:
-        """CR94 (Variante B): one sysop console command at the TinyBox, signed. Only
-        if the box granted ADM (the sysop, logged in with his released key).
-        refresh: 'mail' or 'bulletins' changed (KILL, MOVE, COPY) - sync that
-        when the answer is in."""
-        command = " ".join(command.split())[:200]
-        if "ADM" not in self.caps or not command or self.state != "online":
-            return False
-        if refresh in ("mail", "bulletins"):
-            self._adm_refresh = refresh
-        self.adm_log.append({"k": "cmd", "x": command, "t": int(time.time())})
-        self.asking["adm"] = time.time()
-        self._send(self.signed("//ADM " + command))
-        self._touch()
-        return True
-
-    def signed(self, line: str, payload: list[str] | tuple[str, ...] = ()) -> str:
-        """CR93 stage 2: a critical command (//SEND, //KILL, //SYNC k=, //PROF) with
-        its number and signature - bound to this login, so an injected or recorded
-        frame is refused. payload = the lines that follow (subject and text)."""
-        if self._login is None:
-            return line                       # no login with a key (older TinyBox)
-        self._cmd_ctr += 1
-        box, nonce = self._login
-        sig = self.identity.sign_command(box, self.cfg.mycall, nonce, self._cmd_ctr, line,
-                                         payload)
-        return tbproto.with_signature(line, self._cmd_ctr, sig)
-
-    # --- CR93 stage 3: the certificate of the home BBS ----------------------------------
-
-    def _certs(self) -> dict[str, str]:
-        certs = self.settings.get("certs")
-        return certs if isinstance(certs, dict) else {}
-
-    def _cert_due(self) -> bool:
-        """At the home BBS: no certificate of it yet, or one that runs out soon."""
-        box = self.auth.get("box") or self.target
-        if self._login is None or base_call(box) != base_call(self.home):
-            return False
-        try:
-            until = auth.parse_cert(self._certs().get(box.upper(), ""))["until"]
-        except auth.AuthError:
-            return True
-        soon = time.strftime("%Y%m%d", time.gmtime(time.time() + auth.CERT_RENEW_DAYS * 86400))
-        return until < soon
-
-    def _store_cert(self, text: str) -> None:
-        try:
-            c = auth.parse_cert(text)
-        except auth.AuthError:
-            return                                   # '-': this box issues none
-        box = (self.auth.get("box") or self.target).upper()
-        if c["call"] != base_call(self.cfg.mycall) or c["pub"] != self.identity.pub \
-                or c["issuer"] != box:
-            log.warning("certificate from %s not for this key - ignored", box)
-            return
-        self.settings["certs"] = {**self._certs(), box: text}
-        self._save_settings()
-        self.console.append(f"*** certificate of {box} until {c['until'][:4]}-{c['until'][4:6]}-"
-                            f"{c['until'][6:]}: other TinyBoxen that trust {box} let you log in")
-
-    def _trust_due(self) -> bool:
-        box = self.auth.get("box") or self.target
-        if self._login is None or base_call(box) != base_call(self.home):
-            return False
-        tr = self.settings.get("trust")
-        return not isinstance(tr, dict) or time.time() - tr.get("at", 0) > 86400
-
-    def _store_trust(self, rest: str) -> None:
-        """//TRUST box=key ...: from the home BBS (the first one is the home BBS itself)."""
-        box = (self.auth.get("box") or self.target).upper()
-        if self._login is None or base_call(box) != base_call(self.home):
-            return
-        keys = {}
-        for part in rest.split()[:21]:
-            name, eq, pub = part.partition("=")
-            try:
-                if eq and 3 <= len(name) <= 9:
-                    auth.b64d(pub, 32)
-                    keys[name.upper()] = pub
-            except auth.AuthError:
-                continue
-        if box in keys:
-            self.settings["trust"] = {"at": int(time.time()), "home": box, "keys": keys}
-            self._save_settings()
-
-    def trusted_issuer(self, issuer: str) -> bytes | None:
-        """CR99: the key of a TinyBox whose certificates this client believes - its
-        home BBS and the boxes that one trusts (fetched with //TRUST?)."""
-        tr = self.settings.get("trust")
-        pub = tr.get("keys", {}).get(issuer.upper()) if isinstance(tr, dict) else None
-        try:
-            return auth.b64d(pub, 32) if pub else None
-        except auth.AuthError:
-            return None
-
-    # --- CR113: LoTW as anchor of trust -------------------------------------------------
-
-    @property
-    def _lotw_path(self):
-        return self.cfg.data_dir / "lotw.json"
-
-    def lotw_proof(self) -> dict | None:
-        """The kept LoTW proof for the current key (None = none, or for another key)."""
-        import json
-        try:
-            proof = json.loads(self._lotw_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-        if not isinstance(proof, dict) or proof.get("pub") != self.identity.pub:
-            return None
-        return proof
-
-    def lotw_status(self) -> dict:
-        from prcore import lotw
-        out = {"available": lotw.available(), "call": base_call(self.cfg.mycall),
-               "box": {k: v for k, v in self.lotw_box.items() if k != "asked"}}
-        proof = self.lotw_proof()
-        if proof:
-            try:
-                info = lotw.verify(proof, roots=None)
-                out.update(state="ok", until=info["until"], dxcc=info["dxcc"], fp=info["fp"],
-                           issuer=info["issuer"], date=proof.get("date", ""))
-            except lotw.LotwError as exc:
-                out.update(state="invalid", error=str(exc), until=proof.get("until", ""))
-        else:
-            out["state"] = "none"
-        return out
-
-    def lotw_sign(self, p12: bytes, password: str) -> dict:
-        """Confirm the own key with the LoTW certificate: sign once, keep the proof.
-        The .p12 and the password are only used here and not kept."""
-        import json
-        from prcore import lotw
-        proof = lotw.sign_binding(p12, password, base_call(self.cfg.mycall), self.identity.pub)
-        tmp = self._lotw_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(proof, indent=1), encoding="utf-8")
-        tmp.replace(self._lotw_path)
-        log.info("LoTW: key %s confirmed with the LoTW certificate of %s (until %s)",
-                 self.identity.fp, proof["call"], proof["until"])
-        if "LOTW" in self.caps and self.state == "online":
-            self.lotw_box = {}
-            self._lotw_ask()                         # the TinyBox learns it now
-        self._touch()
-        return self.lotw_status()
-
-    # CR113 stage 2: the TinyBox learns it - once per key, then only //LOTW? at a login
-
-    def _lotw_ask(self) -> None:
-        if self.lotw_proof() is not None and self.lotw_box.get("asked") != self.target:
-            self.lotw_box = {"asked": self.target, "state": "asking"}
-            self._send("//LOTW?")
-
-    def _lotw_answer(self, rest: str) -> None:
-        proof = self.lotw_proof()
-        word = rest.split(" ", 1)[0]
-        box = self.auth.get("box") or self.target
-        if rest.startswith("until=") and proof and rest[6:] >= proof.get("until", ""):
-            self.lotw_box.update(state="ok", until=rest[6:], box=box)
-        elif (rest == "-" or rest.startswith("until=")) and proof:
-            self._lotw_send(proof)
-        elif word == "more" and proof and not self.lotw_box.get("full"):
-            self.lotw_box["full"] = True             # the box lacks an ARRL certificate
-            self._lotw_send(proof, full=True)
-        elif word == "off":
-            self.lotw_box.update(state="off", box=box)
-        elif word == "ok":
-            until = rest.split("until=", 1)[1].split()[0] if "until=" in rest else ""
-            self.lotw_box.update(state="ok", until=until, box=box)
-            self.console.append(f"*** {box} knows now: your key is confirmed with LoTW (until {until})")
-            if self.auth.get("state") == "ok":
-                self.asking["cert"] = time.time()
-                self._send("//CERT?")            # the certificate with the LoTW level
-        elif word == "err":
-            why = rest[4:].strip()
-            self.lotw_box.update(state="err", error=why, box=box)
-            self.console.append(f"*** {box} did not take your LoTW confirmation: {why}")
-        self._touch()
-
-    def _lotw_send(self, proof: dict, full: bool = False) -> None:
-        """Normally only the callsign certificate (the box has the ARRL ones)."""
-        from prcore import lotw
-        text = lotw.wire_encode(proof, full)
-        parts = [text[i:i + 200] for i in range(0, len(text), 200)]
-        self.lotw_box["state"] = "sending"
-        log.info("LoTW: sending the confirmation to %s (%d bytes, %d lines)", self.target,
-                 len(text), len(parts))
-        for i, chunk in enumerate(parts, 1):
-            self._send(f"//LOTWP {i}/{len(parts)} {chunk}")
-
-    def lotw_forget(self) -> None:
-        try:
-            self._lotw_path.unlink()
-        except FileNotFoundError:
-            pass
-        self._touch()
-
-    def own_cert(self) -> str:
-        """The certificate of the home BBS for this key (for other TBClients, CR99)."""
-        return self._cert_for("")
-
-    def _cert_for(self, box: str) -> str:
-        """At another TinyBox: the newest valid certificate of another box (home)."""
-        today = time.strftime("%Y%m%d", time.gmtime())
-        best = ("", "")
-        for issuer, text in self._certs().items():
-            if issuer == box.upper():
-                continue
-            try:
-                c = auth.parse_cert(text)
-            except auth.AuthError:
-                continue
-            if c["until"] >= today and c["pub"] == self.identity.pub and c["until"] > best[0]:
-                best = (c["until"], text)
-        return best[1]
-
-    def _note_home_auth(self, state: str, reason: str = "") -> None:
-        """CR104: the last login answer of the home BBS, kept for the settings page."""
-        if base_call(self.auth.get("box") or self.target) != base_call(self.home):
-            return
-        new = {"state": state, "reason": reason, "at": int(time.time())}
-        old = self.settings.get("auth_home") or {}
-        if (old.get("state"), old.get("reason")) == (state, reason) and new["at"] - old.get("at", 0) < 3600:
-            return                                  # same answer: no write per login
-        self.settings["auth_home"] = new
-        self._save_settings()
+    # --- the lines of the TinyBox (R1); login: login.py, board: board.py, games: gameplay.py
 
     def _control(self, line: str) -> None:
         """A //-line of the TinyBox goes to its handler (_CONTROL, Refactoring R1).
@@ -1362,64 +931,12 @@ class ClientCore:
         "P": "_c_prompt",
     }
 
-    def _c_auth_ask(self, cmd: str, rest: str, line: str) -> None:
-        """//AUTH? - CR93: log in with the user's key"""
-        a = dict(x.split("=", 1) for x in rest.split() if "=" in x)
-        nonce, box = a.get("n", ""), a.get("box", "") or self.target
-        if not nonce or len(nonce) > 64:
-            return
-        self.auth.update(state="asking", box=box, reason="")
-        self._login = (box, nonce)            # stage 2: signed commands of this login
-        self._cmd_ctr = 0
-        cert = self._cert_for(box)
-        self._send(f"//AUTH sig={self.identity.sign_login(box, self.cfg.mycall, nonce)} "
-                   f"pub={self.identity.pub} dev={self.identity.device}"
-                   + (f" cert={cert}" if cert else ""))
-
-    def _c_adm(self, cmd: str, rest: str, line: str) -> None:
-        """//ADM>/ADMEND - CR94: answer of an admin command"""
-        k = "out" if cmd == "ADM>" else "end"
-        self.adm_log.append({"k": k, "x": rest, "t": int(time.time())})
-        if k == "end":
-            self.asking.pop("adm", None)
-        if k == "end" and self._adm_refresh:
-            scope, self._adm_refresh = self._adm_refresh, ""
-            self.sync.start(scope)
-        self._touch()
-
-    def _c_trust(self, cmd: str, rest: str, line: str) -> None:
-        """//TRUST - CR99: keys the home BBS trusts"""
-        self.asking.pop("trust", None)
-        self._store_trust(rest)
-
-    def _c_cert(self, cmd: str, rest: str, line: str) -> None:
-        """//CERT - stage 3: from the home BBS"""
-        self.asking.pop("cert", None)
-        self._store_cert(rest.strip())
-
     def _c_prompt(self, cmd: str, rest: str, line: str) -> None:
         """CR134: the box answered a terminal command - show its prompt here
         (the prompt itself does not go over the air)."""
         if self.chan is not None:
             self.chan.term_line("rx", tbproto.TERM_PROMPT)
-        self._touch()
-
-    def _c_authwait(self, cmd: str, rest: str, line: str) -> None:
-        self.auth.update(state="wait", reason="")
-        self._note_home_auth("wait")
-        box = base_call(self.auth["box"] or self.target)
-        waited = self.settings.setdefault("auth_waited", [])     # CR133: "confirmed" later
-        if box not in waited:
-            waited.append(box)
-            self._save_settings()
-        self.console.append(f"*** {self.auth['box'] or self.target}: the sysop still has to confirm "
-                            f"this client (protects your callsign) - give him the code {self.identity.fp}")
-        self._lotw_ask()                     # CR113: LoTW may release it
-        self._touch()
-
-    def _c_lotw(self, cmd: str, rest: str, line: str) -> None:
-        """//LOTW - CR113 stage 2"""
-        self._lotw_answer(rest.strip())
+        self.changed()
 
     def _c_ok(self, cmd: str, rest: str, line: str) -> None:
         self.auth.update(state="ok", reason="")
@@ -1428,14 +945,14 @@ class ClientCore:
         box = base_call(self.auth.get("box") or self.target)
         if box in waited:                    # CR133: the sysop has confirmed it - say welcome
             waited.remove(box)
-            self._save_settings()
+            self.save_settings()
             self.auth["confirmed"] = int(time.time())
         if self._cert_due():
             self.asking["cert"] = time.time()
-            self._send("//CERT?")            # stage 3: for logins at other TinyBoxen
+            self.send_line("//CERT?")            # stage 3: for logins at other TinyBoxen
         if self._trust_due():
             self.asking["trust"] = time.time()
-            self._send("//TRUST?")           # CR99: whose certificates count
+            self.send_line("//TRUST?")           # CR99: whose certificates count
         m = re.search(r"caps=(\S*)", rest)
         self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
         self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
@@ -1445,14 +962,14 @@ class ClientCore:
         if self.target != self.home and self.target not in known:
             known.append(self.target)          # CR43: next time no terminal guess
             del known[:-20]
-            self._save_settings()
+            self.save_settings()
         q = re.search(r"q=(\d+)/(\d+)/(\d+)/([\d.,]+)", rest)      # CR33
         if q:
             self.qcfg = {"frames": int(q.group(1)), "minutes": int(q.group(2)),
                          "min_frames": int(q.group(3)),
                          "steps": [float(x) for x in q.group(4).split(",") if x]}
         self._update_info(rest)
-        self._send("//BOARDS")
+        self.send_line("//BOARDS")
         self.profiles.on_ok(rest)                # CR73: profile only if it differs
         self.reports.on_login()                  # CR127: results of chess / CQ contest
         if self.cfg.sync_on_login and "SYNC" in self.caps and self.at_home \
@@ -1460,88 +977,6 @@ class ClientCore:
             # CR40: headers of mail and subscribed rubrics after every login,
             # a moment later so the board list comes first
             asyncio.get_event_loop().call_later(LOGIN_SYNC_SEC, self._login_sync)
-
-    def _c_board(self, cmd: str, rest: str, line: str) -> None:
-        parts = rest.split(" ", 4)
-        if len(parts) >= 4 and isnum(parts[0]):
-            if self._boards_tmp is None:
-                self._boards_tmp = []
-            self._boards_tmp.append({"n": int(parts[0]), "name": parts[1], "keep": parts[2],
-                                     "users": int(parts[3]) if isnum(parts[3]) else 0,
-                                     "desc": parts[4] if len(parts) > 4 else ""})
-
-    def _c_boards_end(self, cmd: str, rest: str, line: str) -> None:
-        self.boards = self._boards_tmp or []
-        self._boards_tmp = None
-        last = self.tset.get("board")
-        if self.board is None and any(b["n"] == last for b in self.boards) \
-                and not self.sync.own_connect:   # a sync-only connection stays out
-            self.join(last)                  # back into the last board
-
-    def _c_in(self, cmd: str, rest: str, line: str) -> None:
-        parts = rest.split()
-        # CR98: "//IN <n> <name> <keep> <last hex|->" - anything else is not a join
-        if len(parts) >= 4 and isnum(parts[0]) and \
-                (parts[3] == "-" or re.fullmatch(r"[0-9A-Fa-f]{1,4}", parts[3])):
-            self._clear_board()
-            self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2],
-                          "img": self._img_limit(rest), "file": self._file_limit(rest)}
-            self._history_on_join(rest)
-            self._motd_on_join(rest)
-            last = None if parts[3] == "-" else int(parts[3], 16)
-            self.unwrap.reset(last)
-            early = self._early if self._joining == self.board["n"] else []
-            self._joining, self._early = None, []
-            if early:     # after the //H and //WHO lines, which come next
-                asyncio.get_event_loop().call_soon(self._replay_early, early, last)
-            if self.tset.get("board") != self.board["n"]:
-                self.tset["board"] = self.board["n"]
-                self._save_settings()
-
-    def _c_hist(self, cmd: str, rest: str, line: str) -> None:
-        # HSEQ: "//H <unix> #<n> <call>: <text>" - the event number for quotes
-        m = re.match(r"^(\d+) (?:#([0-9A-F]{1,2}) )?([A-Z0-9-]+): ?(.*)$", rest)
-        if m and self.board:
-            line = (int(m.group(1)), m.group(3), m.group(4),
-                    int(m.group(2), 16) if m.group(2) else None)
-            if self._hist_buf is not None:
-                self._hist_buf.append(line)          # answer to //HIST: until //HEND
-            else:
-                self._add_history([line], older=False)   # older TinyBox: right away
-
-    def _c_hist_end(self, cmd: str, rest: str, line: str) -> None:
-        p = rest.split()
-        if self.board and len(p) == 2 and isnum(p[1]):
-            self._add_history(self._hist_buf or [], older=self._hist_older)
-            self._hist_buf = None
-            self.board["older"] = int(p[1])
-            self.board["loading"] = False
-
-    def _c_motd(self, cmd: str, rest: str, line: str) -> None:
-        crc, _, text = rest.partition(" ")
-        if self.board:
-            motds = self.tset.setdefault("motd", {})
-            if crc == "-":
-                motds.pop(self.board["name"], None)
-            else:
-                motds[self.board["name"]] = {"crc": crc, "text": text}
-            self._save_settings()
-            self.board["motd"] = text if crc != "-" else ""
-            self._touch()
-
-    def _c_who(self, cmd: str, rest: str, line: str) -> None:
-        """//WHO - 'n call[=sym] ...' (NUM) or 'call[=sym] ...'"""
-        num = 0
-        for item in rest.split():
-            if isnum(item):
-                num = int(item)
-                continue
-            call, _, sym = item.partition("=")
-            self.members[call] = sym
-            if num:
-                self._set_number(num, call)
-                num = 0
-        self.profiles.want(self.members)         # CR73: names and locators
 
     def _c_prof(self, cmd: str, rest: str, line: str) -> None:
         self.profiles.on_line(rest)
@@ -1552,52 +987,12 @@ class ClientCore:
     def _c_whois_end(self, cmd: str, rest: str, line: str) -> None:
         self.profiles.on_whois_end()
 
-    def _c_out(self, cmd: str, rest: str, line: str) -> None:
-        self._clear_board()
-        self.tset.pop("board", None)
-        self._save_settings()
-
     def _c_sys(self, cmd: str, rest: str, line: str) -> None:
         # //SYS <seconds left> <text>  (-1 = shutdown called off)
         left, _, text = rest.partition(" ")
         if re.match(r"^-?\d+$", left):
             self.sysmsg = {"text": text, "left": int(left), "at": int(time.time())}
             self.console.append("*** " + text)
-
-    def _c_ct(self, cmd: str, rest: str, line: str) -> None:
-        """//CT - CR122: the box plays the CQ contest"""
-        self.box_contest.take(rest)
-
-    def _c_game(self, cmd: str, rest: str, line: str) -> None:
-        """//GAME - CR127: the box answers a result"""
-        self.reports.answer(rest)
-
-    def _c_games(self, cmd: str, rest: str, line: str) -> None:
-        """//GAMES - CR126: leaderboards"""
-        self.leaderboard.line(rest)
-        self._touch()
-
-    def _c_pr(self, cmd: str, rest: str, line: str) -> None:
-        """//PR - CR123: the box answers a Prefix raten command"""
-        self.prefix.answer(rest)
-        self._touch()
-
-    def _c_ctr(self, cmd: str, rest: str, line: str) -> None:
-        """//CTR - CR122: another client, handed on by the box"""
-        call, _, line = rest.partition(" ")
-        call = call.upper()
-        if AX25_CALL_RE.match(call) and line:
-            self._relay_slot(call).take(line)
-
-    def _c_err(self, cmd: str, rest: str, line: str) -> None:
-        if rest.startswith("auth"):
-            why = rest[4:].strip() or "refused"
-            self.auth.update(state="refused", reason=why)
-            self._note_home_auth("refused", why)
-            self.console.append(f"*** login with your key refused: {why}")
-            self._touch()
-            return
-        self.console.append(line)
 
     def _mail_notice(self, text: str) -> None:
         """UI frame to TBMAIL: '<call> <n> new' (sent by the TinyBox, C1)."""
@@ -1640,146 +1035,9 @@ class ClientCore:
         old = self.mail["count"] if self.mail else 0
         self.mail = {"count": count, "at": int(time.time()) if count != old else
                      (self.mail or {}).get("at", int(time.time()))}
-        self._touch()
-
-    def _replay_early(self, events: list[proto.Event], last: int | None) -> None:
-        for ev in events:
-            if last is None or 0 < (ev.seq - last) % 256 < 128:
-                self._event(ev)
-        self._touch()
-
-    def _clear_board(self) -> None:
-        if self.board:                       # everything up to now was seen (CR13)
-            seen = self.tset.setdefault("seen", {})
-            seen[self.board["name"]] = int(time.time()) + self.clock_off
-            self._save_settings()
-        self._hist_keys = set()
-        self._hist_buf, self._hist_lo, self._hist_hi = None, 0, 0
-        self.prefix.clear()                          # CR123: the game belongs to the board
-        self.board = None
-        self.members = {}
-        self.numbers = {}
-        self.quality = {}
-        self.linkq = {}
-        self.messages = []
-        self.uploads = {}
-        self.seen = set()
-        self.unwrap = proto.Unwrapper()
-        self.pending_reacts = {}
-
-    def _event(self, ev: proto.Event) -> None:
-        if not self.board:
-            return
-        before = self.unwrap.last
-        pos = self.unwrap.unwrap(ev.seq)
-        if pos in self.seen:
-            return                                   # UI + I-frame, or a resend
-        self.seen.add(pos)
-        if before is not None and pos > before + 1:
-            first, last = (before + 1) % 256, (pos - 1) % 256
-            if pos - before - 1 <= MAX_GAP:
-                self._send(f"//RESEND {first:X}-{last:X}")
-            else:                 # too many to fetch: only tell, for the receive quote
-                self._send(f"//LOST {first:X}-{last:X}")
-        now = int(time.time())
-        if ev.kind == "line":
-            self._add({"id": pos, "seq": ev.seq, "kind": "line", "call": ev.call,
-                       "text": ev.text, "time": now, "reactions": {}})
-            if chatimg.parse_ref(ev.text):          # the picture is here: no "uploading"
-                self.uploads.pop(ev.call, None)
-            if ev.call == self.cfg.mycall:
-                for p in self.pending:
-                    if p["text"] == ev.text:
-                        self.pending.remove(p)
-                        break
-        elif ev.kind == "join":
-            self.members[ev.call] = ev.symbol
-            self.profiles.want([ev.call])
-            if ev.num:
-                self._set_number(ev.num, ev.call)
-            self._add({"id": pos, "seq": ev.seq, "kind": "join", "call": ev.call, "time": now})
-        elif ev.kind == "symbol":                    # nothing to show, only the avatars
-            call = ev.call or self.numbers.get(ev.num, "")
-            if call in self.members:
-                self.members[call] = ev.symbol
-        elif ev.kind == "leave":
-            call = ev.call or self.numbers.pop(ev.num, "")
-            if not call:
-                return                               # number unknown: nothing to remove
-            self.numbers = {n: c for n, c in self.numbers.items() if c != call}
-            self.members.pop(call, None)
-            self.quality.pop(call, None)
-            self.linkq.pop(call, None)
-            self._add({"id": pos, "seq": ev.seq, "kind": "leave", "call": call, "time": now})
-        elif ev.kind == "react":
-            for m in reversed(self.messages):
-                if m.get("seq") == ev.ref and m["kind"] == "line":
-                    calls = m["reactions"].setdefault(ev.text, [])
-                    if ev.call not in calls:
-                        calls.append(ev.call)
-                    break
-            if ev.call == self.cfg.mycall:
-                self.pending_reacts.pop((ev.ref, ev.text), None)
-        elif ev.kind == "upload":                    # CR30: a picture is going up
-            if ev.call != self.cfg.mycall:
-                self.uploads[ev.call] = {"size": ev.ref, "at": now, "got": 0}
-        elif ev.kind == "quality":                   # bars next to the avatars (14.4)
-            self.quality = {}
-            for who, b in (ev.bars or {}).items():
-                call = self.numbers.get(who, "") if isinstance(who, int) else who
-                if call:
-                    self.quality[call] = b
-        elif ev.kind == "system":
-            pr = self.prefix.event(ev.text)              # CR123: Prefix raten
-            self._add({"id": pos, "seq": ev.seq, "kind": "system", "text": ev.text,
-                       "time": now, **({"pr": True} if pr else {})})
-
-    def _set_number(self, num: int, call: str) -> None:
-        """Member numbers are reused: a new holder pushes the old one out."""
-        self.numbers = {n: c for n, c in self.numbers.items() if c != call and n != num}
-        self.numbers[num] = call
-
-    def _qstat(self, line: str) -> None:
-        """%Q: the numbers behind the bars of every member with data (CR33)."""
-        stats = proto.parse_qstat(line)
-        if stats is None:
-            return
-        self.linkq = {}
-        for num, rec in stats.items():
-            call = self.numbers.get(num)
-            if call:
-                rec = dict(rec, call=call, at=int(time.time()))
-                self.linkq[call] = rec
-                self.quality[call] = rec["bars"]       # the bars come with it
-        self._touch()
-
-    def _add(self, msg: dict) -> None:
-        self.chan.act_n += 1                     # CR45: the chip blinks in the background
-        self.messages.append(msg)
-        self.messages.sort(key=lambda m: m["id"])
-        del self.messages[:-MAX_MESSAGES]
+        self.changed()
 
     # --- for the GUI -------------------------------------------------------------------
-
-    def _expire_reacts(self, now: float) -> None:
-        """Own reactions that never came back within 2 min are taken back."""
-        for (seq, emoji), at in list(self.pending_reacts.items()):
-            if now - at < 120:
-                continue
-            del self.pending_reacts[(seq, emoji)]
-            for m in reversed(self.messages):
-                if m.get("seq") == seq and m["kind"] == "line":
-                    calls = m["reactions"].get(emoji, [])
-                    if self.cfg.mycall in calls:
-                        calls.remove(self.cfg.mycall)
-                    if not calls:
-                        m["reactions"].pop(emoji, None)
-                    break
-
-    def symbol_of(self, call: str) -> str:
-        if call == self.cfg.mycall and self.my_symbol:
-            return self.my_symbol
-        return self.members.get(call) or self.heard.get(call, "")
 
     def snapshot(self, ch: int | None = None) -> dict:
         """ch = the channel shown in the GUI: its terminal lines come along
@@ -1918,7 +1176,7 @@ class ClientCore:
     def clear_monitor(self) -> None:
         """CR50: the Clear button of the monitor (the counter goes on)."""
         self.monitor.clear()
-        self._touch()
+        self.changed()
 
     def radio_state(self) -> dict:
         """The way to the radio: Direwolf (AGW), kisshub (KISS, with the TNC) or telnet."""

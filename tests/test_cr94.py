@@ -79,7 +79,7 @@ class ClientSide(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             core = ClientCore(client_cfg(tmp))
             sent = []
-            core._send = sent.append
+            core.send_line = sent.append
             core.state = "online"
             self.assertFalse(core.admin("STATUS"))                  # no ADM granted
             core._on_line("//AUTH? n=abc123 box=OE3GAS-1")

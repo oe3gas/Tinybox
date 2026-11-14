@@ -1,0 +1,1 @@
+- Intern: Client-Code aufgeteilt (Login, Board, Spiele), keine neuen Funktionen.

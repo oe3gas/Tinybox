@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from tbclient import filecheck
+from prcore import filecheck
 from tbclient.images import ImageStore
 from tbclient.peerfile import FILE_MAX, FileStore, PeerFiles
 from tbclient.peerimg import PEER_IMG_MAX, PeerImages
@@ -62,7 +62,7 @@ def fake_peer(tmp: str, history=()):
     core = SimpleNamespace(
         images=SimpleNamespace(loading={}, store=ImageStore(Path(tmp) / "img")),
         files=FileStore(Path(tmp) / "files"), file_loading={},
-        peerchat=SimpleNamespace(messages=lambda call: list(history)), _touch=lambda: None)
+        peerchat=SimpleNamespace(messages=lambda call: list(history)), changed=lambda: None)
     ch = SimpleNamespace(core=core, state="online", n=1,
                          link=SimpleNamespace(splitter=splitter, kind="agw"),
                          disconnect=lambda: disconnected.append(True))

@@ -65,7 +65,7 @@ class PeerFun:
         token = os.urandom(3).hex()
         self._ping = (token, time.monotonic())
         self.peer._send(f"//PING {token}")
-        self.core._touch()
+        self.core.changed()
         return True
 
     def _pong(self, token: str) -> None:
@@ -74,7 +74,7 @@ class PeerFun:
             self._ping = None
             self.pong_at = time.time()
             self._remember("ping", [self.pings[-1], int(time.time())])
-            self.core._touch()
+            self.core.changed()
 
     # --- speed test -----------------------------------------------------------------
 
@@ -85,7 +85,7 @@ class PeerFun:
             return False
         self.st = {"state": "running", "out": None, "in": None, "at": time.time(), "n": ST_BYTES}
         self._send_block(ST_BYTES, "go")
-        self.core._touch()
+        self.core.changed()
         return True
 
     def _send_block(self, n: int, how: str) -> None:
@@ -108,7 +108,7 @@ class PeerFun:
             elif self.st:                     # the way back of our own test
                 self.st["in"] = round(n * 1000 / ms)
                 self._finish()
-            self.core._touch()
+            self.core.changed()
         self.ch.link.splitter.expect(n, done)
 
     def _result(self, n: int, ms: int) -> None:
@@ -136,8 +136,8 @@ class PeerFun:
             games.pop(self.peer.call, None)
         else:
             games[self.peer.call] = game
-        self.core._save_settings()
-        self.core._touch()
+        self.core.save_settings()
+        self.core.changed()
 
     def _my_turn(self) -> bool:
         g = self.game
@@ -254,7 +254,7 @@ class PeerFun:
         if len(last) > 50:                    # forget the stations not met for longest
             for call in sorted(last, key=lambda c: max(v[-1] for v in last[c].values()))[:-50]:
                 del last[call]
-        self.core._save_settings()
+        self.core.save_settings()
 
     def summary(self) -> dict:
         g = self.game

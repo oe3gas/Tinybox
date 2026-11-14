@@ -64,8 +64,8 @@ class Reports:
 
     def _save(self) -> None:
         del self.items[:-KEEP]
-        self.core._save_settings()
-        self.core._touch()
+        self.core.save_settings()
+        self.core.changed()
 
     def add(self, game: str, gid: str, vs: str, result: str, h: str, n: int) -> None:
         if not gid or result not in ("win", "loss", "draw"):
@@ -89,10 +89,10 @@ class Reports:
             if r["st"] == "queued":
                 line = (f"//GAME RES g={r['g']} id={r['id']} vs={r['vs']} r={r['r']} h={r['h']} "
                         f"n={r['n']} t={r['t']}")
-                c._send(c.signed(line))
+                c.send_line(c.signed(line))
                 r["st"] = "sent"
             elif r["st"] == "pending" and not self._asked:
-                c._send(f"//GAME ST {r['id']}")
+                c.send_line(f"//GAME ST {r['id']}")
         self._asked = True
         self._save()
 

@@ -439,7 +439,7 @@ class WebServer:
         try:
             if action == "open":
                 m = box.open(int(data.get("id", 0)))
-                core._touch()
+                core.changed()
                 return (200, m, None) if m else (404, {"error": "not found"}, None)
             if action == "delete":
                 ok = box.delete(int(data.get("id", 0)))
@@ -454,7 +454,7 @@ class WebServer:
                 waits = core.send_outbox()          # CR47: out at once
                 if waits:
                     core.sync._notice(f"The mail waits in the outbox: {waits}.")
-                core._touch()
+                core.changed()
                 return 200, {"ok": True, "oid": oid, "waits": waits}, None
             elif action == "discard":
                 ok = box.discard_out(int(data.get("oid", 0)))
@@ -473,13 +473,13 @@ class WebServer:
                 ok = True
             elif action == "fetch":
                 err = core.sync.fetch(int(data.get("id", 0)))
-                core._touch()
+                core.changed()
                 return (200, {"ok": True}, None) if not err else (200, {"ok": False, "error": err}, None)
             else:
                 return 404, {"error": "unknown"}, None
         except (TypeError, ValueError):
             return 400, {"error": "bad value"}, None
-        core._touch()
+        core.changed()
         return (200 if ok else 400), {"ok": ok}, None
 
     async def _send(self, writer, status, payload, ctype=None, extra=None) -> None:

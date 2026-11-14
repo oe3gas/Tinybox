@@ -1428,6 +1428,15 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   nicht je Board. Client-Seite (gemeinsamer Ereignis-Parser für Quiz-Spiele) kommt mit dem
   Elmer Quiz, wenn es ein zweites Quiz gibt.
 
+**Etappe 3 – Stand:**
+- R2 `ClientCore` geteilt ✅ (14.11.): drei Mixins – `tbclient/login.py` (Login, Signaturen,
+  Zertifikate, Trust, LoTW), `tbclient/board.py` (Board, History, MOTD, Mitglieder, Ereignisse),
+  `tbclient/gameplay.py` (CQ Contest, Prefix raten, Ergebnisse, Bestenliste); `core.py` von 1.888
+  auf rund 1.230 Zeilen. Mixins statt eigener Objekte: kein Verhalten ändert sich, die Methoden
+  arbeiten weiter auf dem Zustand des Cores. Öffentliche Schnittstelle für die Hilfsmodule:
+  `changed()` (war `_touch`), `save_settings()`, `send_line()` (war `_send`).
+  Dazu das Umleitungsmodul `tbclient/filecheck.py` entfernt (alle nutzen `prcore.filecheck`).
+
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 
 Anlass: Die Wetterseite trug bei jeder Aussendung den Text „GeoSphere Austria, TAWES

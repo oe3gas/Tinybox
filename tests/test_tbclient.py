@@ -922,7 +922,7 @@ class ImageHoldTests(unittest.TestCase):
                 # between //IMGPUT and //IMGGO: typed text and the gap detection
                 # must wait - the TinyBox would take them as image data
                 self.assertTrue(core.say("mitten drin"))
-                core._send("//RESEND 1-2")
+                core.send_line("//RESEND 1-2")
                 self.assertEqual(core._hold, ["mitten drin", "//RESEND 1-2"])
                 self.assertEqual(len(sent), 1)
                 core._on_line(f"//IMGGO {h} 0")

@@ -93,7 +93,7 @@ class PeerImages:
         self._want, self._last = h, time.monotonic()
         self.loading[h] = {"done": 0, "total": 0, "error": ""}
         self.peer._send(f"//IMG {h}")
-        self.core._touch()
+        self.core.changed()
         return True
 
     def link_lost(self) -> None:
@@ -104,7 +104,7 @@ class PeerImages:
         self.loading[h] = {**self.loading.get(h, {}), "error": why}
         if self._want == h:
             self._want = None
-        self.core._touch()
+        self.core.changed()
 
     # --- lines from the other side ----------------------------------------------------
 
@@ -162,7 +162,7 @@ class PeerImages:
         def progress(got: int) -> None:
             self._last = time.monotonic()
             ld["done"] = off + got
-            self.core._touch()
+            self.core.changed()
 
         def done(data: bytes) -> None:
             whole = data
@@ -175,7 +175,7 @@ class PeerImages:
                 log.info("image %s is here already - kept", h)
             self.loading.pop(h, None)
             log.info("image %s from %s (%d bytes)", h, self.peer.call, len(whole))
-            self.core._touch()
+            self.core.changed()
 
         if off:                                       # we always ask from 0
             log.warning("image %s from %s: offset %d not asked for", h, self.peer.call, off)

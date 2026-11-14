@@ -108,11 +108,11 @@ class Channel:
         if self.peer is not None and not text.startswith("//"):
             self.peer.text("tx", text)                  # CR78: the chat history
         if self.core.chan is self:
-            self.core._send(text)             # an image upload may hold lines back
+            self.core.send_line(text)             # an image upload may hold lines back
         else:
             self.core.console.append(f"[{self.n}]> {text}")
             self.link.send_line(text)
-        self.core._touch()
+        self.core.changed()
         return True
 
     def term_line(self, kind: str, text: str) -> None:
@@ -177,7 +177,7 @@ class Channel:
                                      + (f" ({reason})" if reason else ""))
         if state == "offline" and self.auto:     # the sync's own connection: away again
             self.core.drop_channel(self)
-        self.core._touch()
+        self.core.changed()
 
     def _on_line(self, line: str) -> None:
         self.last_io = time.time()
@@ -191,7 +191,7 @@ class Channel:
             self.term_line("rx", line[:i])
             line = line[i + 1:]
         if line.startswith("//") and self._tb_line(line):
-            self.core._touch()
+            self.core.changed()
             return
         if self.mode == "" and line.startswith("Welcome to TinyBox"):
             if self.core.can_attach(self):
@@ -204,7 +204,7 @@ class Channel:
             self.peer.text("rx", line)                  # CR78: the chat history
         if line:
             self.core.console.append(f"[{self.n}] {line}")
-        self.core._touch()
+        self.core.changed()
 
     async def _detect(self) -> None:
         """No "Welcome to TinyBox" seen: a TinyBox we know gets the handshake
@@ -299,7 +299,7 @@ class Channel:
         self.core.console.append(f"[{self.n}] *** {self.target}: terminal")
         if self.core.chan is self:
             self.core.detach()
-        self.core._touch()
+        self.core.changed()
 
     # --- logbook (CR44) ------------------------------------------------------------------
 

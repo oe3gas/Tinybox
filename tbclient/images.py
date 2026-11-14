@@ -193,7 +193,7 @@ class Images:
             def progress(got: int) -> None:
                 if prog is not None:
                     prog["done"] = off + got
-                    self.core._touch()
+                    self.core.changed()
             self.core.link.splitter.expect(n, lambda data: q.put_nowait(("data", h, off, total, data)),
                                            progress)
             return True
@@ -211,7 +211,7 @@ class Images:
     def _kick(self) -> None:
         if not self.busy:
             self.task = asyncio.ensure_future(self._run())
-        self.core._touch()
+        self.core.changed()
 
     async def _run(self) -> None:
         while self._jobs:
@@ -231,7 +231,7 @@ class Images:
                 self._fail(job, f"internal error: {exc}")
             finally:
                 self.queue = None
-                self.core._touch()
+                self.core.changed()
 
     def _fail(self, job: dict, why: str) -> None:
         log.warning("image %s %s: %s", job["hash"], job["kind"], why)
@@ -295,7 +295,7 @@ class Images:
         try:
             # the TinyBox takes everything after //IMGGO as image data: hold
             # back every other line until the bytes are handed over
-            self.core._send(f"//IMGPUT {h} {len(data)}")
+            self.core.send_line(f"//IMGPUT {h} {len(data)}")
             self.core.hold_lines(True)
             while True:
                 item = await self._answer(progress)
@@ -323,7 +323,7 @@ class Images:
             self.core.hold_lines(False)
         if up:
             up.update(state="done", sent=len(data))
-        self.core._touch()
+        self.core.changed()
 
     async def _send_all(self, data: bytes, offset: int, line: str, up: dict | None):
         """Hand the bytes from `offset` on to Direwolf in one go, the chat line
@@ -344,7 +344,7 @@ class Images:
         self.core.hold_lines(False)         # ... and out now, in order, behind the bytes
         if up:
             up.update(state="sending", sent=offset)
-        self.core._touch()
+        self.core.changed()
         start = [await link.outstanding()]   # frames still to go = nothing sent yet
         last = [offset]
         log.info("image %s: %d bytes handed over, %d frame(s) waiting", job_hash(line),
@@ -372,7 +372,7 @@ class Images:
             last[0] = sent
             if up and moved:
                 up["sent"] = sent
-                self.core._touch()
+                self.core.changed()
             return moved or waiting > 0
         return progress
 
@@ -392,7 +392,7 @@ class Images:
         have = self._partial.get(h, bytearray())
         self.current = h
         try:
-            self.core._send(f"//IMG {h} {len(have)}" if have else f"//IMG {h}")
+            self.core.send_line(f"//IMG {h} {len(have)}" if have else f"//IMG {h}")
             while True:
                 item = await self._answer()
                 if item[0] == "data" and item[1] == h:
@@ -425,7 +425,7 @@ class Images:
             log.info("image %s is here already - kept", h)
         self.loading.pop(h, None)
         log.info("image %s fetched (%d bytes)", h, len(data))
-        self.core._touch()
+        self.core.changed()
 
 
 def job_hash(line: str) -> str:

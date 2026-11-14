@@ -158,7 +158,7 @@ class PeerAuth:
             for old in sorted(s, key=lambda c: max((r.get("at", 0) for r in s[c]), default=0))[
                     :len(s) - CALLS_MAX]:
                 del s[old]
-        self.core._save_settings()
+        self.core.save_settings()
 
     def _set(self, state: str) -> None:
         was = self.trusted
@@ -173,7 +173,7 @@ class PeerAuth:
         ch.term_line("sys", f"*** {ch.target}: {text}" + (f" ({self.fp})" if self.fp else ""))
         if self.trusted and not was:
             self.peer.trusted_now()
-        self.core._touch()
+        self.core.changed()
 
     def summary(self) -> dict:
         return {"state": self.state, "fp": self.fp, "dev": self.dev, "issuer": self.issuer}

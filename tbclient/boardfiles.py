@@ -74,7 +74,7 @@ class BoardFiles(Images):
         why = filecheck.name_verdict(name)
         if why:                                      # CR96: refused before a byte comes
             self.loading[hash] = {"done": 0, "total": 0, "error": why}
-            self.core._touch()
+            self.core.changed()
             return False
         if hash in self.loading and not self.loading[hash].get("error"):
             return True
@@ -108,7 +108,7 @@ class BoardFiles(Images):
             def progress(got: int) -> None:
                 if prog is not None:
                     prog["done"] = off + got
-                    self.core._touch()
+                    self.core.changed()
             self.core.link.splitter.expect(
                 n, lambda data: q.put_nowait(("data", h, off, total, data, how)), progress)
             return True
@@ -145,7 +145,7 @@ class BoardFiles(Images):
             return
         progress = None
         try:
-            self.core._send(f"//FPUT {h} {how} {len(data)}")
+            self.core.send_line(f"//FPUT {h} {how} {len(data)}")
             self.core.hold_lines(True)
             while True:
                 item = await self._answer(progress)
@@ -170,7 +170,7 @@ class BoardFiles(Images):
             self.core.hold_lines(False)
         if up:
             up.update(state="done", sent=len(data))
-        self.core._touch()
+        self.core.changed()
 
     async def _download(self, job: dict) -> None:
         h = job["hash"]
@@ -182,7 +182,7 @@ class BoardFiles(Images):
         self.current = h
         how = "r"
         try:
-            self.core._send(f"//FGET {h} {len(have)}" if have else f"//FGET {h}")
+            self.core.send_line(f"//FGET {h} {len(have)}" if have else f"//FGET {h}")
             while True:
                 item = await self._answer()
                 if item[0] == "data" and item[1] == h:
@@ -223,7 +223,7 @@ class BoardFiles(Images):
         self.store.put(h, data)
         self.loading.pop(h, None)
         log.info("board file %s fetched (%d bytes)", h, len(data))
-        self.core._touch()
+        self.core.changed()
 
 
 def _reason(line: str) -> str:

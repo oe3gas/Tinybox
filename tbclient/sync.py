@@ -314,7 +314,7 @@ class Syncer:
 
     def _set(self, **kw) -> None:
         self.status.update(kw)
-        self.core._touch()
+        self.core.changed()
 
     def _notice(self, text: str, console: bool = True) -> None:
         """Message for the user: in the mail view and in the console (CR40)."""
@@ -503,7 +503,7 @@ class Syncer:
             self.status["running"] = False
             self.status["aborting"] = False
             self.status["ended"] = time.time()      # CR110: the status bar shows the end
-            self.core._touch()
+            self.core.changed()
         if self.send_again and self.status["step"] == "done":
             self.send_again = False               # CR47: written meanwhile - out it goes,
             task = asyncio.current_task()         # once this run is really over
@@ -615,7 +615,7 @@ class Syncer:
             raise SyncError("connection lost")
         self._last_req = self._req_at = time.monotonic()
         self._rx = 0
-        self.core._send(lines[0])
+        self.core.send_line(lines[0])
         for line in lines[1:]:                   # message text: not into the monitor
             self.core.link.send_line(line)
 

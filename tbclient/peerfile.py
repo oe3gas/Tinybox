@@ -27,10 +27,10 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from prcore import chatimg, lzhuf
+from prcore import chatimg, filecheck, lzhuf
 from prcore.text import isnum
 
-from . import budget, filecheck
+from . import budget
 
 if TYPE_CHECKING:
     from .peer import Peer
@@ -137,7 +137,7 @@ class PeerFiles:
         why = filecheck.name_verdict(offer[0]) if offer else None
         if why or (offer and offer[1] > FILE_MAX):      # CR96: refused before a byte comes
             self.loading[h] = {"done": 0, "total": 0, "error": why or "too large"}
-            self.core._touch()
+            self.core.changed()
             return False
         busy = self._want and time.monotonic() - self._last < IDLE_SEC
         if busy:
@@ -145,7 +145,7 @@ class PeerFiles:
         self._want, self._last = h, time.monotonic()
         self.loading[h] = {"done": 0, "total": 0, "error": ""}
         self.peer._send(f"//FGET {h}")
-        self.core._touch()
+        self.core.changed()
         return True
 
     def link_lost(self) -> None:
@@ -156,7 +156,7 @@ class PeerFiles:
         self.loading[h] = {**self.loading.get(h, {}), "error": why}
         if self._want == h:
             self._want = None
-        self.core._touch()
+        self.core.changed()
 
     # --- lines from the other side --------------------------------------------------
 
@@ -212,7 +212,7 @@ class PeerFiles:
         def progress(got: int) -> None:
             self._last = time.monotonic()
             ld["done"] = got
-            self.core._touch()
+            self.core.changed()
 
         def done(body: bytes) -> None:
             if self._want == h:
@@ -234,6 +234,6 @@ class PeerFiles:
                 log.info("file %s is here already - kept", h)
             self.loading.pop(h, None)
             log.info("file %s from %s (%d bytes)", h, self.peer.call, len(data))
-            self.core._touch()
+            self.core.changed()
 
         self.peer.ch.link.splitter.expect(n, done, progress)

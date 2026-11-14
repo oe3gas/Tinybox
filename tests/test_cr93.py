@@ -225,7 +225,7 @@ class ClientSide(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             core = ClientCore(client_cfg(tmp))
             sent = []
-            core._send = sent.append
+            core.send_line = sent.append
             core._on_line("//AUTH? n=abcDEF123 box=OE3XTC-1")
             [line] = sent
             args = dict(x.split("=", 1) for x in line.split()[1:])
@@ -351,7 +351,7 @@ class ClientSigns(unittest.TestCase):
     def test_signed_lines(self):
         with tempfile.TemporaryDirectory() as tmp:
             core = ClientCore(client_cfg(tmp))
-            core._send = lambda line: None
+            core.send_line = lambda line: None
             self.assertEqual(core.signed("//KILL 5"), "//KILL 5")       # no login: as before
             core._on_line("//AUTH? n=xyz123 box=OE3XTC-1")
             pub = core.identity.public
@@ -453,7 +453,7 @@ class ClientCertificate(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             core = ClientCore(client_cfg(tmp))
             sent = []
-            core._send = sent.append
+            core.send_line = sent.append
             core._on_line("//AUTH? n=abc123 box=OE3GAS-1")
             core._on_line("//OK TB1 caps=CHAT")
             self.assertIn("//CERT?", sent)

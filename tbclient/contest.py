@@ -54,8 +54,8 @@ class ContestSlot:
         if len(games) > 30:                 # forget the oldest games
             for k in sorted(games, key=lambda k: games[k].get("at", 0))[:-30]:
                 del games[k]
-        self.core._save_settings()
-        self.core._touch()
+        self.core.save_settings()
+        self.core.changed()
 
     def _send(self, lines: list[str]) -> None:
         for line in lines:
@@ -157,7 +157,7 @@ class ContestSlot:
             state = self.state
             if state is not None and state["st"] == "setup" and not state["c"]:
                 self._save(None)                 # the box does not play
-            self.core._touch()
+            self.core.changed()
             return
         if word == "NEW":
             a = {k.lower(): v for k, s, v in (x.partition("=") for x in p[1:]) if s}

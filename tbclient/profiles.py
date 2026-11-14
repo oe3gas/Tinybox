@@ -66,18 +66,18 @@ class Profiles:
             return str(exc)
         self._store({**fields, "t": int(time.time())})
         self.core.settings.pop("prof_snooze", None)
-        self.core._save_settings()
+        self.core.save_settings()
         self.error = ""
         if self.ready:
             self._send_mine()
-        self.core._touch()
+        self.core.changed()
         return ""
 
     def later(self) -> None:
         """'Later' on the invitation."""
         self.core.settings["prof_snooze"] = int(time.time()) + SNOOZE_SEC
-        self.core._save_settings()
-        self.core._touch()
+        self.core.save_settings()
+        self.core.changed()
 
     @property
     def ask(self) -> bool:
@@ -87,11 +87,11 @@ class Profiles:
 
     def _store(self, p: dict) -> None:
         self.core.settings["profile"] = {f: p.get(f, "") for f in pf.FIELDS} | {"t": int(p["t"])}
-        self.core._save_settings()
+        self.core.save_settings()
 
     def _send_mine(self) -> None:
         self.busy_at = time.time()
-        self.core._send(self.core.signed(f"//PROF {pf.encode(self.mine)}"))   # CR93 stage 2
+        self.core.send_line(self.core.signed(f"//PROF {pf.encode(self.mine)}"))   # CR93 stage 2
 
     # --- protocol --------------------------------------------------------------------
 
@@ -111,7 +111,7 @@ class Profiles:
                 self._send_mine()             # only what the user really entered
         else:
             self.busy_at = time.time()
-            self.core._send("//PROF ?")       # who is newer? the answer has t=
+            self.core.send_line("//PROF ?")       # who is newer? the answer has t=
 
     def on_line(self, rest: str) -> None:
         """//PROF OK <crc> | ERR <field> | = <crc> t=.. loc=.. | -"""
@@ -141,7 +141,7 @@ class Profiles:
                 self.core.console.append("*** profile taken from the TinyBox")
             else:
                 self._send_mine()             # ours is newer
-        self.core._touch()
+        self.core.changed()
 
     def on_whois(self, rest: str) -> None:
         """//WI <call> loc=.. home=.. name=..  or  //WI <call> -"""
@@ -160,8 +160,8 @@ class Profiles:
 
     def on_whois_end(self) -> None:
         self.busy_at = 0.0
-        self.core._save_settings()
-        self.core._touch()
+        self.core.save_settings()
+        self.core.changed()
 
     # --- profiles of the others --------------------------------------------------------
 
@@ -192,7 +192,7 @@ class Profiles:
             return
         for i in range(0, len(queue), WHOIS_MAX):
             self.busy_at = time.time()
-            self.core._send("//WHOIS " + ",".join(queue[i:i + WHOIS_MAX]))
+            self.core.send_line("//WHOIS " + ",".join(queue[i:i + WHOIS_MAX]))
 
     def link_lost(self) -> None:
         self._asked.clear()

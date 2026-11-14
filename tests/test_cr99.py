@@ -156,7 +156,7 @@ class TrustList(unittest.TestCase):
             self.assertIn(f"OE3GAS-1={me['pub']}", line)
             self.assertIn(f"OE5XBL-1={other.pub}", line)
             core = ClientCore(client_cfg(tmp))
-            core._send = lambda x: None
+            core.send_line = lambda x: None
             core._on_line("//AUTH? n=abc123 box=OE3GAS-1")
             core._on_line(line)
             self.assertEqual(core.trusted_issuer("OE5XBL-1"), other.public)

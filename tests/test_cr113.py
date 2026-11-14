@@ -156,7 +156,7 @@ class Client(unittest.TestCase):
     def test_tells_the_tinybox_once(self):
         c = self.core
         sent = []
-        c._send = sent.append
+        c.send_line = sent.append
         c.lotw_sign(self.p12, "geheim")
         c._lotw_ask()
         c._lotw_ask()                                    # once per connection

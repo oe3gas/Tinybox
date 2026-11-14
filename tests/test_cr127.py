@@ -148,9 +148,9 @@ class ClientTests(unittest.TestCase):
                 self.settings, self.state, self.caps, self.at_home = {}, "offline", set(), True
                 self.sent, self.peerchat = [], None
 
-            def _save_settings(self): pass
-            def _touch(self): pass
-            def _send(self, line): self.sent.append(line)
+            def save_settings(self): pass
+            def changed(self): pass
+            def send_line(self, line): self.sent.append(line)
             def signed(self, line): return line + " c=1 sig=x"
 
         core = Core()
