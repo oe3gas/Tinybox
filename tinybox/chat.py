@@ -196,7 +196,7 @@ class ChatHub:
         sym = session.client.symbol if session.client else ""
         n = self._assign_no(board.name, session.call)
         tail = f" {sym}" if sym else ""
-        self._deliver(board.name, f"+{n} {session.call}{tail}",
+        self.deliver(board.name, f"+{n} {session.call}{tail}",
                       texts.CHAT_JOINED.format(call=session.call, board=board.name),
                       sender=session, legacy=f"+{session.call}{tail}")
         self.bus.publish("chat.joined", board=board.name, call=session.call)
@@ -216,12 +216,12 @@ class ChatHub:
             members.remove(session)
         n = self._numbers.get(board, {}).pop(session.call, 0)
         if not quiet:
-            self._deliver(board, f"-{n}",
+            self.deliver(board, f"-{n}",
                           texts.CHAT_LEFT.format(call=session.call, board=board,
                                                  reason=reason), sender=session,
                           legacy=f"-{session.call}")
             if lost:
-                self._deliver(board, "!" + texts.CHAT_LOST_SYS.format(call=session.call), None,
+                self.deliver(board, "!" + texts.CHAT_LOST_SYS.format(call=session.call), None,
                               sender=session)
         self.bus.publish("chat.left", board=board, call=session.call)
         log.info("%s left chat %s%s", session.call, board, reason)
@@ -257,7 +257,7 @@ class ChatHub:
         now = utc_now()
         # terminals read "[Image ...]" and the quoted line instead of the bare
         # references (CR12, CR31)
-        self._deliver(board.name, f"{session.call}: {text}",
+        self.deliver(board.name, f"{session.call}: {text}",
                       texts.CHAT_LINE.format(call=session.call,
                                              text=self.readable(board.name, text)),
                       sender=session)
@@ -274,7 +274,7 @@ class ChatHub:
         target = self.readable(board, self._line_of(board, ref))
         human = texts.CHAT_REACT.format(call=session.call, emoji=emoji,
                                         target=target[:40] if target else f"#{ref:X}")
-        self._deliver(board, f"{session.call} *{ref:X} {emoji}", human, sender=session)
+        self.deliver(board, f"{session.call} *{ref:X} {emoji}", human, sender=session)
         return True
 
     def upload_started(self, session: Session, size_code: str, size: int) -> None:
@@ -283,7 +283,7 @@ class ChatHub:
         board = session.chat_board
         if board is None:
             return
-        self._deliver(board, f"^{session.call} {size_code}",
+        self.deliver(board, f"^{session.call} {size_code}",
                       texts.CHAT_UPLOAD.format(call=session.call, size=f"{size / 1024:.1f} KB"),
                       sender=session)
 
@@ -295,7 +295,7 @@ class ChatHub:
             return
         sym = session.client.symbol
         tail = f" {sym}" if sym else ""
-        self._deliver(board, f"={self.member_no(board, session.call)}{tail}", None,
+        self.deliver(board, f"={self.member_no(board, session.call)}{tail}", None,
                       sender=session, legacy=f"={session.call}{tail}")
 
     def replay(self, board: str, first: int, last: int, legacy: bool = False) -> list[str]:
@@ -323,14 +323,21 @@ class ChatHub:
         self._recent.setdefault(board, deque(maxlen=SEQ_MOD)).append((seq, line, old))
         return line, old
 
-    def _deliver(self, board: str, payload: str, human: str | None, sender: Session,
-                 legacy: str | None = None) -> None:
-        """human None: an event only for clients (terminals get nothing).
+    def deliver(self, board: str, payload: str, human: str | None, sender: Session | None,
+                legacy: str | None = None,
+                audience: Callable[[Session], bool] | None = None) -> None:
+        """One event of the board to its members - the only place that fans out.
+        human None: an event only for clients (terminals get nothing).
         legacy: the same event with calls instead of member numbers, for clients
         without the NUM cap - they get it as I-frame even in UI mode (the UI
-        frame carries the new form, which they cannot read)."""
+        frame carries the new form, which they cannot read).
+        audience (Refactoring R4): only members it says True for get the event -
+        as I-frame or text; the UI frame goes out once if one of them listens to UI
+        (radio is open: the others' clients ignore it). None = every member."""
         line, old = self._next_event(board, payload, legacy)
         members = self.members(board)
+        if audience is not None:
+            members = [s for s in members if audience(s)]
         ui_clients = [s for s in members if s.client and s.client.ui]
         n = self.number(board)
         sent_ui = False
@@ -398,7 +405,7 @@ class ChatHub:
             if text != self._q_text.get(b.name) \
                     and now - self._q_at.get(b.name, -1e9) >= self.QUALITY_MIN_SEC:
                 self._q_text[b.name], self._q_at[b.name] = text, now
-                self._deliver(b.name, text, None, sender=members[0],
+                self.deliver(b.name, text, None, sender=members[0],
                               legacy="%" + " ".join(legacy))
             if not stats or not any(self._num_client(s) for s in members):
                 continue

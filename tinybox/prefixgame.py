@@ -96,7 +96,7 @@ class Game:
     # --- output -------------------------------------------------------------
 
     def emit(self, text: str, human: str | None) -> None:
-        self.hub._deliver(self.board, "!PR " + text, human, sender=None)
+        self.hub.deliver(self.board, "!PR " + text, human, sender=None)
 
     def _set_timer(self, delay: float, fn: Callable[[], None]) -> None:
         self._cancel()

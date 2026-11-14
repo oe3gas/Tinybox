@@ -1407,6 +1407,15 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
 - R5 Sysop-Identität ✅ (14.11.): vier Sichten in `StationCfg` – `sysops`, `sysop_mail_to`,
   `local_sysop`, `sysop_text`; kein Code nimmt mehr `sysop_call` direkt. Ohne Verhaltensänderung,
   bereitet CR125 vor (Vorarbeit dort beschrieben).
+- R4 Zielgruppe ✅ (14.11.): `ChatHub.deliver(..., audience=...)` – ein Ereignis nur an bestimmte
+  Mitglieder (I-Frame/Text nur an sie, der UI-Frame einmal, wenn einer von ihnen UI hört).
+  Öffentlich statt `_deliver` (Prefix raten griff auf die private Methode zu). Für CR128.
+- R1 Protokoll-Definition ✅ (14.11.): `prcore/tbproto.py` – Caps (`CAPS`, `client_caps()`),
+  welche Befehle signiert sein müssen (`needs_signature`), Signatur anhängen/abtrennen.
+  Box: `clientproto.COMMANDS`, eine Tabelle Befehl → Handler, Cap, wer darf; `handle()` ist ein
+  Nachschlag. Client: `ClientCore._CONTROL`, Tabelle Antwortzeile → Methode (`_control` vorher
+  Komplexität 90). **Verhaltensänderung:** `//PR`, `//GAMES`, `//GAME` prüfen jetzt ihre Cap wie
+  `//CT` und `//IMG` (Lücke aus der Analyse); der aktuelle Client sendet sie immer.
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 

@@ -1,0 +1,1 @@
+- Intern: Protokoll-Definition mit der TinyBox gemeinsam, keine neuen Funktionen.

@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from prcore import auth
+from prcore import auth, tbproto
 from prcore.calls import base_call
 from tbclient.core import ClientCore
 from tinybox import clientproto
@@ -85,7 +85,7 @@ class ClientSide(unittest.TestCase):
             core._on_line("//AUTH? n=abc123 box=OE3GAS-1")
             core._on_line("//OK TB1 caps=CHAT,ADM")
             self.assertTrue(core.admin("STATUS"))
-            plain, ctr, sig = clientproto.split_signature(sent[-1])
+            plain, ctr, sig = tbproto.split_signature(sent[-1])
             self.assertEqual(plain, "//ADM STATUS")
             msg = auth.command_message("OE3GAS-1", "OE3GAS", "abc123", ctr, plain)
             self.assertTrue(auth.verify(core.identity.public, msg, auth.b64d(sig, 64)))

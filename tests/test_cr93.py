@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from prcore import auth
+from prcore import auth, tbproto
 from tbclient.core import ClientCore
 from tinybox import clientproto, keys
 from tinybox.adapters.sysop import MonitorFilter, SysopConsole
@@ -357,7 +357,7 @@ class ClientSigns(unittest.TestCase):
             pub = core.identity.public
             for n in (1, 2):
                 line = core.signed("//SEND P OE1XYZ 1 mid=abcdefgh", ["subj", "text"])
-                plain, ctr, sig = clientproto.split_signature(line)
+                plain, ctr, sig = tbproto.split_signature(line)
                 self.assertEqual((plain, ctr), ("//SEND P OE1XYZ 1 mid=abcdefgh", n))
                 msg = auth.command_message("OE3XTC-1", "OE3GAS", "xyz123", n, plain,
                                            ["subj", "text"])

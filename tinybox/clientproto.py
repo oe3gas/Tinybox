@@ -89,6 +89,9 @@ Other client commands:
     //IMGPUT, //IMG       small images in the chat (CR12), see chatimg.py;
                           //IN tells img (8 KB) or img=<max, hex> where allowed
 
+The caps and the signed commands are defined in prcore/tbproto.py, the command
+table is COMMANDS below (Refactoring R1).
+
 caps: CHAT = chat lines in the format above, UI = the client hears the
 mailbox directly and takes chat events from the UI frames to TBCHAT-<n>
 instead of I-frames. UI is only granted on radio sessions.
@@ -131,9 +134,9 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
-from prcore import auth
+from prcore import auth, tbproto
 from prcore import profile as pf
 from prcore.calls import base_call
 from prcore.release import RELEASE
@@ -151,11 +154,6 @@ log = logging.getLogger(__name__)
 # for the tests that are about something else.
 REQUIRE_AUTH = True
 
-PROTO = "TB1"
-KNOWN_CAPS = ("CHAT", "UI", "SYNC", "SYNC2", "Z", "IMG", "NUM", "SHORT", "HAVE", "PROF",
-              "HSEQ", "ADM", "BFILE", "LOTW", "CT", "CTR", "PR", "GAMES", "GAME")
-IMG_COMMANDS = ("IMGPUT", "IMG")
-FILE_COMMANDS = ("FPUT", "FGET")          # CR86: files in a board
 # APRS symbol: table ('/', '\' or an overlay 0-9/A-Z) + symbol code (any printable)
 SYMBOL_RE = re.compile(r"^[/\\0-9A-Z][!-~]$")
 
@@ -181,31 +179,7 @@ def _parse_args(parts: list[str]) -> dict[str, str]:
     return args
 
 
-# --- CR93 stage 2: signed commands ------------------------------------------------
-
-SIG_RE = re.compile(r"^c=(\d{1,12})$")
-
-
-def split_signature(line: str) -> tuple[str, int | None, str | None]:
-    """'//KILL 5 c=3 sig=..' -> ('//KILL 5', 3, '..'); without them (line, None, None)."""
-    words = line.split()
-    if len(words) >= 3 and words[-1].startswith("sig=") and (m := SIG_RE.match(words[-2])):
-        return " ".join(words[:-2]), int(m.group(1)), words[-1][4:]
-    return line, None, None
-
-
-def critical(cmd: str, parts: list[str]) -> bool:
-    """The commands that need a signature after the login (see module doc)."""
-    if cmd in ("SEND", "KILL", "ADM"):
-        return True
-    if cmd == "PROF":
-        return parts[1:] != ["?"]
-    if cmd == "SYNC":
-        return any(p.lower().startswith("k=") for p in parts[1:])
-    if cmd == "GAME":                       # CR127: a result counts only signed
-        return len(parts) > 1 and parts[1].upper() == "RES"
-    return False
-
+# --- CR93 stage 2: signed commands (which ones: prcore.tbproto.needs_signature) -----
 
 def check_signed(s: Session, plain: str, counter: int | None, sig: str | None,
                  payload: list[str] | tuple[str, ...] = ()) -> str | None:
@@ -246,88 +220,122 @@ def _refuse(s: Session, cmd: str, reason: str, gid: str = "") -> None:
         s.out(f"//ERR {cmd.lower()} {reason}")
 
 
+@dataclass(frozen=True)
+class Call:
+    """One //-line of a client, taken apart."""
+    cmd: str                    # upper case, without '//'
+    line: str                   # the line without its signature
+    parts: list[str]            # its words without '//' (parts[0] = the command as sent)
+    counter: int | None = None
+    sig: str | None = None
+
+    @property
+    def args(self) -> list[str]:
+        return self.parts[1:]
+
+    @property
+    def rest(self) -> str:
+        """Everything after the command word."""
+        return self.line[2:][len(self.parts[0]):].strip()
+
+
+def _anyone(s: Session) -> bool:
+    return True
+
+
+def _client_mode(s: Session) -> bool:
+    return s.client is not None
+
+
+def _client_or_key_waits(s: Session) -> bool:
+    # CR113: LoTW may release a key that waits for the sysop - before client mode
+    return s.client is not None or getattr(s, "_wait_pub", None) is not None
+
+
+@dataclass(frozen=True)
+class Command:
+    """A client command (Refactoring R1): its handler and what it needs.
+    Signatures: prcore.tbproto.needs_signature, checked before the handler runs."""
+    run: Callable[[Session, Call], None]
+    cap: str = ""                                   # the client must have this cap
+    allowed: Callable[[Session], bool] = _client_mode
+
+
 def handle(s: Session, line: str) -> None:
     """One line starting with '//' (in the mailbox or inside a board)."""
-    line, counter, sig = split_signature(line.strip())
+    line, counter, sig = tbproto.split_signature(line.strip())
     parts = line[2:].split()
     if not parts:
         return
     cmd = parts[0].upper()
-    if s.client is not None and critical(cmd, parts) and cmd != "SEND":
+    if s.client is not None and tbproto.needs_signature(cmd, parts) and cmd != "SEND":
         # //SEND is checked when its text is in: the lines must be read anyway
         reason = check_signed(s, line, counter, sig)
         if reason:
             gid = next((p[3:] for p in parts if p.lower().startswith("id=")), "")[:16]
             _refuse(s, cmd, reason, gid)
             return
-    if cmd == "TB?":
-        tb_probe(s)
-    elif cmd == "CLIENT":
-        _client(s, parts[1:])
-    elif cmd == "AUTH":
-        _auth(s, parts[1:])
-    elif cmd in ("LOTW?", "LOTWP") and (s.client is not None
-                                        or getattr(s, "_wait_pub", None) is not None):
-        _lotw(s, cmd, parts[1:])            # CR113: also while the key waits for the sysop
-    elif s.client is None:
-        s.out("//ERR not a client session")
-    elif cmd == "CERT?":
-        _cert(s)
-    elif cmd == "TRUST?":
-        _trust_list(s)
-    elif cmd == "ADM":
-        _admin(s, line[2:][3:].strip())
-    elif cmd == "BOARDS":
-        _boards(s)
-    elif cmd == "RESEND":
-        _resend(s, parts[1:])
-    elif cmd == "LOST":
-        _resend(s, parts[1:], replay=False)
-    elif cmd == "SYM":
-        _symbol(s, parts[1:])
-    elif cmd == "HIST":
-        _hist(s, parts[1:])
-    elif cmd == "MOTD":
-        _motd(s)
-    elif cmd == "PROF":
-        _profile(s, line[2:][4:].strip())
-    elif cmd == "WHOIS":
-        _whois(s, parts[1:])
-    elif cmd == "SEND" and "SYNC" in s.client.caps:
-        clientsync.handle(s, cmd, parts[1:],
-                          signed=lambda lines: check_signed(s, line, counter, sig, lines))
-    elif cmd in clientsync.COMMANDS:
-        clientsync.handle(s, cmd, parts[1:])
-    elif cmd == "CT":                       # CR122: the box plays the CQ contest
-        if "CT" not in s.client.caps:
-            s.out("//ERR CT needs CT")
-        else:
-            contest.handle(s, line[2:][2:].strip())
-    elif cmd == "CTR":                      # CR122: two clients play through the box
-        if "CTR" not in s.client.caps:
-            s.out("//ERR CTR needs CTR")
-        else:
-            contest.relay(s, line[2:][3:].strip())
-    elif cmd == "GAME":                     # CR127: signed results of chess / CQ contest
-        gamereport.command(s, line[2:][4:].strip())
-    elif cmd == "GAMES":                    # CR126: leaderboards
-        games.top_command(s, line[2:][5:].strip())
-    elif cmd == "PR":                       # CR123: Prefix raten in the board
-        prefixgame.command(s, line[2:][2:].strip())
-    elif cmd in IMG_COMMANDS:
-        if "IMG" not in s.client.caps:
-            s.out(f"//ERR {cmd} needs IMG")
-        else:
-            img = s.service.chat.images
-            (img.put if cmd == "IMGPUT" else img.get)(s, parts[1:])
-    elif cmd in FILE_COMMANDS:
-        if "BFILE" not in s.client.caps:
-            s.out(f"//ERR {cmd} needs BFILE")
-        else:
-            f = s.service.chat.files
-            (f.put if cmd == "FPUT" else f.get)(s, parts[1:])
+    c = COMMANDS.get(cmd)
+    if c is None or not c.allowed(s):
+        s.out("//ERR not a client session" if s.client is None else f"//ERR unknown {cmd}")
+    elif c.cap and c.cap not in s.client.caps:
+        s.out(f"//ERR {cmd} needs {c.cap}")
     else:
-        s.out(f"//ERR unknown {cmd}")
+        c.run(s, Call(cmd, line, parts, counter, sig))
+
+
+def _sync_send(s: Session, c: Call) -> None:
+    clientsync.handle(s, c.cmd, c.args,
+                      signed=lambda lines: check_signed(s, c.line, c.counter, c.sig, lines))
+
+
+def _image(s: Session, c: Call) -> None:
+    img = s.service.chat.images
+    (img.put if c.cmd == "IMGPUT" else img.get)(s, c.args)
+
+
+def _file(s: Session, c: Call) -> None:
+    f = s.service.chat.files
+    (f.put if c.cmd == "FPUT" else f.get)(s, c.args)
+
+
+# The client commands. Names are resolved when a command runs (lambdas): the
+# handlers are defined further down.
+COMMANDS: dict[str, Command] = {
+    # before client mode: the probe, the handshake and the login (CR76, CR93)
+    "TB?": Command(lambda s, c: tb_probe(s), allowed=_anyone),
+    "CLIENT": Command(lambda s, c: _client(s, c.args), allowed=_anyone),
+    "AUTH": Command(lambda s, c: _auth(s, c.args), allowed=_anyone),
+    "LOTW?": Command(lambda s, c: _lotw(s, c.cmd, c.args), allowed=_client_or_key_waits),
+    "LOTWP": Command(lambda s, c: _lotw(s, c.cmd, c.args), allowed=_client_or_key_waits),
+    # client mode
+    "CERT?": Command(lambda s, c: _cert(s)),
+    "TRUST?": Command(lambda s, c: _trust_list(s)),
+    "ADM": Command(lambda s, c: _admin(s, c.rest)),
+    "BOARDS": Command(lambda s, c: _boards(s)),
+    "RESEND": Command(lambda s, c: _resend(s, c.args)),
+    "LOST": Command(lambda s, c: _resend(s, c.args, replay=False)),
+    "SYM": Command(lambda s, c: _symbol(s, c.args)),
+    "HIST": Command(lambda s, c: _hist(s, c.args)),
+    "MOTD": Command(lambda s, c: _motd(s)),
+    "PROF": Command(lambda s, c: _profile(s, c.rest)),
+    "WHOIS": Command(lambda s, c: _whois(s, c.args)),
+    # the offline mailbox (clientsync.py; SYNC2 is checked there)
+    "SEND": Command(_sync_send, cap="SYNC"),
+    **{name: Command(lambda s, c: clientsync.handle(s, c.cmd, c.args), cap="SYNC")
+       for name in clientsync.COMMANDS if name != "SEND"},
+    # games
+    "CT": Command(lambda s, c: contest.handle(s, c.rest), cap="CT"),        # CR122: vs. the box
+    "CTR": Command(lambda s, c: contest.relay(s, c.rest), cap="CTR"),       # CR122: two clients
+    "GAME": Command(lambda s, c: gamereport.command(s, c.rest), cap="GAME"),  # CR127: results
+    "GAMES": Command(lambda s, c: games.top_command(s, c.rest), cap="GAMES"),  # CR126: tables
+    "PR": Command(lambda s, c: prefixgame.command(s, c.rest), cap="PR"),    # CR123
+    # images (CR12) and files (CR86) in a board
+    "IMGPUT": Command(_image, cap="IMG"),
+    "IMG": Command(_image, cap="IMG"),
+    "FPUT": Command(_file, cap="BFILE"),
+    "FGET": Command(_file, cap="BFILE"),
+}
 
 
 def tb_probe(s: Session) -> None:
@@ -339,12 +347,12 @@ def tb_probe(s: Session) -> None:
 
 
 def _client(s: Session, parts: list[str]) -> None:
-    if not parts or parts[0].upper() != PROTO:
-        s.out("", f"//ERR protocol {PROTO} only")
+    if not parts or parts[0].upper() != tbproto.PROTO:
+        s.out("", f"//ERR protocol {tbproto.PROTO} only")
         return
     args = _parse_args(parts[1:])
     wanted = {c.strip().upper() for c in args.get("caps", "").split(",") if c.strip()}
-    caps = {c for c in wanted if c in KNOWN_CAPS}
+    caps = {c for c in wanted if c in tbproto.CAPS}
     if s.origin != "radio" or s.service.chat.ui_send is None:
         caps.discard("UI")        # telnet, or no radio link: chat lines come as I-frames
     if s.origin not in ("radio", "axudp") or not hasattr(s.transport, "write_bytes"):
@@ -356,7 +364,7 @@ def _client(s: Session, parts: list[str]) -> None:
     if s.cfg.chat.file_max <= 0:
         caps.discard("BFILE")
     symbol = args.get("sym", "")
-    info = ClientInfo(PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "",
+    info = ClientInfo(tbproto.PROTO, caps, symbol if SYMBOL_RE.match(symbol) else "",
                       args.get("v", "")[:20])
     if not REQUIRE_AUTH:              # tests about something else
         _client_ok(s, info)
@@ -566,7 +574,7 @@ def _client_ok(s: Session, info: ClientInfo) -> None:
     if "PROF" in caps:                # CR73: the client sends or fetches only on a change
         extra += f" prof={pf.crc(profiles.get(s.service.store, s.call))}"
     # the human prompt is still on the line: start the answer on a fresh line
-    s.out("", f"//OK {PROTO} caps={','.join(sorted(caps))}{extra}")
+    s.out("", f"//OK {tbproto.PROTO} caps={','.join(sorted(caps))}{extra}")
     if s.chat_board is not None:
         # The session is still in a board: the client restarted while the AX.25
         # link stayed up (Direwolf keeps it, so the mailbox never saw a connect

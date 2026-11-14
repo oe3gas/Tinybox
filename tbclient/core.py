@@ -16,7 +16,7 @@ from prcore import chatimg               # the image reference in a chat line (C
 from prcore.agw import PID_NO_L3, via_data
 from prcore.ax25.frame import AX25Error, split_call
 from prcore.ax25.frame import ui_frame as ax25_ui_frame
-from prcore import auth
+from prcore import auth, tbproto
 from prcore.calls import AX25_CALL_RE, base_call
 from prcore.text import isnum
 
@@ -43,7 +43,6 @@ from .sync import Syncer
 log = logging.getLogger(__name__)
 
 
-PROTO = "TB1"
 HANDSHAKE_FALLBACK_SEC = 6
 LOGIN_SYNC_SEC = 1.5      # CR40: the sync after the login starts this much after //OK
 DIRECT_VALID_SEC = 30 * 60
@@ -984,10 +983,9 @@ class ClientCore:
             return
         self.handshake_done = True          # sent; //OK confirms the caps
         self.chan.mode = "tinybox"
-        caps = "CHAT,UI" if self._want_ui() else "CHAT"
-        caps += ",SYNC,SYNC2,SHORT,NUM,HAVE,PROF,HSEQ,ADM,LOTW,CT,CTR,PR,GAMES,GAME" + (",Z,IMG,BFILE" if self.link.kind != "telnet" else "")
+        caps = tbproto.client_caps(ui=self._want_ui(), binary=self.link.kind != "telnet")
         sym = f" sym={self.my_symbol}" if self.my_symbol else ""
-        self._send(f"//CLIENT {PROTO} v={VERSION} caps={caps}{sym}")
+        self._send(f"//CLIENT {tbproto.PROTO} v={VERSION} caps={caps}{sym}")
 
     def _on_line(self, line: str) -> None:
         if not self.caps and (m := AUTH_AFTER_PROMPT.match(line)):
@@ -1124,7 +1122,7 @@ class ClientCore:
         box, nonce = self._login
         sig = self.identity.sign_command(box, self.cfg.mycall, nonce, self._cmd_ctr, line,
                                          payload)
-        return f"{line} c={self._cmd_ctr} sig={sig}"
+        return tbproto.with_signature(line, self._cmd_ctr, sig)
 
     # --- CR93 stage 3: the certificate of the home BBS ----------------------------------
 
@@ -1326,197 +1324,261 @@ class ClientCore:
         self._save_settings()
 
     def _control(self, line: str) -> None:
+        """A //-line of the TinyBox goes to its handler (_CONTROL, Refactoring R1).
+        Anything else - e.g. //CLIENT echoed by a terminal - is ignored."""
         cmd, _, rest = line[2:].partition(" ")
-        if cmd == "AUTH?":                       # CR93: log in with the user's key
-            a = dict(x.split("=", 1) for x in rest.split() if "=" in x)
-            nonce, box = a.get("n", ""), a.get("box", "") or self.target
-            if not nonce or len(nonce) > 64:
-                return
-            self.auth.update(state="asking", box=box, reason="")
-            self._login = (box, nonce)            # stage 2: signed commands of this login
-            self._cmd_ctr = 0
-            cert = self._cert_for(box)
-            self._send(f"//AUTH sig={self.identity.sign_login(box, self.cfg.mycall, nonce)} "
-                       f"pub={self.identity.pub} dev={self.identity.device}"
-                       + (f" cert={cert}" if cert else ""))
+        name = self._CONTROL.get(cmd)
+        if name is not None:
+            getattr(self, name)(cmd, rest, line)
+
+    # the //-lines of the TinyBox and their handlers (method names)
+    _CONTROL: dict[str, str] = {
+        "AUTH?": "_c_auth_ask",
+        "ADM>": "_c_adm",
+        "ADMEND": "_c_adm",
+        "TRUST": "_c_trust",
+        "CERT": "_c_cert",
+        "AUTHWAIT": "_c_authwait",
+        "LOTW": "_c_lotw",
+        "OK": "_c_ok",
+        "B": "_c_board",
+        "BEND": "_c_boards_end",
+        "IN": "_c_in",
+        "H": "_c_hist",
+        "HEND": "_c_hist_end",
+        "MOTD": "_c_motd",
+        "WHO": "_c_who",
+        "PROF": "_c_prof",
+        "WI": "_c_whois",
+        "WIEND": "_c_whois_end",
+        "OUT": "_c_out",
+        "SYS": "_c_sys",
+        "CT": "_c_ct",
+        "GAME": "_c_game",
+        "GAMES": "_c_games",
+        "PR": "_c_pr",
+        "CTR": "_c_ctr",
+        "ERR": "_c_err",
+    }
+
+    def _c_auth_ask(self, cmd: str, rest: str, line: str) -> None:
+        """//AUTH? - CR93: log in with the user's key"""
+        a = dict(x.split("=", 1) for x in rest.split() if "=" in x)
+        nonce, box = a.get("n", ""), a.get("box", "") or self.target
+        if not nonce or len(nonce) > 64:
             return
-        if cmd in ("ADM>", "ADMEND"):            # CR94: answer of an admin command
-            k = "out" if cmd == "ADM>" else "end"
-            self.adm_log.append({"k": k, "x": rest, "t": int(time.time())})
-            if k == "end":
-                self.asking.pop("adm", None)
-            if k == "end" and self._adm_refresh:
-                scope, self._adm_refresh = self._adm_refresh, ""
-                self.sync.start(scope)
+        self.auth.update(state="asking", box=box, reason="")
+        self._login = (box, nonce)            # stage 2: signed commands of this login
+        self._cmd_ctr = 0
+        cert = self._cert_for(box)
+        self._send(f"//AUTH sig={self.identity.sign_login(box, self.cfg.mycall, nonce)} "
+                   f"pub={self.identity.pub} dev={self.identity.device}"
+                   + (f" cert={cert}" if cert else ""))
+
+    def _c_adm(self, cmd: str, rest: str, line: str) -> None:
+        """//ADM>/ADMEND - CR94: answer of an admin command"""
+        k = "out" if cmd == "ADM>" else "end"
+        self.adm_log.append({"k": k, "x": rest, "t": int(time.time())})
+        if k == "end":
+            self.asking.pop("adm", None)
+        if k == "end" and self._adm_refresh:
+            scope, self._adm_refresh = self._adm_refresh, ""
+            self.sync.start(scope)
+        self._touch()
+
+    def _c_trust(self, cmd: str, rest: str, line: str) -> None:
+        """//TRUST - CR99: keys the home BBS trusts"""
+        self.asking.pop("trust", None)
+        self._store_trust(rest)
+
+    def _c_cert(self, cmd: str, rest: str, line: str) -> None:
+        """//CERT - stage 3: from the home BBS"""
+        self.asking.pop("cert", None)
+        self._store_cert(rest.strip())
+
+    def _c_authwait(self, cmd: str, rest: str, line: str) -> None:
+        self.auth.update(state="wait", reason="")
+        self._note_home_auth("wait")
+        self.console.append(f"*** your key ({self.identity.fp}) waits for the sysop of "
+                            f"{self.auth['box'] or self.target} - tell him the fingerprint")
+        self._lotw_ask()                     # CR113: LoTW may release it
+        self._touch()
+
+    def _c_lotw(self, cmd: str, rest: str, line: str) -> None:
+        """//LOTW - CR113 stage 2"""
+        self._lotw_answer(rest.strip())
+
+    def _c_ok(self, cmd: str, rest: str, line: str) -> None:
+        self.auth.update(state="ok", reason="")
+        self._note_home_auth("ok")
+        if self._cert_due():
+            self.asking["cert"] = time.time()
+            self._send("//CERT?")            # stage 3: for logins at other TinyBoxen
+        if self._trust_due():
+            self.asking["trust"] = time.time()
+            self._send("//TRUST?")           # CR99: whose certificates count
+        m = re.search(r"caps=(\S*)", rest)
+        self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
+        self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
+        if "LOTW" in self.caps and self.lotw_box.get("state") != "ok":
+            self._lotw_ask()
+        known = self.settings.setdefault("tinyboxes", [])
+        if self.target != self.home and self.target not in known:
+            known.append(self.target)          # CR43: next time no terminal guess
+            del known[:-20]
+            self._save_settings()
+        q = re.search(r"q=(\d+)/(\d+)/(\d+)/([\d.,]+)", rest)      # CR33
+        if q:
+            self.qcfg = {"frames": int(q.group(1)), "minutes": int(q.group(2)),
+                         "min_frames": int(q.group(3)),
+                         "steps": [float(x) for x in q.group(4).split(",") if x]}
+        self._update_info(rest)
+        self._send("//BOARDS")
+        self.profiles.on_ok(rest)                # CR73: profile only if it differs
+        self.reports.on_login()                  # CR127: results of chess / CQ contest
+        if self.cfg.sync_on_login and "SYNC" in self.caps and self.at_home \
+                and not self.sync.running:
+            # CR40: headers of mail and subscribed rubrics after every login,
+            # a moment later so the board list comes first
+            asyncio.get_event_loop().call_later(LOGIN_SYNC_SEC, self._login_sync)
+
+    def _c_board(self, cmd: str, rest: str, line: str) -> None:
+        parts = rest.split(" ", 4)
+        if len(parts) >= 4 and isnum(parts[0]):
+            if self._boards_tmp is None:
+                self._boards_tmp = []
+            self._boards_tmp.append({"n": int(parts[0]), "name": parts[1], "keep": parts[2],
+                                     "users": int(parts[3]) if isnum(parts[3]) else 0,
+                                     "desc": parts[4] if len(parts) > 4 else ""})
+
+    def _c_boards_end(self, cmd: str, rest: str, line: str) -> None:
+        self.boards = self._boards_tmp or []
+        self._boards_tmp = None
+        last = self.tset.get("board")
+        if self.board is None and any(b["n"] == last for b in self.boards) \
+                and not self.sync.own_connect:   # a sync-only connection stays out
+            self.join(last)                  # back into the last board
+
+    def _c_in(self, cmd: str, rest: str, line: str) -> None:
+        parts = rest.split()
+        # CR98: "//IN <n> <name> <keep> <last hex|->" - anything else is not a join
+        if len(parts) >= 4 and isnum(parts[0]) and \
+                (parts[3] == "-" or re.fullmatch(r"[0-9A-Fa-f]{1,4}", parts[3])):
+            self._clear_board()
+            self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2],
+                          "img": self._img_limit(rest), "file": self._file_limit(rest)}
+            self._history_on_join(rest)
+            self._motd_on_join(rest)
+            last = None if parts[3] == "-" else int(parts[3], 16)
+            self.unwrap.reset(last)
+            early = self._early if self._joining == self.board["n"] else []
+            self._joining, self._early = None, []
+            if early:     # after the //H and //WHO lines, which come next
+                asyncio.get_event_loop().call_soon(self._replay_early, early, last)
+            if self.tset.get("board") != self.board["n"]:
+                self.tset["board"] = self.board["n"]
+                self._save_settings()
+
+    def _c_hist(self, cmd: str, rest: str, line: str) -> None:
+        # HSEQ: "//H <unix> #<n> <call>: <text>" - the event number for quotes
+        m = re.match(r"^(\d+) (?:#([0-9A-F]{1,2}) )?([A-Z0-9-]+): ?(.*)$", rest)
+        if m and self.board:
+            line = (int(m.group(1)), m.group(3), m.group(4),
+                    int(m.group(2), 16) if m.group(2) else None)
+            if self._hist_buf is not None:
+                self._hist_buf.append(line)          # answer to //HIST: until //HEND
+            else:
+                self._add_history([line], older=False)   # older TinyBox: right away
+
+    def _c_hist_end(self, cmd: str, rest: str, line: str) -> None:
+        p = rest.split()
+        if self.board and len(p) == 2 and isnum(p[1]):
+            self._add_history(self._hist_buf or [], older=self._hist_older)
+            self._hist_buf = None
+            self.board["older"] = int(p[1])
+            self.board["loading"] = False
+
+    def _c_motd(self, cmd: str, rest: str, line: str) -> None:
+        crc, _, text = rest.partition(" ")
+        if self.board:
+            motds = self.tset.setdefault("motd", {})
+            if crc == "-":
+                motds.pop(self.board["name"], None)
+            else:
+                motds[self.board["name"]] = {"crc": crc, "text": text}
+            self._save_settings()
+            self.board["motd"] = text if crc != "-" else ""
             self._touch()
-            return
-        if cmd == "TRUST":                       # CR99: keys the home BBS trusts
-            self.asking.pop("trust", None)
-            self._store_trust(rest)
-            return
-        if cmd == "CERT":                        # stage 3: from the home BBS
-            self.asking.pop("cert", None)
-            self._store_cert(rest.strip())
-            return
-        if cmd == "AUTHWAIT":
-            self.auth.update(state="wait", reason="")
-            self._note_home_auth("wait")
-            self.console.append(f"*** your key ({self.identity.fp}) waits for the sysop of "
-                                f"{self.auth['box'] or self.target} - tell him the fingerprint")
-            self._lotw_ask()                     # CR113: LoTW may release it
-            self._touch()
-            return
-        if cmd == "LOTW":                        # CR113 stage 2
-            self._lotw_answer(rest.strip())
-            return
-        if cmd == "ERR" and rest.startswith("auth"):
+
+    def _c_who(self, cmd: str, rest: str, line: str) -> None:
+        """//WHO - 'n call[=sym] ...' (NUM) or 'call[=sym] ...'"""
+        num = 0
+        for item in rest.split():
+            if isnum(item):
+                num = int(item)
+                continue
+            call, _, sym = item.partition("=")
+            self.members[call] = sym
+            if num:
+                self._set_number(num, call)
+                num = 0
+        self.profiles.want(self.members)         # CR73: names and locators
+
+    def _c_prof(self, cmd: str, rest: str, line: str) -> None:
+        self.profiles.on_line(rest)
+
+    def _c_whois(self, cmd: str, rest: str, line: str) -> None:
+        self.profiles.on_whois(rest)
+
+    def _c_whois_end(self, cmd: str, rest: str, line: str) -> None:
+        self.profiles.on_whois_end()
+
+    def _c_out(self, cmd: str, rest: str, line: str) -> None:
+        self._clear_board()
+        self.tset.pop("board", None)
+        self._save_settings()
+
+    def _c_sys(self, cmd: str, rest: str, line: str) -> None:
+        # //SYS <seconds left> <text>  (-1 = shutdown called off)
+        left, _, text = rest.partition(" ")
+        if re.match(r"^-?\d+$", left):
+            self.sysmsg = {"text": text, "left": int(left), "at": int(time.time())}
+            self.console.append("*** " + text)
+
+    def _c_ct(self, cmd: str, rest: str, line: str) -> None:
+        """//CT - CR122: the box plays the CQ contest"""
+        self.box_contest.take(rest)
+
+    def _c_game(self, cmd: str, rest: str, line: str) -> None:
+        """//GAME - CR127: the box answers a result"""
+        self.reports.answer(rest)
+
+    def _c_games(self, cmd: str, rest: str, line: str) -> None:
+        """//GAMES - CR126: leaderboards"""
+        self.leaderboard.line(rest)
+        self._touch()
+
+    def _c_pr(self, cmd: str, rest: str, line: str) -> None:
+        """//PR - CR123: the box answers a Prefix raten command"""
+        self.prefix.answer(rest)
+        self._touch()
+
+    def _c_ctr(self, cmd: str, rest: str, line: str) -> None:
+        """//CTR - CR122: another client, handed on by the box"""
+        call, _, line = rest.partition(" ")
+        call = call.upper()
+        if AX25_CALL_RE.match(call) and line:
+            self._relay_slot(call).take(line)
+
+    def _c_err(self, cmd: str, rest: str, line: str) -> None:
+        if rest.startswith("auth"):
             why = rest[4:].strip() or "refused"
             self.auth.update(state="refused", reason=why)
             self._note_home_auth("refused", why)
             self.console.append(f"*** login with your key refused: {why}")
             self._touch()
             return
-        if cmd == "OK":
-            self.auth.update(state="ok", reason="")
-            self._note_home_auth("ok")
-            if self._cert_due():
-                self.asking["cert"] = time.time()
-                self._send("//CERT?")            # stage 3: for logins at other TinyBoxen
-            if self._trust_due():
-                self.asking["trust"] = time.time()
-                self._send("//TRUST?")           # CR99: whose certificates count
-            m = re.search(r"caps=(\S*)", rest)
-            self.caps = set(filter(None, (m.group(1) if m else "").split(",")))
-            self.console.append(f"*** client mode, caps: {','.join(sorted(self.caps)) or '-'}")
-            if "LOTW" in self.caps and self.lotw_box.get("state") != "ok":
-                self._lotw_ask()
-            known = self.settings.setdefault("tinyboxes", [])
-            if self.target != self.home and self.target not in known:
-                known.append(self.target)          # CR43: next time no terminal guess
-                del known[:-20]
-                self._save_settings()
-            q = re.search(r"q=(\d+)/(\d+)/(\d+)/([\d.,]+)", rest)      # CR33
-            if q:
-                self.qcfg = {"frames": int(q.group(1)), "minutes": int(q.group(2)),
-                             "min_frames": int(q.group(3)),
-                             "steps": [float(x) for x in q.group(4).split(",") if x]}
-            self._update_info(rest)
-            self._send("//BOARDS")
-            self.profiles.on_ok(rest)                # CR73: profile only if it differs
-            self.reports.on_login()                  # CR127: results of chess / CQ contest
-            if self.cfg.sync_on_login and "SYNC" in self.caps and self.at_home \
-                    and not self.sync.running:
-                # CR40: headers of mail and subscribed rubrics after every login,
-                # a moment later so the board list comes first
-                asyncio.get_event_loop().call_later(LOGIN_SYNC_SEC, self._login_sync)
-        elif cmd == "B":
-            parts = rest.split(" ", 4)
-            if len(parts) >= 4 and isnum(parts[0]):
-                if self._boards_tmp is None:
-                    self._boards_tmp = []
-                self._boards_tmp.append({"n": int(parts[0]), "name": parts[1], "keep": parts[2],
-                                         "users": int(parts[3]) if isnum(parts[3]) else 0,
-                                         "desc": parts[4] if len(parts) > 4 else ""})
-        elif cmd == "BEND":
-            self.boards = self._boards_tmp or []
-            self._boards_tmp = None
-            last = self.tset.get("board")
-            if self.board is None and any(b["n"] == last for b in self.boards) \
-                    and not self.sync.own_connect:   # a sync-only connection stays out
-                self.join(last)                  # back into the last board
-        elif cmd == "IN":
-            parts = rest.split()
-            # CR98: "//IN <n> <name> <keep> <last hex|->" - anything else is not a join
-            if len(parts) >= 4 and isnum(parts[0]) and \
-                    (parts[3] == "-" or re.fullmatch(r"[0-9A-Fa-f]{1,4}", parts[3])):
-                self._clear_board()
-                self.board = {"n": int(parts[0]), "name": parts[1], "keep": parts[2],
-                              "img": self._img_limit(rest), "file": self._file_limit(rest)}
-                self._history_on_join(rest)
-                self._motd_on_join(rest)
-                last = None if parts[3] == "-" else int(parts[3], 16)
-                self.unwrap.reset(last)
-                early = self._early if self._joining == self.board["n"] else []
-                self._joining, self._early = None, []
-                if early:     # after the //H and //WHO lines, which come next
-                    asyncio.get_event_loop().call_soon(self._replay_early, early, last)
-                if self.tset.get("board") != self.board["n"]:
-                    self.tset["board"] = self.board["n"]
-                    self._save_settings()
-        elif cmd == "H":
-            # HSEQ: "//H <unix> #<n> <call>: <text>" - the event number for quotes
-            m = re.match(r"^(\d+) (?:#([0-9A-F]{1,2}) )?([A-Z0-9-]+): ?(.*)$", rest)
-            if m and self.board:
-                line = (int(m.group(1)), m.group(3), m.group(4),
-                        int(m.group(2), 16) if m.group(2) else None)
-                if self._hist_buf is not None:
-                    self._hist_buf.append(line)          # answer to //HIST: until //HEND
-                else:
-                    self._add_history([line], older=False)   # older TinyBox: right away
-        elif cmd == "HEND":
-            p = rest.split()
-            if self.board and len(p) == 2 and isnum(p[1]):
-                self._add_history(self._hist_buf or [], older=self._hist_older)
-                self._hist_buf = None
-                self.board["older"] = int(p[1])
-                self.board["loading"] = False
-        elif cmd == "MOTD":
-            crc, _, text = rest.partition(" ")
-            if self.board:
-                motds = self.tset.setdefault("motd", {})
-                if crc == "-":
-                    motds.pop(self.board["name"], None)
-                else:
-                    motds[self.board["name"]] = {"crc": crc, "text": text}
-                self._save_settings()
-                self.board["motd"] = text if crc != "-" else ""
-                self._touch()
-        elif cmd == "WHO":                 # 'n call[=sym] ...' (NUM) or 'call[=sym] ...'
-            num = 0
-            for item in rest.split():
-                if isnum(item):
-                    num = int(item)
-                    continue
-                call, _, sym = item.partition("=")
-                self.members[call] = sym
-                if num:
-                    self._set_number(num, call)
-                    num = 0
-            self.profiles.want(self.members)         # CR73: names and locators
-        elif cmd == "PROF":
-            self.profiles.on_line(rest)
-        elif cmd == "WI":
-            self.profiles.on_whois(rest)
-        elif cmd == "WIEND":
-            self.profiles.on_whois_end()
-        elif cmd == "OUT":
-            self._clear_board()
-            self.tset.pop("board", None)
-            self._save_settings()
-        elif cmd == "SYS":
-            # //SYS <seconds left> <text>  (-1 = shutdown called off)
-            left, _, text = rest.partition(" ")
-            if re.match(r"^-?\d+$", left):
-                self.sysmsg = {"text": text, "left": int(left), "at": int(time.time())}
-                self.console.append("*** " + text)
-        elif cmd == "CT":                  # CR122: the box plays the CQ contest
-            self.box_contest.take(rest)
-        elif cmd == "GAME":                # CR127: the box answers a result
-            self.reports.answer(rest)
-        elif cmd == "GAMES":               # CR126: leaderboards
-            self.leaderboard.line(rest)
-            self._touch()
-        elif cmd == "PR":                  # CR123: the box answers a Prefix raten command
-            self.prefix.answer(rest)
-            self._touch()
-        elif cmd == "CTR":                 # CR122: another client, handed on by the box
-            call, _, line = rest.partition(" ")
-            call = call.upper()
-            if AX25_CALL_RE.match(call) and line:
-                self._relay_slot(call).take(line)
-        elif cmd == "ERR":
-            self.console.append(line)
-        # //CLIENT etc. echoed by a terminal: ignore
+        self.console.append(line)
 
     def _mail_notice(self, text: str) -> None:
         """UI frame to TBMAIL: '<call> <n> new' (sent by the TinyBox, C1)."""

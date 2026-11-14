@@ -229,6 +229,37 @@ class ClientProtoTests(unittest.TestCase):
         self.assertEqual(ct.take(), "#1 OE3GAS: test\r")
         self.assertEqual(self.ui, [])                 # nobody needs UI
 
+    def test_deliver_to_an_audience(self):
+        """R4: an event for some members only - I-frames and text only to them,
+        the UI frame once if one of them listens to UI, nothing for the others."""
+        term, tt = login(self.app, "OE3XYZ")
+        type_lines(term, "C TREFF")
+        a, at = login(self.app, "OE3AAA")               # I-frame client, in the audience
+        type_lines(a, "//CLIENT TB1 caps=CHAT,NUM", "C TREFF")
+        b, bt = login(self.app, "OE3BBB")               # I-frame client, not in it
+        type_lines(b, "//CLIENT TB1 caps=CHAT,NUM", "C TREFF")
+        for t in (tt, at, bt):
+            t.take()
+        hub = self.app.service.chat
+        players = {"OE3AAA"}
+        hub.deliver("TREFF", "!game", "game for players", sender=None,
+                    audience=lambda s: s.call in players)
+        self.assertRegex(at.take(), r"^#[0-9A-F]+ !game\r$")
+        self.assertEqual((bt.take(), tt.take()), ("", ""))
+        self.assertEqual(self.ui, [])                   # no UI listener in the audience
+        players.add("OE3XYZ")                           # a terminal: gets the text
+        hub.deliver("TREFF", "!game2", "game for players", sender=None,
+                    audience=lambda s: s.call in players)
+        self.assertIn("game for players", tt.take())
+        self.assertEqual(bt.take(), "")
+        # a UI client in the audience: one UI frame, which everybody could hear
+        c, ct = radio_login(self.app, "OE3GAS")
+        type_lines(c, "//CLIENT TB1 caps=CHAT,NUM,UI", "C TREFF")
+        ct.take(); at.take(); bt.take(); tt.take()
+        hub.deliver("TREFF", "!game3", None, sender=None, audience=lambda s: s.call == "OE3GAS")
+        self.assertTrue(self.ui[-1][1].endswith(" !game3"))
+        self.assertEqual((ct.take(), at.take(), bt.take()), ("", "", ""))
+
     def test_restart_in_board_gets_in_without_anybody_hearing_it(self):
         """The client restarts while the link stays up: the session is still in
         the board, so //CLIENT is answered with //IN and //WHO - and the other
