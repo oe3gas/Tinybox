@@ -5209,7 +5209,11 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
   - während ein Bild oder eine Datei hinausgeht (Fall 6).
 - Grundsatz (OE3GAS): Kein Wechsel ins Terminal mitten in einer Aktivität, die dabei Probleme machen
   kann – eine lineare Abfolge ist keine Einschränkung, sie macht das Arbeiten strukturierter.
-- Erlaubt bleibt das Terminal bei laufendem Sync (5) und aus den lokalen Ansichten (9).
+- Erlaubt bleibt das Terminal bei laufendem Sync (5) und aus den lokalen Ansichten (9). Syncs laufen im
+  Hintergrund – das Terminal nicht.
+- **Umgekehrt:** Solange das Terminal offen ist, kann man **nicht spielen** – kein Spiel starten, keinem
+  beitreten (Buttons CQ Contest, Schach, Prefix raten „Mitspielen“ deaktiviert). „Wer im Terminal
+  arbeitet, will nicht spielen und braucht nicht spielen können.“
 
 ### Vorschlag zur Umsetzung (noch nicht entschieden)
 
@@ -5225,8 +5229,10 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
 - Im Client-Modus geht jede Terminal-Zeile als `//CMD <Zeile>` hinaus (Box ohne `CMD`: Terminal-Button
   im Board deaktiviert, sonst wie heute). `//CMD` erscheint im Terminal nicht, nur die getippte Zeile.
 - Button-Zustand aus dem Snapshot (online, Handshake fertig, Spiel läuft).
-- Wird das Terminal gesperrt, während es offen ist (Spiel startet, Verbindung weg): Eingabezeile
-  deaktivieren bzw. zurück in den Chat.
+- Wird das Terminal gesperrt, während es offen ist (Verbindung weg): Eingabezeile deaktivieren bzw.
+  zurück in den Chat.
+- Einladungen anderer zu einem Spiel (Schach, CQ Contest), die ankommen, während das Terminal offen ist:
+  Vorschlag – nicht anzeigen, sondern mit „beschäftigt“ ablehnen (zu entscheiden bei der Umsetzung).
 
 **Tests**
 
@@ -5235,3 +5241,4 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
 - Box ohne `CMD`: Client sperrt das Terminal im Board.
 - Button deaktiviert: offline, vor dem Handshake, während CQ Contest / Schach / Prefix raten (Mitspieler),
   während eines Bild-/Datei-Uploads.
+- Terminal offen: Spiel-Buttons deaktiviert, kein Start und kein Beitritt möglich.
