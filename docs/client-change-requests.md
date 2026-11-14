@@ -5437,6 +5437,12 @@ Deutsch (Referenz, falls die GUI später übersetzt wird):
   - Text-Vorschlag über dem Formular: „Tell the others who you are – your first name, your
     locator and your home BBS. You can change it any time under Settings > My profile.“
 - Zu entscheiden: Pflicht oder überspringbar (CR73: überspringbar, Erinnerung nach einer Woche).
+- Formular „My profile“ (`index.html`, `#profdlg`, auch in der Willkommens-Karte): die beiden
+  Erklärtexte **entfallen** (OE3GAS, 14.11.2026):
+  - unter der Überschrift „My profile“: „Kept by the TinyBox for your call (all SSIDs) and shown to
+    everybody … Sent only when it changes.“
+  - unter dem Feld Locator: „4 characters (JN88, about 150 × 110 km) or 6 (JN88EP, …) – the others see
+    exactly what you enter.“
 
 ### Offen
 
