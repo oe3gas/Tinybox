@@ -5171,3 +5171,64 @@ Sprache aus `[games] language` – mit CR128 spielen Terminal-User ohnehin nicht
   zeigen die Namen in ihrer Sprache; älterer Client ohne `PR2` (Verhalten wie entschieden).
 - Jede DXCC-Nummer der CSV hat einen deutschen und einen englischen Namen.
 
+
+## CR130 – TinyBox-Terminal: Eingaben gehen immer an die Mailbox, Terminal gesperrt bei Spielen und ohne Verbindung (offen)
+
+Gilt nur für das **Terminal zur eigenen TinyBox** (Client-Modus, „TinyBox terminal“) – nicht für
+Terminals zu anderen Stationen (zweite TinyBox, fremde BBS, eingehende Connects, TBClient, CR43/45/46/78).
+
+### Befund (14.11.2026)
+
+Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zustand der Sitzung dort ab:
+
+1. Kein Board betreten: Befehlsmodus – L, R, V … funktionieren, Antworten im Terminal (kein Prompt;
+   Schreiben/Löschen/Profil sperrt CR93).
+2. **In einem Board** (auch live-Board, I-Frame- oder UI-Chat): die Zeile wird **Chat-Text an alle**,
+   das Echo erscheint nur im Chat; wirksam sind nur `/`-Befehle. (Gefunden mit `l` in TREFF.)
+3. Im Board läuft Prefix raten: wie 2, zusätzlich ist „mit“/„join“ ein Spielbeitritt.
+4. Spiel gegen die Box oder über die Box (CQ Contest): Spielzeilen laufen parallel, Terminal wie 1/2.
+5. Mail-/Bulletin-Sync läuft: funktioniert, Antworten kommen zwischen den Sync-Blöcken.
+6. Bild-/Dateiupload läuft: die Zeile wird bis zum Ende des Uploads zurückgehalten (`hold_lines`).
+7. Signierte Mail (`//SEND`, Box sammelt Zeilen): geht am Stück hinaus, kein Problem.
+8. Erste Sekunde nach „Welcome“, vor dem Handshake: Box noch im Gast-Terminal – ein „S“ würde die
+   Betreff-Eingabe öffnen und `//CLIENT` zum Betreff machen.
+9. Aus lokalen Ansichten (Mailbox, Monitor, APRS-Statistik, Spielfenster): das Terminal springt auf den
+   Box-Kanal, dann gilt 1/2.
+10. Box-Kanal nicht online: Terminal öffnet sich, Enter tut nichts (ohne Hinweis).
+
+### Entscheidungen (OE3GAS, 14.11.2026)
+
+- **A – Eingaben im Board:** Weg b) – eine neue Steuerzeile `//CMD <Zeile>`: die Box führt die Zeile als
+  **Mailbox-Befehl** aus, die Sitzung **bleibt im Board**, die anderen merken nichts (kein Verlassen und
+  Wiederkommen, keine Bytes für Leave/Join).
+- **B – Terminal sperren:** Der Button „TinyBox terminal“ (und der Menüeintrag) wird **deaktiviert** –
+  ohne Meldung oder Erklärung – in diesen Fällen:
+  - solange der Box-Kanal nicht online ist (Fall 10) und vor dem Handshake (Fall 8),
+  - **während der Teilnahme an einem Spiel** (CQ Contest gegen die Box, über die Box oder direkt,
+    Schach, Prefix raten als Mitspieler, später Elmer Quiz).
+- Erlaubt bleibt das Terminal bei laufendem Sync (5) und aus den lokalen Ansichten (9).
+
+### Vorschlag zur Umsetzung (noch nicht entschieden)
+
+**Box**
+
+- Neue Fähigkeit `CMD` im `//OK`. `//CMD <Zeile>` wird in jedem Zustand (Befehlsmodus und Board) wie
+  eine Mailbox-Befehlszeile behandelt (`commands.dispatch`), nie als Chat-Text; die Sperre für
+  Schreiben/Löschen aus CR93 gilt weiter. Danach ist die Sitzung im selben Zustand wie vorher.
+- Antworten wie bisher als normale Textzeilen (kein Prompt im Client-Modus).
+
+**Client**
+
+- Im Client-Modus geht jede Terminal-Zeile als `//CMD <Zeile>` hinaus (Box ohne `CMD`: Terminal-Button
+  im Board deaktiviert, sonst wie heute). `//CMD` erscheint im Terminal nicht, nur die getippte Zeile.
+- Button-Zustand aus dem Snapshot (online, Handshake fertig, Spiel läuft).
+- Wird das Terminal gesperrt, während es offen ist (Spiel startet, Verbindung weg): Eingabezeile
+  deaktivieren bzw. zurück in den Chat.
+- **Offen:** Fall 6 (Upload läuft) – erlauben wie heute (Zeile wartet) oder ebenfalls sperren.
+
+**Tests**
+
+- Im Board: `//CMD L` liefert die Liste, nichts geht an die anderen im Board, die Sitzung bleibt drin.
+- `//CMD S OE3XYZ` im Client-Modus: abgelehnt wie heute (CR93).
+- Box ohne `CMD`: Client sperrt das Terminal im Board.
+- Button deaktiviert: offline, vor dem Handshake, während CQ Contest / Schach / Prefix raten (Mitspieler).
