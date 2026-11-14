@@ -5580,3 +5580,32 @@ Hilfetext-Vorschlag:
   (`_c_prompt`). Ältere Clients ohne `PRM` bekommen wie bisher nichts.
 - Tests: `tests/test_cr134.py` (Abkürzungen, alte Befehle weg, Prompt, `//P`, Client-Seite, CR133
   „confirmed“); bestehende Tests auf die neuen Befehle und Caps umgestellt.
+
+
+## CR135 – Prefix raten: Suffix höchstens 3 Buchstaben, gelöschte Entitäten nur unter DX-God unmarkiert (✅ 14.11.2026, nur Box)
+
+### Erfassung (OE3GAS, 14.11.2026)
+
+- `BV9PLWX` ist kein gültiges Rufzeichen: ein **Suffix hat höchstens 3 Buchstaben**.
+- Bei **Pro und darunter** sollen nicht mehr aktive (gelöschte) Entitäten **als solche gekennzeichnet**
+  werden. Nur bei **DX-God** keine Kennzeichnung.
+
+### Befund
+
+- `prcore/prefixgame.make_call()` hängte an das Muster immer 1–3 Zufallsbuchstaben an. Endet das Muster
+  schon auf Buchstaben (Pratas `BV9P`), wurde das Suffix bis zu 4 Buchstaben lang.
+- Die 28 gelöschten Entitäten stehen in `prefixraten.csv` nur in der Stufe DX-God und trugen dort
+  „(alt)“ im Anzeigetext – genau umgekehrt zur Regel.
+
+### Umsetzung (14.11.2026)
+
+- `make_call()`: zählt die Buchstaben nach der letzten Ziffer des Musters und ergänzt nur so viele, dass
+  das Suffix 1–3 Buchstaben hat (`BV9P` + 0–2 → `BV9PA` … `BV9PAB`; `3A#` + 1–3).
+- `Entity.deleted` aus der Spalte `status`; der Name wird ohne „(alt)“ geladen. `label(e, stage)`
+  hängt „(alt)“ an, außer bei DX-God. Die Box (`tinybox/prefixgame.py`) nimmt `label()` für Frage und
+  Auflösung – keine Protokolländerung, der Client zeigt den Text wie geliefert.
+- Ohne Kennzeichnung gibt es zwei gleiche Texte (Comoros, Palestine): `question()` wählt nie zwei
+  Antworten mit demselben Namen.
+- Tests in `tests/test_cr123.py`.
+- Hinweis: Unter Pro und darunter kommen gelöschte Entitäten derzeit gar nicht vor (Spalte `stufen`).
+  Sollen sie dort auftauchen, muss die Liste ergänzt werden.

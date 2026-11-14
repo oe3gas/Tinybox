@@ -20,8 +20,9 @@ class ListTests(unittest.TestCase):
         self.assertGreater(len(self.ents), 290)
         names = {e.name for e in self.ents}
         self.assertIn("Austria", names)
-        self.assertIn("Saar (alt)", names)
-        self.assertEqual(len(names), len(self.ents))         # every answer text once
+        self.assertIn("Saar", names)
+        texts = {pg.label(e, "PRO") for e in self.ents}
+        self.assertEqual(len(texts), len(self.ents))         # every marked answer text once
 
     def test_stage_sizes(self):
         rng = random.Random(1)
@@ -47,6 +48,33 @@ class ListTests(unittest.TestCase):
                 self.assertTrue(re.fullmatch(r"[A-Z0-9]{3,9}", call), call)
                 self.assertTrue(any(re.match("^" + p.replace("#", "[0-9]"), call)
                                     for p in e.patterns), (e.name, call))
+
+    def test_suffix_at_most_three_letters(self):         # CR135
+        rng = random.Random(5)
+        for e in self.ents:
+            for _ in range(20):
+                call = pg.make_call(e, rng)
+                suffix = re.search(r"[A-Z]*$", call).group(0)
+                self.assertTrue(1 <= len(suffix) <= 3, (e.name, call))
+        pratas = next(e for e in self.ents if e.name == "Pratas I.")
+        for _ in range(50):
+            self.assertRegex(pg.make_call(pratas, rng), r"^BV9P[A-Z]{0,2}$")
+
+    def test_deleted_marked_except_dx_god(self):        # CR135
+        saar = next(e for e in self.ents if e.name == "Saar")
+        self.assertTrue(saar.deleted)
+        self.assertEqual(pg.label(saar, "GOD"), "Saar")
+        for st in ("NC", "OM", "PRO"):
+            self.assertEqual(pg.label(saar, st), "Saar (alt)")
+        austria = next(e for e in self.ents if e.name == "Austria")
+        self.assertEqual(pg.label(austria, "PRO"), "Austria")
+
+    def test_no_two_answers_alike(self):                 # CR135: Comoros / Comoros (deleted)
+        rng = random.Random(6)
+        pl = [e for e in self.ents if e.name in ("Comoros", "Palestine")] + self.ents[:3]
+        for _ in range(200):
+            q = pg.question(pl, set(), rng)
+            self.assertEqual(len({e.name for e in q.options}), len(q.options))
 
     def test_question(self):
         rng = random.Random(4)

@@ -8,8 +8,12 @@ regions; with fewer than MIN_POOL it fills up from the next weaker stage
 even that is not enough, the round plays with fewer - the box says how many.
 
 Pattern: letters/digits fixed, [A-R] / [1-57] one character of the class,
-# a digit 0-9; several patterns separated by commas (one is picked). A suffix
-of 1-3 random letters follows.
+# a digit 0-9; several patterns separated by commas (one is picked). Random
+letters follow, so that the suffix (the letters after the last digit) has 1-3
+letters - BV9P gets 1-2 more, 3A# 1-3 (CR135).
+
+Deleted entities (status "geloescht") carry their name without "(alt)"; label()
+marks them for every stage but DX-God - there the player has to know (CR135).
 """
 
 from __future__ import annotations
@@ -39,6 +43,15 @@ class Entity:
     region: str            # "1", "2", "3"
     stages: frozenset[str]
     rarity: int
+    deleted: bool = False
+
+
+ALT = " (alt)"
+
+
+def label(e: Entity, stage: str) -> str:
+    """The answer text: deleted entities marked, except in DX-God (CR135)."""
+    return e.name + ALT if e.deleted and stage != "GOD" else e.name
 
 
 def stage_of(word: str) -> str | None:
@@ -55,8 +68,12 @@ def load(path: Path | str = DATA_FILE) -> list[Entity]:
                                if x.strip() in names)
             if not pats or not stages or r["iaru"] not in ("1", "2", "3"):
                 continue
-            out.append(Entity(int(r["dxcc"]), r["anzeige"].strip(), pats, r["iaru"],
-                              stages, _RARITY.get(r["rangbereich"], 5)))
+            name = r["anzeige"].strip()
+            if name.endswith(ALT):
+                name = name[:-len(ALT)].strip()
+            out.append(Entity(int(r["dxcc"]), name, pats, r["iaru"],
+                              stages, _RARITY.get(r["rangbereich"], 5),
+                              r["status"].strip() == "geloescht"))
     return out
 
 
@@ -113,8 +130,9 @@ def make_call(e: Entity, rng: random.Random) -> str:
             s += rng.choice(_chars(tok[1:-1]))
         else:
             s += tok
-    return s + "".join(rng.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-                       for _ in range(rng.randint(1, 3)))
+    tail = len(s) - len(s.rstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))   # letters after the last digit
+    n = rng.randint(1, 3 - tail) if tail < 3 else 0
+    return s + "".join(rng.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ") for _ in range(n))
 
 
 @dataclass
@@ -130,8 +148,13 @@ def question(pl: list[Entity], used: set[int], rng: random.Random) -> Question:
     fresh = [e for e in pl if e.dxcc not in used] or pl
     e = rng.choice(fresh)
     used.add(e.dxcc)
+    # no two answers with the same text (Comoros and the deleted Comoros, unmarked in DX-God)
     others = [x for x in pl if x.dxcc != e.dxcc and x.name != e.name]
-    wrong = rng.sample(others, min(2, len(others)))
+    rng.shuffle(others)
+    wrong: list[Entity] = []
+    for x in others:
+        if len(wrong) < 2 and all(x.name != w.name for w in wrong):
+            wrong.append(x)
     opts = wrong + [e]
     rng.shuffle(opts)
     return Question(make_call(e, rng), opts, opts.index(e))

@@ -163,7 +163,7 @@ class Game:
         self.asked_now = set(self.players_here())
         for c in self.asked_now:
             self.stat[c]["asked"] += 1
-        names = [e.name for e in self.q.options]
+        names = [pg.label(e, self.stage) for e in self.q.options]
         self.emit(f"Q {self.k}/{self.calls} {self.q.call} {self.tip_sec} " + "|".join(names),
                   f"Prefix raten {self.k}/{self.calls}: {self.q.call}?  " +
                   "  ".join(f"{LETTERS[i]} {n}" for i, n in enumerate(names)) +
@@ -199,7 +199,7 @@ class Game:
         for c in right:
             self.scores[c] += 1
             self.stat[c]["hits"] += 1
-        letter, name = LETTERS[q.right], q.options[q.right].name
+        letter, name = LETTERS[q.right], pg.label(q.options[q.right], self.stage)
         n_right, n_asked = len(right & self.asked_now), len(self.asked_now)
         self.emit(f"RES {self.k} {letter} {n_right}/{n_asked} {self._table(right)}",
                   f"Prefix raten {self.k}: {q.call} is {letter} {name}, {n_right} of {n_asked} right. " +
