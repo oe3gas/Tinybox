@@ -102,6 +102,7 @@ Stand: 13.11.2026 (CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus de
 | 127 | Spielergebnisse (Schach, CQ Contest) vom Client signiert an die Box melden – zählt nur, wenn beide Spieler dasselbe Ergebnis signiert melden | ✅ 13.11.2026 (Client 2026.11.13.5, Funktest offen) – siehe unten |
 | 128 | Spiele: keine Terminal-User; Zuschauer sehen nur, dass ein Spiel läuft (Prefix raten, Elmer Quiz) | offen – siehe unten |
 | 129 | Spiele in der Sprache der Box (`[games] language` in tinybox.conf), jeder Client darf eine eigene wählen; Prefix raten schickt DXCC-Nummern statt Ländernamen | offen – siehe unten |
+| 131 | brocastd: Wiederholungen auch bei Benutzerbetrieb (Stufe 1) gedrosselt senden – Schalter `busy_repeats` in `[traffic]`; Verbindungen über AXUDP belegen den Funkkanal nicht und zählen für brocast nicht | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -5242,3 +5243,56 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
 - Button deaktiviert: offline, vor dem Handshake, während CQ Contest / Schach / Prefix raten (Mitspieler),
   während eines Bild-/Datei-Uploads.
 - Terminal offen: Spiel-Buttons deaktiviert, kein Start und kein Beitritt möglich.
+
+
+## CR131 – brocastd: Wiederholungen bei Benutzerbetrieb gedrosselt senden; AXUDP zählt nicht als Verbindung (offen)
+
+### Erfassung (OE3GAS, 14.11.2026)
+
+- Solange eine Station über Funk an der TinyBox verbunden ist (Stufe 1), ruhen in brocastd **alle
+  Wiederholungen** – nur neue Revisionen gehen hinaus. Ist jemand dauerhaft verbunden (z. B. der eigene
+  TBClient), gehen Wiederholungen **nie** hinaus. Beobachtet am 14.11.2026: 27 Seiten im Pool,
+  „wartet seit“ über 15 min, Kanal frei.
+- Wunsch: Wiederholungen sollen auch bei Stufe 1 gehen – **gedrosselt**, wie neue Revisionen heute.
+- **Ein Connect über AXUDP belegt den Funkkanal nicht.** Solche Verbindungen gelten gegenüber brocast
+  **nicht** als Verbindung (weder als Benutzer noch als Forward).
+- Nur aufnehmen, **noch nicht umsetzen**.
+
+### Stand vor dem CR (14.11.2026)
+
+- brocastd `carousel._hold()`: Stufe 1 und `tx_count > 0` → Seite ruht. Neue Revisionen gehen bei
+  Stufe 1 nur mit `busy_percent` (Airtime-Budget), `busy_burst_frames` (Frames je Aussendung) und
+  höchstens `busy_max_parts` Teilen.
+- TinyBox `adapters/brocast.py` `busy_level()`: Stufe 1 zählt nur Sitzungen mit `origin == "radio"`
+  (AGW/KISS). AXUDP-Sitzungen haben `origin = "axudp"` und zählen **schon heute nicht**; Telnet und Web
+  ebenso nicht. Die Meldung „verbunden: OE3GAS“ vom 14.11. war also eine Verbindung über Funk.
+- Stufe 2 (Forward): `forward.radio_busy` nimmt jede Forward-Sitzung außer TCP auf. Eingehender
+  Forward wird nur bei `origin == "radio"` als Forward erkannt; ausgehender Forward läuft über den
+  AGW-Weg (`transport="agw"`).
+- Unabhängig davon hört brocastd den Kanal selbst (Direwolf-Monitor, `quiet_s`/`connected_quiet_s`);
+  AXUDP-Frames sind dort nicht zu hören.
+
+### Vorschlag zur Umsetzung (noch nicht entschieden)
+
+**brocastd**
+
+- Neuer Schalter in `[traffic]`: `busy_repeats = yes|no`. Bei `yes` gehen Wiederholungen bei Stufe 1
+  wie neue Revisionen: im Budget `busy_percent`, mit `busy_burst_frames`, höchstens `busy_max_parts`
+  Teile. Neue Revisionen haben Vorrang vor Wiederholungen (Reihenfolge im Pool).
+- Default zu entscheiden: `yes` (Wiederholungen laufen, gedrosselt) oder `no` (Verhalten wie bisher).
+- `brocastd.conf.example` und Anzeige „Sendung“ (Text bei Art `repeats`) anpassen.
+
+**TinyBox**
+
+- AXUDP bleibt bei Stufe 1 ausgenommen – als Regel festhalten und mit Test absichern.
+- Stufe 2 prüfen: ein Forward, dessen Partner über AXUDP angebunden ist (ausgehend über einen
+  AXUDP-Port des AGW-/KISS-Adapters), darf **nicht** in `radio_busy` landen. Entscheidend ist der Port,
+  über den die Verbindung läuft, nicht der Transportname.
+
+### Test
+
+- `busy_repeats = yes`, Benutzer über Funk verbunden: Wiederholungen gehen, Budget `busy_percent` und
+  `busy_burst_frames` werden eingehalten; neue Revisionen gehen zuerst.
+- `busy_repeats = no`: Verhalten wie bisher.
+- Nur AXUDP-Verbindungen an der Box: TinyBox meldet Stufe 0, brocast sendet normal.
+- Forward über AXUDP: keine Stufe 2.
