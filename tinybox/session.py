@@ -165,7 +165,7 @@ class Session:
         if exc.code == "not_found":
             self.out(texts.NO_SUCH_MSG.format(id=msg_id))
         elif exc.code == "not_allowed" and "third party" in str(exc):
-            self.out(texts.THIRD_PARTY_OFF.format(sysop=self.cfg.station.sysop_call))
+            self.out(texts.THIRD_PARTY_OFF.format(sysop=self.cfg.station.sysop_text))
         elif exc.code == "not_allowed":
             self.out(texts.NOT_ALLOWED)
         elif exc.code == "need_login":
@@ -211,7 +211,7 @@ class Session:
         left = self.service.shutdown_left() if self.service.shutdown_left else None
         if left is not None:             # shutdown pending: warn new stations too
             lines.append(texts.SHUTDOWN_WARNING.format(
-                mailbox=mailbox, sysop=self.cfg.station.sysop_call,
+                mailbox=mailbox, sysop=self.cfg.station.sysop_text,
                 left="1 second" if left == 1 else f"{left} seconds"))
         ask = self._profile_due()
         if ask:
@@ -526,7 +526,7 @@ class Session:
             self.out(texts.SAVED.format(id=", ".join(map(str, ids))))
             held = [i for i in ids if (m := self.service.store.get(i)) and m.fwd == "H"]
             if held:                                # CR92: a guest's mail to another BBS
-                self.out(texts.GUEST_HELD.format(sysop=self.cfg.station.sysop_call))
+                self.out(texts.GUEST_HELD.format(sysop=self.cfg.station.sysop_text))
 
 
 MAX_PER_CALL = 2          # CR97 (TB-17): sessions of one call (all SSIDs) at once

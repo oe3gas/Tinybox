@@ -47,6 +47,30 @@ class StationCfg:
     def address(self) -> str:
         return self.haddress or self.bbs_call
 
+    # --- the sysops (Refactoring R5, prepares CR125) --------------------------------
+    # Code never takes sysop_call itself but one of these four, so a list of sysops
+    # (CR125) changes only them.
+
+    @property
+    def sysops(self) -> tuple[str, ...]:
+        """All sysop calls of this box (today one: [station] sysop_call)."""
+        return (self.sysop_call,)
+
+    @property
+    def sysop_mail_to(self) -> str:
+        """Recipient of the box's system mail to the sysop (held mail, key waits ...)."""
+        return self.sysop_call
+
+    @property
+    def local_sysop(self) -> str:
+        """Who acts for a local sysop source: console, web GUI, inbox, SHUTDOWN."""
+        return self.sysop_call
+
+    @property
+    def sysop_text(self) -> str:
+        """The sysop(s) as users, the log head and STATUS see them."""
+        return ", ".join(self.sysops)
+
 
 @dataclass
 class PartnerCfg:

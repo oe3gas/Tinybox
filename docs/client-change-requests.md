@@ -4789,6 +4789,14 @@ Systemnachrichten an den Sysop (`service.py`, `forward.py`), Identität von Syso
 Web-GUI (`adapters/sysop.py`, `adapters/web.py`), `SHUTDOWN`/`RESTART` (`shutdown.py`), Texte an
 User (`session.py`: Gast gehalten, Third-Party aus), Inbox-Absender, Logkopf, Stationsprofil.
 
+**Vorarbeit (Refactoring R5, 14.11.2026):** Der Code nimmt `sysop_call` nicht mehr direkt, sondern
+eine von vier Sichten in `StationCfg` (`tinybox/config.py`): `sysops` (alle Sysop-Rufzeichen,
+`is_sysop_call` prüft gegen diese), `sysop_mail_to` (Empfänger der Systemnachrichten, künftig
+`SYSOP`), `local_sysop` („by“ von Konsole, Web-GUI, Inbox, `SHUTDOWN`, künftig `SYSOP`) und
+`sysop_text` (Anzeige für User, Logkopf, `STATUS`). Für CR125 ändern sich im Kern nur diese vier,
+dazu der Lader (Liste) und die `SYSOP`-Post. Offen bleibt das „by“ bei `//ADM` (Rufzeichen des
+angemeldeten Sysops statt `local_sysop`).
+
 **Vorschlag:**
 
 - `sysop_call` nimmt eine Liste, getrennt durch Komma und/oder Leerzeichen:

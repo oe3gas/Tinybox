@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from prcore.release import RELEASE
 from tinybox import clientnews
@@ -313,6 +314,14 @@ class MailNotifyTests(unittest.TestCase):
         self.assertEqual(len(self.ui), 1)
         self.mail("OE1DEF")
         self.assertEqual(self.ui[-1], ("TBMAIL", "OE1DEF 1 new"))
+
+    def test_first_mail_right_after_boot(self):
+        """time.monotonic() counts from the boot: a TinyBox started by systemd is
+        less than a minute old - the first mail of a call is still announced at once."""
+        from tinybox import notify
+        with mock.patch.object(notify.time, "monotonic", return_value=5.0):
+            self.mail("OE3ABC")
+        self.assertEqual(self.ui, [("TBMAIL", "OE3ABC 1 new")])
 
     def test_no_bulletins_and_switch_off(self):
         self.mail("ALL", type="B")

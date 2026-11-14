@@ -532,7 +532,7 @@ def _start_items(cfg, adapters: str, via: tuple, config_path, log_path, debug) -
     return [
         ("Mailbox call", cfg.station.mailbox_call),
         ("BBS call", cfg.station.bbs_call),
-        ("Sysop", cfg.station.sysop_call),
+        ("Sysop", cfg.station.sysop_text),
         ("Max users", cfg.mailbox.max_users),
         None,
         ("Connection via", *via),

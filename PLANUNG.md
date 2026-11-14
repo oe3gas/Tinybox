@@ -1398,8 +1398,15 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   Python-Modul aus `tinybox/` mehr (nur noch die geteilten Web-Dateien); toter Code entfernt
   (`kiss.send_param`, `contest.game_of`, `fwd/link.partial`, brocast-Adapter `full_list`,
   `peerfun._mine_white`).
-- Ein Test schlug am 14.11. einmal ohne Code-Änderung fehl (welcher, ist nicht erfasst); in
-  fünf weiteren Läufen nicht wieder aufgetreten. Bei Auftreten den Namen notieren.
+- Der gelegentlich fehlschlagende Test ist gefunden ✅ (14.11.): `MailNotifyTests` – und dahinter
+  ein echter Fehler in `tinybox/notify.py`. `time.monotonic()` zählt ab dem Systemstart; in der
+  ersten Minute nach dem Booten (NanoPi mit systemd!) galt die erste Mail-Benachrichtigung je
+  Rufzeichen als „schon gesendet“ und kam bis zu 60 s später. Jetzt: noch nie gesendet = sofort.
+
+**Etappe 1 – Stand:**
+- R5 Sysop-Identität ✅ (14.11.): vier Sichten in `StationCfg` – `sysops`, `sysop_mail_to`,
+  `local_sysop`, `sysop_text`; kein Code nimmt mehr `sysop_call` direkt. Ohne Verhaltensänderung,
+  bereitet CR125 vor (Vorarbeit dort beschrieben).
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 

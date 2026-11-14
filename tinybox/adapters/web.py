@@ -371,7 +371,7 @@ class WebServer:
         if method == "GET" and parts == ["feed"]:
             return await self._feed(writer)
         if method == "GET" and parts == ["messages"] and query.get("q"):     # CR49 search
-            sysop = self.app.cfg.station.sysop_call
+            sysop = self.app.cfg.station.local_sysop
             found = self.app.service.search(sysop, True, query["q"][0][:100])
             return self._json(writer, 200, [self._msg(m) for m in found])
         if method == "GET" and parts in (["connlog.csv"], ["connlog.adi"]):   # CR44 export
@@ -381,7 +381,7 @@ class WebServer:
 
     def _api(self, method: str, parts: list[str], data: dict):
         app, svc = self.app, self.app.service
-        sysop = app.cfg.station.sysop_call
+        sysop = app.cfg.station.local_sysop
         if method == "GET":
             if parts == ["status"]:
                 return self._status()
@@ -555,7 +555,7 @@ class WebServer:
         else:
             rows = list(reversed(rows))                  # logbooks: oldest first
             body = connlog.to_adif(rows, st.mailbox_call, "TinyBox", VERSION, freq=st.freq,
-                                   locator=st.locator, operator=st.sysop_call)
+                                   locator=st.locator, operator=st.sysops[0])
             ctype = "text/plain; charset=us-ascii"
         fname = f"tinybox-connlog-{stamp}{('-' + call) if call else ''}{name[7:]}"
         self._send(writer, 200, body.encode("utf-8"), ctype,
@@ -625,7 +625,7 @@ class WebServer:
         return {
             "version": VERSION, "mailbox": cfg.station.mailbox_call,
             "update": self.app.update.status() if self.app.update is not None else None,
-            "sysop": cfg.station.sysop_call, "started": self.app.started,
+            "sysop": cfg.station.sysop_text, "started": self.app.started,
             "agw": "connected" if agw is not None and agw.connected.is_set()
                    else ("disconnected" if agw is not None else "not started"),
             "interface": cfg.radio.interface,

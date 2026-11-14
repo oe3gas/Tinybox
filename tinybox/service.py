@@ -54,7 +54,8 @@ class MessageService:
     # --- helpers --------------------------------------------------------
 
     def is_sysop_call(self, call: str) -> bool:
-        return base_call(call) == base_call(self.cfg.station.sysop_call)
+        base = base_call(call)
+        return any(base == base_call(s) for s in self.cfg.station.sysops)
 
     @staticmethod
     def _is_addressee(msg: Message, call: str) -> bool:
@@ -200,7 +201,7 @@ class MessageService:
         self._sysop_on_air_mail = now
         st = self.cfg.station
         try:
-            self.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
+            self.create(from_call=st.mailbox_call, to_call=st.sysop_mail_to, type="P",
                         subject=f"Sysop call {call} connected over the radio",
                         body=(f"{call} had a terminal session over {where} (ended "
                               f"{utc_now()[:16]} UTC).\n"
@@ -215,7 +216,7 @@ class MessageService:
         """CR93: a new client key waits for the sysop - he gets a personal mail."""
         st = self.cfg.station
         try:
-            self.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
+            self.create(from_call=st.mailbox_call, to_call=st.sysop_mail_to, type="P",
                         subject=f"Client key of {call} waits for release",
                         body=(f"{seen_as} logged in with the TinyBox client and a new key"
                               + (f" (device {device})" if device else "") + ".\n"
@@ -257,7 +258,7 @@ class MessageService:
             text = text[:max(room, 0)].decode("utf-8", "ignore") + "\n[... shortened]"
         else:
             text = msg.body
-        new_id = self.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
+        new_id = self.create(from_call=st.mailbox_call, to_call=st.sysop_mail_to, type="P",
                              subject=f"New rubric {name} offered by {partner}",
                              body=head + text, origin="sysop", sysop=True)
         log.warning("new rubric %s offered by %s: msg %d held, sysop mail %d",
@@ -271,7 +272,7 @@ class MessageService:
         Returns the normalized destination."""
         to_call = normalize_call(to_call)
         if type == "P" and to_call == "SYSOP":      # CR118: S SYSOP = the sysop of this box
-            to_call = base_call(self.cfg.station.sysop_call)
+            to_call = base_call(self.cfg.station.sysop_mail_to)
         if type == "P":
             if not is_valid_call(to_call):
                 raise ServiceError("invalid_call", to_call)

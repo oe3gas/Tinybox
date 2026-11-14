@@ -143,7 +143,7 @@ class ForwardModule:
                 self.release(msg.id)
                 released += 1
             elif state in ("refused", "system"):
-                svc.delete(msg.id, self.app.cfg.station.sysop_call, sysop=True)
+                svc.delete(msg.id, self.app.cfg.station.local_sysop, sysop=True)
                 deleted += 1
         if released or deleted:
             log.info("new rubrics decided by the sysop: %d bulletin(s) released, %d deleted",
@@ -213,7 +213,7 @@ class ForwardModule:
                     partner.call, result.error, len(reopened), len(held))
         st = self.app.cfg.station
         try:
-            svc.create(from_call=st.mailbox_call, to_call=st.sysop_call, type="P",
+            svc.create(from_call=st.mailbox_call, to_call=st.sysop_mail_to, type="P",
                        subject=f"Forward {partner.call}: two stations under one call?",
                        body=(f"During the forward session with {partner.radio_call} the call also "
                              f"sent: {seen}.\nThe real partner probably answered while another "

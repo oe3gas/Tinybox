@@ -43,7 +43,8 @@ class MailNotifier:
         send = self.app.service.chat.ui_send
         if send is None or call in self._waiting:
             return
-        wait = self._last.get(call, 0) + MIN_GAP_SEC - time.monotonic()
+        last = self._last.get(call)             # None = never: at once (monotonic() starts
+        wait = 0.0 if last is None else last + MIN_GAP_SEC - time.monotonic()   # near 0 at boot)
         if wait > 0:
             try:
                 loop = asyncio.get_running_loop()

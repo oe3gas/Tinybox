@@ -64,7 +64,7 @@ class SysopConsole:
         self.app = app
         self.filter = monitor_filter or MonitorFilter(app.cfg.console.monitor)
         self.transport = ConsoleTransport(write_fn or _stdout_write)
-        self.session = Session(app.cfg.station.sysop_call, app.service, app.cfg,
+        self.session = Session(app.cfg.station.local_sysop, app.service, app.cfg,
                                self.transport, origin="sysop", sysop=True, monitor=False)
 
     def out(self, *lines: str) -> None:
@@ -232,7 +232,7 @@ class SysopConsole:
             elif r["hub"] == "unreachable":
                 agw_state += ", kisshub status not available"
         values = dict(
-            version=VERSION, mailbox=cfg.station.mailbox_call, sysop=cfg.station.sysop_call,
+            version=VERSION, mailbox=cfg.station.mailbox_call, sysop=cfg.station.sysop_text,
             since=self.app.started[:16].replace("T", " ") + " UTC", agw=agw_state,
             users=len(self.app.registry), max_users=cfg.mailbox.max_users,
             msgs=len(msgs), private=sum(m.type == "P" for m in msgs),
@@ -350,7 +350,7 @@ class SysopConsole:
             if self.app.stop_event is not None:
                 self.app.stop_event.set()
             return
-        sec = timer.schedule(int(arg) if arg else 60, self.app.cfg.station.sysop_call)
+        sec = timer.schedule(int(arg) if arg else 60, self.app.cfg.station.local_sysop)
         self.out(texts.SHUTDOWN_SCHEDULED.format(sec=sec, n=users))
 
     def cmd_restart(self, arg: str) -> None:
@@ -378,7 +378,7 @@ class SysopConsole:
             if self.app.stop_event is not None:
                 self.app.stop_event.set()
             return
-        sec = timer.schedule(int(arg) if arg else 60, self.app.cfg.station.sysop_call,
+        sec = timer.schedule(int(arg) if arg else 60, self.app.cfg.station.local_sysop,
                              restart=True)
         self.out(texts.RESTART_SCHEDULED.format(sec=sec, n=users))
 
@@ -592,7 +592,7 @@ class SysopConsole:
         got = self._numbers_and_rubric(arg, texts.USAGE_MOVE if move else texts.USAGE_COPY)
         if got is None:
             return
-        svc, by = self.app.service, self.app.cfg.station.sysop_call
+        svc, by = self.app.service, self.app.cfg.station.local_sysop
         ids, rubric = got
         for msg_id in ids:
             try:
@@ -629,7 +629,7 @@ class SysopConsole:
         if not words or not all(isnum(w) for w in words) or len(words) > 20:
             self.out(texts.USAGE_KILL)
             return
-        svc, by = self.app.service, self.app.cfg.station.sysop_call
+        svc, by = self.app.service, self.app.cfg.station.local_sysop
         for msg_id in map(int, words):
             try:
                 svc.delete(msg_id, by, True)

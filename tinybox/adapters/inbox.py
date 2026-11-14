@@ -165,7 +165,7 @@ class Inbox:
         if b.valid_min:
             expires = (datetime.now(timezone.utc) + timedelta(minutes=b.valid_min)) \
                 .strftime("%Y-%m-%dT%H:%M:%SZ")
-        return svc.create(from_call=normalize_call(b.sender or cfg.station.sysop_call),
+        return svc.create(from_call=normalize_call(b.sender or cfg.station.local_sysop),
                           to_call=b.to, type="B", subject=b.subject, body=b.body,
                           origin="inbox", sysop=True, replace_key=b.replace, expires=expires,
                           brocast=b.brocast)

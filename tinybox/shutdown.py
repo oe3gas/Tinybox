@@ -60,7 +60,7 @@ class ShutdownTimer:
         if self.pending:
             self.task.cancel()
         self.restart = restart
-        self.by = by or self.app.cfg.station.sysop_call
+        self.by = by or self.app.cfg.station.local_sysop
         self.at = time.monotonic() + seconds
         self.app.service.shutdown_left = self.seconds_left
         log.warning("%s in %d s (by %s)", "restart" if restart else "shutdown", seconds, self.by)
