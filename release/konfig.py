@@ -25,6 +25,11 @@ CALL_RE = re.compile(r"^[A-Z0-9]{1,2}[0-9][A-Z0-9]{1,4}$")
 LOC_RE = re.compile(r"^[A-R]{2}[0-9]{2}([A-X]{2})?$", re.I)
 
 
+def _isnum(s: str) -> bool:
+    """ASCII digits only - isdigit() also accepts '²', int() then fails (CR88)."""
+    return s.isascii() and s.isdigit()
+
+
 # --- small dialog helpers ----------------------------------------------------
 
 def ask(text: str, default: str = "", check=None, hint: str = "") -> str:
@@ -53,7 +58,7 @@ def is_call(c: str) -> bool:
 
 def is_call_ssid(c: str) -> bool:
     base, _, ssid = c.upper().partition("-")
-    return is_call(base) and (not ssid or (ssid.isdigit() and 0 <= int(ssid) <= 15))
+    return is_call(base) and (not ssid or (_isnum(ssid) and 0 <= int(ssid) <= 15))
 
 
 def with_ssid(call: str, ssid: str) -> str:
@@ -195,7 +200,7 @@ def _pick(title: str, names: list[str]) -> str:
         print(f"    {i:2}  {n}")
     hint = next((i for i, n in enumerate(names)
                  if re.search(r"usb|codec|signalink|digirig", n, re.I)), 0)
-    return ask("Nummer", str(hint), lambda a: a.isdigit() and int(a) < len(names),
+    return ask("Nummer", str(hint), lambda a: _isnum(a) and int(a) < len(names),
                f"Eine Zahl von 0 bis {len(names) - 1}.")
 
 
@@ -226,7 +231,7 @@ def choose_ptt() -> str:
 
     def ok(a: str) -> bool:
         a = a.strip().upper()
-        return (a in ("C", "V") or (a.isdigit() and 1 <= int(a) <= len(ports))
+        return (a in ("C", "V") or (_isnum(a) and 1 <= int(a) <= len(ports))
                 or bool(re.fullmatch(r"COM\d+( -?(RTS|DTR))*", a)))
 
     a = ask("Auswahl", "V", ok, "Nummer, C, V oder z. B. COM5 RTS.").strip().upper()
@@ -236,7 +241,7 @@ def choose_ptt() -> str:
         return "CM108"
     if a.startswith("COM") and " " in a:
         return a
-    dev = ports[int(a) - 1][0] if a.isdigit() else a
+    dev = ports[int(a) - 1][0] if _isnum(a) else a
     line = ask(f"Leitung an {dev}: RTS oder DTR", "RTS", lambda x: x.upper() in ("RTS", "DTR"),
                "RTS oder DTR.").upper()
     return f"{dev} {line}"
@@ -272,7 +277,7 @@ def main() -> int:
         print()
         print("TinyBox")
         box_ssid = ask("SSID der Mailbox (1-15)", "1",
-                       lambda a: a.isdigit() and 1 <= int(a) <= 15, "Eine Zahl von 1 bis 15.")
+                       lambda a: _isnum(a) and 1 <= int(a) <= 15, "Eine Zahl von 1 bis 15.")
         box_call = with_ssid(call, box_ssid)
         if box_call == my:
             print(f"    Hinweis: Client und Mailbox duerfen nicht dasselbe Rufzeichen haben ({my}).")

@@ -74,9 +74,10 @@ NOISE_BULLETIN = {"typ": "text", "ti": "Messseite", "cat": ["tech"], "exp": 60,
 class ConfigTests(unittest.TestCase):
     def test_shipped_config_loads(self):
         from brocast import config
-        cfg = config.load(ROOT / "brocastd.conf")
+        # the template from the repo - brocastd.conf is PC-specific and never in the repo
+        cfg = config.load(ROOT / "brocastd.conf.example")
         self.assertEqual((cfg.mode, cfg.callsign, cfg.direwolf.port, cfg.listener.web_port),
-                         ("station", "OE3GAS-5", 8000, 7733))
+                         ("listener", "", 8000, 7733))
         self.assertEqual(cfg.direwolf.interface, "agw")
         self.assertEqual(cfg.station.repeat_minutes, [0, 2, 5, 10])
         self.assertEqual(cfg.station.token, "")
