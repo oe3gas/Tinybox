@@ -274,6 +274,67 @@ class JlogEntry:
     count: int
 
 
+def _columns(db: sqlite3.Connection, table: str) -> set[str]:
+    return {r["name"] for r in db.execute(f"PRAGMA table_info({table})")}
+
+
+def _add_columns(db: sqlite3.Connection, table: str, sql_type: str, *cols: str) -> None:
+    have = _columns(db, table)
+    for col in cols:
+        if col not in have:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {sql_type}")
+
+
+# --- migrations (Refactoring R12) ----------------------------------------------------
+# Each step brings an older database up to the version in front of it; the steps run
+# for every version above PRAGMA user_version, in order. They check before they
+# change, so a step that finds its work done does nothing (a fresh database: SCHEMA
+# has made everything, user_version is 0, the steps only fill sync_seq).
+
+def _m5(db: sqlite3.Connection) -> None:
+    """2: inbox folder; 3: brocast page; 5: forwarding fields (existing rows stay as
+    they are, BIDs are given by MessageService.assign_missing_bids)."""
+    _add_columns(db, "messages", "TEXT", "replace_key", "expires", "brocast", "bid")
+    _add_columns(db, "messages", "TEXT NOT NULL DEFAULT ''",
+                 "at_addr", "rlines", "fwd", "note", "bid_kind")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS messages_bid ON messages (bid)")
+
+
+def _m7(db: sqlite3.Connection) -> None:
+    """Change counter for the delta sync; old rows count as changed "at their number",
+    the counter starts above the highest number."""
+    _add_columns(db, "messages", "INTEGER NOT NULL DEFAULT 0", "seq", "cseq")
+    db.execute("UPDATE messages SET seq = id, cseq = id WHERE seq = 0")
+    db.execute("INSERT OR IGNORE INTO sync_seq (k, v) VALUES (1, "
+               "COALESCE((SELECT MAX(id) FROM messages), 0))")
+
+
+def _m10(db: sqlite3.Connection) -> None:
+    """Event number of a chat line (a quote "~^5" finds it in the history)."""
+    _add_columns(db, "chat_lines", "INTEGER", "seq")
+
+
+def _m11(db: sqlite3.Connection) -> None:
+    """Size of the proposal with the B1 restart data (CR89, TB-20a)."""
+    _add_columns(db, "fwd_partial", "INTEGER NOT NULL DEFAULT 0", "size")
+
+
+def _m14(db: sqlite3.Connection) -> None:
+    """One key per call became one key per device (OE3GAS, 10.11.2026)."""
+    if db.execute("SELECT 1 FROM sqlite_master WHERE name = 'user_keys'").fetchone():
+        db.execute("INSERT OR IGNORE INTO client_keys (call, pub, status, created, changed,"
+                   " note) SELECT call, pub, status, created, changed, note FROM user_keys")
+        db.execute("DROP TABLE user_keys")
+
+
+def _m17(db: sqlite3.Connection) -> None:
+    """LoTW confirmation of a key (CR113)."""
+    _add_columns(db, "client_keys", "TEXT NOT NULL DEFAULT ''", "lotw")
+
+
+MIGRATIONS = [(5, _m5), (7, _m7), (10, _m10), (11, _m11), (14, _m14), (17, _m17)]
+
+
 class Store:
     def __init__(self, db_path: Path | str) -> None:
         if str(db_path) != ":memory:":
@@ -281,43 +342,26 @@ class Store:
         self._db = sqlite3.connect(str(db_path))
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA foreign_keys = ON")
+        if str(db_path) != ":memory:":
+            # PLANUNG 11.9 / R12: as brocastd - a commit costs no fsync, readers do not
+            # wait for the writer; spares the eMMC of the NanoPi
+            self._db.execute("PRAGMA journal_mode = WAL")
+            self._db.execute("PRAGMA synchronous = NORMAL")
         self._db.executescript(SCHEMA)
-        # schema 1 -> 2: two columns for the inbox folder; 2 -> 3: brocast page;
-        # 4 -> 5: forwarding fields (existing rows stay as they are, BIDs are
-        # given by MessageService.assign_missing_bids)
-        cols = {r["name"] for r in self._db.execute("PRAGMA table_info(messages)")}
-        for col in ("replace_key", "expires", "brocast", "bid"):
-            if col not in cols:
-                self._db.execute(f"ALTER TABLE messages ADD COLUMN {col} TEXT")
-        for col in ("at_addr", "rlines", "fwd", "note", "bid_kind"):
-            if col not in cols:
-                self._db.execute(f"ALTER TABLE messages ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
-        self._db.execute("CREATE UNIQUE INDEX IF NOT EXISTS messages_bid ON messages (bid)")
-        # 10 -> 11: size of the proposal with the B1 restart data (CR89, TB-20a)
-        if "size" not in {r["name"] for r in self._db.execute("PRAGMA table_info(fwd_partial)")}:
-            self._db.execute("ALTER TABLE fwd_partial ADD COLUMN size INTEGER NOT NULL DEFAULT 0")
-        # 9 -> 10: event number of a chat line (a quote "~^5" finds it in the history)
-        if "seq" not in {r["name"] for r in self._db.execute("PRAGMA table_info(chat_lines)")}:
-            self._db.execute("ALTER TABLE chat_lines ADD COLUMN seq INTEGER")
-        # 6 -> 7: change counter for the delta sync; old rows count as changed "at
-        # their number", the counter starts above the highest number
-        for col in ("seq", "cseq"):
-            if col not in cols:
-                self._db.execute(f"ALTER TABLE messages ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
-        self._db.execute("UPDATE messages SET seq = id, cseq = id WHERE seq = 0")
-        self._db.execute("INSERT OR IGNORE INTO sync_seq (k, v) VALUES (1, "
-                         "COALESCE((SELECT MAX(id) FROM messages), 0))")
-        # 16 -> 17: LoTW confirmation of a key (CR113)
-        if "lotw" not in {r["name"] for r in self._db.execute("PRAGMA table_info(client_keys)")}:
-            self._db.execute("ALTER TABLE client_keys ADD COLUMN lotw TEXT NOT NULL DEFAULT ''")
-        # 13 -> 14: one key per call became one key per device (OE3GAS, 10.11.2026)
-        if self._db.execute("SELECT 1 FROM sqlite_master WHERE name = 'user_keys'").fetchone():
-            self._db.execute("INSERT OR IGNORE INTO client_keys (call, pub, status, created, changed,"
-                             " note) SELECT call, pub, status, created, changed, note FROM user_keys")
-            self._db.execute("DROP TABLE user_keys")
+        self.migrate()
         self._db.executescript(TRIGGERS)
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._db.commit()
+
+    def migrate(self) -> list[int]:
+        """Brings an older database up to SCHEMA_VERSION. Returns the steps that ran."""
+        have = self._db.execute("PRAGMA user_version").fetchone()[0]
+        ran = []
+        for version, step in MIGRATIONS:
+            if version > have:
+                step(self._db)
+                ran.append(version)
+        return ran
 
     def close(self) -> None:
         self._db.close()

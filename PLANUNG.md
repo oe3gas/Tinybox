@@ -515,7 +515,7 @@ Sitzungszustände: `COMMAND` → `SEND_SUBJECT` → `SEND_BODY` → `COMMAND`. W
 
    Bis zum Fix bleibt die brocastd-Datenbank auf dem eMMC. Das Sendeprotokoll legt die Produktionsversion in den RAM (`/run/tinybox`).
 
-   Offen bleibt nur der letzte Vorschlag: PRAGMAs für die TinyBox-Datenbank (niedrige Priorität).
+   PRAGMAs für die TinyBox-Datenbank: ✅ umgesetzt 15.11.2026 (Refactoring R12, Abschnitt 17.3).
 
 ---
 
@@ -1446,6 +1446,14 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   zeichengleich (nur verteilt), Laden und erstes Rendern gegen einen echten Client in jsdom ohne
   Fehler. Die Node-Tests lesen die Teile über `tests/fixtures/appsrc.js`.
   Offen (nicht gemacht): gemeinsame Teile der Box- und Client-GUI (Monitorzeile, Rufzeichenfarbe).
+
+**Etappe 4 – Stand:**
+- R12 Migrationen und WAL ✅ (15.11.): `tinybox/store.py` – Liste `MIGRATIONS` (Version → Schritt),
+  gesteuert über `PRAGMA user_version`; jeder Schritt prüft vor dem Ändern (ein falsch gesetzter
+  Stand schadet nicht). Neue Schema-Änderung = neuer Schritt + `SCHEMA_VERSION` hoch. Die
+  TinyBox-Datenbank läuft jetzt wie brocastd mit `journal_mode=WAL`, `synchronous=NORMAL`
+  (Punkt 9 / 11.9 erledigt). Neben `tinybox.db` liegen dann `tinybox.db-wal` und `-shm` – sie
+  gehören dazu (beim Sichern bei gestoppter Box kopieren oder `VACUUM INTO`).
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 
