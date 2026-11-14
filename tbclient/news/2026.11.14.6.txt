@@ -1,1 +1,2 @@
-- Intern: Client-Code aufgeteilt (Login, Board, Spiele), keine neuen Funktionen.
+- Intern: Client-Code aufgeteilt (Login, Board, Spiele).
+- Neu: Logdatei pro Tag in data/tbclient/logs (fuer die Fehlersuche).

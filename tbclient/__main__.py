@@ -8,7 +8,8 @@ import logging
 import socket
 import sys
 
-from prcore import auth, release, termcolor
+from prcore import auth, dailylog, release, termcolor
+from prcore.text import visible
 
 from . import VERSION, config
 from .console import Console
@@ -16,6 +17,34 @@ from .core import ClientCore
 from .web import WebServer
 
 TAG = "[tbcli]"
+LOG_KEEP_DAYS = 14
+LOG_LEGEND = ("# TBClient log - time with ms | level D I W E | logger | message",)
+
+
+class FileFormatter(logging.Formatter):
+    """One line per record, control characters made visible (as TinyBox, CR95)."""
+
+    def __init__(self) -> None:
+        super().__init__("%(asctime)s.%(msecs)03d %(levelname).1s %(name)-16s %(message)s",
+                         "%Y-%m-%d %H:%M:%S")
+
+    def format(self, record: logging.LogRecord) -> str:
+        return visible(super().format(record))
+
+
+def file_log(cfg, debug: bool) -> dailylog.DailyFileHandler | None:
+    """R13: a log file per day in <data_dir>/logs - for finding errors after a
+    radio test. None if the folder cannot be made."""
+    try:
+        logs = cfg.data_dir / "logs"
+        logs.mkdir(parents=True, exist_ok=True)
+        h = dailylog.DailyFileHandler(logs, LOG_KEEP_DAYS, prefix="tbclient-",
+                                      legend=LOG_LEGEND)
+    except OSError:
+        return None
+    h.setFormatter(FileFormatter())
+    h.setLevel(logging.DEBUG if debug else logging.INFO)
+    return h
 
 
 def main() -> int:
@@ -36,7 +65,12 @@ def main() -> int:
     if cfg is None:
         log.error("Config error: %s", error)
         return 1
+    fh = file_log(cfg, args.verbose)
+    if fh is not None:
+        root.addHandler(fh)
     start_block(log, cfg)
+    if fh is not None:
+        log.info("log file %s", fh.path)
 
     async def run() -> None:
         core = ClientCore(cfg)

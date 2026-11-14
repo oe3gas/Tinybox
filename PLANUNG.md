@@ -1436,6 +1436,9 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   arbeiten weiter auf dem Zustand des Cores. Öffentliche Schnittstelle für die Hilfsmodule:
   `changed()` (war `_touch`), `save_settings()`, `send_line()` (war `_send`).
   Dazu das Umleitungsmodul `tbclient/filecheck.py` entfernt (alle nutzen `prcore.filecheck`).
+- R13 Client-Logdatei ✅ (14.11.): `prcore/dailylog.py` – die Tagesdatei (vorher nur in
+  `tinybox/logsetup.py`) für Box und Client. Der Client schreibt `data/tbclient/logs/
+  tbclient-<Datum>.log`, 14 Tage, INFO (mit `-v` DEBUG); `logging_manual.md` Abschnitt 2.
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 

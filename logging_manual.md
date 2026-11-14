@@ -58,6 +58,12 @@ Andere Dateien im Ordner bleiben unberührt – gelöscht wird nur `tinybox-*.lo
 Logfiles gehören **nie ins Repo** (`.gitignore`). Sie müssen also aktiv
 weitergegeben werden, siehe Abschnitt 5.
 
+**Der Client (TBClient)** schreibt ebenfalls eine Datei pro Tag (Refactoring R13, 14.11.2026):
+`data\tbclient\logs\tbclient-2026-11-15.log` (Ordner `logs` im `data_dir` aus `tbclient.conf`),
+14 Tage aufgehoben, Stufe INFO – mit `tbclient.bat -v` auch DEBUG. Beim Start nennt der Client
+den Pfad in der Konsole. Für einen Funktest: die Datei von PC1 zusammen mit der TinyBox-Datei
+weitergeben.
+
 ---
 
 ## 3. Eine Zeile lesen
