@@ -514,14 +514,15 @@ def schreibe_tinybox(ordner: Path, dateiname: str, kopf: dict, text: str) -> Pat
     return ziel
 
 
-def protokoll(datei: str | None, text: str) -> None:
-    """Fehler/Ereignisse auch in eine Datei schreiben (fuer Laeufe ohne Konsole)."""
+def protokoll(datei: str | None, text: str, quelle: str = "geosphere_station") -> None:
+    """Fehler/Ereignisse auch in eine Datei schreiben (fuer Laeufe ohne Konsole).
+    Auch fuer geosphere_prognose.py und geosphere_warnungen.py (quelle = ihr Name)."""
     if not datei:
         return
     try:
         Path(datei).parent.mkdir(parents=True, exist_ok=True)
         with open(datei, "a", encoding="utf-8") as fh:
-            fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} geosphere_station: {text}\n")
+            fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {quelle}: {text}\n")
     except OSError:
         pass
 

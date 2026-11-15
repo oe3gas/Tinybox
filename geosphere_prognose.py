@@ -307,14 +307,7 @@ def als_json(loc: str, d: dict, zeilen: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 def protokoll(datei: str | None, text: str) -> None:
-    if not datei:
-        return
-    try:
-        Path(datei).parent.mkdir(parents=True, exist_ok=True)
-        with open(datei, "a", encoding="utf-8") as fh:
-            fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} geosphere_prognose: {text}\n")
-    except OSError:
-        pass
+    gs.protokoll(datei, text, "geosphere_prognose")
 
 
 def bulletin(loc: str, d: dict, zeilen: list[dict], args) -> Path:

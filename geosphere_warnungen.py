@@ -27,8 +27,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import ssl
 import sys
 import time
 import urllib.error
@@ -36,6 +34,9 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+
+import geosphere_station as gs        # TLS-Kontext, Bulletin-Datei, Protokoll (R17)
+from geosphere_station import SSL_PRUEFEN, TLS_HINWEIS, schreibe_tinybox, ssl_kontext, tls_fehler  # noqa: F401
 
 API_URL = "https://warnungen.zamg.at/wsapp/api/getWarningsForCoords"
 
@@ -60,42 +61,6 @@ def hole_warnungen(lat: float, lon: float, lang: str = "de", timeout: int = 20) 
     with urllib.request.urlopen(req, timeout=timeout, context=ssl_kontext()) as resp:
         return json.load(resp)
 
-
-# Zertifikatspruefung ein (Entscheidung OE3GAS, 20.10.2026): die Daten gehen ueber
-# Funk weiter, Warnungen sogar als Warnseite, die jeder Listener anzeigt - die Quelle
-# muss daher echt sein. Vorher (03.10.2026) aus wegen fehlender Stammzertifikate unter
-# Windows. Dafuer: ist das Paket "truststore" installiert (py -3 -m pip install
-# truststore), prueft Windows selbst und laedt fehlende Stammzertifikate nach; sonst
-# certifi, falls vorhanden; sonst der Zertifikatsspeicher des Systems.
-SSL_PRUEFEN = True
-
-
-def ssl_kontext() -> ssl.SSLContext:
-    if not SSL_PRUEFEN:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
-    try:
-        import truststore
-        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    except ImportError:
-        pass
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except ImportError:
-        return ssl.create_default_context()
-
-
-TLS_HINWEIS = ("Zertifikat nicht pruefbar - unter Windows hilft meist: "
-               "py -3 -m pip install truststore")
-
-
-def tls_fehler(e: BaseException) -> bool:
-    """True, wenn ein Abruf an der Zertifikatspruefung gescheitert ist."""
-    grund = getattr(e, "reason", e)
-    return isinstance(grund, ssl.SSLCertVerificationError) or isinstance(e, ssl.SSLCertVerificationError)
 
 
 def ts(epoch) -> str:
@@ -145,26 +110,8 @@ TINYBOX_STATE = Path(__file__).with_name(".geosphere_warnungen_tinybox.json")
 ENTWARNUNG_GUELTIG = "3h"
 
 
-def schreibe_tinybox(ordner: Path, dateiname: str, kopf: dict, text: str) -> Path:
-    """Bulletin-Datei fuer den TinyBox-Eingangsordner: erst .tmp, dann umbenennen."""
-    ordner.mkdir(parents=True, exist_ok=True)
-    inhalt = "".join(f"{k}: {v}\n" for k, v in kopf.items()) + "\n" + text.rstrip() + "\n"
-    tmp = ordner / (dateiname + ".tmp")
-    tmp.write_text(inhalt, encoding="utf-8")
-    ziel = ordner / (dateiname + ".txt")
-    os.replace(tmp, ziel)
-    return ziel
-
-
 def protokoll(datei: str | None, text: str) -> None:
-    if not datei:
-        return
-    try:
-        Path(datei).parent.mkdir(parents=True, exist_ok=True)
-        with open(datei, "a", encoding="utf-8") as fh:
-            fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} geosphere_warnungen: {text}\n")
-    except OSError:
-        pass
+    gs.protokoll(datei, text, "geosphere_warnungen")
 
 
 def tinybox_bulletin(warnungen: list[dict], ort: str, args) -> dict | None:

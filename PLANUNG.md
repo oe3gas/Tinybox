@@ -1471,6 +1471,14 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   ohnehin berührt (z. B. CR125 `[station]`, CR129 `[games]`). Danach kann der Installer
   (`release/konfig.py`) die Beschreibung mitnutzen.
 
+**Etappe 5 – Stand:**
+- R17 GeoSphere ✅ (15.11.): `geosphere_warnungen.py` und `geosphere_prognose.py` nehmen
+  TLS-Kontext, Zertifikatsfehler-Erkennung, Bulletin-Datei und Protokoll aus
+  `geosphere_station.py` (wie `geosphere_prognose.py` schon zum Teil) – keine Kopien mehr.
+  `geosphere_prognose.py` ist importierbar (`import geosphere_prognose`); für CR72 holt die Box
+  die Prognose damit, der Befehl bleibt optional, weil das Release-Paket `geosphere_*` nicht
+  enthält.
+
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 
 Anlass: Die Wetterseite trug bei jeder Aussendung den Text „GeoSphere Austria, TAWES
