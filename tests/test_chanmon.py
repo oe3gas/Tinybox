@@ -110,6 +110,15 @@ class HubStatusTests(HubTestBase):
         self.assertIn(b"404", await r.read(1000))
         w.close()
 
+    async def test_foreign_host_is_refused(self):
+        """R8: DNS rebinding - a page of another site must not read the status."""
+        await self.start_hub(FakePK232("cmd"))
+        for host, code in ((b"evil.example.com:8102", b"403"), (b"127.0.0.1:8102", b"200")):
+            r, w = await asyncio.open_connection("127.0.0.1", self.hub.status_port)
+            w.write(b"GET /status HTTP/1.0\r\nHost: " + host + b"\r\n\r\n")
+            self.assertIn(code, (await r.read(4000)).split(b"\r\n", 1)[0])
+            w.close()
+
 
 class TinyBoxReadsHubTests(HubTestBase):
     profile = fast(example_profile("pk232"))

@@ -73,9 +73,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from prcore import connlog                 # CSV and ADIF of the connection log (CR44)
+from prcore import webguard                # CR100: who may use the web GUI
 from prcore.text import isnum
 
-from . import VERSION, peerfile, webguard
+from . import VERSION, peerfile
 from .core import ClientCore
 
 log = logging.getLogger(__name__)

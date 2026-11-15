@@ -1,4 +1,4 @@
-"""Who may use the web GUI (CR100).
+"""Who may use a web GUI (CR100) - the client's, and the kisshub status query (R8).
 
 No login - devices in the own network are trusted (PLANUNG 29.6, AR3). What
 is checked instead:

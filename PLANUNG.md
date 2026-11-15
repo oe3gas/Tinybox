@@ -1478,6 +1478,13 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   `geosphere_prognose.py` ist importierbar (`import geosphere_prognose`); für CR72 holt die Box
   die Prognose damit, der Befehl bleibt optional, weil das Release-Paket `geosphere_*` nicht
   enthält.
+- R8 HTTP-Schutz ✅ teilweise (15.11.): `webguard` (Host-/Origin-Prüfung gegen DNS-Rebinding,
+  CR100) liegt jetzt in `prcore/webguard.py`; der kisshub-Status (`GET /status`) prüft damit den
+  Host-Header (403 für fremde Namen) – Sofort-Fund aus der Analyse erledigt. Die TinyBox-Web-GUI
+  behält ihre strengere Regel (nur Loopback, Host exakt mit Port). **Nicht gemacht:** ein
+  gemeinsamer Mini-HTTP-Server für TinyBox, Client und kisshub – die drei sind verschieden genug
+  (Long-Poll, SSE-Feed, Uploads, 1-Zeilen-Status), dass ein gemeinsamer Unterbau erst lohnt, wenn
+  ein CR einen davon ohnehin umbaut (CR67 `/events`).
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 

@@ -7,7 +7,7 @@ import dataclasses
 import tempfile
 import unittest
 
-from tbclient import webguard as g
+from prcore import webguard as g
 from tbclient.core import ClientCore
 from tbclient.web import WebServer
 from tests.test_tbclient import client_cfg

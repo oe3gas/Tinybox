@@ -41,7 +41,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from prcore import kiss
+from prcore import kiss, webguard
 from prcore.ax25.frame import addresses_valid
 from prcore.termcolor import OK
 
@@ -395,8 +395,13 @@ class Hub:
         """Tiny HTTP: GET /status -> JSON. Loopback only, nothing can be changed."""
         try:
             head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 5)
-            line = head.split(b"\r\n", 1)[0].split()
-            if len(line) >= 2 and line[0] == b"GET" and line[1] in (b"/status", b"/"):
+            lines = head.decode("latin-1").split("\r\n")
+            line = lines[0].encode("latin-1").split()
+            host = next((v.strip() for k, _, v in (h.partition(":") for h in lines[1:])
+                         if k.strip().lower() == "host"), None)
+            if not webguard.host_allowed(host):          # DNS rebinding (R8, as CR100)
+                writer.write(b"HTTP/1.0 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+            elif len(line) >= 2 and line[0] == b"GET" and line[1] in (b"/status", b"/"):
                 body = json.dumps(self.status_dict()).encode()
                 writer.write(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n"
                              b"Cache-Control: no-store\r\nContent-Length: "

@@ -6,12 +6,11 @@ import configparser
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from prcore.conf import ConfigError     # one error class for all programs (R7)
-from prcore import release, termcolor
+from prcore import release, termcolor, webguard
 from prcore.ax25.link import parse_calls
 from prcore.calls import AX25_CALL_RE
+from prcore.conf import ConfigError     # one error class for all programs (R7)
 
-from . import webguard
 
 MAX_CHANNELS_LIMIT = 10              # upper bound of [tinybox] max_channels
 
