@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- **Installation: Direwolf oder KISS:** Der Konfigurationsdialog (`release/konfig.py`) fragt die
+  Funkanbindung – Direwolf (Soundkarte, AGW) oder KISS über kisshub. Bei KISS listet er die TNC-Profile
+  aus `kisshub.conf.example`, der Anwender wählt seinen TNC und die COM-Schnittstelle; daraus entstehen
+  `kisshub.conf` und `interface = kiss` in tbclient/tinybox/brocastd.conf. Das Startmenü startet dann
+  kisshub statt Direwolf mit (`tbstart.conf`: `kisshub = yes`).
+- **kisshub: Profil `dr-635`** (Alinco DR-635 mit EJ-50U), Init `KISS ON`.
+
 - **Prefix raten (CR123, PLANUNG 31):** Spiel im Chatboard – die Box nennt ein fiktives Rufzeichen, die
   Spieler tippen die DXCC-Entität (A/B/C), 30 s je Call. Start mit Stufe, IARU-Regionen und Anzahl der Calls,
   Anmeldung („mit“), Zuschauer, Tipps nur an die Box. Spielliste `prcore/prefixraten.csv` (306 Entitäten).

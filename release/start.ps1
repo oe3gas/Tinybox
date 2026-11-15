@@ -3,7 +3,8 @@
 #   TinyBox-Start.bat 4        no menu: update and start choice 4 (for autostart)
 # Choices: 1 client only, 2 client + TinyBox, 3 client + brocast listener, 4 all three.
 # Before the start "git pull" fetches the newest version from GitHub; offline the
-# installed version starts. Direwolf is started first if tbstart.conf says so.
+# installed version starts. Direwolf or kisshub (KISS TNC) is started first if
+# tbstart.conf says so (direwolf = yes / kisshub = yes, written by release/konfig.py).
 param([string]$Wahl = '', [switch]$NoPull)
 
 $ErrorActionPreference = 'Continue'
@@ -92,6 +93,7 @@ while ($true) {
         Say '   P  Python-Pakete neu installieren'
         Say '   Q  Beenden'
         if ($cfg['direwolf'] -eq 'yes') { Say '   (Direwolf wird automatisch mitgestartet)' DarkGray }
+        if ($cfg['kisshub'] -eq 'yes') { Say ('   (kisshub wird automatisch mitgestartet, TNC ' + $cfg['kisshub_profile'] + ')') DarkGray }
         $d = if ($cfg['tinybox'] -eq 'yes' -and $cfg['brocast'] -eq 'yes') { '4' }
              elseif ($cfg['tinybox'] -eq 'yes') { '2' } elseif ($cfg['brocast'] -eq 'yes') { '3' } else { '1' }
         $Wahl = Read-Host "Auswahl [$d]"
@@ -110,6 +112,7 @@ $bro = $Wahl -in '3', '4'
 
 # --- configuration present? -----------------------------------------------------
 $need = @('tbclient.conf')
+if ($cfg['kisshub'] -eq 'yes') { $need += 'kisshub.conf' }
 if ($box) { $need += 'tinybox.conf' }
 if ($bro) { $need += 'brocast\brocastd.conf' }
 $missing = @($need | Where-Object { -not (Test-Path (Join-Path $root $_)) })
@@ -161,6 +164,15 @@ if ($cfg['direwolf'] -eq 'yes') {
         Say '  Starte Direwolf ...' Green
         Start-Process $exe -ArgumentList '-c', 'direwolf.conf' -WorkingDirectory $dwDir
         Start-Sleep -Seconds 8        # until the AGW and KISS ports are open
+    }
+}
+
+# --- kisshub (KISS TNC, instead of Direwolf) -------------------------------------
+if ($cfg['kisshub'] -eq 'yes') {
+    if (Is-Running 'kisshub') { Say '  kisshub laeuft schon.' Yellow }
+    else {
+        Start-Bat 'kisshub' ('kisshub (TNC ' + $cfg['kisshub_profile'] + ')') $root 'kisshub.bat'
+        Start-Sleep -Seconds 6        # until the TNC is in KISS and port 8101 is open
     }
 }
 

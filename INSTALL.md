@@ -20,8 +20,17 @@ Entwicklungswerkzeuge (Tests, Simulatoren, Planungsunterlagen).
 ### Konfigurationsdialog
 
 `release\konfig.py` fragt Rufzeichen, Locator, QTH, was auf dem PC laufen soll (TinyBox ja/nein,
-brocast-Listener ja/nein), die SSIDs von Client und Mailbox und den Direwolf. Für Direwolf
-listet er die Soundkarten (Eingang und Ausgang getrennt, mit den Windows-Nummern, die Direwolf
+brocast-Listener ja/nein), die SSIDs von Client und Mailbox und die **Funkanbindung**:
+
+1. **Direwolf** – Soundkarten-Modem (Interface wie SignaLink, Digirig), AGW,
+2. **KISS** – TNC oder Funkgerät mit eingebautem TNC, VARA (über `kisshub`).
+
+Bei **KISS** zeigt der Dialog die TNC-Profile aus `kisshub.conf.example` (PK-232, TM-D710,
+DR-635, TNC7multi, TH-D74/75, TNC2, VARA FM/HF …); der Anwender wählt seinen TNC und dann die
+COM-Schnittstelle und die Baudrate PC ↔ TNC (bei VARA den Rechner, auf dem VARA läuft). modem73
+steht nur in der Liste, wenn `modem73.exe` im Installationsordner liegt.
+
+Für Direwolf listet er die Soundkarten (Eingang und Ausgang getrennt, mit den Windows-Nummern, die Direwolf
 in `ADEVICE` erwartet) und die COM-Schnittstellen für die PTT (RTS/DTR) zur Auswahl; dazu CM108
 und VOX. Außerdem fragt er 1200 oder 9600 Bd. Daraus entstehen aus den `*.conf.example`:
 
@@ -30,12 +39,17 @@ und VOX. Außerdem fragt er 1200 oder 9600 Bd. Daraus entstehen aus den `*.conf.
 | `tbclient.conf` | Rufzeichen, Locator, Ziel-TinyBox, AGW über Direwolf |
 | `tinybox.conf` | Mailbox-Rufzeichen (Rufzeichen + SSID), Sysop, QTH, Frequenz, Locator; `[brocast] publish = no` |
 | `brocast\brocastd.conf` | `mode = listener` |
-| `direwolf\direwolf.conf` | ADEVICE, MODEM, PTT, MYCALL, AGWPORT 8000, KISSPORT 8001 |
-| `tbstart.conf` | Einstellungen des Startmenüs (Direwolf mitstarten, Pfad) |
+| `direwolf\direwolf.conf` | nur bei Direwolf: ADEVICE, MODEM, PTT, MYCALL, AGWPORT 8000, KISSPORT 8001 |
+| `kisshub.conf` | nur bei KISS: `[kisshub] profile` = gewählter TNC, in dessen Abschnitt `device` und `serial_baud` (VARA: `host`) |
+| `tbstart.conf` | Einstellungen des Startmenüs (Direwolf oder kisshub mitstarten, Pfad, TNC-Profil) |
+
+Bei KISS stellt der Dialog in `tbclient.conf`, `tinybox.conf` und `brocastd.conf`
+`[radio] interface = kiss` und `[kiss] port` auf den Port von kisshub (8101), sonst
+`interface = agw`.
 
 Geändert werden nur die gefragten Werte, alle Kommentare der Vorlagen bleiben. Eine vorhandene
-Datei wird nur nach Rückfrage ersetzt. Alles Weitere (Chat-Boards, Bake, Rubriken, KISS statt
-Direwolf …) direkt in den `.conf`-Dateien – siehe MANUAL.md. Der Dialog lässt sich jederzeit im
+Datei wird nur nach Rückfrage ersetzt. Alles Weitere (Chat-Boards, Bake, Rubriken,
+Funkwerte des TNC …) direkt in den `.conf`-Dateien – siehe MANUAL.md. Der Dialog lässt sich jederzeit im
 Startmenü mit **K** wiederholen.
 
 ## Starten und aktualisieren
@@ -50,8 +64,8 @@ Startmenü mit **K** wiederholen.
 | 4 | alle drei |
 
 Nach der Wahl holt das Startmenü mit `git pull` den neuesten Stand von GitHub, zeigt die
-Neuerungen und startet dann Direwolf (falls in `tbstart.conf` eingeschaltet und noch nicht
-laufend), danach die gewählten Programme, jedes in einem eigenen Fenster. TinyBox und brocast
+Neuerungen und startet dann Direwolf bzw. kisshub (falls in `tbstart.conf` eingeschaltet und
+noch nicht laufend), danach die gewählten Programme, jedes in einem eigenen Fenster. TinyBox und brocast
 laufen im Dauerbetrieb (Neustart nach Absturz). Der Browser öffnet den Client unter
 http://127.0.0.1:7744/ (brocast-Listener: http://127.0.0.1:7733/).
 

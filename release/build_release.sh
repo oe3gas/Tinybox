@@ -51,7 +51,7 @@ printf '%s\r\n' \
   "TinyBox - Installation unter Windows 10/11" "" \
   "1. Diese ZIP-Datei ganz entpacken (Rechtsklick - Alle extrahieren)." \
   "2. Im entpackten Ordner install.bat doppelklicken." \
-  "3. Fragen beantworten (Ordner, Rufzeichen, Direwolf ...)." \
+  "3. Fragen beantworten (Ordner, Rufzeichen, Direwolf oder KISS-TNC ...)." \
   "4. Starten mit TinyBox-Start.bat im Installationsordner oder der Desktop-Verknuepfung." "" \
   "Git und Python werden bei Bedarf automatisch installiert (winget)." \
   "Updates holt das Startmenue bei jedem Start selbst von GitHub (git pull)." \

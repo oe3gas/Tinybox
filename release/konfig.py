@@ -4,7 +4,9 @@
 
 Asks a few questions and writes from the *.conf.example templates:
     tbclient.conf, tinybox.conf, brocast/brocastd.conf (listener),
-    direwolf/direwolf.conf and tbstart.conf (settings of the start menu).
+    direwolf/direwolf.conf or kisshub.conf, and tbstart.conf (settings of the start menu).
+The radio is either Direwolf (sound card modem, AGW) or a KISS TNC through kisshub:
+for KISS the dialog lists the TNC sections of kisshub.conf.example, the user picks his.
 Only the asked keys are changed, all comments of the templates stay.
 An existing file is only replaced after asking. Everything else (chat boards,
 rubrics, beacon ...) is set later by hand in the .conf files - see MANUAL.md.
@@ -20,6 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DW_DIR = ROOT / "direwolf"
 START_CONF = ROOT / "tbstart.conf"
+KISS_EXAMPLE = ROOT / "kisshub.conf.example"
+KISS_CONF = ROOT / "kisshub.conf"
 
 CALL_RE = re.compile(r"^[A-Z0-9]{1,2}[0-9][A-Z0-9]{1,4}$")
 LOC_RE = re.compile(r"^[A-R]{2}[0-9]{2}([A-X]{2})?$", re.I)
@@ -247,6 +251,92 @@ def choose_ptt() -> str:
     return f"{dev} {line}"
 
 
+# --- KISS: TNC profiles of kisshub ---------------------------------------------
+
+def kiss_profiles() -> list[tuple[str, dict[str, str]]]:
+    """(name, keys) of every TNC section in kisshub.conf.example, 'base' resolved -
+    the same reading as kisshub -l. Direwolf sections are left out: Direwolf is the
+    other choice of this dialog (AGW). modem73 only if its exe is there (it is not in
+    the repo, so not in the release package)."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from kisshub import profiles as kp
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+    cp.read(KISS_EXAMPLE, encoding="utf-8")
+    out = []
+    for name in kp.names(cp):
+        keys = kp.merged(cp, name)
+        typ = keys.get("type", "").strip()
+        if typ == "direwolf":
+            continue
+        if typ == "modem73" and not (ROOT / keys.get("exe", "modem73.exe").strip()).is_file():
+            continue
+        out.append((name, {k: v.strip() for k, v in keys.items()}))
+    return out
+
+
+def kiss_port() -> str:
+    """kisshub's KISS-TCP port ([server] port) - what TinyBox, client and brocast use."""
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+    cp.read(KISS_EXAMPLE, encoding="utf-8")
+    return cp.get("server", "port", fallback="8101").strip() or "8101"
+
+
+def choose_com(default: str) -> str:
+    """A COM port from the list, a number of the list or typed in (COM7, /dev/ttyUSB0)."""
+    ports = com_ports()
+    print("  Serielle Schnittstelle (PC <-> TNC):")
+    for i, (dev, desc) in enumerate(ports, 1):
+        print(f"    {i:2}  {dev:7} {desc}")
+    if not ports:
+        print("        (keine COM-Schnittstelle gefunden - direkt eingeben, z. B. COM7)")
+    if ports and default not in [p[0] for p in ports]:
+        default = ports[0][0]
+
+    def ok(a: str) -> bool:
+        a = a.strip()
+        return ((_isnum(a) and 1 <= int(a) <= len(ports)) or bool(re.fullmatch(r"(?i)COM\d+", a))
+                or a.startswith("/dev/"))
+
+    a = ask("Schnittstelle", default, ok, "Nummer aus der Liste oder z. B. COM7.").strip()
+    return ports[int(a) - 1][0] if _isnum(a) else (a.upper() if a.upper().startswith("COM") else a)
+
+
+def choose_kiss(call: str) -> tuple[str, dict[str, str]] | None:
+    """(profile name, keys to set in its section) - None if kisshub.conf.example cannot be read."""
+    try:
+        profs = kiss_profiles()
+    except Exception as exc:              # noqa: BLE001 - the dialog must go on
+        print(f"  kisshub.conf.example konnte nicht gelesen werden: {exc}")
+        return None
+    if not profs:
+        print("  In kisshub.conf.example ist kein TNC-Profil.")
+        return None
+    print("  TNC-Profile (kisshub.conf.example):")
+    for i, (name, k) in enumerate(profs, 1):
+        print(f"    {i:2}  {name:14} {k.get('notes', '')}")
+    a = ask("Nummer deines TNC", "1", lambda a: _isnum(a) and 1 <= int(a) <= len(profs),
+            f"Eine Zahl von 1 bis {len(profs)}.")
+    name, k = profs[int(a) - 1]
+    print(f"    gewaehlt: {name} ({k.get('display', name)})")
+    if k.get("hint"):
+        print(f"    Hinweis: {k['hint']}")
+    values: dict[str, str] = {}
+    typ = k.get("type", "tnc")
+    if k.get("transport", "serial") == "serial":
+        values["device"] = choose_com(k.get("device", ""))
+        values["serial_baud"] = ask("Baudrate PC <-> TNC", k.get("serial_baud", "9600"), _isnum,
+                                    "Eine Zahl, z. B. 9600.")
+    elif typ == "vara":
+        values["host"] = ask("Rechner, auf dem VARA laeuft", k.get("host", "127.0.0.1"),
+                             lambda a: bool(a) and " " not in a, "IP-Adresse oder Name.")
+    if typ == "modem73":
+        values["callsign"] = call
+        print("  PTT fuer modem73:")
+        values["com_port"] = choose_com(k.get("com_port", ""))
+    return name, values
+
+
 # --- the dialog -------------------------------------------------------------
 
 def main() -> int:
@@ -291,63 +381,86 @@ def main() -> int:
                          "Zum Beispiel OE3XYZ-1.").upper()
 
     print()
-    print("Direwolf (Modem fuer die Soundkarte)")
-    print(f"  Mitgeliefert: {DW_DIR / 'direwolf-tinybox.exe'}")
-    start_dw = yes("Direwolf beim Start automatisch mitstarten?", True)
-    dw_dir = DW_DIR
+    print("Funkanbindung")
+    print("   1  Direwolf - Soundkarten-Modem (Interface wie SignaLink, Digirig ...)")
+    print("   2  KISS - TNC oder Funkgeraet mit eingebautem TNC, VARA, modem73 (ueber kisshub)")
+    mode = ask("Auswahl", "1", lambda a: a in ("1", "2"), "1 oder 2.")
+    kiss = None
+    if mode == "2":
+        print()
+        print("KISS-TNC (kisshub)")
+        kiss = choose_kiss(call)
+        if kiss is None:
+            print("    -> weiter mit Direwolf.")
+            mode = "1"
+    start_dw = False
+    dw_dir: Path | None = None
     dw_exe = "direwolf-tinybox.exe"
-    if start_dw:
-        if not yes("Mitgelieferten Direwolf verwenden?", True):
-            dw_dir = Path(ask("Ordner deines Direwolf", r"C:\direwolf",
-                              lambda a: Path(a).is_dir(), "Ordner gibt es nicht."))
-            dw_exe = ask("Programmdatei darin", "direwolf.exe",
-                         lambda a: (dw_dir / a).is_file(), "Datei gibt es dort nicht.")
-        dwc = dw_dir / "direwolf.conf"
-        if not dwc.exists() or yes(f"{dwc} gibt es schon - neu erstellen?", False):
-            adev, adev_note = choose_audio()
-            baud = ask("Baudrate (1200 oder 9600)", "1200", lambda a: a in ("1200", "9600"),
-                       "1200 oder 9600.")
-            ptt = choose_ptt()
-            dw_dir.mkdir(parents=True, exist_ok=True)
-            dwc.write_text(direwolf_conf(call, adev, baud, ptt, adev_note), encoding="utf-8")
-            print(f"    geschrieben: {dwc}")
-    else:
-        own = ask("Ordner der direwolf.conf deines eigenen Direwolf (leer = keiner)", "",
-                  lambda a: not a or (Path(a) / "direwolf.conf").is_file(),
-                  "Dort liegt keine direwolf.conf.")
-        dw_dir = Path(own) if own else None
-    # CR70: the programs read AGWPORT, MODEM, PACLEN ... from direwolf.conf
     agw = {"channel": "0"}
-    if dw_dir and (dw_dir / "direwolf.conf").is_file():
-        agw["direwolf_conf"] = str(dw_dir)
+    if mode == "1":
+        print()
+        print("Direwolf (Modem fuer die Soundkarte)")
+        print(f"  Mitgeliefert: {DW_DIR / 'direwolf-tinybox.exe'}")
+        start_dw = yes("Direwolf beim Start automatisch mitstarten?", True)
+        dw_dir = DW_DIR
+        dw_exe = "direwolf-tinybox.exe"
+        if start_dw:
+            if not yes("Mitgelieferten Direwolf verwenden?", True):
+                dw_dir = Path(ask("Ordner deines Direwolf", r"C:\direwolf",
+                                  lambda a: Path(a).is_dir(), "Ordner gibt es nicht."))
+                dw_exe = ask("Programmdatei darin", "direwolf.exe",
+                             lambda a: (dw_dir / a).is_file(), "Datei gibt es dort nicht.")
+            dwc = dw_dir / "direwolf.conf"
+            if not dwc.exists() or yes(f"{dwc} gibt es schon - neu erstellen?", False):
+                adev, adev_note = choose_audio()
+                baud = ask("Baudrate (1200 oder 9600)", "1200", lambda a: a in ("1200", "9600"),
+                           "1200 oder 9600.")
+                ptt = choose_ptt()
+                dw_dir.mkdir(parents=True, exist_ok=True)
+                dwc.write_text(direwolf_conf(call, adev, baud, ptt, adev_note), encoding="utf-8")
+                print(f"    geschrieben: {dwc}")
+        else:
+            own = ask("Ordner der direwolf.conf deines eigenen Direwolf (leer = keiner)", "",
+                      lambda a: not a or (Path(a) / "direwolf.conf").is_file(),
+                      "Dort liegt keine direwolf.conf.")
+            dw_dir = Path(own) if own else None
+        # CR70: the programs read AGWPORT, MODEM, PACLEN ... from direwolf.conf
+        if dw_dir and (dw_dir / "direwolf.conf").is_file():
+            agw["direwolf_conf"] = str(dw_dir)
+    if kiss:
+        radio = {"radio": {"interface": "kiss"}, "kiss": {"port": kiss_port()}}
+    else:
+        radio = {"radio": {"interface": "agw"}, "agw": agw}
 
     print()
     print("Konfigurationsdateien")
+    if kiss:
+        name, values = kiss
+        write_conf(KISS_CONF, KISS_EXAMPLE, {"kisshub": {"profile": name}, name: values})
     write_conf(ROOT / "tbclient.conf", ROOT / "tbclient.conf.example", {
         "station": {"mycall": my, "locator": locator},
         "tinybox": {"call": target_box},
-        "radio": {"interface": "agw"},
-        "agw": agw,
+        **radio,
     })
     if use_box:
         write_conf(ROOT / "tinybox.conf", ROOT / "tinybox.conf.example", {
             "station": {"mailbox_call": box_call, "sysop_call": call, "qth": qth,
                         "freq": freq, "locator": locator},
-            "radio": {"interface": "agw"},
-            "agw": agw,
+            **radio,
             # a listener takes no pages from the TinyBox (only a brocast station does)
             "brocast": {"publish": "no"},
         })
     if use_bro:
         write_conf(ROOT / "brocast" / "brocastd.conf", ROOT / "brocast" / "brocastd.conf.example", {
             "brocastd": {"mode": "listener", "callsign": ""},
-            "radio": {"interface": "agw"},
-            "agw": agw,
+            **radio,
         })
 
     cp = configparser.ConfigParser()
     cp["start"] = {"direwolf": "yes" if start_dw else "no",
                    "direwolf_dir": str(dw_dir or DW_DIR), "direwolf_exe": dw_exe,
+                   "kisshub": "yes" if kiss else "no",
+                   "kisshub_profile": kiss[0] if kiss else "",
                    "tinybox": "yes" if use_box else "no",
                    "brocast": "yes" if use_bro else "no"}
     with START_CONF.open("w", encoding="utf-8") as f:
