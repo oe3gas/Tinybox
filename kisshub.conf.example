@@ -7,6 +7,7 @@
 ; ONE SECTION PER TNC (kisshub 2026.11.05): every value of a TNC is in its own section,
 ; nothing comes from the program code. The section name is the profile name:
 ;   kisshub.bat -p pk232      kisshub.bat -p vara-fm      kisshub.bat -p tm-d710-9k6
+;   kisshub.bat -p dr-635
 ;   kisshub.bat -l            lists the TNC sections of this file
 ; Keep only the TNCs you use, rename them or add your own (e.g. [pk232-hf]).
 ;
@@ -190,6 +191,51 @@ maxframe_ext  = 7
 t1_min_sec    = 1.5
 t1_max_sec    = 15
 t2_sec        = 0.5
+
+
+; ======================================================================================
+; Alinco DR-635 with the TNC unit EJ-50U (TNC-2 compatible, cmd: prompt). PC on the DSUB
+; at the rear panel, straight cable. Init after Gerhard 15.11.2026: KISS ON. The air rate
+; (HBAUD 1200 / 9600, short HB) is set once in a terminal, the TNC keeps it. Leaving KISS:
+; C0 FF C0 (EJ-50U manual chapter 6), then KISS OFF. Still to be tried on the air.
+[dr-635]
+type          = tnc
+display       = DR-635
+notes         = Alinco DR-635 with EJ-50U TNC, 1200 Bd
+hint          = DR-635: EJ-50U TNC must be installed, PC on the DSUB at the rear panel
+transport     = serial
+device        = COM9       ; the PC port the radio's DSUB is on
+serial_baud   = 9600       ; PC <-> TNC
+dtr           = yes
+rts           = yes
+rtscts        = no
+reconnect_sec = 10
+prompt        = cmd:
+step_timeout  = 3
+wake          =
+    <CR>                   @2
+    <C0><FF><C0><CR>       @3     ; leave KISS (after a kisshub run)
+    ^C<CR>                 @2     ; Converse
+    ^Q<CR>                 @2     ; XON
+init          =
+    KISS ON                !-  @1 ; from here on KISS, no prompt
+exit_kiss     = yes
+exit          =
+    KISS OFF
+settle_sec    = 1
+send_params   = yes
+smack         = no
+air_baud      = 1200       ; must match HBAUD in the TNC
+txdelay_ms    = 300
+persist       = 63
+slottime_ms   = 100
+max_lead_ms   = 1500
+paclen        = 256
+maxframe      = 4
+maxframe_ext  = 7
+t1_min_sec    = 3
+t1_max_sec    = 30
+t2_sec        = 1.5
 
 
 ; ======================================================================================
