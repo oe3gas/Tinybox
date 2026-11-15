@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fuchsjagd – TinyBox ARDF</title>
+<style>
+:root{--bg:#fafaf7;--card:#f1efe8;--map:#fbfbf8;--fg:#1f1f1d;--mut:#6b6a65;--line:#d3d1c7;--acc:#185FA5;--danger:#A32D2D;--ok:#3B6D11;--course:#B8327E}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1c1a;--card:#2a2a27;--map:#232321;--fg:#ecebe6;--mut:#a3a29b;--line:#444441;--acc:#85B7EB;--danger:#F09595;--ok:#97C459;--course:#E27BB6}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+main{max-width:560px;margin:0 auto;padding:12px}
+h1{font-size:20px;font-weight:600;margin:4px 0 2px}
+.sub{color:var(--mut);font-size:13px;margin:0 0 14px}
+button{font:inherit;font-size:14px;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;touch-action:manipulation}
+button:active{transform:scale(.97)}
+button.on{background:var(--acc);color:var(--bg);border-color:var(--acc)}
+button.primary{background:var(--fg);color:var(--bg);border-color:var(--fg);padding:9px 22px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
+.lbl{width:70px;color:var(--mut);font-size:13px}
+.hint{color:var(--mut);font-size:13px;margin:4px 0 14px}
+.bar{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:5px;flex:1}
+.chip{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--card);color:var(--mut);border:1.5px solid var(--line);white-space:nowrap;transition:background .15s,color .15s}
+.chip.act{color:#fff;animation:pulse .9s ease-in-out infinite}
+@keyframes pulse{50%{filter:brightness(1.18)}}
+.secs{font:600 22px ui-monospace,SFMono-Regular,Consolas,monospace;min-width:44px;text-align:right}
+canvas#map{width:100%;display:block;border-radius:10px;border:1px solid var(--line);touch-action:manipulation;cursor:crosshair}
+.dash{display:grid;grid-template-columns:150px 1fr;gap:10px;margin:10px 0}
+.card{background:var(--card);border-radius:10px;padding:8px 10px}
+.k{font-size:12px;color:var(--mut)}
+.v{font:600 18px ui-monospace,SFMono-Regular,Consolas,monospace}
+.log{font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--mut);margin-top:6px;min-height:20px}
+.msg{font-size:14px;min-height:21px;margin:2px 0 6px}
+.res{background:var(--card);border-radius:10px;padding:12px 14px;margin:10px 0}
+.res table{border-collapse:collapse;font:14px ui-monospace,SFMono-Regular,Consolas,monospace;margin-top:6px}
+.res td{padding:2px 14px 2px 0}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Fuchsjagd</h1>
+<p class="sub">ARDF-Prototyp für TinyBox · eigenständig, ohne Funk</p>
+
+<section id="setup">
+  <div class="row"><span class="lbl">Band</span><span class="seg" data-k="band"><button data-v="80" class="on">80 m</button> <button data-v="2">2 m</button></span></div>
+  <div class="row"><span class="lbl">Füchse</span><span class="seg" data-k="n"><button data-v="1">1</button> <button data-v="2">2</button> <button data-v="3" class="on">3</button> <button data-v="4">4</button> <button data-v="5">5</button></span></div>
+  <div class="row"><span class="lbl">Tempo</span><span class="seg" data-k="f"><button data-v="1">1×</button> <button data-v="5">5×</button> <button data-v="10" class="on">10×</button> <button data-v="20">20×</button></span></div>
+  <p class="hint" id="tempoHint"></p>
+  <div class="row"><button class="primary" id="startBtn">Start</button></div>
+  <p class="hint">Ein Feld sind 100 m, die Karte 2 × 2 km. Gehen kostet 1 min je Feld (diagonal 1,4 min), Peilen 0,5 min, auf 80 m die Seitenbestimmung weitere 0,5 min. Jeder Fuchs sendet 1 min, dann der nächste. Feld antippen zum Gehen, über ein Fuchsfeld laufen stempelt ihn. Ins Ziel (Doppelkreis) laufen beendet das Spiel. Ton einschalten lohnt sich: der aktive Fuchs ist in CW zu hören, laut heißt nah.</p>
+</section>
+
+<section id="game" class="hidden">
+  <div class="bar"><div class="chips" id="chips"></div><div class="secs" id="secs">60</div></div>
+  <canvas id="map"></canvas>
+  <div class="dash">
+    <div class="card" style="padding:4px"><canvas id="smeter" width="300" height="170" style="width:100%;display:block"></canvas></div>
+    <div class="card">
+      <div class="k">Spielzeit / Limit</div><div class="v" id="clock">0:00</div>
+      <div class="k" style="margin-top:4px">Strecke</div><div class="v" id="distv">0,0 km</div>
+    </div>
+  </div>
+  <div class="row">
+    <button id="pBtn">Peilen</button>
+    <button id="psBtn">Peilen + Seite</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="toneBtn" class="on">Ton an</button>
+    <button id="endBtn">Aufgeben</button>
+  </div>
+  <div class="msg" id="msg"></div>
+  <div id="result" class="res hidden"></div>
+  <div class="log" id="log"></div>
+</section>
+</main>
+
+<script>
+(function(){
+"use strict";
+const N=20, START={x:10,y:18}, GOAL={x:10,y:1};
+const COL=['#7F77DD','#1D9E75','#D85A30','#D4537E','#BA7517'];
+const ID=['MOE','MOI','MOS','MOH','MO5'];
+const MORSE={M:'--',O:'---',E:'.',I:'..',S:'...',H:'....','5':'.....'};
+const UNIT=0.1;               // s per Morse unit (12 WPM)
+const SIG={'80':4,'2':6};     // bearing error sigma in degrees
+
+function pattern(id){
+  const u=[];
+  for(const ch of id){
+    const c=MORSE[ch];
+    for(let i=0;i<c.length;i++){
+      const n=c[i]==='-'?3:1;
+      for(let k=0;k<n;k++)u.push(1);
+      if(i<c.length-1)u.push(0);
+    }
+    u.push(0,0,0);
+  }
+  u.push(0,0,0,0);
+  return u;
+}
+const PAT=ID.map(pattern);
+
+const $=id=>document.getElementById(id);
+const cfg={band:'80',n:3,f:10};
+document.querySelectorAll('.seg').forEach(seg=>{
+  seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    seg.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    const k=seg.dataset.k;
+    cfg[k]=k==='band'?b.dataset.v:+b.dataset.v;
+    tempoHint();
+  }));
+});
+function tempoHint(){
+  const s=60/cfg.f;
+  const lim=30+12*cfg.n;
+  $('tempoHint').textContent=`${cfg.f}×: 1 Feld = ${fmtN(s)} s echte Zeit, jeder Fuchs sendet ${fmtN(s)} s. Zeitlimit ${lim} min Spielzeit (≈ ${fmtN(lim*s/60)} min echt).`;
+}
+function fmtN(x){return (Math.round(x*10)/10).toString().replace('.',',');}
+tempoHint();
+
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const ri=n=>Math.floor(Math.random()*n);
+function gauss(){const u=1-Math.random(),v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function brg(a,b){return (Math.atan2(b.x-a.x,a.y-b.y)*180/Math.PI+360)%360;}
+function fmt(t){const s=Math.floor(t*60);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function d3(x){return String(Math.round(x)%360).padStart(3,'0')+'°';}
+
+function place(n){
+  for(let tries=0;tries<200;tries++){
+    const f=[];let g=0;
+    while(f.length<n&&g<3000){
+      g++;
+      const p={x:ri(N),y:ri(N)};
+      if(dist(p,START)<4||dist(p,GOAL)<3)continue;
+      if(f.some(q=>dist(p,q)<3))continue;
+      f.push({x:p.x,y:p.y,found:false,tf:null});
+    }
+    if(f.length===n)return f;
+  }
+  return [];
+}
+
+// ---------- audio ----------
+let AC=null,keyGain=null,toneOn=true,lastKey=-1;
+function audioInit(){
+  if(AC)return;
+  try{
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    const osc=AC.createOscillator();osc.type='sine';osc.frequency.value=700;
+    keyGain=AC.createGain();keyGain.gain.value=0;
+    osc.connect(keyGain).connect(AC.destination);osc.start();
+  }catch(e){AC=null;}
+}
+function setKey(level){
+  if(!AC)return;
+  if(Math.abs(level-lastKey)<0.002)return;
+  lastKey=level;
+  keyGain.gain.setTargetAtTime(level,AC.currentTime,0.006);
+}
+function beep(freq,dur,vol){
+  if(!AC||!toneOn)return;
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.type='square';o.frequency.value=freq;g.gain.value=vol;
+  o.connect(g).connect(AC.destination);
+  o.start();o.stop(AC.currentTime+dur);
+}
+
+// ---------- game ----------
+let G=null;
+$('startBtn').addEventListener('click',()=>{
+  if(toneOn)audioInit();
+  if(AC&&AC.state==='suspended')AC.resume();
+  const f=place(cfg.n);
+  G={band:cfg.band,n:cfg.n,F:cfg.f,f,pos:{...START},target:null,t:0,lim:30+12*cfg.n,
+     lines:[],path:[{...START}],log:[],over:false,paused:false,peil:null,dist:0,stamps:[],sm:0};
+  $('setup').classList.add('hidden');$('game').classList.remove('hidden');
+  $('result').classList.add('hidden');$('log').innerHTML='';
+  $('psBtn').classList.toggle('hidden',G.band!=='80');
+  $('pauseBtn').textContent='Pause';$('endBtn').textContent='Aufgeben';
+  buildChips();
+  say('Los! Feld antippen zum Gehen – oder erst peilen.');
+  resize();
+});
+
+function buildChips(){
+  const c=$('chips');c.innerHTML='';
+  for(let i=0;i<G.n;i++){
+    const s=document.createElement('span');
+    s.className='chip';s.id='chip'+i;
+    s.textContent=`Fuchs ${i+1} ${ID[i]}`;
+    c.appendChild(s);
+  }
+}
+let lastActive=-1,lastSecs=-1;
+function updChips(){
+  const k=active();
+  const sec=Math.ceil(60*(1-(G.t-Math.floor(G.t))));
+  const st=G.over?'–':String(sec);if(st!==lastSecs){$('secs').textContent=st;lastSecs=st;}
+  if(k===lastActive&&!G.dirtyChips)return;
+  lastActive=k;G.dirtyChips=false;
+  for(let i=0;i<G.n;i++){
+    const el=$('chip'+i),on=i===k&&!G.over;
+    el.classList.toggle('act',on);
+    el.style.background=on?COL[i]:'';
+    el.style.borderColor=on||G.f[i].found?COL[i]:'';
+    el.style.color=on?'#fff':(G.f[i].found?COL[i]:'');
+    el.textContent=`Fuchs ${i+1} ${ID[i]}`+(G.f[i].found?' ✓':'');
+  }
+}
+function active(){return Math.floor(G.t)%G.n;}
+function say(s){$('msg').textContent=s;}
+function addLog(s){G.log.unshift(fmt(G.t)+'  '+s);$('log').innerHTML=G.log.slice(0,7).join('<br>');}
+
+function sValue(d){
+  if(d<=1.5)return {s:9,db:Math.round((1.5-d)/1.5*40)};
+  return {s:Math.max(1,9-(d-1.5)/2.2),db:0};
+}
+function sText(d){const v=sValue(d);return v.db>0?'S9+'+(v.db>=30?40:20):'S'+Math.round(v.s);}
+function sFrac(d){const v=sValue(d);return v.db>0?0.62+v.db/40*0.38:(v.s-1)/8*0.62;}
+
+function startPeil(side){
+  if(!G||G.over||G.peil)return;
+  G.target=null;
+  const withSide=side&&G.band==='80';
+  G.peil={k:active(),side:withSide,rem:withSide?1:0.5,tot:withSide?1:0.5};
+  say(withSide?'Peile mit Hilfsantenne …':'Peile …');
+}
+function finishPeil(){
+  const p=G.peil;G.peil=null;
+  const fx=G.f[p.k],d=dist(G.pos,fx);
+  let b=brg(G.pos,fx)+gauss()*SIG[G.band];
+  if(G.band==='2'&&d>5&&Math.random()<0.15)b+=(Math.random()<.5?-1:1)*(40+Math.random()*60);
+  b=(b+360)%360;
+  const amb=G.band==='80'&&!p.side;
+  G.lines.push({x:G.pos.x,y:G.pos.y,b,k:p.k,amb,t:G.t});
+  const per={};G.lines=G.lines.slice().reverse().filter(l=>(per[l.k]=(per[l.k]||0)+1)<=3).reverse();
+  let txt;
+  if(amb){const a=[b,(b+180)%360].sort((x,y)=>x-y);txt=d3(a[0])+'/'+d3(a[1]);}
+  else txt=d3(b);
+  addLog(`F${p.k+1} ${txt} ${sText(d)}`);
+  say(amb?'Minimum ist zweideutig (±180°). Peilen + Seite klärt die Richtung.':`Fuchs ${p.k+1} gepeilt.`);
+}
+
+function finish(resign){
+  G.over=true;G.target=null;G.peil=null;setKey(0);
+  const found=G.f.filter(x=>x.found).length,dq=G.t>G.lim;
+  const head=resign?'Aufgegeben':(dq?'Im Ziel – außer Wertung (Zeitlimit)':'Im Ziel');
+  if(!resign&&toneOn){beep(2700,.12,.05);setTimeout(()=>beep(2700,.35,.05),180);}
+  let rows='';
+  G.f.forEach((f,i)=>{rows+=`<tr><td style="color:${COL[i]}">Fuchs ${i+1}</td><td>${f.found?fmt(f.tf):'–'}</td></tr>`;});
+  rows+=`<tr><td>Ziel</td><td>${resign?'–':fmt(G.t)}</td></tr>`;
+  $('result').innerHTML=`<div style="font-weight:600">${head}</div>
+    <div>${found} von ${G.n} Füchsen · ${fmt(G.t)} · ${fmtN(G.dist/10)} km</div>
+    <table>${rows}</table>`;
+  $('result').classList.remove('hidden');
+  say('');$('endBtn').textContent='Neues Spiel';G.dirtyChips=true;
+}
+
+$('pBtn').addEventListener('click',()=>startPeil(false));
+$('psBtn').addEventListener('click',()=>startPeil(true));
+$('pauseBtn').addEventListener('click',()=>{
+  if(!G||G.over)return;
+  G.paused=!G.paused;$('pauseBtn').textContent=G.paused?'Weiter':'Pause';
+  say(G.paused?'Pause.':'');
+});
+$('toneBtn').addEventListener('click',()=>{
+  toneOn=!toneOn;
+  $('toneBtn').classList.toggle('on',toneOn);$('toneBtn').textContent=toneOn?'Ton an':'Ton aus';
+  if(toneOn){audioInit();if(AC&&AC.state==='suspended')AC.resume();}else setKey(0);
+});
+$('endBtn').addEventListener('click',()=>{
+  if(G&&!G.over){finish(true);return;}
+  G=null;setKey(0);
+  $('game').classList.add('hidden');$('setup').classList.remove('hidden');
+});
+
+// ---------- map ----------
+const cv=$('map'),ctx=cv.getContext('2d');let W=340,C=17;
+const sm=$('smeter'),sctx=sm.getContext('2d');
+function resize(){
+  W=Math.min(cv.parentElement.clientWidth,560);
+  const dpr=window.devicePixelRatio||1;
+  cv.width=W*dpr;cv.height=W*dpr;cv.style.height=W+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);C=W/N;
+}
+window.addEventListener('resize',()=>{if(G)resize();});
+cv.addEventListener('pointerdown',e=>{
+  if(!G||G.over||G.paused)return;
+  const r=cv.getBoundingClientRect();
+  const x=Math.floor((e.clientX-r.left)/r.width*N),y=Math.floor((e.clientY-r.top)/r.height*N);
+  if(x<0||y<0||x>=N||y>=N)return;
+  if(G.peil){say('Erst fertig peilen.');return;}
+  G.target={x,y};
+  if(AC&&AC.state==='suspended')AC.resume();
+});
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function draw(now){
+  const fg=css('--fg'),mut=css('--mut'),mapc=css('--map'),acc=css('--acc'),course=css('--course');
+  const X=v=>(v+.5)*C;
+  ctx.fillStyle=mapc;ctx.fillRect(0,0,W,W);
+  for(let i=0;i<=N;i++){
+    ctx.strokeStyle=mut;ctx.globalAlpha=i%5===0?.28:.1;ctx.lineWidth=i%5===0?1:.5;
+    ctx.beginPath();ctx.moveTo(i*C,0);ctx.lineTo(i*C,W);ctx.moveTo(0,i*C);ctx.lineTo(W,i*C);ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+  // north + scale
+  ctx.fillStyle=mut;ctx.font='600 12px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  ctx.fillText('N',W-C*.9,C*1.1);
+  ctx.beginPath();ctx.moveTo(W-C*.9,C*1.35);ctx.lineTo(W-C*1.15,C*2.1);ctx.lineTo(W-C*.65,C*2.1);ctx.closePath();ctx.fill();
+  ctx.strokeStyle=mut;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C*.6,W-C*.6);ctx.lineTo(C*5.6,W-C*.6);ctx.stroke();
+  ctx.font='11px system-ui,sans-serif';ctx.fillText('500 m',C*3.1,W-C*.9);
+
+  // bearings
+  const newest={};G.lines.forEach((l,i)=>newest[l.k]=i);
+  G.lines.forEach((l,i)=>{
+    const rad=l.b*Math.PI/180,L=W*1.6,dx=Math.sin(rad)*L,dy=-Math.cos(rad)*L,x0=X(l.x),y0=X(l.y);
+    ctx.strokeStyle=COL[l.k];ctx.globalAlpha=newest[l.k]===i?.95:.45;ctx.lineWidth=newest[l.k]===i?2:1.5;
+    ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x0+dx,y0+dy);
+    if(l.amb){ctx.moveTo(x0,y0);ctx.lineTo(x0-dx,y0-dy);}
+    ctx.stroke();
+  });
+  ctx.globalAlpha=1;
+
+  // path
+  ctx.strokeStyle=fg;ctx.globalAlpha=.45;ctx.lineWidth=1.2;ctx.setLineDash([2,4]);
+  ctx.beginPath();G.path.forEach((p,i)=>i?ctx.lineTo(X(p.x),X(p.y)):ctx.moveTo(X(p.x),X(p.y)));ctx.lineTo(X(G.pos.x),X(G.pos.y));ctx.stroke();
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+
+  // start + goal (orienteering symbols)
+  ctx.strokeStyle=course;ctx.lineWidth=2;
+  const sx=X(START.x),sy=X(START.y);
+  ctx.beginPath();ctx.moveTo(sx,sy-C*.55);ctx.lineTo(sx+C*.5,sy+C*.32);ctx.lineTo(sx-C*.5,sy+C*.32);ctx.closePath();ctx.stroke();
+  ctx.beginPath();ctx.arc(X(GOAL.x),X(GOAL.y),C*.5,0,7);ctx.stroke();
+  ctx.beginPath();ctx.arc(X(GOAL.x),X(GOAL.y),C*.3,0,7);ctx.stroke();
+
+  // foxes
+  G.f.forEach((f,i)=>{
+    if(!f.found&&!G.over)return;
+    const x=f.x*C+1.5,y=f.y*C+1.5,s=C-3;
+    if(f.found){
+      ctx.fillStyle='#fff';ctx.fillRect(x,y,s,s);
+      ctx.fillStyle=COL[i];ctx.beginPath();ctx.moveTo(x+s,y);ctx.lineTo(x+s,y+s);ctx.lineTo(x,y+s);ctx.closePath();ctx.fill();
+      ctx.strokeStyle=COL[i];ctx.lineWidth=1.5;ctx.strokeRect(x,y,s,s);
+    }else{
+      ctx.strokeStyle=COL[i];ctx.lineWidth=2;ctx.setLineDash([3,2]);ctx.strokeRect(x,y,s,s);ctx.setLineDash([]);
+    }
+    ctx.fillStyle=f.found?fg:COL[i];ctx.font='600 '+Math.round(C*.6)+'px system-ui,sans-serif';
+    ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(String(i+1),x+s+2,y+s*.3);
+  });
+
+  // target
+  if(G.target){
+    const tx=X(G.target.x),ty=X(G.target.y);
+    ctx.strokeStyle=acc;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(tx,ty,C*.35,0,7);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(tx-C*.5,ty);ctx.lineTo(tx+C*.5,ty);ctx.moveTo(tx,ty-C*.5);ctx.lineTo(tx,ty+C*.5);ctx.stroke();
+  }
+
+  // player
+  const px=X(G.pos.x),py=X(G.pos.y);
+  if(G.target&&!G.paused){
+    const ph=(now/600)%1;
+    ctx.strokeStyle=acc;ctx.globalAlpha=1-ph;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(px,py,C*(.35+ph*.6),0,7);ctx.stroke();ctx.globalAlpha=1;
+  }
+  if(G.peil){
+    const prog=1-G.peil.rem/G.peil.tot,ang=prog*Math.PI*3;
+    ctx.strokeStyle=COL[G.peil.k];ctx.lineWidth=4;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(px-Math.cos(ang)*C*.9,py-Math.sin(ang)*C*.9);ctx.lineTo(px+Math.cos(ang)*C*.9,py+Math.sin(ang)*C*.9);ctx.stroke();
+    ctx.lineCap='butt';
+    ctx.beginPath();ctx.arc(px,py,C*.75,-Math.PI/2,-Math.PI/2+prog*2*Math.PI);ctx.lineWidth=2;ctx.stroke();
+  }
+  ctx.fillStyle=acc;ctx.strokeStyle=mapc;ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(px,py,C*.32,0,7);ctx.fill();ctx.stroke();
+
+  // stamps
+  G.stamps=G.stamps.filter(s=>now-s.t0<1400);
+  G.stamps.forEach(s=>{
+    const a=(now-s.t0)/1400,sc=a<.25?2.6-a/.25*1.6:1;
+    ctx.globalAlpha=a<.7?1:1-(a-.7)/.3;
+    ctx.strokeStyle=COL[s.k];ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(X(s.x),X(s.y),C*1.1*sc,0,7);ctx.stroke();
+    ctx.fillStyle=COL[s.k];ctx.font='700 '+Math.round(C*.9*sc)+'px system-ui,sans-serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('✓'+(s.k+1),X(s.x),X(s.y));
+    ctx.globalAlpha=1;
+  });
+}
+
+function drawMeter(frac,label,col){
+  const w=300,h=170,cx=150,cy=150,r=120;
+  const fg=css('--fg'),mut=css('--mut');
+  sctx.clearRect(0,0,w,h);
+  const a0=Math.PI*1.15,a1=Math.PI*1.85;
+  sctx.lineWidth=6;sctx.strokeStyle=mut;sctx.globalAlpha=.35;
+  sctx.beginPath();sctx.arc(cx,cy,r,a0,a0+(a1-a0)*.62);sctx.stroke();
+  sctx.strokeStyle='#E24B4A';sctx.globalAlpha=.6;
+  sctx.beginPath();sctx.arc(cx,cy,r,a0+(a1-a0)*.62,a1);sctx.stroke();sctx.globalAlpha=1;
+  sctx.fillStyle=mut;sctx.font='600 18px system-ui,sans-serif';sctx.textAlign='center';sctx.textBaseline='middle';
+  [[1,0],[3,.155],[5,.31],[7,.465],[9,.62],['+20',.81],['+40',1]].forEach(([t,f])=>{
+    const a=a0+(a1-a0)*f;sctx.fillText(String(t),cx+Math.cos(a)*(r-26),cy+Math.sin(a)*(r-26));
+  });
+  const a=a0+(a1-a0)*Math.max(0,Math.min(1,frac));
+  sctx.strokeStyle=col||fg;sctx.lineWidth=4;sctx.lineCap='round';
+  sctx.beginPath();sctx.moveTo(cx,cy);sctx.lineTo(cx+Math.cos(a)*(r+6),cy+Math.sin(a)*(r+6));sctx.stroke();
+  sctx.fillStyle=fg;sctx.beginPath();sctx.arc(cx,cy,8,0,7);sctx.fill();
+  sctx.fillStyle=col||fg;sctx.font='600 20px ui-monospace,monospace';sctx.textAlign='left';sctx.fillText(label,8,22);
+}
+
+// ---------- loop ----------
+let last=performance.now(),lastClock='',lastDist='';
+function loop(now){
+  const dt=Math.min(.1,(now-last)/1000);last=now;
+  if(G){
+    const run=!G.paused&&!G.over;
+    if(run){
+      const dg=dt*G.F/60;
+      G.t+=dg;
+      if(G.peil){G.peil.rem-=dg;if(G.peil.rem<=0)finishPeil();}
+      else if(G.target){
+        const tgt=G.target,d=dist(G.pos,tgt);
+        if(d<=dg){G.dist+=d;G.pos={x:tgt.x,y:tgt.y};G.target=null;G.path.push({...G.pos});}
+        else{G.pos={x:G.pos.x+(tgt.x-G.pos.x)/d*dg,y:G.pos.y+(tgt.y-G.pos.y)/d*dg};G.dist+=dg;
+          const lp=G.path[G.path.length-1];if(dist(lp,G.pos)>.5)G.path.push({...G.pos});}
+        G.f.forEach((f,i)=>{
+          if(!f.found&&dist(G.pos,f)<.5){
+            f.found=true;f.tf=G.t;G.dirtyChips=true;
+            G.stamps.push({x:f.x,y:f.y,k:i,t0:now});
+            beep(2700,.15,.05);addLog(`Fuchs ${i+1} gestempelt`);say(`Fuchs ${i+1} gefunden!`);
+          }
+        });
+        if(dist(G.pos,GOAL)<.5)finish(false);
+      }
+    }
+    updChips();
+    const c=fmt(G.t)+' / '+G.lim+':00';
+    if(c!==lastClock){$('clock').textContent=c;$('clock').style.color=G.t>G.lim?'var(--danger)':'';lastClock=c;}
+    const dd=fmtN(G.dist/10)+' km';if(dd!==lastDist){$('distv').textContent=dd;lastDist=dd;}
+    // receiver: field strength of the active fox, keyed by its Morse ID
+    const k=active(),d=dist(G.pos,G.f[k]);
+    let frac=sFrac(d)+(Math.random()-.5)*.015;
+    if(G.peil){const prog=1-G.peil.rem/G.peil.tot;frac*=.35+.65*Math.abs(Math.cos(prog*Math.PI*3));}
+    const phase=(G.t-Math.floor(G.t))*60/G.F;
+    const pat=PAT[k],keyed=pat[Math.floor(phase/UNIT)%pat.length]===1;
+    G.sm+=((keyed&&run?frac:0)-G.sm)*Math.min(1,dt*12);
+    drawMeter(G.sm,G.over?'':`F${k+1}  ${sText(d)}`,COL[k]);
+    setKey(toneOn&&run&&keyed?(0.015+0.22*frac*frac):0);
+    draw(now);
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

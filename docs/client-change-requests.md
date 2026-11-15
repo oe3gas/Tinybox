@@ -5678,6 +5678,21 @@ Zeiten in Zehntelminuten.
 
 Ein Zug rund 10–25 Bytes; ein Spiel mit 5 Füchsen (rund 40 Züge) etwa 1,5 kB über Funk.
 
+### Entscheidungen (OE3GAS, 15.11.2026, nach dem ersten Prototyp)
+
+- Gehen 1 min je Feld, diagonal 1,4 min (Luftlinie); Peilen 0,5 min. Ein Feld = 100 m.
+- Mehr Interaktivität: Gehen animiert; Fuchs-Chips („Fuchs 1 MOE“ …), aktiver Chip in der Farbe des
+  Fuchses, inaktive grau, rechts daneben der Sekundenzähler.
+- Echte Zeit, gerafft: Tempo beim Start wählbar (1×, 5×, 10×, 20×), Uhr läuft ständig.
+- Zuerst als **eigenständiges Web-Modul ohne Funk** (`fuchsjagd/fuchsjagd.html`): Anmutung und
+  Parameter passen und getestet, erst dann Box/Funk.
+- Im Modul umgesetzt: CW-Kennung des aktiven Fuchses als Ton (700 Hz, Lautstärke nach Feldstärke),
+  analoges S-Meter, Stempel-Effekt mit Piepton beim Fund, Zwischenzeiten am Ende, nur die letzten
+  3 Peilungen je Fuchs sichtbar, 80-m-Mehrdeutigkeit ohne Hinweis auf die richtige Seite (beide
+  Richtungen gleich gezeichnet, im Protokoll aufsteigend sortiert).
+- Später getrennt ausprobieren: Peilen von Hand (Peilring drehen, Minimum hören), Idealroute in der
+  Auswertung.
+
 ### Offen
 
 - Bestenliste (wie CR136): Ergebnis „Füchse/Zeit“ eintragen? Eigene Wertung je Band und Fuchszahl?
