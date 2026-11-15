@@ -49,7 +49,7 @@ canvas#map{width:100%;display:block;border-radius:10px;border:1px solid var(--li
   <div class="row"><span class="lbl">Tempo</span><span class="seg" data-k="f"><button data-v="1">1×</button> <button data-v="5">5×</button> <button data-v="10" class="on">10×</button> <button data-v="20">20×</button></span></div>
   <p class="hint" id="tempoHint"></p>
   <div class="row"><button class="primary" id="startBtn">Start</button></div>
-  <p class="hint">Ein Feld sind 100 m, die Karte 2 × 2 km. Gehen kostet 1 min je Feld (diagonal 1,4 min), Peilen 0,5 min, auf 80 m die Seitenbestimmung weitere 0,5 min. Jeder Fuchs sendet 1 min, dann der nächste. Feld antippen zum Gehen, über ein Fuchsfeld laufen stempelt ihn. Ins Ziel (Doppelkreis) laufen beendet das Spiel. Ton einschalten lohnt sich: der aktive Fuchs ist in CW zu hören, laut heißt nah.</p>
+  <p class="hint">Ein Feld sind 100 m, die Karte 2 × 2 km. Gehen kostet 1 min je Feld (diagonal 1,4 min), Peilen 6 s, auf 80 m mit Seitenbestimmung 10 s (Spielzeit). Jeder Fuchs sendet 1 min, dann der nächste. Feld antippen zum Gehen, über ein Fuchsfeld laufen stempelt ihn. Ins Ziel (Doppelkreis) laufen beendet das Spiel. Ton einschalten lohnt sich: der aktive Fuchs ist in CW zu hören, laut heißt nah.</p>
 </section>
 
 <section id="game" class="hidden">
@@ -84,6 +84,8 @@ const ID=['MOE','MOI','MOS','MOH','MO5'];
 const MORSE={M:'--',O:'---',E:'.',I:'..',S:'...',H:'....','5':'.....'};
 const UNIT=0.1;               // s per Morse unit (12 WPM)
 const SIG={'80':4,'2':6};     // bearing error sigma in degrees
+const T_PEIL=6/60, T_SIDE=4/60; // bearing 6 s, sense antenna +4 s (game time, max 10 s)
+const AUTO_S=2;              // real seconds for the accelerated run to the finish
 
 function pattern(id){
   const u=[];
@@ -221,10 +223,11 @@ function sText(d){const v=sValue(d);return v.db>0?'S9+'+(v.db>=30?40:20):'S'+Mat
 function sFrac(d){const v=sValue(d);return v.db>0?0.62+v.db/40*0.38:(v.s-1)/8*0.62;}
 
 function startPeil(side){
-  if(!G||G.over||G.peil)return;
+  if(!G||G.over||G.peil||G.auto)return;
   G.target=null;
   const withSide=side&&G.band==='80';
-  G.peil={k:active(),side:withSide,rem:withSide?1:0.5,tot:withSide?1:0.5};
+  const dur=T_PEIL+(withSide?T_SIDE:0);
+  G.peil={k:active(),side:withSide,rem:dur,tot:dur};
   say(withSide?'Peile mit Hilfsantenne …':'Peile …');
 }
 function finishPeil(){
@@ -287,7 +290,7 @@ function resize(){
 }
 window.addEventListener('resize',()=>{if(G)resize();});
 cv.addEventListener('pointerdown',e=>{
-  if(!G||G.over||G.paused)return;
+  if(!G||G.over||G.paused||G.auto)return;
   const r=cv.getBoundingClientRect();
   const x=Math.floor((e.clientX-r.left)/r.width*N),y=Math.floor((e.clientY-r.top)/r.height*N);
   if(x<0||y<0||x>=N||y>=N)return;
@@ -348,7 +351,7 @@ function draw(now){
       ctx.strokeStyle=COL[i];ctx.lineWidth=2;ctx.setLineDash([3,2]);ctx.strokeRect(x,y,s,s);ctx.setLineDash([]);
     }
     ctx.fillStyle=f.found?fg:COL[i];ctx.font='600 '+Math.round(C*.6)+'px system-ui,sans-serif';
-    ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(String(i+1),x+s+2,y+s*.3);
+    const right=f.x<N-1;ctx.textAlign=right?'left':'right';ctx.textBaseline='middle';ctx.fillText(String(i+1),right?x+s+2:x-3,y+s*.3);
   });
 
   // target
@@ -415,7 +418,7 @@ function loop(now){
   if(G){
     const run=!G.paused&&!G.over;
     if(run){
-      const dg=dt*G.F/60;
+      const dg=G.auto?dt*G.autoSpeed:dt*G.F/60;
       G.t+=dg;
       if(G.peil){G.peil.rem-=dg;if(G.peil.rem<=0)finishPeil();}
       else if(G.target){
@@ -428,6 +431,11 @@ function loop(now){
             f.found=true;f.tf=G.t;G.dirtyChips=true;
             G.stamps.push({x:f.x,y:f.y,k:i,t0:now});
             beep(2700,.15,.05);addLog(`Fuchs ${i+1} gestempelt`);say(`Fuchs ${i+1} gefunden!`);
+            if(G.f.every(x=>x.found)){
+              G.auto=true;G.target={...GOAL};
+              G.autoSpeed=Math.max(dist(G.pos,GOAL)/AUTO_S,G.F/60);
+              say('Alle Füchse gestempelt – ab ins Ziel!');
+            }
           }
         });
         if(dist(G.pos,GOAL)<.5)finish(false);

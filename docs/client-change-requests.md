@@ -5647,7 +5647,7 @@ Amateurfunkpeilen (ARDF, „Fuchsjagd“) als weiteres Spiel im TBClient. Erste 
   Start S auf (10,18), Ziel Z auf (10,1) – beide sind bekannt und auf der Karte eingezeichnet.
 - Die Box setzt die Füchse zufällig: mindestens 4 Felder vom Start, 3 vom Ziel und 3 voneinander.
 - Spielzeit statt Echtzeit (passt auch zu 1200 Bd): Gehen kostet 1 min je Feld (Luftlinie, Ziel
-  beliebig antippen), Peilen 0,5 min, auf 80 m die Seitenbestimmung (Hilfsantenne) weitere 0,5 min.
+  beliebig antippen), Peilen 6 s, auf 80 m mit Seitenbestimmung (Hilfsantenne) 10 s (geändert 15.11.2026, vorher 0,5 + 0,5 min). Nach dem letzten Fuchs läuft man automatisch und beschleunigt animiert ins Ziel (die Zeit zählt normal nach der Strecke).
 - Fuchs-Zyklus wie bei ARDF: jeder Fuchs sendet 1 min (MOE, MOI, MOS, MOH, MO5), dann der nächste;
   aktiv ist Fuchs `floor(t) mod n + 1`. Gepeilt wird immer der gerade aktive Fuchs; der Client zeigt,
   welcher Fuchs auf Sendung ist und wie lange noch.
