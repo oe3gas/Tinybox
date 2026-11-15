@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 14.11.2026 (CR131; CR130; CR129; CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 15.11.2026 (CR137; CR131; CR130; CR129; CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -104,6 +104,7 @@ Stand: 14.11.2026 (CR131; CR130; CR129; CR128; CR127; CR126; CR124; CR123; CR122
 | 129 | Spiele in der Sprache der Box (`[games] language` in tinybox.conf), jeder Client darf eine eigene wählen; Prefix raten schickt DXCC-Nummern statt Ländernamen | offen – siehe unten |
 | 130 | TinyBox-Terminal (Client-Modus): Eingaben gehen als `//CMD` immer an die Mailbox, auch im Board; Terminal gesperrt ohne Verbindung, vor dem Handshake, bei Spielen und Uploads – und umgekehrt kein Spiel bei offenem Terminal | offen – entschieden (A: `//CMD`, B: Sperren), Umsetzung nicht entschieden – siehe unten |
 | 131 | brocastd: Wiederholungen auch bei Benutzerbetrieb (Stufe 1) gedrosselt senden – Schalter `busy_repeats` in `[traffic]`; Verbindungen über AXUDP belegen den Funkkanal nicht und zählen für brocast nicht | offen – siehe unten |
+| 137 | Fuchsjagd (ARDF) gegen die Box: 80 m oder 2 m, 1–5 Füchse, leere Karte 20 × 20, Box ist Schiedsrichter | offen – siehe unten |
 
 ## CR2 – Emojis (erledigt 11.10.2026)
 
@@ -5628,3 +5629,58 @@ Hilfetext-Vorschlag:
 - Nicht gezählt: wenn die Aufstellung des Spielers nicht zu seinem Hash passt (`check != ok`), ein Spiel
   ohne Ergebnis, ein Spiel, das ohne Auflösung abbricht (Verbindung weg).
 - Tests: `tests/test_cr122.py` (ganzes Spiel, Aufgabe).
+
+
+## CR137 – Fuchsjagd (ARDF) gegen die Box (offen)
+
+### Erfassung (OE3GAS, 15.11.2026)
+
+Amateurfunkpeilen (ARDF, „Fuchsjagd“) als weiteres Spiel im TBClient. Erste Version:
+- **Allein gegen die Box** (die Box versteckt die Füchse und ist Schiedsrichter).
+- **Kein Gelände**, leere Karte, **kein Kartenbezug** (abstraktes Raster, keine echte Gegend).
+- Beim Start wählbar: **Band 80 m oder 2 m** und **Anzahl der Füchse (1–5)**.
+- Interaktiver Prototyp zum Ausprobieren der Regeln im Chat (15.11.2026).
+
+### Regeln (Vorschlag, im Prototyp so umgesetzt)
+
+- Karte 20 × 20 Felder (je 100 m, also 2 × 2 km), x 0–19 von West nach Ost, y 0–19 von Nord nach Süd.
+  Start S auf (10,18), Ziel Z auf (10,1) – beide sind bekannt und auf der Karte eingezeichnet.
+- Die Box setzt die Füchse zufällig: mindestens 4 Felder vom Start, 3 vom Ziel und 3 voneinander.
+- Spielzeit statt Echtzeit (passt auch zu 1200 Bd): Gehen kostet 1 min je Feld (Luftlinie, Ziel
+  beliebig antippen), Peilen 0,5 min, auf 80 m die Seitenbestimmung (Hilfsantenne) weitere 0,5 min.
+- Fuchs-Zyklus wie bei ARDF: jeder Fuchs sendet 1 min (MOE, MOI, MOS, MOH, MO5), dann der nächste;
+  aktiv ist Fuchs `floor(t) mod n + 1`. Gepeilt wird immer der gerade aktive Fuchs; der Client zeigt,
+  welcher Fuchs auf Sendung ist und wie lange noch.
+- Peilung: wahre Richtung plus Fehler (Normalverteilung, σ = 4° auf 80 m, 6° auf 2 m).
+  - **80 m:** ohne Seitenbestimmung zwei Richtungen (b und b + 180°), mit Seitenbestimmung eindeutig.
+  - **2 m:** immer eindeutig, aber ab 5 Feldern Entfernung mit 15 % Wahrscheinlichkeit eine
+    Reflexion (Richtung um 40–100° daneben).
+  - S-Meter: ab 1,5 Feldern S9+20, sonst S9 minus 1 S-Stufe je rund 2,2 Felder (mindestens S1).
+- Ein Fuchs ist gefunden, wenn man sein Feld betritt – auch wenn er gerade nicht sendet.
+- Zeitlimit: 30 + 12 · n Minuten (5 Füchse → 90 min). Wer darüber kommt, ist außer Wertung.
+- Das Spiel endet im Ziel (oder mit Aufgabe). Wertung wie bei ARDF: zuerst die Zahl der gefundenen
+  Füchse, dann die kürzere Zeit. Am Ende zeigt die Box alle Fuchspositionen.
+
+### Protokoll (Vorschlag, Zeilen `//FJ …`, Fähigkeit `FJ`, bei der Box in `//CLIENT`/`//OK`)
+
+Die Box führt Position und Zeit selbst (Client sendet nur Wünsche), damit niemand schummeln kann.
+Zeiten in Zehntelminuten.
+
+    //FJ NEW b=<80|2> n=<1..5>          neues Spiel
+    //FJ OK b=.. n=.. s=10,18 z=10,1 l=<limit>
+    //FJ GO <x> <y>                      gehen
+    //FJ AT <x> <y> t=<t> [F=<k>]        neue Position, ggf. Fuchs k gefunden
+    //FJ P [S]                           peilen (S = mit Seitenbestimmung, nur 80 m)
+    //FJ B <k> <grad> <S> t=<t> [A]      Peilung auf Fuchs k; A = mehrdeutig (±180°); S 1–9, 10 = S9+
+    //FJ END                             im Ziel (Box prüft die Position) / //FJ RESIGN
+    //FJ RES f=<gefunden> t=<t> w=<0|1> <k:x,y,...>   Ergebnis, w=0 außer Wertung, Fuchspositionen
+    //FJ ERR no_game | bad | busy
+
+Ein Zug rund 10–25 Bytes; ein Spiel mit 5 Füchsen (rund 40 Züge) etwa 1,5 kB über Funk.
+
+### Offen
+
+- Bestenliste (wie CR136): Ergebnis „Füchse/Zeit“ eintragen? Eigene Wertung je Band und Fuchszahl?
+- Spätere Versionen: Gelände (Wald, Sumpf, Fluss), Abschwächer auf 2 m, Bake am Ziel, mehrere
+  Spieler gleichzeitig (Wettlauf), Kartenbezug zum Standort der Box, Sprint/Foxoring.
+- Sprache nach CR129, keine Terminal-User nach CR128.
