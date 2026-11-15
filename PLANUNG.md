@@ -1312,6 +1312,7 @@ Regel: `prcore` importiert nie aus `tinybox`, `tbclient`, `kisshub` oder `brocas
 - ✅ **2b – AGW-Kopf** vereinheitlichen (tinybox, tbclient, fwdsim).
 - ✅ **2c – KISS-Port** zusammenführen: Basisklasse in `prcore/kissport.py`, `KissAdapter` und `KissPort` behalten nur ihr Eigenes (BBS-Sitzungen bzw. Client-Kanäle). Einziger Teilschritt mit echtem Verhaltensrisiko → danach **Funktest** auf PC1 mit PK-232 (und VARA FM, sobald es läuft), TinyBox und Client im KISS-Mode.
 - **2d – brocast:** entschieden 17.10.2026 – bleibt eigenständig mit seinen eigenen UI-Kopien.
+  **Geändert 15.11.2026** (Abschnitt 17.4): brocast nutzt `prcore` wie die anderen drei.
 
 **Stand 17.10.2026:** 2a–2c umgesetzt (Commits „Refactoring 2a/2b/2c“), 628 Tests grün, tbclient 2026.10.17.6.
 - `prcore/agw.py`: AGW-Kopf (`Frame`, `read_frame`, `decode_call`, `via_data`); `AgwProtocolError` ist jetzt ein `ConnectionError`.
@@ -1384,7 +1385,7 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   Stelle. Ersetzt die Kopien in `tinybox/config.py`, `addressing.py`, `connlog.py`,
   `prcore/auth.base`, `axudp`, `kissport`, `tbclient` (profiles, budget, mailstore, config)
   und `tbtest`. `base_call` wandelt jetzt immer in Großschrift. Eigene Kopien behalten
-  bewusst: brocast, fwdsim, dxfeed, `release/konfig.py` (eigenständig, 17.1).
+  bewusst: fwdsim, dxfeed, `release/konfig.py`; brocast folgt mit Etappe 6 (17.4).
 - R14 Tests schneller ✅ (14.11.): Suite von 346 s auf rund 180 s.
   - Web-Live-Feed (`/api/feed`): beim Schließen des Web-Servers enden offene Feeds sofort;
     vorher hielt jeder offene Browser-Feed das Beenden bis zu 30 s auf (echter Fehler, auch
@@ -1485,6 +1486,40 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   gemeinsamer Mini-HTTP-Server für TinyBox, Client und kisshub – die drei sind verschieden genug
   (Long-Poll, SSE-Feed, Uploads, 1-Zeilen-Status), dass ein gemeinsamer Unterbau erst lohnt, wenn
   ein CR einen davon ohnehin umbaut (CR67 `/events`).
+
+
+### 17.4 Das Paket: vier Programme, ein gemeinsamer Unterbau (entschieden 15.11.2026)
+
+**Entscheidung OE3GAS (15.11.2026), ersetzt die Ausnahme für brocast aus 17.1 (2d):**
+- Das Paket besteht aus **vier Programmen: TinyBox, TBClient, kisshub und brocast** (brocastd
+  mit Station und Listener).
+- **Jedes Programm funktioniert für sich allein** – starten, konfigurieren, betreiben, ohne dass
+  eines der anderen läuft oder installiert sein muss.
+- **Alle vier nutzen gemeinsame Funktionen aus `prcore`, soweit möglich und sinnvoll.** „Für
+  sich allein“ heißt also: kein Programm braucht ein anderes *Programm* – wohl aber `prcore` als
+  gemeinsame Bibliothek, die immer mitkommt.
+- Regel wie bisher: `prcore` importiert nie aus einem der vier Programme. Ein Programm importiert
+  nie aus einem anderen (z. B. Client nicht aus `tinybox/`) – Gemeinsames wandert nach `prcore`.
+
+**Folgen:**
+- brocast nimmt künftig AX.25-Adressen, KISS, AGW-Kopf, Rufzeichen (`prcore/calls.py`),
+  Web-Schutz (`prcore/webguard.py`), Config-Unterbau (`prcore/conf.py`) und die Tagesdatei
+  (`prcore/dailylog.py`) aus `prcore` statt eigener Kopien. Voraussetzung: brocastd findet
+  `prcore` (Start aus dem Repo-Wurzelverzeichnis bzw. Pfad in den Startdateien) – das ist der
+  erste Schritt, bevor Kopien ersetzt werden.
+- Release-Paket und NanoPi-Build müssen `prcore` für jedes der vier Programme mitliefern (heute
+  schon so); ein Installer, der nur ein Programm einrichtet, nimmt `prcore` immer mit.
+- Bleiben bewusst eigenständig mit eigenen Kopien: **fwdsim** und **tbtest** (Testpartner – sie
+  sollen Fehler im gemeinsamen Code finden, nicht ihn wiederverwenden), `release/konfig.py`
+  (läuft vor der Installation) und die GeoSphere-/dxfeed-Hilfsskripte, soweit sie ohne `prcore`
+  laufen sollen.
+- Die Hinweise „brocast behält bewusst eigene Kopien“ in 17.3 (R6, R8) gelten damit nicht mehr;
+  brocast wird schrittweise nachgezogen (Refactoring-Etappe 6, siehe unten).
+
+**Etappe 6 – brocast an `prcore` (offen):** 6a Start so, dass `prcore` gefunden wird (ohne
+Verhaltensänderung); 6b AX.25/KISS/AGW-Kopien durch `prcore` ersetzen; 6c Rufzeichen,
+`webguard`, `conf`, `dailylog`. Je ein Commit, Tests vorher und nachher grün, danach Funktest
+mit brocastd (Station und Listener).
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 
