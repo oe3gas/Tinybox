@@ -16,7 +16,7 @@ import logging
 import sys
 from pathlib import Path
 
-from prcore import release, termcolor
+from prcore import release, stopsignal, termcolor
 
 from . import VERSION
 from .config import ConfigError, load, make_transport, profile_list, radio_lines
@@ -211,6 +211,7 @@ def run(argv: list[str] | None = None) -> int:
     termcolor.kv_block(log, start_items(args.config, cfg))
     for hint in cfg.hints:
         log.warning("config hint: %s", hint)
+    stopsignal.install()                  # CR138: Ctrl+Break from tbstart = Ctrl+C
     try:
         asyncio.run(main(cfg, args.config))
     except KeyboardInterrupt:

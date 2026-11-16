@@ -1,0 +1,359 @@
+"""Start, watch, stop and restart the programs (CR138).
+
+Every program runs as a child process with its own stdout/stderr pipe, in its own
+process group: Ctrl+C in the console window reaches only the console, which then
+stops the programs one by one - cleanly (CTRL_BREAK_EVENT on Windows, SIGINT
+elsewhere; the Python programs treat it like Ctrl+C, prcore/stopsignal.py), hard
+only after STOP_WAIT seconds.
+
+Threads, not asyncio: msvcrt (keys) and the pipes of the children are blocking.
+All state changes run under LOCK; the console only reads it.
+"""
+
+from __future__ import annotations
+
+import collections
+import os
+import re
+import signal
+import socket
+import subprocess
+import threading
+import time
+from dataclasses import dataclass, field
+
+from .programs import Program
+
+LOCK = threading.RLock()
+
+STOP_WAIT = 10.0          # s for a clean stop, then kill
+RESTART_DELAY = 15.0      # s after an unexpected end (as the *_dauerbetrieb.bat)
+MAX_ATTEMPTS = 5          # then "Fehler", no more restarts
+STABLE_AFTER = 600.0      # s running = the attempt counter starts again
+MODEM_WAIT = 20.0         # s the others wait for the AGW/KISS port of the modem
+NO_PORT_RUNNING = 4.0     # s alive without a port to check = "läuft"
+CHECK_EVERY = 2.0         # s between port checks
+RESTART_EXIT = 3          # TinyBox RESTART (sysop console / web GUI)
+CONFIG_EXIT = 2           # config error: restarting would not help
+
+ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+HEADER = re.compile(r"^\[[\w-]+!?\] \d\d:\d\d:\d\d")     # "[tinyb] 11:20:42 ..."
+LOGIN = re.compile(r"http://127\.0\.0\.1:\d+/login\?token=\S+")
+MAX_BLOCK = 40
+JOIN_WITHIN = 0.5      # s: error starts this close together are one block
+MAX_BLOCKS = 50
+
+# states (shown as they are)
+OFF, READY, WAITING, STARTING, RUNNING = "aus", "bereit", "wartet", "startet", "läuft"
+STOPPING, STOPPED, ENDED, RESTARTING = "stoppt", "gestoppt", "beendet", "Neustart"
+FAILED, MISSING, EXTERNAL = "Fehler", "fehlt", "extern"
+
+
+@dataclass
+class Run:
+    """The runtime state of one program."""
+    prog: Program
+    nr: int
+    state: str = READY
+    proc: subprocess.Popen | None = None
+    started: float = 0.0
+    exit_code: int | None = None
+    port_ok: bool | None = None
+    attempts: int = 0
+    restart_at: float | None = None
+    wait_until: float | None = None
+    stopping: bool = False
+    note: str = ""
+    login_url: str | None = None
+    errors: list = field(default_factory=list)     # blocks: [time, [lines]]
+    _block: list | None = None
+
+    @property
+    def pid(self) -> int | None:
+        return self.proc.pid if self.proc is not None and self.proc.poll() is None else None
+
+    def alive(self) -> bool:
+        return self.proc is not None and self.proc.poll() is None
+
+
+def port_open(port: int | None, timeout: float = 0.25) -> bool:
+    if not port:
+        return False
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def is_error_start(line: str) -> bool:
+    return "[ERROR]" in line or line.startswith("Traceback (most recent call last)")
+
+
+class Supervisor:
+    def __init__(self, progs: list[Program], sink=None, log=None) -> None:
+        self.runs = [Run(p, i) for i, p in enumerate(progs, 1)]
+        for r in self.runs:
+            r.state = READY if r.prog.active else OFF
+        self.messages: collections.deque = collections.deque(maxlen=1000)
+        self.sink = sink            # (run, channel, text) -> None, e.g. print in plain mode
+        self.log = log              # logging.Logger for the console's own day file
+        self._last_check = 0.0
+        self.on_first_up = None     # (run) -> None: TBClient up -> open the browser
+
+    # --- lines from the programs -----------------------------------------
+
+    def line(self, run: Run | None, channel: str, text: str) -> None:
+        text = ANSI.sub("", text.rstrip("\r\n"))
+        tag = run.prog.tag if run else "tbstart"
+        with LOCK:
+            self.messages.append((time.time(), tag, channel, text))
+            if run is not None:
+                self._watch_errors(run, text)
+                m = LOGIN.search(text)
+                if m:
+                    run.login_url = m.group(0)
+        if self.log is not None:
+            shown = text if text.startswith("[") else f"[{tag}{'!' if channel == 'err' else ''}] {text}"
+            self.log.info("%s", shown)
+        if self.sink is not None:
+            self.sink(run, channel, text)
+
+    def note(self, text: str) -> None:
+        """A line of the console itself."""
+        self.line(None, "out", f"[tbstart] {time.strftime('%H:%M:%S')} {text}")
+
+    def _watch_errors(self, run: Run, text: str) -> None:
+        if is_error_start(text) and run._block is not None and run.errors \
+                and time.time() - run.errors[-1][0] < JOIN_WITHIN:
+            run._block.append(text)       # [ERROR] on stdout + its traceback on stderr:
+        elif is_error_start(text):       # two pipes, either may come first - one block
+            run._block = [text]
+            run.errors.append([time.time(), run._block])
+            del run.errors[:-MAX_BLOCKS]
+        elif run._block is not None and text and not HEADER.match(text):
+            if len(run._block) < MAX_BLOCK:
+                run._block.append(text)       # traceback lines after [ERROR]
+        else:
+            run._block = None
+
+    def _pump(self, run: Run, proc: subprocess.Popen, stream, channel: str) -> None:
+        for raw in iter(stream.readline, b""):
+            self.line(run, channel, raw.decode("utf-8", "replace"))
+        stream.close()
+
+    # --- start / stop ------------------------------------------------------
+
+    def start(self, run: Run, first: bool = False) -> None:
+        """Start one program now (if it is not running already)."""
+        with LOCK:
+            if run.alive():
+                return
+            run.wait_until = run.restart_at = None
+            if run.prog.missing:
+                run.state, run.note = MISSING, run.prog.missing
+                return
+            if first and run.prog.port and port_open(run.prog.port):
+                run.state, run.note = EXTERNAL, "läuft schon außerhalb der Konsole"
+                return
+            env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",
+                       **run.prog.env)
+            kw: dict = {}
+            if os.name == "nt":
+                # own group: Ctrl+C in the window reaches only the console, and
+                # CTRL_BREAK_EVENT reaches only this program. No CREATE_NO_WINDOW: the
+                # child must share our console, else the Ctrl+Break cannot reach it.
+                kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                kw["start_new_session"] = True
+            try:
+                proc = subprocess.Popen(run.prog.cmd, cwd=run.prog.cwd, env=env,
+                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, **kw)
+            except OSError as exc:
+                run.state, run.note = FAILED, f"Start fehlgeschlagen: {exc}"
+                return
+            run.proc, run.started, run.exit_code = proc, time.monotonic(), None
+            run.state, run.note, run.port_ok, run.stopping = STARTING, "", None, False
+            run._block = None
+        for stream, channel in ((proc.stdout, "out"), (proc.stderr, "err")):
+            threading.Thread(target=self._pump, args=(run, proc, stream, channel),
+                             daemon=True).start()
+        self.note(f"{run.prog.name} gestartet (PID {proc.pid})")
+
+    def _signal_stop(self, run: Run) -> None:
+        proc = run.proc
+        if proc is None or proc.poll() is not None:
+            return
+        try:
+            if os.name == "nt":
+                proc.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                os.killpg(proc.pid, signal.SIGINT)
+        except (OSError, ValueError):
+            proc.terminate()
+
+    def stop(self, run: Run, wait: bool = False) -> None:
+        """Stop cleanly, after STOP_WAIT hard. wait=False: in the background."""
+        with LOCK:
+            run.wait_until = run.restart_at = None
+            if not run.alive():
+                if run.state in (WAITING, RESTARTING, FAILED, EXTERNAL, MISSING, ENDED):
+                    run.state = STOPPED if run.prog.active else OFF
+                    run.note = ""
+                return
+            run.stopping, run.state = True, STOPPING
+        self._signal_stop(run)
+        if wait:
+            self._finish_stop(run)
+        else:
+            threading.Thread(target=self._finish_stop, args=(run,), daemon=True).start()
+
+    def _finish_stop(self, run: Run, timeout: float = STOP_WAIT) -> None:
+        proc = run.proc
+        if proc is None:
+            return
+        try:
+            proc.wait(timeout)
+        except subprocess.TimeoutExpired:
+            self.note(f"{run.prog.name} reagiert nicht - hart beendet")
+            proc.kill()
+            try:
+                proc.wait(3)
+            except subprocess.TimeoutExpired:
+                pass
+        self.tick()
+
+    def restart(self, run: Run) -> None:
+        def go():
+            self.stop(run, wait=True)
+            with LOCK:
+                run.attempts = 0
+            if run.prog.active:
+                self.start(run)
+        threading.Thread(target=go, daemon=True).start()
+
+    def start_all(self, first: bool = False) -> None:
+        """Modem first (Direwolf/kisshub), the others when its port is open."""
+        now = time.monotonic()
+        modems = [r for r in self.runs if r.prog.active and r.prog.modem]
+        for r in modems:
+            self.start(r, first)
+        waiting = any(r.alive() for r in modems)
+        for r in self.runs:
+            if r.prog.active and not r.prog.modem and not r.alive():
+                if waiting:
+                    with LOCK:
+                        r.state, r.wait_until, r.note = WAITING, now + MODEM_WAIT, \
+                            "wartet auf das Modem"
+                else:
+                    self.start(r, first)
+
+    def restart_all(self) -> None:
+        def go():
+            self.stop_all()
+            with LOCK:
+                for r in self.runs:
+                    r.attempts = 0
+            self.start_all()
+        threading.Thread(target=go, daemon=True).start()
+
+    def stop_all(self) -> None:
+        """Signal all at once, then wait - modem last, the others need it to hang up."""
+        order = sorted(self.runs, key=lambda r: r.prog.modem)
+        for r in order:
+            if not r.prog.modem:
+                self.stop(r, wait=False)
+        deadline = time.monotonic() + STOP_WAIT
+        for r in order:
+            if r.prog.modem:
+                while any(x.alive() for x in order if not x.prog.modem) \
+                        and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                self.stop(r, wait=True)
+        for r in order:
+            if r.proc is not None:
+                self._finish_stop(r, max(0.5, deadline - time.monotonic()))
+
+    # --- the clock -----------------------------------------------------------
+
+    def tick(self) -> None:
+        """Called several times a second: ends, restarts, waiting, port checks."""
+        now = time.monotonic()
+        due: list[Run] = []
+        with LOCK:
+            check = now - self._last_check >= CHECK_EVERY
+            if check:
+                self._last_check = now
+            modem_up = any(r.alive() and r.port_ok for r in self.runs if r.prog.modem)
+            for r in self.runs:
+                if r.proc is not None and r.proc.poll() is not None:
+                    self._ended(r, now)
+                if r.state == WAITING and r.wait_until is not None \
+                        and (modem_up or now >= r.wait_until):
+                    due.append(r)
+                if r.state == RESTARTING and r.restart_at is not None and now >= r.restart_at:
+                    due.append(r)
+                if r.state == RESTARTING and r.restart_at is not None:
+                    left = max(0, int(r.restart_at - now + 0.99))
+                    r.note = f"Neustart in {left} s ({r.attempts} von {MAX_ATTEMPTS})"
+                if r.alive() and r.state == RUNNING and r.attempts \
+                        and now - r.started >= STABLE_AFTER:
+                    r.attempts = 0
+        for r in due:
+            self.start(r)
+        if check:
+            for r in self.runs:
+                if r.alive() and r.prog.port:
+                    ok = port_open(r.prog.port)
+                    first = False
+                    with LOCK:
+                        r.port_ok = ok
+                        if ok and r.state == STARTING:
+                            r.state, first = RUNNING, True
+                    if first and self.on_first_up is not None:
+                        self.on_first_up(r)
+        with LOCK:
+            for r in self.runs:
+                if r.alive() and r.state == STARTING and not r.prog.port \
+                        and now - r.started >= NO_PORT_RUNNING:
+                    r.state = RUNNING
+
+    def _ended(self, r: Run, now: float) -> None:
+        code = r.proc.returncode
+        r.proc = None                         # handled once
+        r.exit_code, r.port_ok = code, None
+        if r.stopping:
+            r.state, r.note, r.stopping = (STOPPED if r.prog.active else OFF), "", False
+            self.note(f"{r.prog.name} gestoppt")
+            return
+        if code == RESTART_EXIT and r.prog.key == "tinybox":
+            self.note("TinyBox RESTART")
+            r.state, r.restart_at = RESTARTING, now
+            return
+        if code == 0:
+            r.state, r.note = ENDED, "von selbst beendet (Exit 0)"
+            self.note(f"{r.prog.name} hat sich beendet (Exit 0) - kein Neustart")
+            return
+        if code == CONFIG_EXIT:
+            r.state, r.note = FAILED, "Konfigurationsfehler (Exit 2) - siehe Meldungen"
+            self.note(f"{r.prog.name}: Konfigurationsfehler - kein Neustart")
+            return
+        r.attempts += 1
+        if r.attempts > MAX_ATTEMPTS:
+            r.state, r.note = FAILED, f"aufgegeben nach {MAX_ATTEMPTS} Versuchen (Exit {code})"
+            self.note(f"{r.prog.name}: aufgegeben nach {MAX_ATTEMPTS} Neustarts")
+            return
+        r.state, r.restart_at = RESTARTING, now + RESTART_DELAY
+        r.note = f"Neustart in {int(RESTART_DELAY)} s ({r.attempts} von {MAX_ATTEMPTS})"
+        self.note(f"{r.prog.name} unerwartet beendet (Exit {code}) - {r.note}")
+
+    def set_active(self, run: Run, active: bool) -> None:
+        with LOCK:
+            run.prog.active = active
+            if not active and not run.alive():
+                run.state, run.note = OFF, ""
+        if active:
+            self.start(run)
+        else:
+            self.stop(run)

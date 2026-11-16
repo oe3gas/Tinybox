@@ -8,7 +8,7 @@ import logging
 import os
 import sys
 
-from prcore import termcolor
+from prcore import stopsignal, termcolor
 
 from . import VERSION, beacon, config, logsetup, notify, release, texts
 from .adapters import agw, brocast, inbox, sysop, telnet, web
@@ -143,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.debugbundle:
         return write_bundle_and_exit(cfg, control, args.config)
     restart = False
+    stopsignal.install()                  # CR138: Ctrl+Break from tbstart = Ctrl+C
     try:
         restart = asyncio.run(run(cfg, control, monitor_filter, args.config))
     except KeyboardInterrupt:

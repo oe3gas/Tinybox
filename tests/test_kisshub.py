@@ -618,7 +618,7 @@ class HubConfigTests(unittest.TestCase):
 
     def test_example_every_tnc_loads(self):
         names = [n for n, _, _ in hubconfig.profile_list(ROOT / "kisshub.conf.example")]
-        self.assertEqual(names, ["pk232", "tm-d710", "tm-d710-9k6", "tnc7multi",
+        self.assertEqual(names, ["pk232", "tm-d710", "tm-d710-9k6", "dr-635", "tnc7multi",
                                  "tnc7multi-9k6", "th-d74", "th-d75", "tnc2-kiss", "generic",
                                  "vara-fm", "vara-hf", "direwolf", "modem73"])
         for name in names:

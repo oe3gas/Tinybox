@@ -5700,7 +5700,7 @@ Ein Zug rund 10–25 Bytes; ein Spiel mit 5 Füchsen (rund 40 Züge) etwa 1,5 kB
   Spieler gleichzeitig (Wettlauf), Kartenbezug zum Standort der Box, Sprint/Foxoring.
 - Sprache nach CR129, keine Terminal-User nach CR128.
 
-## CR138 – Steuerkonsole: alle Programme der Station aus einem Fenster starten, stoppen, neu starten, deaktivieren (offen)
+## CR138 – Steuerkonsole: alle Programme der Station aus einem Fenster starten, stoppen, neu starten, deaktivieren (✅ 16.11.2026, Client 2026.11.16)
 
 **Wunsch OE3GAS (15./16.11.2026).** Heute gibt es als Zwischenlösung für das Release das Zip mit
 `TinyBox-Start.bat` → `release/start.ps1` (Menü 1–4, `git pull`, dann je Programm ein eigenes
@@ -5748,7 +5748,7 @@ Ein Fenster, regelmäßig neu gezeichnet (ANSI, Windows-Konsole mit VT-Modus):
 - `s` gewähltes Programm starten, `x` stoppen, `r` neu starten, `R` alle neu starten
   (in Abhängigkeitsreihenfolge)
 - `d` gewähltes Programm deaktivieren/aktivieren (dauerhaft, bleibt beim nächsten Start aus)
-- `e` nur Fehler zeigen, `n`/`p` durch Fehlerblöcke blättern
+- `e` nur Fehler zeigen, `↑`/`↓` (Cursor) durch Fehlerblöcke blättern (OE3GAS 16.11.: statt `n`/`p`)
 - `w` Web-GUI des gewählten Programms im Browser öffnen (nur ein Komfort-Knopf – die Konsole
   selbst braucht keinen Browser)
 - `u` Update: alles stoppen, `git pull`, wieder starten
@@ -5788,3 +5788,29 @@ Ein Fenster, regelmäßig neu gezeichnet (ANSI, Windows-Konsole mit VT-Modus):
 - dxfeed und die GeoSphere-Aufgaben (Windows-Aufgabenplanung) mit anzeigen?
 - Sauberes Stoppen unter Windows (siehe oben) – ggf. ein kleiner gemeinsamer Stopp-Mechanismus
   in `prcore`, den alle vier Programme verstehen.
+
+### Umgesetzt (16.11.2026)
+
+Anordnung nach dem Entwurf auf der Design-Fläche (Konsolenfenster), Blättern mit ↑/↓.
+- `tbstart/` (Python, nur Standardbibliothek und `prcore`): `programs.py` (Programmliste aus
+  `tbstart.conf` und den .conf der Programme: Port, Rolle, Web-Adresse), `supervisor.py`
+  (Kindprozesse, Neustart-Regeln, Port-Prüfung, Fehlerblöcke), `board.py` (Anzeige), `term.py`
+  (VT-Modus, Tasten, Job-Objekt). Start: `TinyBox-Start.bat` → `python -m tbstart`.
+- `tbstart.conf` [start] kennt jetzt auch `tbclient` (Vorgabe yes) und `dxfeed` (Vorgabe no);
+  `d` schreibt die Zeile, Kommentare bleiben.
+- **Sauberes Stoppen** (offener Punkt oben): jedes Programm läuft in einer eigenen
+  Prozessgruppe und bekommt CTRL_BREAK_EVENT; `prcore/stopsignal.py` macht daraus in TinyBox,
+  TBClient, kisshub, dxfeed und brocastd ein Strg+C (KeyboardInterrupt, also der normale Weg
+  hinaus mit finally). Erst nach 10 s hart. Direwolf endet bei Strg+Break von selbst.
+- Exit 3 der TinyBox (RESTART) → sofort neu; Exit 0 und Exit 2 (Konfigurationsfehler) → kein
+  Neustart; sonst nach 15 s, höchstens 5-mal (Zähler beginnt nach 10 min Laufzeit neu).
+- Läuft ein Programm schon außerhalb (Port belegt) → „extern“, kein zweiter Start.
+- TinyBox-Login-Link: die Konsole liest ihn aus der Ausgabe, `w` öffnet ihn.
+- Plain-Modus ohne Konsolenfenster (`--plain` oder Umleitung): Zeilenstrom, keine Tasten.
+- `release/start.ps1` ist nur noch Übergabe an die Konsole (für Installationen, die vom alten
+  Startmenü aus aktualisieren). `start_alles.bat` (PC2) bleibt vorerst; PC2 kann umsteigen mit
+  `tbstart.conf`: direwolf = yes, direwolf_dir = C:\direwolf, direwolf_exe = direwolf.exe,
+  tinybox = yes, tbclient = no, brocast = yes (brocastd.conf: mode = station), dxfeed = yes.
+- Tests: `tests/test_tbstart.py` (Programmliste, Neustart-Regeln mit Dummy-Programmen, Anzeige).
+- Bewusst nicht: Sysop-Konsole der TinyBox (stdin) unter der Steuerkonsole – dafür die Web-GUI.
+- Noch offen: NanoPi (systemd), GeoSphere-/dxfeed-Aufgaben der Aufgabenplanung anzeigen.

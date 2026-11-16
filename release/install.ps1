@@ -85,7 +85,7 @@ $target = Ask 'Installationsordner' 'C:\TinyBox'
 $target = [IO.Path]::GetFullPath($target)
 if (Test-Path (Join-Path $target '.git')) {
     Say "In $target ist TinyBox schon installiert." Yellow
-    Say 'Programm-Updates holt das Startmenue selbst (git pull). Eine Neuinstallation' Yellow
+    Say 'Programm-Updates holt die Steuerkonsole selbst (git pull). Eine Neuinstallation' Yellow
     Say 'ersetzt die Programmdateien; Konfiguration, Datenbanken und Logs bleiben.' Yellow
     if ((Ask 'Trotzdem neu installieren? (j/n)' 'n') -notmatch '^[jy]') { exit 0 }
 } elseif ((Test-Path $target) -and (Get-ChildItem $target -Force | Select-Object -First 1)) {
@@ -131,7 +131,7 @@ Pop-Location
 # --- 4. Python packages -------------------------------------------------------
 Say 'Installiere Python-Pakete ...' Cyan
 & $py[0] @pyArgs -m pip install --user --disable-pip-version-check -q -r (Join-Path $target 'release\requirements.txt')
-if ($LASTEXITCODE -ne 0) { Say 'WARNUNG: pip meldete einen Fehler - Internet pruefen, spaeter im Startmenue Punkt P.' Yellow }
+if ($LASTEXITCODE -ne 0) { Say 'WARNUNG: pip meldete einen Fehler - Internet pruefen, spaeter install.bat erneut ausfuehren.' Yellow }
 
 # --- 5. configuration ---------------------------------------------------------
 & $py[0] @pyArgs (Join-Path $target 'release\konfig.py')

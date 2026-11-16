@@ -34,7 +34,7 @@ cp "$STAGE/payload/release/install.bat" "$STAGE/install.bat"
 
 # must be there - a release without them would not run
 for f in tbclient/__main__.py tinybox/__main__.py brocast/brocast/daemon.py \
-         release/konfig.py release/start.ps1 TinyBox-Start.bat; do
+         release/konfig.py tbstart/__main__.py TinyBox-Start.bat; do
     [ -f "$STAGE/payload/$f" ] || { echo "ERROR: $f missing in the package" >&2; exit 1; }
 done
 # must not be there
@@ -52,9 +52,10 @@ printf '%s\r\n' \
   "1. Diese ZIP-Datei ganz entpacken (Rechtsklick - Alle extrahieren)." \
   "2. Im entpackten Ordner install.bat doppelklicken." \
   "3. Fragen beantworten (Ordner, Rufzeichen, Direwolf oder KISS-TNC ...)." \
-  "4. Starten mit TinyBox-Start.bat im Installationsordner oder der Desktop-Verknuepfung." "" \
+  "4. Starten mit TinyBox-Start.bat im Installationsordner oder der Desktop-Verknuepfung:" \
+  "   die Steuerkonsole startet und ueberwacht alle Programme in einem Fenster." "" \
   "Git und Python werden bei Bedarf automatisch installiert (winget)." \
-  "Updates holt das Startmenue bei jedem Start selbst von GitHub (git pull)." \
+  "Updates holt die Steuerkonsole bei jedem Start selbst von GitHub (git pull)." \
   "Anleitung: INSTALL.md und MANUAL.md im Installationsordner." > "$STAGE/LIESMICH.txt"
 
 mkdir -p "$HERE/release-out"

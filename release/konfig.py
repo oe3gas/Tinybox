@@ -464,12 +464,13 @@ def main() -> int:
                    "tinybox": "yes" if use_box else "no",
                    "brocast": "yes" if use_bro else "no"}
     with START_CONF.open("w", encoding="utf-8") as f:
-        f.write("# Einstellungen des Startmenues (TinyBox-Start.bat), erstellt von release/konfig.py\n")
+        f.write("# Einstellungen der Steuerkonsole (TinyBox-Start.bat), erstellt von release/konfig.py\n"
+                "# yes/no je Programm; die Taste d in der Steuerkonsole aendert sie auch.\n")
         cp.write(f)
     print(f"    geschrieben: {START_CONF.relative_to(ROOT)}")
     print()
     print("Fertig. Weitere Einstellungen (Chat-Boards, Bake, Rubriken ...) direkt in den")
-    print(".conf-Dateien - Beschreibung in MANUAL.md. Erneut aufrufen: Startmenue, Punkt K.")
+    print(".conf-Dateien - Beschreibung in MANUAL.md. Erneut aufrufen: Steuerkonsole, Taste k.")
     return 0
 
 

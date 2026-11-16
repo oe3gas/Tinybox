@@ -563,6 +563,11 @@ def main(argv: list[str] | None = None) -> int:
         # create the daemon inside the running loop (asyncio.Event on Python 3.9)
         await Daemon(cfg).run()
 
+    try:                                         # CR138: Ctrl+Break von tbstart = Strg+C
+        from prcore import stopsignal            # (brocast laeuft auch ohne prcore)
+        stopsignal.install()
+    except ImportError:
+        pass
     try:
         asyncio.run(run())
     except (KeyboardInterrupt, asyncio.CancelledError):

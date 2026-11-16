@@ -8,7 +8,7 @@ import logging
 import socket
 import sys
 
-from prcore import auth, dailylog, release, termcolor
+from prcore import auth, dailylog, release, stopsignal, termcolor
 from prcore.text import visible
 
 from . import VERSION, config
@@ -91,6 +91,7 @@ def main() -> int:
             for t in tasks:
                 t.cancel()
 
+    stopsignal.install()                  # CR138: Ctrl+Break from tbstart = Ctrl+C
     try:
         asyncio.run(run())
     except KeyboardInterrupt:

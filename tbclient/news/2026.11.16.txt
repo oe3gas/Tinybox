@@ -1,0 +1,2 @@
+- Steuerkonsole: TinyBox-Start.bat startet alle Programme in einem Fenster
+- Client endet bei Strg+Break sauber (wie Strg+C)

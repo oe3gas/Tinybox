@@ -2245,6 +2245,9 @@ Für andere Stationen ein Production-Release als ZIP (INSTALL.md):
 - **Startmenü** (`TinyBox-Start.bat` → `release/start.ps1`): 1 nur Client, 2 Client + TinyBox,
   3 Client + brocast-Listener, 4 alle drei; vorher `git pull`, dann Direwolf (falls eingestellt)
   und die gewählten Programme.
+  **Ersetzt 16.11.2026 durch die Steuerkonsole** (CR138, `tbstart/`): ein Konsolenfenster für
+  alle Programme (Start, Stopp, Neustart, Deaktivieren, Fehleranzeige). `release/start.ps1` bleibt
+  nur als Übergabe für Installationen, die vom alten Startmenü aus aktualisieren.
 - **Updates über Git:** Das Paket enthält einen flachen Git-Clone mit Sparse-Checkout, daher holt
   `git pull` später nur die Release-Dateien. Der Direwolf-Fork kommt nur mit einem neuen Paket.
 - Gebaut wird mit `release/build_release.sh <direwolf-tinybox.exe>` aus `main` auf GitHub.

@@ -24,6 +24,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from prcore import stopsignal
+
 from . import VERSION
 from . import cty as ctymod
 from . import dxcc as dxccmod
@@ -84,6 +86,7 @@ def cmd_collect(cfg: Config, args) -> int:
     store = Store(cfg.data.db)
     cty = load_cty(cfg, fetch_if_missing=True)
     collector = Collector(cfg, store, cty)
+    stopsignal.install()                  # CR138: Ctrl+Break from tbstart = Ctrl+C
     try:
         asyncio.run(collector.run())
     except KeyboardInterrupt:
