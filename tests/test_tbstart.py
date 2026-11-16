@@ -196,6 +196,28 @@ class SupervisorTests(unittest.TestCase):
         sup.stop_all()
         self.assertEqual((modem.state, box.state), (sv.STOPPED, sv.STOPPED))
 
+    def test_stop_all_reports_every_program(self):
+        """q / Ctrl+C: one line per program - ended (how, exit code) or not running."""
+        port = free_port()
+        sup = sv.Supervisor([self.prog(key="direwolf", port=port, modem=True),
+                             self.prog(key="tinybox"), self.prog(key="brocast")])
+        modem, box, bro = sup.runs
+        sup.start(modem)
+        sup.start(box)
+        self.assertTrue(wait(lambda: modem.state == sv.RUNNING and box.state == sv.RUNNING,
+                             sup=sup))
+        lines: list[str] = []
+        sup.stop_all(lines.append)
+        text = "\n".join(lines)
+        self.assertIn("brocast: lief nicht", text)
+        self.assertIn("tinybox: wird beendet (PID", text)
+        self.assertIn("tinybox: sauber beendet", text)
+        self.assertIn("direwolf: sauber beendet", text)
+        ends = [i for i, x in enumerate(lines) if "beendet (Exit" in x]
+        self.assertLess(ends[0], ends[1])
+        self.assertIn("tinybox", lines[ends[0]], "modem last")
+        self.assertEqual((modem.state, box.state), (sv.STOPPED, sv.STOPPED))
+
     def test_port_in_use_is_external_and_missing_conf_is_shown(self):
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))

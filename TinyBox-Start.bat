@@ -13,4 +13,5 @@ if %errorlevel%==0 (
 ) else (
     python -m tbstart %*
 )
-if errorlevel 1 pause
+rem keep the shutdown report (one line per program) readable for a moment
+if errorlevel 1 (pause) else (timeout /t 10)

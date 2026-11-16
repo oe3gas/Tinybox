@@ -47,8 +47,12 @@ Bei KISS stellt der Dialog in `tbclient.conf`, `tinybox.conf` und `brocastd.conf
 `[radio] interface = kiss` und `[kiss] port` auf den Port von kisshub (8101), sonst
 `interface = agw`.
 
-Geändert werden nur die gefragten Werte, alle Kommentare der Vorlagen bleiben. Eine vorhandene
-Datei wird nur nach Rückfrage ersetzt. Alles Weitere (Chat-Boards, Bake, Rubriken,
+Geändert werden nur die gefragten Werte, alle Kommentare der Vorlagen bleiben. Ruft man den
+Dialog erneut auf, schlägt er die Werte von heute vor (Rufzeichen, Locator, QTH, Heimat-Box,
+Mailbox-SSID, Frequenz, Direwolf-Ordner, Soundkarte, Baudrate, PTT, TNC-Profil, COM-Port …) –
+Enter behält sie, `-` leert einen optionalen Wert. Eine vorhandene Datei bekommt die Antworten
+eingetragen, alle anderen Einstellungen darin bleiben; neu aus der Vorlage nur auf Wunsch
+(Auswahl `n`). Alles Weitere (Chat-Boards, Bake, Rubriken,
 Funkwerte des TNC …) direkt in den `.conf`-Dateien – siehe MANUAL.md. Der Dialog lässt sich jederzeit in der
 Steuerkonsole mit **k** wiederholen.
 
@@ -88,7 +92,7 @@ und wird nur angezeigt.
 | `↑` / `↓` | durch die Fehlerblöcke blättern (älter / neuer) |
 | `u` | Update: alles stoppen, `git pull`, wieder starten |
 | `k` | Konfigurationsdialog |
-| `q` | alles sauber beenden (auch Strg+C) |
+| `q` | alles sauber beenden (auch Strg+C) – je Programm eine Meldung, wann und wie es endete |
 
 - Start in der richtigen Reihenfolge: zuerst Direwolf bzw. kisshub; die anderen starten, sobald
   dessen AGW- bzw. KISS-Port offen ist (höchstens 20 s warten).
@@ -97,6 +101,9 @@ und wird nur angezeigt.
   werden nicht neu gestartet, RESTART der TinyBox sofort.
 - Stoppen ist sauber: das Programm bekommt Strg+Break, trennt seine Verbindungen und schließt die
   Datenbank; nur wenn es nach 10 s noch läuft, wird es hart beendet.
+- Beim Beenden (`q`, Strg+C) meldet die Konsole jedes Programm einzeln: „wird beendet“, dann
+  „sauber beendet“ bzw. „hart beendet“ mit Exit-Code und Dauer (Modem zuletzt); ein zweites
+  Strg+C beendet den Rest sofort hart. Die Meldungen bleiben 10 s stehen und stehen auch im Log.
 - Schließt man das Fenster, enden alle Programme mit.
 - Ein Programm, das schon außerhalb der Konsole läuft (Port belegt), wird nicht doppelt
   gestartet („extern“).

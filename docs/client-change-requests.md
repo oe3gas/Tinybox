@@ -5822,3 +5822,14 @@ Anordnung nach dem Entwurf auf der Design-Fläche (Konsolenfenster), Blättern m
   Mitgeliefert liegt Direwolf in `direwolf\direwolf-tinybox.exe` des Installationsordners
   (install.ps1 kopiert ihn aus dem ZIP); in einem Git-Clone ohne Release-Paket fehlt er.
   `konfig.py` prüft das jetzt und fragt sonst den Ordner des eigenen Direwolf ab.
+- Nachtrag 16.11. (Wunsch OE3GAS, tbstart 2026.11.16.2):
+  - ✅ `q` / Strg+C: Meldung über die Beendigung jedes einzelnen Programms – „wird beendet (PID)“,
+    dann „sauber beendet“ bzw. „hart beendet“ mit Exit-Code und Dauer, in der Reihenfolge des
+    Endens (Modem zuletzt); nicht laufende werden genannt. Zweites Strg+C = Rest sofort hart.
+    Auch ins Log; `TinyBox-Start.bat` lässt das Fenster danach 10 s stehen.
+  - ✅ `k` (Konfiguration): `konfig.py` liest die vorhandenen Werte ein (tbclient.conf,
+    tinybox.conf, kisshub.conf, tbstart.conf, direwolf.conf) und bietet sie als Vorschlag an –
+    Call, Locator, QTH, Heimat-BBS, Mailbox-SSID, Frequenz, Direwolf-Ordner, Soundkarte, Baud,
+    PTT, TNC-Profil, COM-Port und Baudrate. `-` leert einen optionalen Wert. Vorhandene Dateien
+    bekommen die Antworten eingetragen statt aus der Vorlage neu (Chat-Boards, Bake … bleiben);
+    `tbstart.conf` behält `tbclient`/`dxfeed`. Test: `tests/test_konfig.py`.

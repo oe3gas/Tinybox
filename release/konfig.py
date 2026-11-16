@@ -8,8 +8,10 @@ Asks a few questions and writes from the *.conf.example templates:
 The radio is either Direwolf (sound card modem, AGW) or a KISS TNC through kisshub:
 for KISS the dialog lists the TNC sections of kisshub.conf.example, the user picks his.
 Only the asked keys are changed, all comments of the templates stay.
-An existing file is only replaced after asking. Everything else (chat boards,
-rubrics, beacon ...) is set later by hand in the .conf files - see MANUAL.md.
+Values already there (tbclient.conf, tinybox.conf, kisshub.conf, tbstart.conf,
+direwolf.conf) are offered as the defaults. An existing file gets the answers
+written into it - everything else in it stays (chat boards, rubrics, beacon ...);
+building it anew from the template only on request. See MANUAL.md.
 """
 
 from __future__ import annotations
@@ -36,15 +38,20 @@ def _isnum(s: str) -> bool:
 
 # --- small dialog helpers ----------------------------------------------------
 
-def ask(text: str, default: str = "", check=None, hint: str = "") -> str:
+def ask(text: str, default: str = "", check=None, hint: str = "", clear: bool = False) -> str:
+    """clear=True: an optional value - '-' empties a default that is there."""
     while True:
         shown = f" [{default}]" if default else ""
+        if clear and default:
+            shown += " (- = leeren)"
         try:
             ans = input(f"  {text}{shown}: ").strip()
         except EOFError:
             ans = ""
         if not ans:
             ans = default
+        if clear and ans == "-":
+            return ""
         if check is None or check(ans):
             return ans
         print(f"    -> ungueltig. {hint}")
@@ -67,6 +74,51 @@ def is_call_ssid(c: str) -> bool:
 
 def with_ssid(call: str, ssid: str) -> str:
     return call if ssid in ("", "0") else f"{call}-{ssid}"
+
+
+# --- reading what is there ---------------------------------------------------
+
+def read_conf(path: Path) -> configparser.ConfigParser:
+    """The file as ConfigParser - empty if it is missing or cannot be read."""
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"), interpolation=None,
+                                   strict=False)
+    try:
+        if path.is_file():
+            cp.read(path, encoding="utf-8")
+    except (configparser.Error, OSError, UnicodeDecodeError):
+        return configparser.ConfigParser(interpolation=None)
+    return cp
+
+
+def cval(cp: configparser.ConfigParser, section: str, key: str, default: str = "") -> str:
+    try:
+        return cp.get(section, key, fallback=default).strip() or default
+    except configparser.Error:
+        return default
+
+
+def read_direwolf(dw_dir: Path | None) -> dict[str, str]:
+    """ADEVICE, MODEM, PTT, MYCALL of an existing direwolf.conf ({} if none)."""
+    out: dict[str, str] = {}
+    if not dw_dir:
+        return out
+    try:
+        text = (dw_dir / "direwolf.conf").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    for line in text.splitlines():
+        m = re.match(r"^\s*(ADEVICE|MODEM|PTT|MYCALL)\s+(.+?)\s*$", line, re.I)
+        if m and m.group(1).upper() not in out:
+            out[m.group(1).upper()] = m.group(2)
+    return out
+
+
+def base_call(c: str) -> str:
+    return c.upper().partition("-")[0]
+
+
+def ssid_of(c: str) -> str:
+    return c.upper().partition("-")[2]
 
 
 # --- editing the templates --------------------------------------------------
@@ -110,15 +162,37 @@ def set_keys(text: str, section: str, values: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def write_conf(target: Path, template: Path, sections: dict[str, dict[str, str]]) -> bool:
-    if target.exists() and not yes(f"{target.relative_to(ROOT)} gibt es schon - neu erstellen?", False):
-        print(f"    {target.relative_to(ROOT)} bleibt unveraendert.")
-        return False
-    text = template.read_text(encoding="utf-8")
-    for sec, vals in sections.items():
-        text = set_keys(text, sec, vals)
+def write_conf(target: Path, template: Path, sections: dict[str, dict[str, str]],
+               new_only: dict[str, dict[str, str]] | None = None) -> bool:
+    """Write the answers. An existing file gets them written into it (all other
+    settings stay); new from the template only if wanted. new_only: keys set only
+    in a file new from the template (e.g. brocastd mode = listener - an existing
+    station must stay a station)."""
+    name = target.relative_to(ROOT)
+    fresh = not target.exists()
+    if not fresh:
+        old = target.read_text(encoding="utf-8")
+        text = old
+        for sec, vals in sections.items():
+            text = set_keys(text, sec, vals)
+        if text == old:
+            print(f"    {name}: schon so eingestellt - unveraendert.")
+            return False
+        print(f"  {name} gibt es schon:")
+        print("     e  Antworten eintragen, alle anderen Einstellungen bleiben")
+        print("     n  neu aus der Vorlage (eigene Einstellungen gehen verloren)")
+        print("     b  behalten wie sie ist")
+        a = ask("Auswahl", "e", lambda a: a.lower() in ("e", "n", "b"), "e, n oder b.").lower()
+        if a == "b":
+            print(f"    {name} bleibt unveraendert.")
+            return False
+        fresh = a == "n"
+    if fresh:
+        text = template.read_text(encoding="utf-8")
+        for sec, vals in {**sections, **(new_only or {})}.items():
+            text = set_keys(text, sec, vals)
     target.write_text(text, encoding="utf-8")
-    print(f"    geschrieben: {target.relative_to(ROOT)}")
+    print(f"    geschrieben: {name}")
     return True
 
 
@@ -198,31 +272,47 @@ def com_ports() -> list[tuple[str, str]]:
     return sorted(ports, key=lambda p: (len(p[0]), p[0]))
 
 
-def _pick(title: str, names: list[str]) -> str:
+def _pick(title: str, names: list[str], current: str = "") -> str:
     print(f"  {title}:")
     for i, n in enumerate(names):
         print(f"    {i:2}  {n}")
-    hint = next((i for i, n in enumerate(names)
-                 if re.search(r"usb|codec|signalink|digirig", n, re.I)), 0)
+    if _isnum(current) and int(current) < len(names):
+        hint = int(current)                 # what direwolf.conf has today
+    else:
+        hint = next((i for i, n in enumerate(names)
+                     if re.search(r"usb|codec|signalink|digirig", n, re.I)), 0)
     return ask("Nummer", str(hint), lambda a: _isnum(a) and int(a) < len(names),
                f"Eine Zahl von 0 bis {len(names) - 1}.")
 
 
-def choose_audio() -> tuple[str, str]:
+def choose_audio(current: str = "") -> tuple[str, str]:
     """(ADEVICE value, comment): 'in out' as numbers, the names for the comment line
-    (Direwolf takes comments only on lines of their own)."""
+    (Direwolf takes comments only on lines of their own). current: ADEVICE today."""
     ins, outs = sound_devices()
     if not ins or not outs:
         print("  Soundkarten konnten nicht gelesen werden.")
         print("  Soundkarte: Nummer (0, 1 ...) oder ein Teil des Namens ohne Leerzeichen, z. B. USB.")
-        return ask("Soundkarte", "USB"), ""
-    i = _pick("Eingang (Empfang: Funkgeraet -> PC)", ins)
-    o = _pick("Ausgang (Senden: PC -> Funkgeraet)", outs)
+        return ask("Soundkarte", current or "USB"), ""
+    parts = current.split()
+    cur_in = parts[0] if parts else ""
+    cur_out = parts[1] if len(parts) > 1 else cur_in
+    i = _pick("Eingang (Empfang: Funkgeraet -> PC)", ins, cur_in)
+    o = _pick("Ausgang (Senden: PC -> Funkgeraet)", outs, cur_out)
     return f"{i} {o}", f"Eingang {i}: {ins[int(i)]} / Ausgang {o}: {outs[int(o)]}"
 
 
-def choose_ptt() -> str:
-    """PTT value for direwolf.conf, '' = VOX."""
+def ptt_choice(ptt: str) -> str:
+    """The answer of choose_ptt that gives this PTT value (V, C or 'COM5 RTS')."""
+    p = ptt.strip().upper()
+    if not p:
+        return "V"
+    if p.startswith("CM108"):
+        return "C"
+    return p if re.fullmatch(r"COM\d+( -?(RTS|DTR))*", p) else "V"
+
+
+def choose_ptt(current: str | None = None) -> str:
+    """PTT value for direwolf.conf, '' = VOX. current: PTT today (None = no direwolf.conf)."""
     ports = com_ports()
     print("  PTT (Sendertastung):")
     for i, (dev, desc) in enumerate(ports, 1):
@@ -238,7 +328,8 @@ def choose_ptt() -> str:
         return (a in ("C", "V") or (_isnum(a) and 1 <= int(a) <= len(ports))
                 or bool(re.fullmatch(r"COM\d+( -?(RTS|DTR))*", a)))
 
-    a = ask("Auswahl", "V", ok, "Nummer, C, V oder z. B. COM5 RTS.").strip().upper()
+    a = ask("Auswahl", ptt_choice(current or ""), ok,
+            "Nummer, C, V oder z. B. COM5 RTS.").strip().upper()
     if a == "V":
         return ""
     if a == "C":
@@ -302,8 +393,10 @@ def choose_com(default: str) -> str:
     return ports[int(a) - 1][0] if _isnum(a) else (a.upper() if a.upper().startswith("COM") else a)
 
 
-def choose_kiss(call: str) -> tuple[str, dict[str, str]] | None:
-    """(profile name, keys to set in its section) - None if kisshub.conf.example cannot be read."""
+def choose_kiss(call: str, current: configparser.ConfigParser | None = None
+                ) -> tuple[str, dict[str, str]] | None:
+    """(profile name, keys to set in its section) - None if kisshub.conf.example cannot be read.
+    current: kisshub.conf of today - its profile and values are the defaults."""
     try:
         profs = kiss_profiles()
     except Exception as exc:              # noqa: BLE001 - the dialog must go on
@@ -315,9 +408,14 @@ def choose_kiss(call: str) -> tuple[str, dict[str, str]] | None:
     print("  TNC-Profile (kisshub.conf.example):")
     for i, (name, k) in enumerate(profs, 1):
         print(f"    {i:2}  {name:14} {k.get('notes', '')}")
-    a = ask("Nummer deines TNC", "1", lambda a: _isnum(a) and 1 <= int(a) <= len(profs),
+    cur = current if current is not None else configparser.ConfigParser()
+    cur_name = cval(cur, "kisshub", "profile")
+    nr = next((i for i, (n, _) in enumerate(profs, 1) if n == cur_name), 1)
+    a = ask("Nummer deines TNC", str(nr), lambda a: _isnum(a) and 1 <= int(a) <= len(profs),
             f"Eine Zahl von 1 bis {len(profs)}.")
     name, k = profs[int(a) - 1]
+    if cur.has_section(name):                 # the values of today's kisshub.conf
+        k = {**k, **{key: v.strip() for key, v in cur.items(name) if v.strip()}}
     print(f"    gewaehlt: {name} ({k.get('display', name)})")
     if k.get("hint"):
         print(f"    Hinweis: {k['hint']}")
@@ -340,63 +438,95 @@ def choose_kiss(call: str) -> tuple[str, dict[str, str]] | None:
 # --- the dialog -------------------------------------------------------------
 
 def main() -> int:
+    # what is there today - the defaults of every question
+    cli = read_conf(ROOT / "tbclient.conf")
+    box = read_conf(ROOT / "tinybox.conf")
+    start = read_conf(START_CONF)
+    khub = read_conf(KISS_CONF)
+    bro_conf = ROOT / "brocast" / "brocastd.conf"
+    found = [p.relative_to(ROOT).as_posix() for p in
+             (ROOT / "tbclient.conf", ROOT / "tinybox.conf", bro_conf, KISS_CONF, START_CONF)
+             if p.is_file()]
+
     print()
     print("=" * 66)
     print("  TinyBox - Konfiguration")
     print("  Enter uebernimmt den Vorschlag in [eckigen Klammern].")
+    if found:
+        print("  Vorschlaege = die Werte von heute aus: " + ", ".join(found))
     print("=" * 66)
     print()
     print("Station")
-    call = ask("Dein Rufzeichen (ohne SSID)", "", is_call, "Zum Beispiel OE3ABC.").upper()
-    locator = ask("Locator (leer = keiner)", "", lambda a: not a or LOC_RE.match(a),
-                  "Zum Beispiel JN88EP.").upper()
-    qth = ask("QTH / Ortsname (leer = keiner)", "", lambda a: "#" not in a and ";" not in a,
-              "Ohne # und ;.")
+    old_my = cval(cli, "station", "mycall").upper()
+    old_call = base_call(cval(box, "station", "sysop_call") or old_my)
+    call = ask("Dein Rufzeichen (ohne SSID)", old_call if is_call(old_call) else "", is_call,
+               "Zum Beispiel OE3ABC.").upper()
+    locator = ask("Locator (leer = keiner)",
+                  cval(cli, "station", "locator") or cval(box, "station", "locator"),
+                  lambda a: not a or LOC_RE.match(a), "Zum Beispiel JN88EP.", clear=True).upper()
+    qth = ask("QTH / Ortsname (leer = keiner)", cval(box, "station", "qth"),
+              lambda a: "#" not in a and ";" not in a, "Ohne # und ;.", clear=True)
 
     print()
     print("Was soll auf diesem PC laufen? (Der TBClient ist immer dabei.)")
-    use_box = yes("Eine eigene TinyBox (Mailbox) betreiben?", False)
-    use_bro = yes("brocast-Listener (Teletext-Seiten ueber Funk empfangen)?", False)
+
+    def was_on(key: str, conf: Path) -> bool:
+        if start.has_option("start", key):
+            return cval(start, "start", key).lower() in ("yes", "ja", "j", "true", "1", "on")
+        return conf.is_file()
+
+    use_box = yes("Eine eigene TinyBox (Mailbox) betreiben?", was_on("tinybox", ROOT / "tinybox.conf"))
+    use_bro = yes("brocast-Listener (Teletext-Seiten ueber Funk empfangen)?",
+                  was_on("brocast", bro_conf))
 
     print()
     print("TBClient")
-    my = ask("Rufzeichen des Clients mit SSID", call, is_call_ssid, "Zum Beispiel OE3ABC-12.").upper()
+    my = ask("Rufzeichen des Clients mit SSID",
+             old_my if old_my and base_call(old_my) == call and is_call_ssid(old_my) else call,
+             is_call_ssid, "Zum Beispiel OE3ABC-12.").upper()
 
     box_call = ""
+    old_box = cval(box, "station", "mailbox_call").upper()
     if use_box:
         print()
         print("TinyBox")
-        box_ssid = ask("SSID der Mailbox (1-15)", "1",
+        old_ssid = ssid_of(old_box) if base_call(old_box) == call else ""
+        box_ssid = ask("SSID der Mailbox (1-15)", old_ssid if _isnum(old_ssid) else "1",
                        lambda a: _isnum(a) and 1 <= int(a) <= 15, "Eine Zahl von 1 bis 15.")
         box_call = with_ssid(call, box_ssid)
         if box_call == my:
             print(f"    Hinweis: Client und Mailbox duerfen nicht dasselbe Rufzeichen haben ({my}).")
             my = ask("Anderes Rufzeichen fuer den Client", f"{call}-12", is_call_ssid).upper()
-        freq = ask("Frequenz des Funkports in MHz (leer = keine)", "",
-                   lambda a: not a or re.fullmatch(r"\d+(\.\d+)?", a), "Zum Beispiel 144.800.")
+        freq = ask("Frequenz des Funkports in MHz (leer = keine)", cval(box, "station", "freq"),
+                   lambda a: not a or re.fullmatch(r"\d+(\.\d+)?", a), "Zum Beispiel 144.800.",
+                   clear=True)
         target_box = box_call
     else:
         freq = ""
-        target_box = ask("Rufzeichen deiner Heimat-TinyBox", "", is_call_ssid,
+        old_target = cval(cli, "tinybox", "call").upper()
+        target_box = ask("Rufzeichen deiner Heimat-TinyBox",
+                         old_target if is_call_ssid(old_target) else "", is_call_ssid,
                          "Zum Beispiel OE3XYZ-1.").upper()
 
     print()
     print("Funkanbindung")
     print("   1  Direwolf - Soundkarten-Modem (Interface wie SignaLink, Digirig ...)")
     print("   2  KISS - TNC oder Funkgeraet mit eingebautem TNC, VARA, modem73 (ueber kisshub)")
-    mode = ask("Auswahl", "1", lambda a: a in ("1", "2"), "1 oder 2.")
+    iface = cval(cli, "radio", "interface").lower()
+    was_kiss = iface == "kiss" if iface else was_on("kisshub", KISS_CONF)
+    mode = ask("Auswahl", "2" if was_kiss else "1", lambda a: a in ("1", "2"), "1 oder 2.")
     kiss = None
     if mode == "2":
         print()
         print("KISS-TNC (kisshub)")
-        kiss = choose_kiss(call)
+        kiss = choose_kiss(call, khub)
         if kiss is None:
             print("    -> weiter mit Direwolf.")
             mode = "1"
     start_dw = False
     dw_dir: Path | None = None
     dw_exe = "direwolf-tinybox.exe"
-    agw = {"channel": "0"}
+    agw: dict[str, str] = {}
     if mode == "1":
         print()
         print("Direwolf (Modem fuer die Soundkarte)")
@@ -406,28 +536,52 @@ def main() -> int:
         else:   # e.g. a git clone without the release package: no direwolf\ folder
             print(f"  Kein mitgelieferter Direwolf gefunden ({DW_DIR / 'direwolf-tinybox.exe'}"
                   " fehlt).")
-        start_dw = yes("Direwolf beim Start automatisch mitstarten?", True)
+        old_dir = Path(cval(start, "start", "direwolf_dir")) if cval(start, "start", "direwolf_dir") \
+            else None
+        old_exe = cval(start, "start", "direwolf_exe")
+        own_old = old_dir is not None and old_dir.resolve() != DW_DIR.resolve()
+        start_dw = yes("Direwolf beim Start automatisch mitstarten?",
+                       was_on("direwolf", DW_DIR / "direwolf.conf") if start.has_section("start")
+                       else True)
         dw_dir = DW_DIR
         dw_exe = "direwolf-tinybox.exe"
         if start_dw:
-            if not bundled or not yes("Mitgelieferten Direwolf verwenden?", True):
-                dw_dir = Path(ask("Ordner deines Direwolf", r"C:\direwolf",
+            if not bundled or not yes("Mitgelieferten Direwolf verwenden?", not own_old):
+                dw_dir = Path(ask("Ordner deines Direwolf",
+                                  str(old_dir) if own_old else r"C:\direwolf",
                                   lambda a: Path(a).is_dir(), "Ordner gibt es nicht."))
-                dw_exe = ask("Programmdatei darin", "direwolf.exe",
+                exe_default = old_exe if own_old and old_exe else "direwolf.exe"
+                dw_exe = ask("Programmdatei darin", exe_default,
                              lambda a: (dw_dir / a).is_file(), "Datei gibt es dort nicht.")
             dwc = dw_dir / "direwolf.conf"
+            dw_old = read_direwolf(dw_dir)
+            if dw_old:
+                print(f"  {dwc} heute: ADEVICE {dw_old.get('ADEVICE', '?')}, "
+                      f"MODEM {dw_old.get('MODEM', '?')}, PTT {dw_old.get('PTT', 'keine (VOX)')}")
             if not dwc.exists() or yes(f"{dwc} gibt es schon - neu erstellen?", False):
-                adev, adev_note = choose_audio()
-                baud = ask("Baudrate (1200 oder 9600)", "1200", lambda a: a in ("1200", "9600"),
-                           "1200 oder 9600.")
-                ptt = choose_ptt()
+                adev, adev_note = choose_audio(dw_old.get("ADEVICE", ""))
+                old_baud = dw_old.get("MODEM", "1200").split()[0]
+                baud = ask("Baudrate (1200 oder 9600)",
+                           old_baud if old_baud in ("1200", "9600") else "1200",
+                           lambda a: a in ("1200", "9600"), "1200 oder 9600.")
+                ptt = choose_ptt(dw_old.get("PTT") if dw_old else None)
                 dw_dir.mkdir(parents=True, exist_ok=True)
                 dwc.write_text(direwolf_conf(call, adev, baud, ptt, adev_note), encoding="utf-8")
                 print(f"    geschrieben: {dwc}")
+            elif dw_old.get("MYCALL", "").upper() not in ("", call) \
+                    and base_call(dw_old["MYCALL"]) != call:
+                text = dwc.read_text(encoding="utf-8", errors="replace")
+                dwc.write_text(re.sub(r"(?im)^(\s*MYCALL\s+)\S+", rf"\g<1>{call}", text, count=1),
+                               encoding="utf-8")
+                print(f"    {dwc}: MYCALL {dw_old['MYCALL']} -> {call}")
         else:
-            own = ask("Ordner der direwolf.conf deines eigenen Direwolf (leer = keiner)", "",
+            old_own = cval(cli, "agw", "direwolf_conf") or cval(box, "agw", "direwolf_conf")
+            if old_own.lower().endswith(".conf"):
+                old_own = str(Path(old_own).parent)
+            own = ask("Ordner der direwolf.conf deines eigenen Direwolf (leer = keiner)",
+                      old_own if old_own and (Path(old_own) / "direwolf.conf").is_file() else "",
                       lambda a: not a or (Path(a) / "direwolf.conf").is_file(),
-                      "Dort liegt keine direwolf.conf.")
+                      "Dort liegt keine direwolf.conf.", clear=True)
             dw_dir = Path(own) if own else None
         # CR70: the programs read AGWPORT, MODEM, PACLEN ... from direwolf.conf
         if dw_dir and (dw_dir / "direwolf.conf").is_file():
@@ -435,7 +589,7 @@ def main() -> int:
     if kiss:
         radio = {"radio": {"interface": "kiss"}, "kiss": {"port": kiss_port()}}
     else:
-        radio = {"radio": {"interface": "agw"}, "agw": agw}
+        radio = {"radio": {"interface": "agw"}, **({"agw": agw} if agw else {})}
 
     print()
     print("Konfigurationsdateien")
@@ -452,32 +606,33 @@ def main() -> int:
             "station": {"mailbox_call": box_call, "sysop_call": call, "qth": qth,
                         "freq": freq, "locator": locator},
             **radio,
+        }, new_only={
             # a listener takes no pages from the TinyBox (only a brocast station does)
             "brocast": {"publish": "no"},
         })
     if use_bro:
-        write_conf(ROOT / "brocast" / "brocastd.conf", ROOT / "brocast" / "brocastd.conf.example", {
+        write_conf(bro_conf, ROOT / "brocast" / "brocastd.conf.example", dict(radio), new_only={
             "brocastd": {"mode": "listener", "callsign": ""},
-            **radio,
         })
 
-    cp = configparser.ConfigParser()
-    cp["start"] = {"direwolf": "yes" if start_dw else "no",
-                   "direwolf_dir": str(dw_dir or DW_DIR), "direwolf_exe": dw_exe,
-                   "kisshub": "yes" if kiss else "no",
-                   "kisshub_profile": kiss[0] if kiss else "",
-                   "tinybox": "yes" if use_box else "no",
-                   "brocast": "yes" if use_bro else "no"}
-    with START_CONF.open("w", encoding="utf-8") as f:
-        f.write("# Einstellungen der Steuerkonsole (TinyBox-Start.bat), erstellt von release/konfig.py\n"
-                "# yes/no je Programm; die Taste d in der Steuerkonsole aendert sie auch.\n")
-        cp.write(f)
+    values = {"direwolf": "yes" if start_dw else "no",
+              "direwolf_dir": str(dw_dir or DW_DIR), "direwolf_exe": dw_exe,
+              "kisshub": "yes" if kiss else "no",
+              "kisshub_profile": kiss[0] if kiss else "",
+              "tinybox": "yes" if use_box else "no",
+              "brocast": "yes" if use_bro else "no"}
+    if START_CONF.is_file():        # keep tbclient/dxfeed lines (key d) and comments
+        text = set_keys(START_CONF.read_text(encoding="utf-8"), "start", values)
+    else:
+        text = ("# Einstellungen der Steuerkonsole (TinyBox-Start.bat), erstellt von release/konfig.py\n"
+                "# yes/no je Programm; die Taste d in der Steuerkonsole aendert sie auch.\n"
+                "[start]\n" + "".join(f"{k} = {v}\n" for k, v in values.items()))
+    START_CONF.write_text(text, encoding="utf-8")
     print(f"    geschrieben: {START_CONF.relative_to(ROOT)}")
     print()
     print("Fertig. Weitere Einstellungen (Chat-Boards, Bake, Rubriken ...) direkt in den")
     print(".conf-Dateien - Beschreibung in MANUAL.md. Erneut aufrufen: Steuerkonsole, Taste k.")
     return 0
-
 
 if __name__ == "__main__":
     try:

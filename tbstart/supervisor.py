@@ -63,6 +63,7 @@ class Run:
     restart_at: float | None = None
     wait_until: float | None = None
     stopping: bool = False
+    killed: bool = False                         # the last stop needed kill()
     note: str = ""
     login_url: str | None = None
     errors: list = field(default_factory=list)     # blocks: [time, [lines]]
@@ -180,6 +181,7 @@ class Supervisor:
                 return
             run.proc, run.started, run.exit_code = proc, time.monotonic(), None
             run.state, run.note, run.port_ok, run.stopping = STARTING, "", None, False
+            run.killed = False
             run._block = None
         for stream, channel in ((proc.stdout, "out"), (proc.stderr, "err")):
             threading.Thread(target=self._pump, args=(run, proc, stream, channel),
@@ -222,6 +224,7 @@ class Supervisor:
             proc.wait(timeout)
         except subprocess.TimeoutExpired:
             self.note(f"{run.prog.name} reagiert nicht - hart beendet")
+            run.killed = True
             proc.kill()
             try:
                 proc.wait(3)
@@ -263,22 +266,40 @@ class Supervisor:
             self.start_all()
         threading.Thread(target=go, daemon=True).start()
 
-    def stop_all(self) -> None:
-        """Signal all at once, then wait - modem last, the others need it to hang up."""
-        order = sorted(self.runs, key=lambda r: r.prog.modem)
-        for r in order:
-            if not r.prog.modem:
+    def stop_all(self, say=None) -> None:
+        """Signal all at once, then wait - modem last, the others need it to hang up.
+        say(text): one line per program when it has ended (q / Ctrl+C, update)."""
+        say = say or (lambda text: None)
+        others = [r for r in self.runs if not r.prog.modem]
+        modems = [r for r in self.runs if r.prog.modem]
+        for group in (others, modems):
+            busy = [(r, r.proc) for r in group if r.alive()]   # proc before stop(): tick()
+            for r in group:                                    # may clear it at any time
+                if not r.alive() and not any(r is b for b, _ in busy) and r.prog.active:
+                    say(f"{r.prog.name}: lief nicht ({r.state}) - nichts zu beenden")
                 self.stop(r, wait=False)
-        deadline = time.monotonic() + STOP_WAIT
-        for r in order:
-            if r.prog.modem:
-                while any(x.alive() for x in order if not x.prog.modem) \
-                        and time.monotonic() < deadline:
-                    time.sleep(0.1)
-                self.stop(r, wait=True)
-        for r in order:
-            if r.proc is not None:
-                self._finish_stop(r, max(0.5, deadline - time.monotonic()))
+            for r, proc in busy:
+                say(f"{r.prog.name}: wird beendet (PID {proc.pid}) ...")
+            self._await_end(busy, say)
+        self.tick()
+
+    def _await_end(self, busy: list[tuple[Run, subprocess.Popen]], say) -> None:
+        """Wait until every program has ended (the stop threads kill after STOP_WAIT)
+        and say so, one line each, in the order they end."""
+        t0 = time.monotonic()
+        pending = list(busy)
+        while pending:
+            for r, proc in list(pending):
+                if proc.poll() is not None:
+                    pending.remove((r, proc))
+                    how = "hart beendet" if r.killed else "sauber beendet"
+                    say(f"{r.prog.name}: {how} (Exit {proc.returncode}, "
+                        f"{time.monotonic() - t0:.1f} s)")
+            if pending and time.monotonic() - t0 > STOP_WAIT + 5:
+                for r, proc in pending:
+                    say(f"{r.prog.name}: endet nicht - läuft evtl. noch (PID {proc.pid})")
+                return
+            time.sleep(0.05)
 
     # --- the clock -----------------------------------------------------------
 

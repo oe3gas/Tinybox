@@ -2,6 +2,15 @@
 
 ## Unveröffentlicht
 
+- **Steuerkonsole: Meldung je Programm beim Beenden** (CR138-Nachtrag, tbstart 2026.11.16.2): `q` bzw.
+  Strg+C zeigt für jedes Programm „wird beendet“ und „sauber/hart beendet (Exit, Dauer)“, nicht laufende
+  werden genannt; ein zweites Strg+C beendet den Rest hart. Das Fenster bleibt danach 10 s offen.
+- **Konfigurationsdialog liest die vorhandenen Werte** (`release/konfig.py`): Rufzeichen, Locator, QTH,
+  Heimat-Box, SSID, Frequenz, Direwolf (Ordner, Soundkarte, Baudrate, PTT), TNC-Profil und COM-Port sind
+  die Vorschläge; `-` leert einen optionalen Wert. Vorhandene .conf bekommen nur die Antworten eingetragen
+  (eigene Einstellungen bleiben), `tbstart.conf` behält `tbclient`/`dxfeed`; neu aus der Vorlage nur auf
+  Wunsch. Ein geändertes Rufzeichen kommt auch in die vorhandene `direwolf.conf` (MYCALL).
+
 - **Installation: Direwolf oder KISS:** Der Konfigurationsdialog (`release/konfig.py`) fragt die
   Funkanbindung – Direwolf (Soundkarte, AGW) oder KISS über kisshub. Bei KISS listet er die TNC-Profile
   aus `kisshub.conf.example`, der Anwender wählt seinen TNC und die COM-Schnittstelle; daraus entstehen

@@ -241,7 +241,7 @@ class Console:
         self.busy = True
         try:
             self.ui.say("Update: Programme werden gestoppt ...", 60)
-            self.sup.stop_all()
+            self.sup.stop_all(self.sup.note)
             changed = pull(self.root, self.sup.note)
             self.update_hint = ""
             if changed and any(f.startswith(SELF) for f in changed):
@@ -324,8 +324,7 @@ class Console:
             pass
         finally:
             self.leave_screen()
-        print("Steuerkonsole: Programme werden beendet ...", flush=True)
-        self.sup.stop_all()
+        self.shutdown(lambda t: print("  " + t, flush=True))
         return 0
 
     def run_plain(self) -> int:
@@ -335,9 +334,29 @@ class Console:
                 time.sleep(FRAME)
         except KeyboardInterrupt:
             pass
-        self.sup.note("beendet die Programme ...")
-        self.sup.stop_all()
+        self.shutdown(self.sup.note)
         return 0
+
+    def shutdown(self, say) -> None:
+        """q / Ctrl+C: stop every program and report each one (also in the day log).
+        A second Ctrl+C ends the rest hard at once."""
+        def report(text: str) -> None:
+            say(text)
+            if say != self.sup.note:          # note() writes the log itself
+                self.log.info("[tbstart] %s %s", time.strftime("%H:%M:%S"), text)
+
+        report("Steuerkonsole: Programme werden beendet ...")
+        try:
+            self.sup.stop_all(report)
+        except KeyboardInterrupt:
+            report("Abbruch - die übrigen Programme werden hart beendet ...")
+            for r in self.sup.runs:
+                if r.alive():
+                    r.proc.kill()
+                    report(f"{r.prog.name}: hart beendet")
+        left = [r.prog.name for r in self.sup.runs if r.alive()]
+        report("Noch aktiv: " + ", ".join(left) if left
+               else "Alle Programme beendet - Steuerkonsole Ende.")
 
 
 def main(argv: list[str] | None = None) -> int:
