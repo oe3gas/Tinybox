@@ -6,66 +6,29 @@ import asyncio
 import logging
 from typing import Awaitable, Callable, Optional
 
+from prcore import kiss as _kiss
+
 from .colorlog import OK
 
 log = logging.getLogger(__name__)
 
-FEND, FESC, TFEND, TFESC = 0xC0, 0xDB, 0xDC, 0xDD
-CMD_DATA = 0x00
 
 
 def encode(data: bytes, channel: int = 0) -> bytes:
-    out = bytearray((FEND, (channel << 4) | CMD_DATA))
-    for b in data:
-        if b == FEND:
-            out += bytes((FESC, TFEND))
-        elif b == FESC:
-            out += bytes((FESC, TFESC))
-        else:
-            out.append(b)
-    out.append(FEND)
-    return bytes(out)
+    """One KISS data frame (prcore/kiss.py, PLANUNG 17.4)."""
+    return _kiss.encode(data, channel)
 
 
 class Decoder:
-    """Feed raw bytes from the TCP stream, get complete (channel, data) frames."""
+    """Feed raw bytes from the TCP stream, get complete (channel, data) frames.
+    Only data frames - TXDELAY and the like are dropped. prcore/kiss.py decodes."""
 
     def __init__(self, max_frame: int = 4096):
-        self.buf = bytearray()
-        self.in_frame = False
-        self.escape = False
-        self.max_frame = max_frame
+        self._dec = _kiss.Decoder(max_frame)
 
     def feed(self, chunk: bytes) -> list[tuple[int, bytes]]:
-        frames: list[tuple[int, bytes]] = []
-        for b in chunk:
-            if b == FEND:
-                if self.in_frame and self.buf:
-                    frames.extend(self._finish())
-                self.buf.clear()
-                self.in_frame = True
-                self.escape = False
-                continue
-            if not self.in_frame:
-                continue
-            if self.escape:
-                self.escape = False
-                b = FEND if b == TFEND else FESC if b == TFESC else b
-            elif b == FESC:
-                self.escape = True
-                continue
-            if len(self.buf) >= self.max_frame:      # garbage, resync on next FEND
-                self.buf.clear()
-                self.in_frame = False
-                continue
-            self.buf.append(b)
-        return frames
-
-    def _finish(self) -> list[tuple[int, bytes]]:
-        type_byte = self.buf[0]
-        if type_byte & 0x0F != CMD_DATA:             # TXDELAY etc., not data
-            return []
-        return [(type_byte >> 4, bytes(self.buf[1:]))]
+        return [(port, data) for port, cmd, data in self._dec.feed(chunk)
+                if cmd == _kiss.CMD_DATA]
 
 
 # evaluated at runtime, so no "X | None" here (Python 3.9 compatibility)

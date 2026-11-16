@@ -9,34 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+# addresses, error class and PID: prcore/ax25/frame.py, as TinyBox and client (17.4)
+from prcore.ax25.frame import PID_NO_L3, AX25Error, decode_address, encode_address  # noqa: F401
+
 UI_CONTROL = 0x03
-PID_NO_L3 = 0xF0
-
-
-class AX25Error(ValueError):
-    """Not a valid AX.25 frame."""
-
-
-def encode_address(call: str, *, last: bool, high_bit: bool) -> bytes:
-    """high_bit: C bit for destination/source, H (has-been-repeated) for digis."""
-    base, _, ssid_text = call.upper().partition("-")
-    try:
-        ssid = int(ssid_text) if ssid_text else 0
-    except ValueError:
-        raise AX25Error(f"ungültige SSID in {call!r}") from None
-    if not 1 <= len(base) <= 6 or not base.isalnum() or not 0 <= ssid <= 15:
-        raise AX25Error(f"ungültige AX.25-Adresse {call!r}")
-    out = bytearray(ch << 1 for ch in base.ljust(6).encode("ascii"))
-    out.append(0x60 | (ssid << 1) | (0x80 if high_bit else 0) | (0x01 if last else 0))
-    return bytes(out)
-
-
-def decode_address(raw: bytes) -> tuple[str, bool, bool]:
-    """-> (call, high_bit, last)"""
-    base = bytes(b >> 1 for b in raw[:6]).decode("ascii", errors="replace").rstrip()
-    ssid = (raw[6] >> 1) & 0x0F
-    call = f"{base}-{ssid}" if ssid else base
-    return call, bool(raw[6] & 0x80), bool(raw[6] & 0x01)
 
 
 @dataclass

@@ -15,21 +15,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import struct
 from typing import Optional
+
+from prcore import agw as _agw
 
 from .colorlog import OK
 from .kiss import FrameHandler
 
 log = logging.getLogger(__name__)
 
-HEADER = struct.Struct("<B3xcxBx10s10sII")      # port, kind, pid, from, to, len, user
+HEADER = _agw.HEADER                            # prcore/agw.py (PLANUNG 17.4)
 MAX_DATA = 4096
 QUERY_TIMEOUT_S = 2.0
 
 
 def pack(kind: str, port: int = 0, data: bytes = b"", pid: int = 0) -> bytes:
-    return HEADER.pack(port, kind.encode("ascii"), pid, b"", b"", len(data), 0) + data
+    return _agw.Frame(kind, port, pid, data=data).pack()
 
 
 def unpack_header(raw: bytes) -> tuple[int, str, int]:
