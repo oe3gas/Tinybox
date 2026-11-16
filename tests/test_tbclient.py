@@ -376,7 +376,8 @@ class EndToEndTests(unittest.TestCase):
                 self.assertEqual(core.caps, {"CHAT", "UI", "SYNC", "SYNC2", "SHORT", "Z", "IMG", "NUM", "HAVE", "PROF", "HSEQ", "BFILE", "LOTW", "CT", "CTR", "PR", "GAMES", "GAME", "PRM"})
                 self.assertTrue(core.join(1))
                 await until(lambda: core.board and "OE3GAS" in core.members)
-                self.assertEqual(core.members, {"OE3XYZ": "", "OE3GAS": "/-"})
+                self.assertEqual(core.members, {"OE3XYZ": "*", "OE3GAS": "/-"})   # CR120
+                self.assertEqual((core.terminal_members(), core.symbol_of("OE3XYZ")), (["OE3XYZ"], ""))
                 type_lines(term, "Servus :+1")
                 await until(lambda: any(m.get("text") == "Servus :+1" for m in core.messages))
                 core.say("Hallo ~0A")
@@ -1105,3 +1106,14 @@ class ConnectViaAgwTests(unittest.TestCase):
             tb.cancel()
             dw.server.close()
         asyncio.run(scenario())
+
+
+class TerminalUserTests(unittest.TestCase):
+    """CR120: a terminal user joins with "*" - marked, no APRS symbol, a system line."""
+
+    def test_join_event_parses(self):
+        from tbclient import proto
+        ev = proto.parse_event("#4A +3 OE3NIX *")
+        self.assertEqual((ev.kind, ev.call, ev.symbol, ev.num), ("join", "OE3NIX", "*", 3))
+        ev = proto.parse_event("#4B +4 OE3GAS /-")
+        self.assertEqual(ev.symbol, "/-")

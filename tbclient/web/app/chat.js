@@ -332,6 +332,8 @@ function qualityBars(call) {
 // own chat over AXUDP or the telnet test port: no radio path, no link quality
 function localLink() { return S.chat_link === "axudp" || S.chat_link === "telnet"; }
 
+const TERMINAL_TIP = "Terminal user, sees chat as text only, no pictures, files, reactions";
+
 function personRow(call, sym, note, member) {
   const li = el("li");
   const txt = el("div", "ptxt");
@@ -482,6 +484,12 @@ function renderPeople() {
       const mine = (S.profile && S.profile.name ? `you · ${S.profile.name}` : "you") +
                    (localLink() ? ` · ${S.chat_link}` : "");
       const row = personRow(c, symOf(c), c === S.mycall ? mine : (profileNote(c) || name || ""), true);
+      if ((S.terminals || []).includes(c)) {            // CR120: sees the chat as text
+        const pill = el("span", "pill-term", "terminal");
+        pill.title = TERMINAL_TIP;
+        row.querySelector(".c").append(" ", pill);
+        row.title = TERMINAL_TIP;
+      }
       if (c !== S.mycall && S.link !== "telnet") {      // CR107: straight to it
         const d = el("button", "icon-btn pdirect", "⇄");
         d.type = "button";
@@ -591,7 +599,9 @@ function renderMessages() {
   for (const m of S.messages) {
     if (m.history && !inHistory) { ol.append(el("li", "divider", `history (${S.board.keep})`)); inHistory = true; }
     if (!m.history && inHistory) { ol.append(el("li", "divider", "now")); inHistory = false; }
-    if (m.kind === "join" || m.kind === "leave") {
+    if (m.kind === "join" && m.terminal) {              // CR120: once per entering
+      ol.append(el("li", "sys", `${m.call} enters chat. ${TERMINAL_TIP}. · ${hhmm(m.time)}`));
+    } else if (m.kind === "join" || m.kind === "leave") {
       ol.append(el("li", "sys", `${m.call} ${m.kind === "join" ? "joined" : "left"} · ${hhmm(m.time)}`));
       prevCall = null; continue;
     }

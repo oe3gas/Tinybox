@@ -28,7 +28,8 @@ CALL = r"[A-Z0-9]{1,6}(?:-\d{1,2})?"
 LINE_RE = re.compile(rf"^({CALL}): ?(.*)$", re.S)
 NUM = r"[1-9]\d?"
 JOIN_RE = re.compile(rf"^\+({CALL})(?: (\S{{2}}))?$")
-JOIN_NUM_RE = re.compile(rf"^\+({NUM}) ({CALL})(?: (\S{{2}}))?$")
+TERMINAL_SYM = "*"         # CR120: a terminal user joins with "*" instead of an APRS symbol
+JOIN_NUM_RE = re.compile(rf"^\+({NUM}) ({CALL})(?: (\S{{2}}|\*))?$")   # * = terminal (CR120)
 LEAVE_RE = re.compile(rf"^-({CALL})$")
 LEAVE_NUM_RE = re.compile(rf"^-({NUM})$")
 SYM_RE = re.compile(rf"^=({CALL})(?: (\S{{2}}))?$")

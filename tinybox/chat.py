@@ -18,6 +18,9 @@ readable text form for TinyBox clients (PLANUNG.md 12.4):
                                    result yet (PLANUNG.md 14.4), clients only
     #55 !Connection to OE1ABC lost system text (after "-2" when the link broke)
 
+A terminal user (no TinyBox client) joins with the symbol "*" - no APRS symbol starts
+with it - so clients can mark him (CR120): "+3 OE3NIX *", //WHO "3 OE3NIX=*".
+
 Member numbers (CR33): every station in a board gets the lowest free number
 1..n when it joins, //WHO lists "n call[=sym]". Every client gets this form (the
 old one with calls for clients without NUM is gone: no old clients, 14.11.2026, R15).
@@ -57,6 +60,7 @@ log = logging.getLogger(__name__)
 SEQ_MOD = 256
 MAX_UI_BOARD = 15          # TBCHAT-1 .. TBCHAT-15 (SSID)
 UI_DEST = "TBCHAT"
+TERMINAL_SYM = "*"         # CR120: the "symbol" of a terminal user in join and //WHO
 REACTION_RE = re.compile(r"^[!-~]{1,8}$")    # an emoji code: :+1, <3, ~0A ...
 # CR31: a comment refers to the event it answers - "~^4F text"
 QUOTE_RE = re.compile(r"^~\^([0-9A-F]{1,2})(?: |$)")
@@ -131,7 +135,7 @@ class ChatHub:
         """//WHO for a joining client: 'n call[=sym] ...'."""
         items = []
         for m in self.members(board):
-            sym = m.client.symbol if m.client else ""
+            sym = m.client.symbol if m.client else TERMINAL_SYM
             items.append(f"{self.member_no(board, m.call)} {m.call}" + (f"={sym}" if sym else ""))
         return "//WHO " + " ".join(items) if items else "//WHO"
 
@@ -178,7 +182,7 @@ class ChatHub:
         self._members.setdefault(board.name, []).append(session)
         session.chat_board = board.name
         session.ui_rx = self._rx_window(session)
-        sym = session.client.symbol if session.client else ""
+        sym = session.client.symbol if session.client else TERMINAL_SYM   # CR120
         n = self._assign_no(board.name, session.call)
         tail = f" {sym}" if sym else ""
         self.deliver(board.name, f"+{n} {session.call}{tail}",

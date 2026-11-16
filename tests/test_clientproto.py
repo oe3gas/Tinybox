@@ -89,7 +89,7 @@ class ClientProtoTests(unittest.TestCase):
         out = ct.take().split("\r")
         self.assertRegex(out[0], r"^//IN 1 TREFF 7d 1 hist=1 last=\d+ now=\d+$")  # 0 = join, 1 = 'vorher'
         # R15: no history at once and no old forms any more - every client asks (//HIST)
-        self.assertEqual(out[1], "//WHO 1 OE3XYZ")
+        self.assertEqual(out[1], "//WHO 1 OE3XYZ=*")   # CR120: a terminal user
         self.assertEqual(self.ui[-1], ("TBCHAT-1", "#2 +2 OE3GAS /-"))   # UI: member numbers (CR33)
         self.assertEqual(out[2:], [""])                     # UI client: no I-frame copy
         self.assertIn("*** OE3GAS joined TREFF", tt.take())
@@ -202,22 +202,22 @@ class ClientProtoTests(unittest.TestCase):
         self.assertIn(" q=50/30/20/5,10,20,35,50", ok)
         type_lines(c, "C 1")
         out = ct.take().split("\r")
-        self.assertEqual(out[1], "//WHO 1 OE3XYZ")
+        self.assertEqual(out[1], "//WHO 1 OE3XYZ=*")   # CR120: a terminal user
         self.assertEqual(self.ui[-1][1], "#1 +2 OE3GAS /-")
         self.assertEqual(out[2:], [""])                   # UI client with NUM: no I-frame copy
         old, ot = login(self.app, "OE3TEC")               # client without UI (and NUM): I-frames
         type_lines(old, "//CLIENT TB1 caps=CHAT", "C 1")
         self.assertEqual(self.ui[-1][1], "#2 +3 OE3TEC")
-        self.assertTrue(ot.take().endswith("//WHO 1 OE3XYZ 2 OE3GAS=/-\r#2 +3 OE3TEC\r"))
+        self.assertTrue(ot.take().endswith("//WHO 1 OE3XYZ=* 2 OE3GAS=/-\r#2 +3 OE3TEC\r"))
         type_lines(term, "/Q")                            # member 1 leaves
         self.assertEqual(self.ui[-1][1], "#3 -1")
         self.assertTrue(ot.take().endswith("#3 -1\r"))
         type_lines(term, "C TREFF")                       # gets 1 again
-        self.assertEqual(self.ui[-1][1], "#4 +1 OE3XYZ")
+        self.assertEqual(self.ui[-1][1], "#4 +1 OE3XYZ *")       # CR120: terminal
         self.assertEqual(self.app.service.chat.member_no("TREFF", "OE3TEC"), 3)
         tt.take(); ct.take(); ot.take()
         type_lines(old, "//RESEND 3-4")                   # R15: one form for every client
-        self.assertEqual(ot.take(), "#3 -1\r#4 +1 OE3XYZ\r")
+        self.assertEqual(ot.take(), "#3 -1\r#4 +1 OE3XYZ *\r")
 
     def test_non_ui_client_gets_iframes_incl_own(self):
         c, ct = login(self.app, "OE3GAS")
@@ -275,7 +275,7 @@ class ClientProtoTests(unittest.TestCase):
         self.assertEqual(out[0], "")                      # the answer starts on a fresh line
         self.assertTrue(out[1].startswith("//OK TB1 "), out[1])
         self.assertRegex(out[2], r"^//IN 1 TREFF 7d \S+ hist=\d+( last=\d+)? now=\d+$")
-        self.assertEqual(out[3], "//WHO 1 OE3XYZ 2 OE3GAS=/-")  # with us: we never left
+        self.assertEqual(out[3], "//WHO 1 OE3XYZ=* 2 OE3GAS=/-")  # with us: we never left
         self.assertEqual(tt.take(), "")                   # the terminal user hears nothing
         self.assertEqual(self.ui, [])                     # and nothing goes out over UI
         self.assertEqual(self.app.service.chat._seq["TREFF"], seq_before)   # no event

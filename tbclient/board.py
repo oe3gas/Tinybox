@@ -312,7 +312,10 @@ class BoardMixin:
             self.profiles.want([ev.call])
             if ev.num:
                 self._set_number(ev.num, ev.call)
-            self._add({"id": pos, "seq": ev.seq, "kind": "join", "call": ev.call, "time": now})
+            item = {"id": pos, "seq": ev.seq, "kind": "join", "call": ev.call, "time": now}
+            if ev.symbol == proto.TERMINAL_SYM:          # CR120: the others should know
+                item["terminal"] = True
+            self._add(item)
         elif ev.kind == "symbol":                    # nothing to show, only the avatars
             call = ev.call or self.numbers.get(ev.num, "")
             if call in self.members:
@@ -392,4 +395,11 @@ class BoardMixin:
     def symbol_of(self, call: str) -> str:
         if call == self.cfg.mycall and self.my_symbol:
             return self.my_symbol
-        return self.members.get(call) or self.heard.get(call, "")
+        sym = self.members.get(call)
+        if sym == proto.TERMINAL_SYM:                    # CR120: a marker, no APRS symbol
+            sym = ""
+        return sym or self.heard.get(call, "")
+
+    def terminal_members(self) -> list[str]:
+        """CR120: the members without a TinyBox client (they see the chat as text)."""
+        return sorted(c for c, s in self.members.items() if s == proto.TERMINAL_SYM)

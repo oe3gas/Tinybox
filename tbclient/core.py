@@ -1072,6 +1072,7 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
             "ui": "UI" in self.caps,
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),
+            "terminals": self.terminal_members(),                      # CR120
             "quality": self.quality,
             # PLANUNG 25: the chat runs over AXUDP (or the telnet test port) - no radio
             # path, so no link quality for the own station: only the connection type

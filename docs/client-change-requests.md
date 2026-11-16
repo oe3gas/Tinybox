@@ -4404,7 +4404,7 @@ authentifizierte User schreiben (CR92), ein Gast am Terminal kann es ohnehin nic
 - Der Befehl selbst war schon gesperrt (CR92), daran ändert sich nichts.
 - Tests `tests/test_cr119.py`.
 
-## CR120 – Terminal-User in der User-Ansicht kennzeichnen (offen, entschieden 11.11.2026)
+## CR120 – Terminal-User in der User-Ansicht kennzeichnen (✅ 16.11.2026, Client 2026.11.16.5)
 
 ### Wunsch (OE3GAS, 11.11.2026)
 
@@ -4456,6 +4456,20 @@ In allen Varianten zusätzlich ein Tooltip mit dieser Erklärung.
      bräuchten den Hinweis über andere Terminal-User eher nicht.
    - Im Client als Systemzeile wie „joined/left“ (grau, ohne Bubble), nur einmal je Betreten,
      nicht beim Laden der History wiederholen.
+
+### Umgesetzt (16.11.2026)
+
+- **Kennung:** Die Box schickt für einen Terminal-User statt eines APRS-Symbols ein `*` (kein
+  APRS-Symbol beginnt damit): Join `+3 OE3NIX *`, `//WHO 3 OE3NIX=*`. Ein Byte, nur beim Join;
+  keine neue Cap (R15: keine Rücksicht auf alte Clients).
+- **Client:** gelbe Pille `terminal` neben dem Call in „In this board“, Tooltip mit dem Text oben;
+  `*` gilt nicht als APRS-Symbol (Avatar ohne Symbol).
+- **Systemzeile:** erzeugt der **Client** aus dem Join-Ereignis (keine Zeile über Funk): grau,
+  `OE3NIX enters chat. Terminal user, sees chat as text only, no pictures, files, reactions.` –
+  einmal je Betreten; die History bringt keine Joins, also keine Wiederholung. Terminal-User
+  sehen sie nicht (für sie ohne Bedeutung).
+- Offen bleibt die Frage „Client ohne Schlüssel-Login“ – kein eigener Fall, solche Clients sind
+  Clients (sehen Bilder usw.).
 
 ## CR121 – Eine Verbindung je Rufzeichen (✅ 11.11.2026, Funktest offen)
 
