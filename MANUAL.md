@@ -1,15 +1,16 @@
 # TinyBox – Handbuch
 
-Betrieb von TinyBox, TinyBox-Client, kisshub und den Hilfsprogrammen: welche Teile es gibt,
-wie sie zusammenhängen, wie man sie konfiguriert und wie man die Funkstrecke misst.
+Betrieb von TinyBox, TBClient, kisshub, brocastd und den Hilfsprogrammen: welche Teile es gibt,
+wie sie zusammenhängen, wie man sie konfiguriert, bedient und wie man die Funkstrecke misst.
 
-Weitere Unterlagen: `README.md` (Start, Telnet-Test, Sysop-Konsole), `brocast/README.md`
-(brocastd im Detail: Frames, Listener, Bilder, Wetter, Dictionary), `logging_manual.md`
-(Log-Datei lesen), `tbclient/FEATURES.txt` (was der Client kann),
-`docs/kiss-mode-konzept.md` (KISS-Mode, VARA, Messungen),
-`docs/client-change-requests.md` (alle Änderungen), `PLANUNG.md` (Entscheidungen).
+Weitere Unterlagen: `README.md` (Überblick, Schnellstart), `INSTALL.md` (Windows-Release,
+Konfigurationsdialog, Steuerkonsole), `brocast/README.md` (brocastd im Detail: Frames, Listener,
+Bilder, Wetter, Dictionary), `logging_manual.md` (Log-Dateien lesen), `tbclient/FEATURES.txt`
+(was der TBClient kann), `feederpi/README.md` (Feeder-Pi), `PRODUCTION.md` (Linux mit systemd),
+`docs/kiss-mode-konzept.md` (KISS-Mode, VARA, Messungen), `docs/client-change-requests.md`
+(alle Änderungen), `PLANUNG.md` (Entscheidungen).
 
-Stand: 22.10.2026 (kisshub 2026.10.22, tbclient 2026.10.18.7)
+Stand: 16.11.2026 (Release 1.0.0 und folgende Build-Versionen)
 
 ---
 
@@ -17,18 +18,21 @@ Stand: 22.10.2026 (kisshub 2026.10.22, tbclient 2026.10.18.7)
 
 | Programm | Aufgabe | Start | Konfiguration |
 |---|---|---|---|
-| **TinyBox** | die Mailbox (BBS): Post, Bulletins, Chat, Forwarding, Web-GUI für den Sysop | `tinybox.bat` | `tinybox.conf` |
-| **TinyBox-Client** (`tbclient`) | Programm für Benutzer: Chat, Post, Monitor, APRS – im Browser | `tbclient.bat` | `tbclient.conf` |
-| **kisshub** | besitzt den KISS-TNC (PK-232, Kenwood TM-D710, TNC7multi, Direwolf-KISS, VARA FM) und teilt ihn per KISS-TCP; misst die Verbindungsqualität | `kisshub.bat -p <profil>` bzw. `python -m kisshub -c <datei> -p <profil>` | `kisshub.conf` (eine Datei für alle TNCs) |
-| **Direwolf** | Soundkarten-Modem (AFSK 1200/9600) mit eigenem AX.25 (AGW) oder als reiner KISS-TNC | `direwolf.exe` | `direwolf.conf` (eigener Ordner, z. B. `E:\direwolf`) |
-| **VARA FM** | Soundkarten-Modem von EA5HVK, hier als KISS-TNC (Port 8100) | `VARAFM.exe` | im Programm (Settings → VARA Setup) |
-| **brocastd** | sendet/empfängt brocast-Seiten (UI-Frames); Einzelheiten in `brocast/README.md` | `brocast\brocastd.bat` | `brocast\brocastd.conf` |
-| **dxfeed** | DX-Cluster → tägliches DX-Bulletin in die TinyBox | `dxfeed.bat` | `dxfeed.conf` |
-| **fwdsim** | Testpartner für das Forwarding | `fwdsim.bat` | `fwdsim.conf` |
+| **TinyBox** | die Mailbox (BBS): Post, Bulletins, Chat-Boards, Spiele, Forwarding, Eingangsordner, Sysop-Konsole und Web-GUI (Kapitel 6) | `tinybox.bat` | `tinybox.conf` |
+| **TBClient** (`tbclient`) | Programm für Benutzer: Chat, Post, Spiele, Client zu Client, Monitor, APRS, Terminal – im Browser | `tbclient.bat` | `tbclient.conf` |
+| **kisshub** | besitzt den KISS-TNC (PK-232, TM-D710, DR-635, TNC7multi, TH-D74/75, TNC2, Direwolf-KISS, VARA FM/HF, modem73) und teilt ihn per KISS-TCP; misst die Verbindungsqualität | `kisshub.bat -p <profil>` bzw. `python -m kisshub -c <datei> -p <profil>` | `kisshub.conf` (eine Datei für alle TNCs) |
+| **Direwolf** | Soundkarten-Modem (AFSK 1200/9600) mit eigenem AX.25 (AGW) oder als reiner KISS-TNC; das Release bringt den Fork `direwolf-tinybox.exe` mit (Verbindungsstatistik) | `direwolf.exe` | `direwolf.conf` (eigener Ordner, z. B. `C:\direwolf`) |
+| **VARA FM/HF** | Soundkarten-Modem von EA5HVK, hier als KISS-TNC (Port 8100) | `VARAFM.exe` | im Programm (Settings → VARA Setup) |
+| **brocastd** | brocast-**Station** (sendet die Bulletins der TinyBox als Seiten, UI-Frames) **oder** **Listener** (empfängt Seiten, zeigt sie im Browser) – 1.3, `brocast/README.md` | `brocast\brocastd.bat` | `brocast\brocastd.conf` |
+| **Steuerkonsole** (`tbstart`) | startet, überwacht und stoppt alle Programme einer Station in einem Fenster, Update per `git pull` (`INSTALL.md`) | `TinyBox-Start.bat` bzw. `python -m tbstart` | `tbstart.conf` |
+| **dxfeed** | DX-Cluster → DX-Zusammenfassung und „DX jetzt“ als Bulletins (1.3) | `dxfeed.bat`, Aufgabenplanung | `dxfeed.conf` |
+| **GeoSphere-Skripte** | Wetter, Warnungen, Prognose von GeoSphere Austria als Bulletins (1.3) | Aufgabenplanung (`geosphere_aufgaben_einrichten.bat`) | Variablen in der .bat, Aufrufparameter |
+| **Feeder-Pi** | optional: dxfeed und GeoSphere auf einem Raspberry Pi; `pi_abholung.py` holt die Bulletins zur TinyBox (`feederpi/README.md`) | systemd am Pi, Aufgabenplanung am TinyBox-Rechner | `pi_abholung_einrichten.bat` |
+| **fwdsim** | Testpartner für das Forwarding (`fwdsim/README.md`) | `fwdsim.bat` | `fwdsim.conf` |
 | **tbtest** | Testbed: 1–30 simulierte User über einen simulierten 1200-Bd-Funkkanal gegen eine eigene Test-TinyBox (`tbtest/README.md`) | `tbtest.bat` | `tbtest.conf` im Testbed-Verzeichnis |
 
-**PCs im Testaufbau:** PC1 (`E:\Tinybox`, TS-790) – TinyBox. PC2 (`C:\Tinybox`, FT-818) –
-Client. Auf jedem PC, der einen KISS-TNC nutzt, läuft ein eigener kisshub.
+Jedes Programm läuft für sich allein; gemeinsam nutzen alle nur die Bibliothek `prcore`, die
+immer mitkommt. Auf jedem Rechner, der einen KISS-TNC nutzt, läuft ein eigener kisshub.
 
 Die `*.conf` gehören nie ins Repo; im Repo liegen nur die `*.conf.example`.
 
@@ -64,7 +68,89 @@ KISS:  TinyBox / Client ──KISS 8101──► kisshub ──► TNC ──►
 | 10093 (UDP) | TinyBox | AXUDP-Port (`[axudp]`, PLANUNG 25) |
 | 8080 | TinyBox | Sysop-Web-GUI |
 | 7744 | Client | Web-GUI des Clients |
-| 8090 | brocastd | Ingest (TinyBox meldet Bulletins) |
+| 8090 | brocastd (Station) | Ingest – die TinyBox liefert ihre Bulletins; nur 127.0.0.1 |
+| 7733 | brocastd | Web-GUI (Listener-Oberfläche, Sendung der Station) |
+| 10094 (UDP) | TBClient | eigener AXUDP-Port (`[tinybox] axudp_port`, 3.8) |
+| 8011 | modem73 | KISS-TCP (3.5a) |
+
+### 1.3 Woher die Inhalte kommen: Eingangsordner, TinyBox, brocast
+
+```
+GeoSphere-Skripte ──┐
+dxfeed ─────────────┼──► eingang\ ──► TinyBox ──► Bulletins (Mailbox, TBClient, Forwarding)
+pi_abholung.py ─────┘    (*.txt)        │
+(vom Feeder-Pi)                         └──► Ingest :8090 ──► brocastd Station ──► Funk (UI-Frames)
+                                                                                     │
+                                         Browser :7733 ◄── brocastd Listener ◄───────┘
+```
+
+**Der Eingangsordner** (`[inbox]` in `tinybox.conf`, Standard `eingang` neben der
+`tinybox.conf`) ist die Schnittstelle für Skripte. Nur die **TinyBox** liest ihn – alle
+`poll_sec` Sekunden (Standard 10). Sie nimmt nur `*.txt`, die älter als 2 s sind (Skripte
+schreiben erst `.tmp` und benennen dann um), macht daraus ein Bulletin und schiebt die Datei
+nach `eingang\erledigt\`; Abgelehntes landet in `eingang\fehler\` mit einer `.err`-Datei, die
+den Grund nennt. Läuft die TinyBox nicht, bleiben die Dateien liegen und werden beim nächsten
+Start verarbeitet. Aufbau einer Datei:
+
+```
+To: WX                        Pflicht: Rubrik (Bulletin-Ziel)
+Subject: Wetter 19:00         Pflicht: Betreff (höchstens 60 Zeichen)
+From: OE3ABC                  optional, Standard: Sysop-Rufzeichen
+Replace: geosphere-wetter     optional: gleichnamiges Bulletin ersetzen (gleiche Nummer)
+Valid: 6h                     optional: 90m / 6h / 2d, danach gelöscht
+Brocast: {"typ":"wx", ...}    optional: die brocast-Seite zu diesem Bulletin
+
+Text ...
+```
+
+Skripte schreiben nur in `ALL` und angenommene Rubriken: Steht in der `tinybox.conf` ein
+Abschnitt `[rubrics]`, müssen dort auch `WX`, `WARN`, `DX` usw. angenommen sein. Kommt per
+`Replace:` derselbe Inhalt noch einmal, verlängert die TinyBox nur die Gültigkeit.
+
+**Die Lieferanten** (nicht im Windows-Release-Paket, nur im Git-Repo):
+
+| Lieferant | einrichten | liefert |
+|---|---|---|
+| GeoSphere-Skripte (`geosphere_station.py`, `geosphere_warnungen.py`, `geosphere_prognose.py`) | `geosphere_aufgaben_einrichten.bat` – Windows-Aufgabenplanung, ohne Fenster; Region und Locator oben in der .bat bzw. im Skript | Wetter stündlich, Warnungen alle 15 min (nur bei Änderung), Prognose je Locator alle 3 h – an `WX` bzw. `WARN`, mit brocast-Seite |
+| dxfeed | `dxfeed.conf` (Rufzeichen bei `[cluster] login`); Sammler im Dauerbetrieb über die Steuerkonsole (`tbstart.conf`: `dxfeed = yes`) oder `dxfeed_dauerbetrieb.bat`; dazu `dxfeed_aufgabe_einrichten.bat` | an `DX`: Zusammenfassung der letzten 24 h alle 3 h, „DX jetzt“, „Bänder jetzt“, „Neu auf dem Band“ alle 10 min – Details in 6.6 |
+| Feeder-Pi | `feederpi/README.md`, am TinyBox-Rechner `pi_abholung_einrichten.bat` | dieselben Bulletins, geholt alle 5 min per SSH; die Aufgaben am TinyBox-Rechner dann abschalten, sonst kommt alles doppelt |
+| eigene Skripte | Datei wie oben in den Eingangsordner legen | beliebig |
+
+Die Skripte schreiben standardmäßig in `eingang` neben sich selbst (`--tinybox [ORDNER]`);
+dxfeed nimmt den Ordner aus `[inbox] dir` der `tinybox.conf`. Unter Linux mit systemd ist es
+`/run/tinybox/eingang` (`PRODUCTION.md`) – `[inbox] dir` und die Skripte müssen auf denselben
+Ordner zeigen.
+
+**Von der TinyBox zu brocast.** Mit `[brocast] publish = yes` meldet die TinyBox jedes neue,
+geänderte oder gelöschte Bulletin an brocastd (`ingest_url`, Standard
+`http://127.0.0.1:8090/api/v1`, `token` wie `[station] token` in der `brocastd.conf`).
+Trägt das Bulletin die Kopfzeile `Brocast:`, geht statt des Textes diese Seite über Funk (meist
+1–3 Frames statt des ganzen Textes). `destinations` schränkt die Rubriken ein, `air_days` die
+Sendedauer; Bulletins an `alert_destinations` (Standard `WARN`) werden Warnseiten – aber nur,
+wenn sie vom Sysop oder aus dem Eingangsordner kommen. TBNEWS geht nie über brocast.
+
+**Station oder Listener.** brocastd läuft auf einem Rechner in genau einer Rolle
+(`[brocastd] mode`):
+
+- **Listener** – empfängt Seiten und zeigt sie im Browser (http://127.0.0.1:7733/). Braucht nur
+  den Funkzugang (Direwolf oder kisshub), keine TinyBox. So richtet ihn der
+  Konfigurationsdialog ein (`INSTALL.md`).
+- **Station** – sendet. Ihre Seiten bekommt sie ausschließlich über die Ingest-Schnittstelle,
+  und die nimmt nur Verbindungen von `127.0.0.1` an (`ingest_host` muss 127.0.0.1 oder
+  localhost sein). Eine Station gibt es deshalb **nur zusammen mit einer TinyBox am selben
+  Rechner**; ohne TinyBox kämen nur einzelne Seiten von Hand (`py -3 -m brocast bild … --senden`,
+  `brocast/README.md`). Station und TinyBox teilen sich den Funkzugang (Direwolf über AGW oder
+  den kisshub).
+
+Eine Station einrichten (am Rechner der TinyBox):
+
+1. `brocast\brocastd.conf`: `[brocastd] mode = station`, `callsign` = eigenes Rufzeichen mit
+   einer SSID, die nicht die der Mailbox ist (z. B. `OE3ABC-5`; ohne gültiges Rufzeichen startet
+   brocastd nicht). Wer will, setzt in `[station]` einen `token`.
+2. `tinybox.conf`: `[brocast] publish = yes`, `ingest_url` wie oben, derselbe `token`.
+   Welche Rubriken über Funk gehen: `destinations`.
+3. brocastd und TinyBox neu starten (Steuerkonsole: `R`). Die Seite „Sendung“ der brocastd-Web-GUI
+   zeigt, was gesendet wird; jeder gesendete Frame steht in `brocast\logs\Sendeprotokoll_<JJJJ-MM>.txt`.
 
 ---
 
@@ -84,7 +170,7 @@ KISS:  TinyBox / Client ──KISS 8101──► kisshub ──► TNC ──►
 | Direwolf-Ports | `direwolf.conf` (AGWPORT, KISSPORT) | `[agw] direwolf_conf` zeigt auf die Datei |
 | Station, Mailbox-Call, Inbox-Ordner | `tinybox.conf` | dxfeed, fwdsim lesen `tinybox.conf` mit |
 
-**`direwolf_conf`** darf ein **Ordner** (`E:\direwolf` → dort `direwolf.conf`) oder eine
+**`direwolf_conf`** darf ein **Ordner** (`C:\direwolf` → dort `direwolf.conf`) oder eine
 **Datei** sein. Gelesen werden: `AGWPORT`, `KISSPORT`, `MODEM`, `TXDELAY`, `PERSIST`,
 `SLOTTIME`, `PACLEN`, `MAXFRAME`, `EMAXFRAME`, `FRACK`, `RETRY` (die letzten beiden nur zur
 Anzeige). Steht Direwolf auf einem anderen PC oder fehlt der Eintrag, gelten die Standardwerte
@@ -100,7 +186,7 @@ Jedes Programm zeigt beim Start, **woher** jeder Funkwert kommt (`kisshub`, `gem
 interface = agw                ; agw | kiss
 
 [agw]                          ; nur bei interface = agw
-direwolf_conf = E:\direwolf    ; Ordner oder Datei; daraus: AGWPORT, PACLEN, EMAXFRAME/MAXFRAME
+direwolf_conf = C:\direwolf    ; Ordner oder Datei; daraus: AGWPORT, PACLEN, EMAXFRAME/MAXFRAME
 ; host    = 127.0.0.1          ; Standard; nur wenn Direwolf auf einem anderen PC läuft
 ; port    = 8000               ; Standard: AGWPORT aus direwolf.conf, sonst 8000
 channel   = 0                  ; Direwolf-Kanal (CHANNEL n in direwolf.conf)
@@ -122,7 +208,7 @@ port = 8101                    ; kisshub; Status automatisch auf port + 1, Host 
 ; maxframe_ext =               ; nur kiss (Modulo 128)
 ; version      = 2.2           ; nur kiss: 2.2 (SABME/SREJ/XID, fällt selbst auf 2.0 zurück) | 2.0
 ; srej         = yes           ; nur kiss
-; v20_digis    = OE3XTC-5      ; nur kiss: Digis, die nur v2.0 können (z. B. TM-D700) –
+; v20_digis    = OE3XYZ-5      ; nur kiss: Digis, die nur v2.0 können (z. B. TM-D700) –
 ;                              ; Verbindungen über sie mit SABM/Modulo 8, alle anderen Digis = v2.2
 ; v20_digi_paclen = 128        ; nur kiss: längster I-Frame über einen solchen Digi
 ;                              ; (TM-D700: 256 nein, 128 ja)
@@ -136,11 +222,11 @@ Alle übrigen Abschnitte (`[station]`, `[mailbox]`, `[telnet]`, `[web]`, `[loggi
 
 ```ini
 [station]
-mycall  = OE3GAS
+mycall  = OE3ABC
 locator = JN88bn
 
 [tinybox]
-call         = OE3GAS-1        ; die eigene TinyBox (Mailbox)
+call         = OE3ABC-1        ; die eigene TinyBox (Mailbox)
 ui           = auto            ; auto | yes | no – Chat-Ereignisse als UI-Frames
 auto_connect = no
 max_channels = 5               ; gleichzeitige Verbindungen, 1 … 10 (eingehende mitgezählt)
@@ -159,7 +245,7 @@ channel   = 0
 port = 8101
 
 [ax25]                         ; OPTIONAL, wie bei der TinyBox (nur kiss),
-; v20_digis = OE3XTC-5         ; auch v20_digi_paclen – gilt für Connects über Digis (3.6)
+; v20_digis = OE3XYZ-5         ; auch v20_digi_paclen – gilt für Connects über Digis (3.6)
 
 [images]
 target_bytes  = 4096
@@ -357,7 +443,7 @@ eigenen `[ax25]` steht (oder als alter Schlüssel in `[kiss]`), bleibt und gewin
 interface = agw                ; agw | kiss
 
 [agw]
-direwolf_conf = E:\direwolf    ; AGWPORT, MODEM, TXDELAY
+direwolf_conf = C:\direwolf    ; AGWPORT, MODEM, TXDELAY
 channel = 0
 
 [kiss]
@@ -393,10 +479,10 @@ conf = tinybox.conf            ; daraus mailbox_call, haddress, Telnet-Port, DB-
 forward_host = 127.0.0.1       ; Testdaten bleiben hier
 forward_port = 0
 forward_password =
-telnet_user  = OE3XTC
+telnet_user  = OE3ABC
 
 [agw]
-direwolf_conf = E:\direwolf    ; paclen, max_outstanding, Port
+direwolf_conf = C:\direwolf    ; paclen, max_outstanding, Port
 channel = 0
 via     =
 ```
@@ -463,8 +549,8 @@ Dauerbeschallung. Mit `announce = no` gibt es nur den Hinweis; Konsolenbefehle:
 ### 3.1 Packet 1200 Bd über Direwolf (AGW) – der Standardbetrieb
 
 1. Direwolf starten (Fenster zeigt „Ready to accept AGW client application … on port 8000“).
-2. `tinybox.conf`: `[radio] interface = agw`, `[agw] direwolf_conf = E:\direwolf`.
-3. `tbclient.conf` auf dem anderen PC: `[radio] interface = agw`, `[agw] direwolf_conf = C:\direwolf`.
+2. `tinybox.conf`: `[radio] interface = agw`, `[agw] direwolf_conf = C:\direwolf`.
+3. `tbclient.conf` (Rechner des TBClients): `[radio] interface = agw`, `[agw] direwolf_conf` auf dessen Direwolf.
 4. TinyBox, dann Client starten.
 
 AX.25-Einstellungen (PACLEN, MAXFRAME, EMAXFRAME, FRACK, RETRY, TXDELAY) stehen hier nur in
@@ -495,7 +581,7 @@ als `wake` und `init` im Abschnitt `[pk232]` und lässt sich dort ändern.
    lehnt der kisshub beim Start ab. Bei 9600 auch die Gegenstation auf 9600
    und ein für 9600 geeignetes Datenband (meist 70 cm) wählen; `txdelay_ms` ggf. kürzer.
 3. `kisshub.bat -p tm-d710`. Der kisshub schickt `HBAUD <air_baud>`, `KISS ON`, `RESTART`
-   (mit 1200 von OE3GAS am Gerät geprüft, 22.10.2026; 9600 noch nicht am Funk getestet) und
+   (mit 1200 Bd am Gerät geprüft; 9600 noch nicht am Funk getestet) und
    wartet 2 s, bis der TNC in KISS hochgefahren ist. Mit `air_baud` stimmen auch die
    Sendezeit-Schätzung, die Statusabfrage (TinyBox, Client, brocastd) und die AX.25-Empfehlung.
 4. TinyBox/Client: `[radio] interface = kiss`, `[kiss] port = 8101`.
@@ -522,7 +608,8 @@ meldet der Start zusätzlich, ob der Treiber die Flusssteuerung wirklich eingesc
 (`driver flow control (termios CRTSCTS) on`). Bricht ein Schreibvorgang ab (Adapter gezogen),
 öffnet der kisshub die Schnittstelle neu, statt still nichts mehr zu senden.
 
-**Stand:** Profil und Dialog mit simuliertem TNC getestet, Funktest steht aus (Konzept K9).
+**Stand:** Profil und Dialog mit simuliertem TNC getestet, der Init mit 1200 Bd am Gerät;
+ein ausführlicher Funktest (9600 Bd, lange Übertragungen) steht aus (Konzept K9).
 Gehen trotz RTS/CTS lange Frames verloren, `[ax25.tm-d710] paclen = 128` versuchen.
 
 Als **KISS-TNC** sendet der D710 nur, was TinyBox oder Client liefern – AX.25 v2.2 geht daher
@@ -572,7 +659,7 @@ Gleicher AX.25-Automat wie bei VARA, nur das Modem ist anders – dafür gedacht
 vergleichen.
 
 1. Direwolf läuft, KISSPORT 8001 offen. **VARA geschlossen** (gleiche Soundkarte!).
-2. `kisshub.conf`: Abschnitt `[direwolf]` mit `direwolf_conf = E:\direwolf`; Start
+2. `kisshub.conf`: Abschnitt `[direwolf]` mit `direwolf_conf = C:\direwolf`; Start
    `kisshub.bat -p direwolf`. Port (KISSPORT), Funkrate (MODEM), TXDELAY, PACLEN und Fenster
    kommen aus der `direwolf.conf` – was dort steht, **gewinnt**. Die Werte im Abschnitt gelten
    nur für das, was die `direwolf.conf` nicht setzt. Die Startzeilen zeigen, woher jeder Wert
@@ -581,7 +668,7 @@ vergleichen.
 
 ### 3.5 KISS mit VARA FM
 
-**VARA einrichten** (beide PCs): Settings → VARA Setup → **KISS interface** anhaken, KISS-Port
+**VARA einrichten** (beide Stationen): Settings → VARA Setup → **KISS interface** anhaken, KISS-Port
 **8100**; Soundkarte und PTT einstellen; FM System NARROW (Mikrofon/Lautsprecher) bzw. WIDE
 (9600er-Datenport). VARA neu starten, `netstat -an | findstr 8100` muss LISTENING zeigen.
 
@@ -593,7 +680,7 @@ vergleichen.
   Das Profil verhindert es; `send_params = yes` wird abgewiesen.
 - VARA FM und Direwolf **nie gleichzeitig** an derselben Soundkarte.
 
-**kisshub** (beide PCs): Start `kisshub.bat -p vara-fm`. Der Abschnitt `[vara-fm]` aus
+**kisshub** (beide Stationen): Start `kisshub.bat -p vara-fm`. Der Abschnitt `[vara-fm]` aus
 `kisshub.conf.example` bringt alles mit (transport tcp, Port 8100, air_baud 350, txdelay
 2700 ms, max_lead 12000 ms, AX.25-Empfehlung). Darin bei Bedarf ändern:
 
@@ -616,7 +703,7 @@ der Start meldet `config hint: …` – entfernen, damit der kisshub bestimmt.
 
 **Pegel:** Im VARA-Fenster S/N und Konstellation beobachten. Vier enge Punktwolken, S/N
 25–30 dB auf kurzer Strecke. Ein deutlich niedrigerer Wert in einer Richtung heißt meist:
-TX-Pegel des sendenden Geräts zu niedrig (Lauf 1: TS-790, 15 % Frameverlust).
+TX-Pegel des sendenden Geräts zu niedrig (zeigt sich auch als Frameverlust).
 
 **Was zu erwarten ist** (18.10.2026, kurze Strecke, VHF): VARA FM Narrow über KISS ist
 verlustfrei, aber rund halb so schnell wie Direwolf 1200 Bd (22 gegen 40 B/s): VARA sendet
@@ -648,7 +735,7 @@ port          = 8011
 reconnect_sec = 10
 settle_sec    = 0.2
 send_params   = no
-callsign      = OE3GAS          ; ohne SSID - steht in jedem OFDM-Rahmen
+callsign      = OE3ABC          ; ohne SSID - steht in jedem OFDM-Rahmen
 exe           = C:\modem73\modem73.exe
 modulation    = QAM16
 code_rate     = 1/2
@@ -695,18 +782,18 @@ Kanal dann aber erst am Signal selbst.
 
 ### 3.6 Connect über Digipeater (Client, CR71)
 
-Im Client ins Connect-Feld die klassische TNC-Syntax: `OE3XYZ-1 V OE3XTC-5` (mehrere Digis mit
+Im Client ins Connect-Feld die klassische TNC-Syntax: `OE3ABC-1 V OE3XYZ-5` (mehrere Digis mit
 Komma oder Leerzeichen, höchstens 8). Unter dem Feld zeigt eine Vorschau den Pfad. Die Liste der
 letzten Ziele merkt sich den ganzen Pfad. Via ist nur Digipeating – einen Node connectet man
 selbst und verbindet dort mit `C` weiter.
 
-**v2.0-Digis** (nur bei `interface = kiss`): Ältere Hardware-Digis wie der TM-D700 OE3XTC-5
+**v2.0-Digis** (nur bei `interface = kiss`): Ältere Hardware-Digis (z. B. ein TM-D700 als Digi)
 kennen nur AX.25 v2.0. Über sie scheitern SABME/Modulo 128 und 256-Byte-Frames. Deshalb in
 `tinybox.conf` **und** `tbclient.conf`:
 
 ```ini
 [ax25]
-v20_digis       = OE3XTC-5     ; Verbindungen über diese Digis: SABM, Modulo 8
+v20_digis       = OE3XYZ-5     ; Verbindungen über diese Digis: SABM, Modulo 8
 v20_digi_paclen = 128          ; längster I-Frame über sie
 ```
 
@@ -722,7 +809,7 @@ Alle Benutzer sehen diese Angaben.
 
 - **Terminal:** Nach dem Login fragt die TinyBox nach den fehlenden Angaben. Enter
   überspringt eine Frage, `/AB` alle. Ist das Profil unvollständig, fragt sie höchstens
-  alle 30 Tage wieder. Ändern mit `MYName name`, `MYLoc JN88EP`, `MYHomebbs OE3XSR` (`-` löscht ein Feld;
+  alle 30 Tage wieder. Ändern mit `MYName name`, `MYLoc JN88EP`, `MYHomebbs OE3XYZ` (`-` löscht ein Feld;
   Großbuchstaben = Mindestabkürzung, also `MYN`, `MYL`, `MYH`, CR134), ansehen mit `MYN` (eigenes)
   oder `I call`. Version: `VERsion` (`VER`). Im Chat zeigt `/W` Name und Locator.
   Abschalten der Fragen: `[mailbox] ask_profile = no` in `tinybox.conf`.
@@ -740,7 +827,7 @@ Benutzers** (Ed25519, Signatur – nichts wird verschlüsselt, der Inhalt bleibt
 Terminal-Benutzer ohne Client sind Gäste (3.7b).
 
 - **Der Schlüssel** entsteht beim ersten Start des Clients: `data/tbclient/identity.key`. **Jedes
-  Gerät hat seinen eigenen** (OE3GAS, 10.11.2026): ein zweiter PC – etwa zu Hause statt am
+  Gerät hat seinen eigenen:** ein zweiter PC – etwa zu Hause statt am
   Box-PC – meldet sich mit seinem Schlüssel an und wartet auf die Freigabe wie ein neuer; die
   anderen Geräte laufen weiter. Höchstens 5 Schlüssel je Rufzeichen. Der Client schickt dabei
   ein **Gerätekennzeichen** (`dev=`, z. B. `3F9A21C0`): ein Hash des Rechnernamens mit dem
@@ -793,7 +880,7 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   | Befehl | |
   |---|---|
   | `TRUST` | Schlüssel dieser Box, vertraute Boxen |
-  | `TRUST ADD box key` | den Zertifikaten von `box` (z. B. `OE5XBL-1`) vertrauen |
+  | `TRUST ADD box key` | den Zertifikaten von `box` (z. B. `OE5XYZ-1`) vertrauen |
   | `TRUST DEL box` | nicht mehr |
 - **LoTW (CR113):** Schlüssel, die der User mit seinem LoTW-Zertifikat bestätigt hat, bekommen in `USER` den
   Vermerk „LoTW bis …“, die Box stellt dafür ein Zertifikat mit Stufe `lotw` aus. Dafür braucht die Box die
@@ -829,7 +916,7 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
 
   | Anzeige | Bedeutung |
   |---|---|
-  | ✓ verified by OE3GAS-1 | Zertifikat seiner Heimat-BBS – einer Box, der deine Heimat-BBS vertraut (oder sie selbst) |
+  | ✓ verified by OE3XYZ-1 | Zertifikat seiner Heimat-BBS – einer Box, der deine Heimat-BBS vertraut (oder sie selbst) |
   | ✓ known key | derselbe Schlüssel wie bei früheren Verbindungen |
   | first contact – key stored | erstes Mal; der Schlüssel wird gemerkt (wie bei SSH) |
   | ⚠ another key than before | ein neues Gerät des anderen – oder jemand verwendet sein Rufzeichen. Fingerabdruck im QSO vergleichen, dann „Accept new key“ |
@@ -891,7 +978,7 @@ Rufzeichen verwenden. Deshalb unterscheidet die TinyBox:
 
   | über Funk erlaubt | nicht über Funk |
   |---|---|
-  | `H`, `INFO`, `WHO`, `STATUS`, `DISC`, `BEACON`, `FWD`, `FWQ`, `HOLD`, `REL`, `SHUTDOWN`, `RESTART`, `RELOAD`, `USER`, `TRUST` | `WEB` (Login-Link), `MON`, `LOG`, `UPDATE`, Mailbox-Befehle als Sysop |
+  | `H`, `INFO`, `WHO`, `STATUS`, `DISC`, `BEACON`, `FWD`, `FWQ`, `HOLD`, `REL`, `SHUTDOWN`, `RESTART`, `RELOAD`, `USER`, `TRUST`, `KILL`, `MOVE`, `COPY`, `FILES`, `BAN`, `UNBAN`, `PURGE`, `GAMES` | `WEB` (Login-Link), `MON`, `LOG`, `UPDATE`, `LOTW`, Mailbox-Befehle als Sysop |
 
   Jeder Befehl steht als Warnung im Log der Box. Wer nur ein Zertifikat einer anderen Box hat
   (Stufe 3), bekommt die Sysop-Konsole nie.
@@ -916,7 +1003,7 @@ AXUDP-Port. Der Client erreicht die eigene Box darüber, alle anderen Stationen 
 enabled = yes
 listen  = 127.0.0.1
 port    = 10093
-peers   = OE3GAS 127.0.0.1:10094   ; Rufzeichen des Clients und sein UDP-Port
+peers   = OE3ABC 127.0.0.1:10094   ; Rufzeichen des Clients und sein UDP-Port
 ```
 
 - Über AXUDP läuft das eigene AX.25 der TinyBox (auch wenn der Funk über Direwolf/AGW
@@ -932,7 +1019,7 @@ peers   = OE3GAS 127.0.0.1:10094   ; Rufzeichen des Clients und sein UDP-Port
 
   ```ini
   [tinybox]
-  call       = OE3GAS-1
+  call       = OE3ABC-1
   axudp      = 127.0.0.1:10093   ; die TinyBox ([axudp] port)
   axudp_port = 10094             ; eigener UDP-Port = Eintrag in den peers der TinyBox
   ```
@@ -987,7 +1074,7 @@ anderswo nennt seine Herkunft, z. B. `(direwolf.conf)`, `(modem73 BPSK 1/2 short
 
 **Links-Datei** (`[log] links_file`): je beendeter Verbindung eine JSON-Zeile mit TNC-Profil,
 Einstellungen, VARA-Messwerten, Tunnel-Zählern und allen Kennzahlen. Für einen Vergleich je Lauf
-einen eigenen Dateinamen setzen, auf **beiden** PCs.
+einen eigenen Dateinamen setzen, auf **beiden** Stationen.
 
 **Kennzahlen lesen:**
 
@@ -1012,11 +1099,11 @@ die AX.25-Empfehlung (`ax25`) und je Wert die Herkunft (`source`).
 |---|---|---|
 | kisshub-Startzeile zeigt alte Version oder `generic` statt `vara-fm` | kein `git pull` bzw. falsches Profil | `git pull`, Profil in der kisshub-conf |
 | VARA: „Wrong KISS frame“ | Verbindungs-Frames als Typ 0 an VARA | Profil `vara-fm` (Tunnel) auf **beiden** Seiten |
-| kisshub: „type-2 data that is not ours … ignored“ | Gegenseite sendet Bündel/Format, das diese Version nicht kennt | gleiche kisshub-Version auf beiden PCs |
+| kisshub: „type-2 data that is not ours … ignored“ | Gegenseite sendet Bündel/Format, das diese Version nicht kennt | gleiche kisshub-Version auf beiden Stationen |
 | VARA: „Soundcard … missing in action“ | Audio-Gerät nicht gefunden | Settings → Soundcard neu wählen, VARA neu starten |
 | Viele Polls, Quittungen über T1 | T1 zu kurz für das Modem | Log: fehlt `radio values from kisshub`? kisshub ≥ 2026.10.18.7 und alte `[kiss]`/`[ax25]`-Werte entfernen |
 | Start meldet `config hint: … overrides …` | alter Schlüssel in der conf überschreibt den Besitzer | Schlüssel entfernen (Tabelle 2.8), außer die Überschreibung ist gewollt |
-| `[agw] direwolf_conf: direwolf.conf not readable` | Pfad falsch | Ordner oder Datei angeben, z. B. `E:\direwolf` |
+| `[agw] direwolf_conf: direwolf.conf not readable` | Pfad falsch | Ordner oder Datei angeben, z. B. `C:\direwolf` |
 | `[kiss] txdelay_ms … must be between 0 and 2550` | alte TinyBox | `git pull` (Grenze jetzt 10 000 ms) |
 | Mail bleibt im Postausgang trotz Aussendung | alter Client (vor 2026.10.18) | `git pull`; CR68/CR69 |
 | `not reachable … 8100` | VARA nicht gestartet oder KISS-Interface aus | VARA starten, Häkchen „KISS interface“ |
@@ -1026,5 +1113,148 @@ die AX.25-Empfehlung (`ax25`) und je Wert die Herkunft (`source`).
 | kisshub: `[<name>] missing: …` | Pflichtwerte fehlen im TNC-Abschnitt | genannte Schlüssel aus `kisshub.conf.example` übernehmen |
 | kisshub: `-p <name>: no section [<name>]` | Abschnitt fehlt oder Tippfehler | `kisshub -l` zeigt die vorhandenen Abschnitte |
 | kisshub: `[<name>] device: the serial port …` | serieller TNC ohne `device` | `device = COMx` im Abschnitt |
-| Connect über OE3XTC-5 kommt nicht zustande oder hängt bei langen Texten | Digi kann nur v2.0 bzw. verwirft 256-Byte-Frames | `[ax25] v20_digis` und `v20_digi_paclen = 128` (3.6) |
+| Connect über einen älteren Digi kommt nicht zustande oder hängt bei langen Texten | Digi kann nur v2.0 bzw. verwirft 256-Byte-Frames | `[ax25] v20_digis` und `v20_digi_paclen = 128` (3.6) |
 | GeoSphere: Zertifikatsfehler (`CERTIFICATE_VERIFY_FAILED`) | Stammzertifikate fehlen unter Windows (TLS-Prüfung seit 20.10.2026 ein) | `geosphere_aufgaben_einrichten.bat` erneut oder `py -3 -m pip install truststore` |
+
+---
+
+## 6. TinyBox im Betrieb
+
+### 6.1 Starten und beenden
+
+Am bequemsten über die Steuerkonsole (`TinyBox-Start.bat`, `INSTALL.md`). Allein:
+`tinybox.bat` (Windows) bzw. `tinybox.sh` (Linux) oder
+
+```
+cd /d C:\Tinybox                 (Linux: cd ~/Tinybox)
+py -3 -m tinybox -c tinybox.conf  (Linux: python3 -m tinybox -c tinybox.conf)
+```
+
+Beenden mit `SHUTDOWN` (verbundene Stationen werden 60 s vorher gewarnt), sofort mit
+`SHUTDOWN NOW` oder Strg+C. Die Daten liegen unter `data\`. Mit Direwolf zeigt das Log nach
+dem Start `connected to Direwolf AGW 127.0.0.1:8000` und `mailbox call … registered with
+Direwolf`; die Reihenfolge des Starts ist nicht kritisch, die TinyBox verbindet sich alle
+`reconnect_sec` Sekunden neu, auch nach einem Neustart von Direwolf.
+
+### 6.2 Ohne Funk testen (Telnet)
+
+Windows mit PuTTY: Host `127.0.0.1`, Port `6300`, Connection type **Telnet**. Linux:
+`telnet 127.0.0.1 6300`. Als Rufzeichen z. B. `OE1ABC` eingeben; mit dem Sysop-Rufzeichen aus
+`tinybox.conf` hat man von hier aus Sysop-Rechte. Abschalten: `[telnet] enabled = no`.
+
+### 6.3 Sysop-Web-GUI
+
+Beim Start zeigt das TinyBox-Fenster den Login-Link (`http://127.0.0.1:8080/login?token=...`);
+die Steuerkonsole öffnet ihn mit `w`. Der Token liegt in `data\web.token` und bleibt über
+Neustarts gleich; neuer Token: Datei löschen und neu starten. Konsolenbefehl `WEB` zeigt den
+Link erneut. Erreichbar nur am eigenen Rechner (`[web]`). Die Seitenleiste: Dashboard
+(Verbindungen, Connection log, JLOG, Live-Monitor), Messages, Rubriken, Monitor,
+„User management“ (3.7a) und Settings; oben die Knöpfe **Reload** (wie `RELOAD`), **Restart**
+und **Shutdown**.
+
+### 6.4 Sysop-Konsole
+
+Eingaben im TinyBox-Fenster – also nur, wenn die TinyBox allein läuft (`tinybox.bat`); unter
+der Steuerkonsole gibt es kein Eingabefenster, dort die Web-GUI. Über Funk geht ein Teil der
+Befehle im TBClient mit freigegebenem Sysop-Schlüssel, jeder einzeln signiert (3.7b). Per Telnet
+mit dem Sysop-Rufzeichen gibt es die Mailbox-Befehle mit Sysop-Rechten, nicht diese
+Konsolenbefehle. Im Fenster gelten alle Mailbox-Befehle mit Sysop-Rechten (`L`, `R n`, `K n`,
+`E n …`, `S call`, `SB ALL` …), dazu:
+
+| Befehl | Wirkung |
+|---|---|
+| `H` | Hilfe mit allen Befehlen |
+| `INFO` | Startblock: Version, Rufzeichen, Funkwerte, Adapter, Log, Web-GUI (`I` bleibt der Profil-Befehl der Mailbox) |
+| `W` | wer ist verbunden, wer in welchem Chat-Board |
+| `STATUS` | Funk-/AGW-/KISS-Verbindung, AXUDP, Benutzer, Nachrichten, Release-Hinweis |
+| `MON [ON\|OFF]` | laufende Sitzungen mitlesen |
+| `LOG …` | Log-Datei, Debug je Komponente, Marke, Paket zum Weitergeben (6.8) |
+| `DISC call` | Benutzer trennen (ohne SSID: alle SSIDs) |
+| `BEACON` | Bake jetzt senden (`[beacon]`) |
+| `WEB` | Login-Link der Web-GUI |
+| `UPDATE`, `UPDATE NEWS` | jetzt bei GitHub nach einem neuen Release fragen; TBNEWS-Bulletin dazu senden (2.9) |
+| `FWD [call]`, `FWQ`, `HOLD n`, `REL n` | Forwarding jetzt (alle Partner oder einer), Warteschlange und Partnerstatus, Nachricht halten / freigeben |
+| `KILL n[,n]`, `MOVE n[,n] RUB`, `COPY n[,n] RUB` | löschen, Bulletins verschieben / kopieren (3.7b) |
+| `FILES [DEL hash]` | Dateien in den Chat-Boards |
+| `USER …`, `TRUST …`, `LOTW …` | Schlüssel der Benutzer, vertraute TinyBoxen, LoTW-Zertifikate (3.7a) |
+| `BAN [call]`, `UNBAN call`, `PURGE call [CONFIRM]` | Stationen sperren, wieder zulassen, entfernen (3.7a) |
+| `GAMES`, `GAMES CLEAR <spiel\|ALL> [call] [CONFIRM]` | Spielstände ansehen bzw. löschen (6.7) |
+| `SHUTDOWN [s\|NOW\|CANCEL]` | in s Sekunden beenden (Standard 60); alle Stationen bekommen sofort eine Systemnachricht, Erinnerung bei 30 und 10 s; ohne Verbindungen sofort |
+| `RESTART [s\|NOW\|CANCEL]` | neu starten, z. B. nach einem `git pull`; prüft vorher die `tinybox.conf` – bei einem Fehler kein Neustart. Unter der Steuerkonsole, `tinybox.bat` und `tinybox.sh` startet die TinyBox sofort wieder |
+| `RELOAD` | `tinybox.conf` neu einlesen, **ohne** jemanden zu trennen: übernimmt, was im Betrieb geht (Mailbox-Werte, Bake, Log-Level, Rubriken, Chat-Boards und MOTD, brocast, Forward-Partner …) und listet, was einen `RESTART` braucht (Rufzeichen, Funk, Ports, Adapter, gelöschte Boards) |
+
+Nachricht beenden mit `/EX`. Log-Meldungen und Monitor erscheinen zwischen den Eingaben.
+
+### 6.5 Chat-Boards
+
+Im Terminal wechselt `C` in den Chat: `C` zeigt die Boards, `C TREFF` oder `C 1` betritt eines.
+Jede Zeile ist Chat-Text, Befehle beginnen mit `/`: `/Q` (oder `/EX`, `^Z`) zurück zur
+Mailbox, `/W` wer ist da (mit Name und Locator), `/L` Boards, `/J board` wechseln, `/H n`
+Verlauf, `/H` Hilfe. Der TBClient zeigt die Boards als Chat mit Karte, Bildern, Dateien und
+Spielen.
+
+Die Boards legt der Sysop unter `[chat_boards]` fest (`NAME = Aufbewahrung Beschreibung`):
+
+```
+[chat_boards]
+TREFF = 7d    General meeting point
+DX    = 24h   DX spots and news
+RUNDE = live  Live round, nothing is stored
+```
+
+`live` = nichts wird gespeichert; `12h`/`7d` = Verlauf so lange aufbewahren (höchstens
+`history_lines` Zeilen je Abruf, `[chat]`); `nofile` sperrt Dateien in diesem Board. Im Chat
+gilt kein Idle-Timeout. Neue und geänderte Boards übernimmt `RELOAD`, gelöschte erst `RESTART`.
+Begrüßungstexte je Board: `[chat_motd]`.
+
+### 6.6 DX-Zusammenfassung (dxfeed)
+
+dxfeed sammelt die Spots eines DX-Clusters und legt Bulletins an **DX** in den Eingangsordner
+(1.3), keine Live-Spots über Funk:
+
+- alle 3 Stunden die letzten 24 Stunden als „DX-Zusammenfassung“ (Stationen nach Relevanz A/B/C
+  aus Club Log Most Wanted und Spotterzahl) und „DX-Bandaktivitaet“ – gleitend, sie ersetzen sich;
+- alle 10 Minuten `dxfeed live`: „DX jetzt“ (letzte 2 Stunden), „Bänder jetzt“ (letzte Stunde
+  nach Kontinent), „Neu auf dem Band“ (seltenes DX), je als eigenes Bulletin, das nach 1½–2
+  Stunden ausläuft (`[live]` in `dxfeed.conf`).
+
+Alle tragen eine brocast-Seite `dxsum`, die der Listener als Band/Mode-Raster bzw. Heatmap zeigt.
+
+1. `dxfeed.conf.example` nach `dxfeed.conf` kopieren, bei `[cluster] login` das Rufzeichen
+   eintragen. Steht in der `tinybox.conf` ein Abschnitt `[rubrics]`, dort `DX` annehmen.
+2. Den Sammler dauernd laufen lassen: Steuerkonsole mit `dxfeed = yes` in der `tbstart.conf`
+   oder `dxfeed_dauerbetrieb.bat`. Die Ländertabelle `cty.dat` holt er selbst.
+3. Einmal `dxfeed_aufgabe_einrichten.bat` ausführen: legt beide Aufgaben in der Aufgabenplanung
+   an (Ordner *TinyBox*); bei schon eingerichteten Aufgaben einfach nochmals ausführen.
+
+Prüfen: `dxfeed status` (auch Most-Wanted- und DXCC-Liste), `dxfeed live` und `dxfeed digest`
+(zeigen nur an), `dxfeed show`; Most-Wanted-Liste sofort holen: `dxfeed mw-update`. Meldungen in
+`logs\dxfeed.log`. Unter Linux übernehmen `deploy/systemd/dxfeed.service` und
+`dxfeed-digest.timer` den Ablauf.
+
+### 6.7 Spiele
+
+Die Spiele sind für den TBClient gemacht (Karte „Spiele“ links); im Terminal gibt es nur
+einfache Befehle im Chat-Board (`/PR …`, `/TOP`).
+
+| Spiel | gegen | wo |
+|---|---|---|
+| **Prefix raten** | die TinyBox, mehrere Spieler | im Chat-Board: die Box nennt ein Rufzeichen, die Spieler tippen die DXCC-Entität; Stufen und IARU-Regionen wählbar |
+| **CQ Contest** | einen anderen TBClient oder die TinyBox | Schiffe versenken mit Contest-Stationen |
+| **Schach** | einen anderen TBClient | Client zu Client |
+
+Die Ergebnisse von Schach und CQ Contest melden beide Clients signiert an ihre TinyBox; gezählt
+wird, wenn beide passend melden. Daraus entstehen Bestenlisten (im TBClient, im Chat-Board
+`/TOP [spiel]`).
+Der Sysop sieht die Spielstände mit `GAMES` und löscht sie mit
+`GAMES CLEAR <prefix|contest|chess|ALL> [call]` (zeigt zuerst, was gelöscht würde; dann mit
+`CONFIRM`). Die Fuchsjagd (ARDF, `fuchsjagd/`) ist noch ein eigenständiger Prototyp im Browser.
+
+### 6.8 Log-Datei
+
+`[logging] log_dir` (z. B. `logs`) schaltet die Log-Datei ein: eine Datei pro Tag
+(`tinybox-<Datum>.log`), ältere als `keep_days` (Standard 14) werden gelöscht. Jede Zeile ein
+Ereignis mit Zeit, Level, Komponente, `#Session` und Rufzeichen. An der Konsole: `LOG` (Stand),
+`LOG DEBUG agw` (Debug für eine Komponente, ohne Neustart), `LOG OFF [agw]`, `LOG MARK Text`,
+`LOG BUNDLE` (Log, Version und Konfiguration ohne Token in einer Datei; ohne laufende TinyBox:
+`py -3 -m tinybox --debugbundle`). Alles Weitere: `logging_manual.md`.

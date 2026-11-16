@@ -24,7 +24,8 @@ Grundlage ist die W0RLI-BBS-Spezifikation vom 12.10.1998 (`docs/w0rli/`) und die
 - Zeilen, die mit `;` beginnen, sind Nullbefehle (Feature I) und werden ignoriert.
 - R:-Zeilen werden in beiden Formen gelesen: `@:BBS … #:nr` und das alte `nr@BBS`.
 - Bei einem Fehler trennt fwdsim sofort und sendet vorher nichts (W0RLI, Abschnitt 6).
-- B1 (komprimiert) fehlt noch. Es folgt zusammen mit TinyBox-Meilenstein F5.
+- B1 (komprimiert) kann fwdsim nicht. Die TinyBox spricht B1 seit Meilenstein F5; getestet wird
+  B1 gegen LinBPQ.
 
 ## Bedienung
 

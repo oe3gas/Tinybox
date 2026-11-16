@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- **Dokumentation überarbeitet** (PLANUNG 32a): README nur noch Überblick, Schnellstart und Liste der
+  Unterlagen. MANUAL neu mit 1.3 „Woher die Inhalte kommen“ (Eingangsordner, TinyBox → brocast, Station
+  oder Listener) und Kapitel 6 „TinyBox im Betrieb“ (Starten, Telnet, Web-GUI, vollständige
+  Sysop-Konsole, Chat-Boards, dxfeed, Spiele, Log). Alle Anleitungen ohne Angaben aus dem Testaufbau;
+  GIT-ANLEITUNG auf den heutigen Ablauf (GitHub → `git pull`/Steuerkonsole, Release-Paket) umgestellt.
+
 - **Steuerkonsole: Meldung je Programm beim Beenden** (CR138-Nachtrag, tbstart 2026.11.16.2): `q` bzw.
   Strg+C zeigt für jedes Programm „wird beendet“ und „sauber/hart beendet (Exit, Dauer)“, nicht laufende
   werden genannt; ein zweites Strg+C beendet den Rest hart. Das Fenster bleibt danach 10 s offen.

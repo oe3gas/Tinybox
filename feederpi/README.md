@@ -92,7 +92,9 @@ Fragt nach der IP des Pi, testet die Verbindung (beim ersten Mal merkt sich der 
 Schlüssel des Pi), legt die Aufgabe **TinyBox\Pi-Abholung** an (alle 5 Minuten, ohne Fenster)
 und schaltet auf Wunsch die bisherigen GeoSphere-/DX-Aufgaben des PCs ab. Den dxfeed-Sammler
 schaltet es ab, indem es `dxfeed.conf` in `dxfeed.conf.vor-feederpi` umbenennt
-(`start_alles.bat` startet ihn nur, wenn `dxfeed.conf` da ist). Sonst kämen die Bulletins doppelt.
+(`start_alles.bat` startet ihn nur, wenn `dxfeed.conf` da ist). Läuft der Sammler über die
+Steuerkonsole, dort zusätzlich `dxfeed = no` in der `tbstart.conf` setzen (Taste `d`). Sonst
+kämen die Bulletins doppelt.
 
 ### 5. Prüfen
 

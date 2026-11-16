@@ -10,7 +10,7 @@ lässt – auch von jemandem, der den Rechner nicht sieht.
 
 ## 1. Einschalten
 
-In `tinybox.conf` (PC-spezifisch, nicht im Repo):
+In `tinybox.conf` (je Installation, nicht im Repo):
 
 ```ini
 [logging]
@@ -61,8 +61,9 @@ weitergegeben werden, siehe Abschnitt 5.
 **Der Client (TBClient)** schreibt ebenfalls eine Datei pro Tag (Refactoring R13, 14.11.2026):
 `data\tbclient\logs\tbclient-2026-11-15.log` (Ordner `logs` im `data_dir` aus `tbclient.conf`),
 14 Tage aufgehoben, Stufe INFO – mit `tbclient.bat -v` auch DEBUG. Beim Start nennt der Client
-den Pfad in der Konsole. Für einen Funktest: die Datei von PC1 zusammen mit der TinyBox-Datei
-weitergeben.
+den Pfad in der Konsole. Für einen Funktest: die Datei des TBClients zusammen mit der
+TinyBox-Datei weitergeben. Die Steuerkonsole schreibt zusätzlich alle Zeilen aller Programme in
+`logs\tbstart-<Datum>.log`.
 
 ---
 
@@ -143,7 +144,8 @@ Schlusszeile ganz, ist der Prozess hart gestorben (Stromausfall, Task beendet).
 
 ## 4. Die Befehle in der Sysop-Konsole
 
-Nur im **TinyBox-Fenster auf PC2**, nicht über Funk und nicht über Telnet.
+Nur im **TinyBox-Fenster** (TinyBox allein gestartet), nicht über Funk, nicht über Telnet und
+nicht unter der Steuerkonsole.
 
 | Befehl | Wirkung |
 |---|---|

@@ -4,7 +4,8 @@ How to create a stripped production version of TinyBox for the NanoPi Core (512 
 
 ## What goes into production
 
-The NanoPi runs the full station ("PC2" setup):
+The NanoPi runs a complete mailbox station: TinyBox, brocastd as the brocast station (it needs
+TinyBox on the same machine, MANUAL.md 1.3) and the GeoSphere content jobs:
 
 | Part | Started by |
 |---|---|
@@ -30,7 +31,7 @@ and logs when all slots are taken (PLANUNG 11, point 6).
   news files: TinyBox reads them to publish the TBNEWS bulletins and to tell a
   client that it is out of date (CR18). The client itself runs on the user PCs
   and is not part of the build.
-- the two GeoSphere scripts
+- the three GeoSphere scripts (`geosphere_station.py`, `geosphere_warnungen.py`, `geosphere_prognose.py`)
 - `tinybox.conf.example` and `brocast/brocastd.conf.example`
 - `brocast/requirements.txt`
 - `deploy/` (the systemd units and `install.sh`)
@@ -47,6 +48,8 @@ and logs when all slots are taken (PLANUNG 11, point 6).
 - old dictionary versions (`brocast-core.v*.yaml`) and `brocast.cddl`
 - all Windows `*.bat` and Linux `*.sh` launchers (systemd starts everything)
 - `kisshub/` – the KISS mode is not a NanoPi target (PLANUNG 15)
+- `tbstart/` (the Windows control console) and `release/` (the Windows installer) – systemd
+  starts everything here
 
 A build is about 1.2 MB, compared with 3.7 MB for the full repository.
 

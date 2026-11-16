@@ -1,9 +1,10 @@
 # TinyBox installieren (Windows-Release-Paket)
 
-Das Release-Paket ist eine ZIP-Datei für Windows 10/11 mit allem, was TBClient, TinyBox und den
-brocast-Listener betreibt – inklusive des Direwolf-Forks `direwolf-tinybox.exe`. Nicht enthalten
-sind die GeoSphere-Wetterskripte, der DX-Cluster-Sammler (dxfeed), der NanoPi-Build und die
-Entwicklungswerkzeuge (Tests, Simulatoren, Planungsunterlagen).
+Das Release-Paket ist eine ZIP-Datei für Windows 10/11 mit allem, was TBClient, TinyBox,
+kisshub und brocastd betreibt – inklusive der Steuerkonsole und des Direwolf-Forks
+`direwolf-tinybox.exe`. Nicht enthalten sind die GeoSphere-Wetterskripte, der DX-Cluster-Sammler
+(dxfeed), der NanoPi-Build, der Feeder-Pi und die Entwicklungswerkzeuge (Tests, Simulatoren,
+Planungsunterlagen). Wie die Teile zusammenspielen, beschreibt `MANUAL.md`, Kapitel 1.
 
 ## Installieren
 
@@ -36,9 +37,9 @@ und VOX. Außerdem fragt er 1200 oder 9600 Bd. Daraus entstehen aus den `*.conf.
 
 | Datei | Inhalt |
 |---|---|
-| `tbclient.conf` | Rufzeichen, Locator, Ziel-TinyBox, AGW über Direwolf |
+| `tbclient.conf` | Rufzeichen, Locator, Ziel-TinyBox, Funkanbindung |
 | `tinybox.conf` | Mailbox-Rufzeichen (Rufzeichen + SSID), Sysop, QTH, Frequenz, Locator; `[brocast] publish = no` |
-| `brocast\brocastd.conf` | `mode = listener` |
+| `brocast\brocastd.conf` | neu: `mode = listener`; eine vorhandene behält ihre Rolle |
 | `direwolf\direwolf.conf` | nur bei Direwolf: ADEVICE, MODEM, PTT, MYCALL, AGWPORT 8000, KISSPORT 8001 |
 | `kisshub.conf` | nur bei KISS: `[kisshub] profile` = gewählter TNC, in dessen Abschnitt `device` und `serial_baud` (VARA: `host`) |
 | `tbstart.conf` | Einstellungen der Steuerkonsole: welche Programme laufen (yes/no), Direwolf-Pfad, TNC-Profil |
@@ -46,6 +47,11 @@ und VOX. Außerdem fragt er 1200 oder 9600 Bd. Daraus entstehen aus den `*.conf.
 Bei KISS stellt der Dialog in `tbclient.conf`, `tinybox.conf` und `brocastd.conf`
 `[radio] interface = kiss` und `[kiss] port` auf den Port von kisshub (8101), sonst
 `interface = agw`.
+
+**brocast:** Der Dialog richtet brocastd nur als **Listener** ein (empfangene Seiten im Browser
+ansehen). Eine brocast-**Station** sendet die Bulletins einer TinyBox als Seiten und geht nur
+zusammen mit einer TinyBox am selben Rechner – die Umstellung (`mode = station`, eigenes
+Rufzeichen, `[brocast] publish = yes` in der `tinybox.conf`) steht in `MANUAL.md`, 1.3.
 
 Geändert werden nur die gefragten Werte, alle Kommentare der Vorlagen bleiben. Ruft man den
 Dialog erneut auf, schlägt er die Werte von heute vor (Rufzeichen, Locator, QTH, Heimat-Box,
@@ -63,14 +69,14 @@ Fenster, das alle Programme der Station startet, überwacht, anhält und neu sta
 sie mit `git pull` den neuesten Stand von GitHub und zeigt die Neuerungen.
 
 ```
-┌─ TinyBox Steuerkonsole  PC1 · Release 1.1.0 ────────────────────── 11:20:42 ─┐
+┌─ TinyBox Steuerkonsole  BOX-PC · Release 1.0.0 ─────────────────── 11:20:42 ─┐
 │  Nr Programm  Rolle      Zustand     Port          PID    Laufzeit Fehler    │
 │   1 Direwolf  Modem      läuft       AGW :8000 ✓   5124   3h12m    0         │
-│   3 TinyBox   OE3XHU     läuft       Web :8080 ✓   5390   3h11m    1         │
-│   4 TBClient  OE3GAS-12  läuft       Web :7744 ✓   5402   3h10m    0         │
+│   3 TinyBox   OE3ABC-1   läuft       Web :8080 ✓   5390   3h11m    1         │
+│   4 TBClient  OE3ABC-12  läuft       Web :7744 ✓   5402   3h10m    0         │
 │   5 brocastd  Listener   aus         Web :7733     –      –        0         │
 ├─ Letzte Meldungen ───────────────────────────────────────────────────────────┤
-│ [tinyb] 11:20:40 OE3GAS-12 connected (client mode)                           │
+│ [tinyb] 11:20:40 OE3ABC-12 connected (client mode)                           │
 ├─ Letzter Fehler – 3 TinyBox (1 von 1) ───────────────────────────────────────┤
 │ …                                                                            │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -118,6 +124,9 @@ und wird nur angezeigt.
 - Die Sysop-Konsole der TinyBox (Eingaben im TinyBox-Fenster) gibt es unter der Steuerkonsole
   nicht – dafür die Web-GUI (`w`). Wer sie braucht, startet `tinybox.bat` allein.
 - Jedes Programm lässt sich weiter auch allein starten (`tinybox.bat`, `tbclient.bat` …).
+
+- Ohne Release-Paket (Git-Clone): `TinyBox-Start.bat` bzw. unter Linux `python3 -m tbstart`;
+  `--plain` gibt nur die Zeilen aus (ohne Tasten), z. B. für einen Dienst.
 
 Konfiguration, Datenbanken und Logs bleiben bei Updates unberührt (sie stehen in `.gitignore`).
 Neue Einstellungen kommen in die `*.conf.example`; bei Bedarf von Hand übernehmen.

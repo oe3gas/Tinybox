@@ -2287,6 +2287,25 @@ Für andere Stationen ein Production-Release als ZIP (INSTALL.md):
 - **Updates über Git:** Das Paket enthält einen flachen Git-Clone mit Sparse-Checkout, daher holt
   `git pull` später nur die Release-Dateien. Der Direwolf-Fork kommt nur mit einem neuen Paket.
 - Gebaut wird mit `release/build_release.sh <direwolf-tinybox.exe>` aus `main` auf GitHub.
+- **Nachtrag 16.11.2026 – brocast im Konfigurationsdialog:** Der Dialog richtet brocastd nur als
+  **Listener** ein. Eine **Station** geht nur zusammen mit einer TinyBox am selben Rechner: ihre
+  Seiten kommen allein über die Ingest-API, und die nimmt nur 127.0.0.1 an (`config.py` lehnt
+  anderes ab). Einrichtung von Hand: `MANUAL.md` 1.3. Offen (Vorschlag): Station im Dialog nur
+  anbieten, wenn auf dem Rechner auch die TinyBox eingerichtet wird; dann `publish = yes`,
+  `ingest_url` und Token passend setzen, eine vorhandene Station nie stillschweigend zum
+  Listener machen.
+
+### 32a. Dokumentation (entschieden 16.11.2026)
+
+- **Entscheidung OE3GAS:** In den Anleitungen (README, INSTALL, MANUAL, brocast/README,
+  PRODUCTION, logging_manual, GIT-ANLEITUNG, Unterordner-READMEs, Kommentare der
+  `*.conf.example`) stehen **keine Angaben aus unserem Testaufbau** – keine PC-Namen, Laufwerke,
+  Funkgeräte oder Rufzeichen der Teststationen. Beschrieben wird nach Komponenten: TinyBox,
+  TBClient, kisshub, brocastd, Steuerkonsole … Beispiel-Rufzeichen: `OE3ABC`, `OE3XYZ`.
+  PLANUNG, CHANGELOG und Change Requests bleiben Protokoll und dürfen den Testaufbau nennen.
+- Aufteilung: `README.md` = Überblick, Schnellstart, Liste der Unterlagen; `MANUAL.md` = das
+  Handbuch für den Betrieb (neu: 1.3 Woher die Inhalte kommen, 6 TinyBox im Betrieb mit
+  Sysop-Konsole, Chat-Boards, dxfeed, Spielen); `INSTALL.md` = Windows-Release und Steuerkonsole.
 
 ## 33. Spiel „Elmer Quiz“ (Idee und Entwurf, 13.11.2026)
 

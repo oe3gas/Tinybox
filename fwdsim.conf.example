@@ -41,7 +41,7 @@ db           =                      # z. B. data/tinybox.db - nur lesend, fuer d
 
 [agw]
 enabled         = no                # Funktest ueber Direwolf (Option --agw)
-# direwolf_conf = E:\direwolf       # AGWPORT, PACLEN, EMAXFRAME/MAXFRAME daraus
+# direwolf_conf = C:\direwolf       # AGWPORT, PACLEN, EMAXFRAME/MAXFRAME daraus
 host            = 127.0.0.1
 channel         = 0                 # Direwolf-Kanal (alt: radio_port)
 # port / paclen / max_outstanding   # nur zum Ueberschreiben (Standard 8000 / 128 / 4)

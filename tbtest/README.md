@@ -88,7 +88,7 @@ passt – die erste Zeile eines Laufs nennt sie:
 
 ```
 tbtest.bat run -u 20 -t 0 --air 9600
-tbclient.bat -c E:\tinybox-testbed\tbclient-testbed-9600.conf
+tbclient.bat -c C:\tinybox-testbed\tbclient-testbed-9600.conf
 ```
 
 und im Browser http://127.0.0.1:7745/ öffnen. Du bist dort **OE3GAS** (nicht Sysop – Sysop der
@@ -103,11 +103,11 @@ Für eine lange Sitzung zum Mitspielen: `tbtest run -u 20 -t 0` – läuft bis S
 
 ## Testbed-Verzeichnis
 
-Standard: `tinybox-testbed` **neben** dem Repo, also bei `E:\Tinybox` → `E:\tinybox-testbed`.
+Standard: `tinybox-testbed` **neben** dem Repo, also bei `C:\Tinybox` → `C:\tinybox-testbed`.
 Anders mit `-D <ordner>` vor dem Befehl oder der Umgebungsvariable `TBTEST_DIR`.
 
 ```
-E:\tinybox-testbed\
+C:\tinybox-testbed\
   tbtest.conf             User, Ports, Kanal, Qualität, Gast – von `tbtest init`, darf geändert werden
   tinybox.conf            die Test-Box – ERZEUGT aus tbtest.conf
   tbclient-testbed-<baud>.conf   dein Client im Testbed, je Bitrate – ERZEUGT aus tbtest.conf

@@ -21,12 +21,18 @@ https://claude.ai/code/artifact/bf4b91a7-7807-42d7-b72e-5739d9c257bd
 
 ## Einrichten
 
-Python 3.10 oder neuer, dazu zwei Pakete:
+Python 3.10 oder neuer, dazu zwei Pakete (im Windows-Release schon installiert):
 
 ```
-cd /d E:\Tinybox\brocast
+cd /d C:\Tinybox\brocast
 py -3 -m pip install -r requirements.txt
 ```
+
+**Station oder Listener:** brocastd läuft auf einem Rechner in genau einer Rolle
+(`[brocastd] mode`). Der **Listener** braucht nur den Funkzugang. Die **Station** bekommt ihre
+Seiten über die Ingest-API, die nur auf 127.0.0.1 lauscht – sie läuft deshalb immer zusammen mit
+der TinyBox am selben Rechner, die ihre Bulletins liefert. Zusammenspiel, Eingangsordner und
+Umstellung auf Station: `MANUAL.md`, Abschnitt 1.3.
 
 ## Ausprobieren
 
@@ -54,8 +60,10 @@ Dann `brocastd.bat` doppelklicken oder:
 py -3 -m brocast.daemon -c brocastd.conf
 ```
 
-Einstellungen in `brocastd.conf` (Modus `station` oder `listener`, Rufzeichen
-`OE3GAS-5`, Airtime-Budget …). Daten liegen unter `data\brocastd.db`.
+Einstellungen in `brocastd.conf` (Modus `station` oder `listener`, Rufzeichen der Station
+z. B. `OE3ABC-5` – nicht das der Mailbox –, Airtime-Budget …). Daten liegen unter
+`data\brocastd.db`. Am bequemsten startet man brocastd mit den anderen Programmen über die
+Steuerkonsole (`TinyBox-Start.bat`, `INSTALL.md`).
 
 Seite von Hand einspielen (Ingest-API, z. B. mit curl):
 
@@ -294,7 +302,7 @@ py -3 -m brocast statistik --stunden 12    anderer Zeitraum (1..48 h)
 
 **Bake (Station):** `[beacon]` in `brocastd.conf` sendet alle `interval_min` Minuten (Standard
 30, mindestens 5, 0 = aus; die erste beim Start) einen UI-Frame im Klartext an `dest` (Standard
-`BEACON`), z. B. „OE3GAS-5: brocast - Teletext-Seiten ueber Packet Radio …“ – so sieht jeder am
+`BEACON`), z. B. „OE3ABC-5: brocast - Teletext-Seiten ueber Packet Radio …“ – so sieht jeder am
 Terminal oder Monitor, was hier sendet. Text frei (`text`, höchstens 250 Bytes, ASCII empfohlen,
 Platzhalter `{call}` `{version}` `{pages}`); mehrere Zeilen: die weiteren eingerückt unter
 `text =`, sie gehen mit CR getrennt im selben Frame. Die Bake geht nie mitten in eine Seite, zählt zur
@@ -342,7 +350,7 @@ Die Rohdaten liefert weiterhin die JSON-API:
 | `http://127.0.0.1:7733/api/v1/rubrics` | alle Rubriken für die Abo-Matrix, mit Beschreibung und `stations` |
 | `http://127.0.0.1:7733/api/v1/stations` | gehörte Stationen |
 | `http://127.0.0.1:7733/api/v1/pages?cat=dx` | Seiten einer Rubrik (auch `station=`, `unread=1`, `favorite=1`, `q=`) |
-| `http://127.0.0.1:7733/api/v1/pages/OE3GAS-5/25?raw=1` | eine Seite, mit Rohansicht |
+| `http://127.0.0.1:7733/api/v1/pages/OE3ABC-5/25?raw=1` | eine Seite, mit Rohansicht |
 
 Schreibende Aufrufe (lesen/ungelesen, Favorit, löschen, Einstellungen, Abo)
 brauchen den Header `X-Brocast-Client: 1`; Details in `brocast/listener_api.py`.
@@ -369,13 +377,12 @@ Aufrufe mit fremden Domainnamen im Host-Header werden weiter abgewiesen
 (Schutz gegen DNS-Rebinding). Die Ingest-API (Port 8090) bleibt immer auf
 127.0.0.1 – über sie wird gesendet.
 
-## Dauerbetrieb (PC2) und Sendeprotokoll
+## Dauerbetrieb und Sendeprotokoll
 
-- `..\start_alles.bat` startet Direwolf, brocastd und TinyBox in eigenen Fenstern
-  (Direwolf-Pfad oben in der Datei einmal anpassen). brocastd und TinyBox werden
-  nach einem Absturz automatisch neu gestartet.
-- Autostart: Verknüpfung zu `start_alles.bat` in den Autostart-Ordner legen
-  (Win+R → `shell:startup`).
+- Die Steuerkonsole (`..\TinyBox-Start.bat`) startet Direwolf bzw. kisshub, TinyBox und
+  brocastd in einem Fenster und startet sie nach einem Absturz neu; Autostart:
+  `TinyBox-Start.bat 4` als Verknüpfung in den Autostart-Ordner (Win+R → `shell:startup`).
+  Die ältere `..\start_alles.bat` (je Programm ein Fenster) gibt es noch.
 - `logs\brocastd-<Datum>.log`: Programm-Log, eine Datei pro Tag (14 Tage aufbewahrt).
 - `logs\Sendeprotokoll_<JJJJ-MM>.txt`: jeder gesendete Frame mit Zeit (UTC),
   Rufzeichen, Seite, Revision, Teil, Bytes, Sendezeit, Lieferant und Titel.
@@ -438,7 +445,7 @@ mehrere Aussendungen, prüft dann Länge, Prüfsumme, Version und dass nur Eintr
 dazukommen. Installiert wird
 
 - automatisch, wenn die Station unter Einstellungen → „Dictionary über Funk
-  automatisch übernehmen von“ eingetragen ist (z. B. `OE3GAS-5`),
+  automatisch übernehmen von“ eingetragen ist (z. B. `OE3ABC-5`),
 - sonst nach Klick auf „Installieren“ im gelben Hinweis.
 
 Die alte Datei bleibt als `brocast-core.v<alt>.bak.yaml` erhalten. Ein automatisch übernommenes
