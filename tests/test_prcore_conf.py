@@ -59,3 +59,24 @@ class DeclaredSections(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClientConfigNumbersTests(unittest.TestCase):
+    """R7: a typo in a number of tbclient.conf is a ConfigError naming the key."""
+
+    def load(self, text: str):
+        import tempfile
+        from pathlib import Path
+        from tbclient import config as ccfg
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "tbclient.conf"
+            p.write_text("[station]\nmycall = OE3GAS\n" + text, encoding="utf-8")
+            return ccfg.load(p)
+
+    def test_typo_names_the_key(self):
+        from tbclient.config import ConfigError
+        with self.assertRaisesRegex(ConfigError, r"\[web\] port: '77x4' is not a number"):
+            self.load("[web]\nport = 77x4\n")
+        with self.assertRaisesRegex(ConfigError, "not a number"):
+            self.load("[agw]\nport = abc\n")
+        self.assertEqual(self.load("[web]\nport = 7755\n").web_port, 7755)

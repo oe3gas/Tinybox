@@ -93,6 +93,14 @@ def _strip(value: str) -> str:
 
 
 def load(path: str | Path) -> Config:
+    """Read tbclient.conf. Every wrong value is a ConfigError (R7) - never a traceback."""
+    try:
+        return _load(path)
+    except ValueError as exc:            # a number that is none, in a less common key
+        raise ConfigError(f"{Path(path).name}: a value is not a number ({exc})") from None
+
+
+def _load(path: str | Path) -> Config:
     path = Path(path)
     if not path.exists():
         raise ConfigError(f"{path} not found - copy tbclient.conf.example to {path.name}")
@@ -101,6 +109,14 @@ def load(path: str | Path) -> Config:
 
     def get(section: str, key: str, default: str) -> str:
         return _strip(cp.get(section, key, fallback=default)) or default
+
+    def num(section: str, key: str, default, kind=int):
+        """A number from the file - a typo is a ConfigError naming the key, not a crash."""
+        raw = get(section, key, str(default))
+        try:
+            return kind(raw)
+        except ValueError:
+            raise ConfigError(f"[{section}] {key}: '{raw}' is not a number") from None
 
     cfg = Config()
     cfg.mycall = get("station", "mycall", "").upper()
@@ -136,32 +152,32 @@ def load(path: str | Path) -> Config:
     cfg.ui = get("tinybox", "ui", cfg.ui).lower()
     cfg.auto_connect = get("tinybox", "auto_connect", "no").lower() in ("yes", "true", "1", "on")
     try:
-        cfg.max_channels = int(get("tinybox", "max_channels", str(cfg.max_channels)))
+        cfg.max_channels = num("tinybox", "max_channels", str(cfg.max_channels), int)
     except ValueError:
         raise ConfigError("[tinybox] max_channels must be a number 1 ... 10") from None
     if not 1 <= cfg.max_channels <= MAX_CHANNELS_LIMIT:
         raise ConfigError(f"[tinybox] max_channels must be 1 ... {MAX_CHANNELS_LIMIT}")
     cfg.telnet_host = get("tinybox", "telnet_host", cfg.telnet_host)
-    cfg.telnet_port = int(get("tinybox", "telnet_port", str(cfg.telnet_port)))
+    cfg.telnet_port = num("tinybox", "telnet_port", str(cfg.telnet_port), int)
     if has("tinybox", "axudp"):                                  # PLANUNG 25
         from prcore import axudp as udp
         try:
             cfg.axudp_host, cfg.axudp_port = udp.parse_addr(get("tinybox", "axudp", ""))
         except udp.AxudpError as exc:
             raise ConfigError(f"[tinybox] axudp: {exc}") from None
-        cfg.axudp_listen = int(get("tinybox", "axudp_port", str(cfg.axudp_listen)))
+        cfg.axudp_listen = num("tinybox", "axudp_port", str(cfg.axudp_listen), int)
         if not udp.is_loopback(cfg.axudp_host):
             raise ConfigError("[tinybox] axudp: only the TinyBox on this PC for now "
                               "(127.0.0.1)")
         if not 1 <= cfg.axudp_listen <= 65535:
             raise ConfigError("[tinybox] axudp_port must be 1 ... 65535")
         try:
-            cfg.axudp_paclen = int(get("tinybox", "axudp_paclen", str(cfg.axudp_paclen)))
-            cfg.axudp_maxframe = int(get("tinybox", "axudp_maxframe", str(cfg.axudp_maxframe)))
-            cfg.axudp_t1_sec = float(get("tinybox", "axudp_t1_sec", str(cfg.axudp_t1_sec)))
-            cfg.axudp_n2 = int(get("tinybox", "axudp_n2", str(cfg.axudp_n2)))
-            cfg.axudp_air_baud = int(get("tinybox", "axudp_air_baud", "0"))
-            cfg.axudp_txdelay_ms = int(get("tinybox", "axudp_txdelay_ms", "0"))
+            cfg.axudp_paclen = num("tinybox", "axudp_paclen", str(cfg.axudp_paclen), int)
+            cfg.axudp_maxframe = num("tinybox", "axudp_maxframe", str(cfg.axudp_maxframe), int)
+            cfg.axudp_t1_sec = num("tinybox", "axudp_t1_sec", str(cfg.axudp_t1_sec), float)
+            cfg.axudp_n2 = num("tinybox", "axudp_n2", str(cfg.axudp_n2), int)
+            cfg.axudp_air_baud = num("tinybox", "axudp_air_baud", "0", int)
+            cfg.axudp_txdelay_ms = num("tinybox", "axudp_txdelay_ms", "0", int)
         except ValueError:
             raise ConfigError("[tinybox] axudp_paclen / _maxframe / _t1_sec / _n2 / "
                               "_air_baud / _txdelay_ms: numbers, please") from None
@@ -199,7 +215,7 @@ def load(path: str | Path) -> Config:
                            else "direwolf.conf" if dw and dw.agw_port else "default")
 
     cfg.web_host = get("web", "host", cfg.web_host)
-    cfg.web_port = int(get("web", "port", str(cfg.web_port)))
+    cfg.web_port = num("web", "port", str(cfg.web_port), int)
     cfg.web_allow = get("web", "allow", cfg.web_allow)
     cfg.web_hosts = get("web", "hosts", cfg.web_hosts)
     try:
@@ -213,13 +229,13 @@ def load(path: str | Path) -> Config:
     data_dir = Path(get("storage", "data_dir", str(cfg.data_dir)))
     cfg.data_dir = data_dir if data_dir.is_absolute() else path.parent / data_dir
 
-    cfg.sync_chunk = int(get("sync", "chunk_bytes", str(cfg.sync_chunk)))
-    cfg.sync_pause = float(get("sync", "pause_sec", str(cfg.sync_pause)))
+    cfg.sync_chunk = num("sync", "chunk_bytes", str(cfg.sync_chunk), int)
+    cfg.sync_pause = num("sync", "pause_sec", str(cfg.sync_pause), float)
     if not 128 <= cfg.sync_chunk <= 8192:
         raise ConfigError("[sync] chunk_bytes must be 128 ... 8192")
     if not 0 <= cfg.sync_pause <= 120:
         raise ConfigError("[sync] pause_sec must be 0 ... 120")
-    cfg.sync_short = int(get("sync", "short_bytes", str(cfg.sync_short)))
+    cfg.sync_short = num("sync", "short_bytes", str(cfg.sync_short), int)
     if not 0 <= cfg.sync_short <= 8192:
         raise ConfigError("[sync] short_bytes must be 0 ... 8192")
     cfg.sync_on_login = get("sync", "on_login", "yes").lower() in ("yes", "true", "1", "on")
@@ -229,7 +245,7 @@ def load(path: str | Path) -> Config:
         raise ConfigError(str(exc)) from None
 
     # --- KISS: kisshub, values from its status --------------------------------------
-    cfg.kiss_port = int(get("kiss", "port", str(cfg.kiss_port)))
+    cfg.kiss_port = num("kiss", "port", str(cfg.kiss_port), int)
     fixed: set[str] = set()
     cfg.kiss_host = old("kiss", "host", "the fixed 127.0.0.1", "127.0.0.1") or cfg.kiss_host
     cfg.kiss_status_port = int(old("kiss", "status_port", "port + 1", str(cfg.kiss_port + 1))
@@ -257,7 +273,7 @@ def load(path: str | Path) -> Config:
             fixed.add(lc)
     cfg.ax25_srej = get("ax25", "srej", "yes").lower() in ("yes", "true", "1", "on")
     cfg.ax25_v20_digis = parse_calls(get("ax25", "v20_digis", ""))
-    cfg.ax25_v20_digi_paclen = int(get("ax25", "v20_digi_paclen", "128"))
+    cfg.ax25_v20_digi_paclen = num("ax25", "v20_digi_paclen", "128", int)
     if not 16 <= cfg.ax25_v20_digi_paclen <= 256:
         raise ConfigError("[ax25] v20_digi_paclen must be 16 ... 256")
     cfg.kiss_fixed = frozenset(fixed)
@@ -279,7 +295,7 @@ def load(path: str | Path) -> Config:
     # piece_bytes / pause_sec of older versions are ignored: the picture goes to
     # the radio in one go, the AX.25 window paces it
     if has("images", "bytes_per_sec"):
-        cfg.img_rate = int(get("images", "bytes_per_sec", str(cfg.img_rate)))
+        cfg.img_rate = num("images", "bytes_per_sec", str(cfg.img_rate), int)
         cfg.img_rate_fixed = True
         sources["img_rate"] = "tbclient.conf"
     else:
@@ -290,7 +306,7 @@ def load(path: str | Path) -> Config:
                                if dw and cfg.link == "agw" and dw.channel(cfg.radio_port).baud
                                else f"estimated from {baud} Bd"
                                + (" - kisshub value follows" if cfg.link == "kiss" else ""))
-    cfg.img_target = int(get("images", "target_bytes", str(cfg.img_target)))
+    cfg.img_target = num("images", "target_bytes", str(cfg.img_target), int)
     if not 10 <= cfg.img_rate <= 100000:
         raise ConfigError("[images] bytes_per_sec must be 10 ... 100000")
     if not 1024 <= cfg.img_target <= 16320:

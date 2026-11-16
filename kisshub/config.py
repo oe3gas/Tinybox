@@ -7,7 +7,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
-from prcore.conf import ConfigError     # one error class for all programs (R7)
+from prcore.conf import ConfigError, get_value  # one error class for all programs (R7)
 from prcore import direwolfconf, kiss, release, termcolor
 
 from . import modem73 as m73
@@ -117,15 +117,9 @@ def load(path: str | Path, profile_name: str | None = None) -> Config:
                 if key not in allowed and key not in cp.defaults():
                     raise ConfigError(f"[{sec}] {key}: unknown - use {', '.join(allowed)}")
 
-    def gget(sec, key, default, kind=str):
-        try:
-            if kind is int:
-                return cp.getint(sec, key, fallback=default)
-            if kind is bool:
-                return cp.getboolean(sec, key, fallback=default)
-            return cp.get(sec, key, fallback=default).strip()
-        except ValueError as exc:
-            raise ConfigError(f"[{sec}] {key}: {exc}") from None
+    def gget(sec, key, default, kind=str):           # prcore/conf.py (R7)
+        value = get_value(cp, sec, key, default, kind)
+        return value.strip() if kind is str and isinstance(value, str) else value
 
     tncs = pr.names(cp)
     if not tncs:

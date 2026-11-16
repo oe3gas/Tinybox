@@ -218,18 +218,28 @@ class AxudpCfg:
     txdelay_ms: int = 0          # simulated 1200 Bd channel): air time, half duplex
 
 
+def _color_ok(value: str) -> str | None:
+    try:
+        termcolor.check_mode(value)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
 @dataclass
 class WebCfg:
-    enabled: bool
-    host: str
-    port: int
+    """[web] - declared (R7); host must be a loopback address (checked in load)."""
+    enabled: bool = setting(True)
+    host: str = setting("127.0.0.1")
+    port: int = setting(8080, check=_tcp_port)
 
 
 @dataclass
 class ConsoleCfg:
-    enabled: bool
-    monitor: bool
-    color: str = "auto"              # colours in the console window: auto | yes | no
+    """[console] - declared (R7)."""
+    enabled: bool = setting(True)
+    monitor: bool = setting(True)
+    color: str = setting("auto", check=_color_ok)   # console colours: auto | yes | no
 
 
 @dataclass
@@ -248,14 +258,15 @@ class LoggingCfg:
 
 @dataclass
 class MqttCfg:
-    enabled: bool
-    host: str
-    port: int
-    tls: bool
-    client_id: str
-    username: str
-    password_file: str
-    topic_root: str
+    """[mqtt] - declared (R7); topic_root empty = tinybox/<mailbox call> (set in load)."""
+    enabled: bool = setting(False)
+    host: str = setting("127.0.0.1")
+    port: int = setting(8883, check=_tcp_port)
+    tls: bool = setting(True)
+    client_id: str = setting("tinybox")
+    username: str = setting("")
+    password_file: str = setting("")
+    topic_root: str = setting("")
 
 
 DEFAULT_RUBRICS = {
@@ -336,8 +347,9 @@ class ChatBoard:
 
 @dataclass
 class ClientCfg:
-    mail_notify: bool = True    # UI frame to TBMAIL when private mail arrives (PLANUNG 12, C1)
-    lotw_release: bool = False  # CR113: a new key confirmed with LoTW counts without the sysop
+    """[client] - declared (R7), all live (RELOAD)."""
+    mail_notify: bool = setting(True, live=True)    # UI frame to TBMAIL on private mail (C1)
+    lotw_release: bool = setting(False, live=True)  # CR113: LoTW-confirmed key counts at once
 
 
 @dataclass
@@ -719,22 +731,14 @@ def load(path: str | Path) -> Config:
 
     axudp = _load_axudp(cp)
 
-    web = WebCfg(
-        enabled=_get(cp, "web", "enabled", True, bool),
-        host=_get(cp, "web", "host", "127.0.0.1"),
-        port=_get(cp, "web", "port", 8080, int),
-    )
-    _check_port("web", "port", web.port)
+    web = load_section(cp, "web", WebCfg)
     if web.host not in LOOPBACK_HOSTS:
         raise ConfigError("[web] host must be a loopback address (127.0.0.1)")
     if web.enabled and telnet.enabled and web.port == telnet.port:
         raise ConfigError("[web] port and [telnet] port must differ")
 
-    console = ConsoleCfg(
-        enabled=_get(cp, "console", "enabled", True, bool),
-        monitor=_get(cp, "console", "monitor", True, bool),
-        color=_color(_get(cp, "console", "color", "auto")),
-    )
+    console = load_section(cp, "console", ConsoleCfg)
+    console.color = _color(console.color)
 
     data_dir = Path(_get(cp, "storage", "data_dir", "data"))
     if not data_dir.is_absolute():
@@ -753,17 +757,8 @@ def load(path: str | Path) -> Config:
                              debug=_debug_components(_get(cp, "logging", "debug", "")),
                              keep_days=keep_days)
 
-    mqtt = MqttCfg(
-        enabled=_get(cp, "mqtt", "enabled", False, bool),
-        host=_get(cp, "mqtt", "host", "127.0.0.1"),
-        port=_get(cp, "mqtt", "port", 8883, int),
-        tls=_get(cp, "mqtt", "tls", True, bool),
-        client_id=_get(cp, "mqtt", "client_id", "tinybox"),
-        username=_get(cp, "mqtt", "username", ""),
-        password_file=_get(cp, "mqtt", "password_file", ""),
-        topic_root=_get(cp, "mqtt", "topic_root", f"tinybox/{station.mailbox_call}"),
-    )
-    _check_port("mqtt", "port", mqtt.port)
+    mqtt = load_section(cp, "mqtt", MqttCfg)
+    mqtt.topic_root = mqtt.topic_root or f"tinybox/{station.mailbox_call}"
 
     brocast = BrocastCfg()
     dict_file = _get(cp, "brocast", "dict_file", "").strip()
@@ -835,8 +830,7 @@ def load(path: str | Path) -> Config:
                   mqtt=mqtt, brocast=brocast, inbox=inbox, chat=_load_chat(cp), rubrics=_load_rubrics(cp),
                   forward=forward, radio=radio, kiss=kiss, ax25=ax25,
                   sources=rad.sources, hints=rad.hints, kiss_fixed=kiss_fixed,
-                  client=ClientCfg(mail_notify=_get(cp, "client", "mail_notify", True, bool),
-                                   lotw_release=_get(cp, "client", "lotw_release", False, bool)),
+                  client=load_section(cp, "client", ClientCfg),
                   beacon=_load_beacon(cp), update=_load_update(cp), axudp=axudp)
 
 

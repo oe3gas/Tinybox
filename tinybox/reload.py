@@ -53,7 +53,7 @@ LIVE: dict[str, Any] = {
     "inbox": {"poll_sec"},
     "beacon": ALL,
     "update": {"announce"},
-    "client": ALL,
+    "client": live_fields(config.ClientCfg),       # declared (R7)
     "chat": {"history_lines", "max_line", "image_max"},
     "forward": {"bid_days", "aliases", "publish_to_brocast"},
 }

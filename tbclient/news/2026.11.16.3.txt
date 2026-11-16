@@ -1,0 +1,1 @@
+- Tippfehler in einer Zahl in tbclient.conf: klare Meldung statt Absturz

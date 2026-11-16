@@ -1467,7 +1467,11 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   Prüfung), `load_section()` liest einen Abschnitt, `live_fields()` liefert, was RELOAD übernimmt;
   dazu `get_value`, `check_range`, `check_port` und **eine** `ConfigError` für TinyBox, Client,
   kisshub und dxfeed. Umgestellt: TinyBox `[mailbox]` und `[telnet]`; `reload.LIVE["mailbox"]`
-  kommt aus der Deklaration. **Offen:** die übrigen Abschnitte (TinyBox `[station]`, `[web]`,
+  kommt aus der Deklaration. 16.11.: dazu TinyBox `[web]`, `[console]`, `[mqtt]`, `[client]`
+  (`reload.LIVE["client"]` aus der Deklaration); kisshub liest die globalen Abschnitte über
+  `get_value`; der Client meldet jeden Tippfehler in einer Zahl als `ConfigError` mit Abschnitt
+  und Schlüssel statt mit einem Traceback (vorher z. B. `[web] port = 77x4` → ValueError).
+  **Offen:** die übrigen Abschnitte (TinyBox `[station]`, `[web]`,
   `[chat]`, `[brocast]` …, Client, kisshub) – je Abschnitt ein kleiner Schritt, wenn ein CR ihn
   ohnehin berührt (z. B. CR125 `[station]`, CR129 `[games]`). Danach kann der Installer
   (`release/konfig.py`) die Beschreibung mitnutzen.
