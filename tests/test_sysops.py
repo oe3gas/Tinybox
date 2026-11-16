@@ -13,11 +13,11 @@ class SysopViews(unittest.TestCase):
         self.app = make_app()
         self.st = self.app.cfg.station
 
-    def test_today_all_views_are_the_one_call(self):
+    def test_one_sysop_mail_and_local_go_to_sysop(self):
         call = self.st.sysop_call
         self.assertEqual(self.st.sysops, (call,))
         self.assertEqual((self.st.sysop_mail_to, self.st.local_sysop, self.st.sysop_text),
-                         (call, call, call))
+                         ("SYSOP", "SYSOP", call))     # CR125
 
     def test_every_ssid_of_the_sysop_is_sysop(self):
         base = self.st.sysop_call.split("-")[0]

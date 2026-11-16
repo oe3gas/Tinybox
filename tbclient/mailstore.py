@@ -152,8 +152,12 @@ class MailStore:
             self.db.executemany("DELETE FROM todo WHERE id=?", [(i,) for i in ids])
             self._changed()
 
+    def to_me(self, to_call: str) -> bool:
+        """Addressed to me - or to SYSOP: the box sends that only to its sysops (CR125)."""
+        return base(to_call) == self.me or to_call == "SYSOP"
+
     def _is_mine(self, h) -> bool:
-        return h["type"] == "P" and base(h["to_call"]) == self.me
+        return h["type"] == "P" and self.to_me(h["to_call"])
 
     def set_body(self, msg_id: int, body: str) -> None:
         self.db.execute("UPDATE messages SET body=?, fetched=? WHERE id=?",
@@ -245,7 +249,7 @@ class MailStore:
         out = []
         for r in rows:
             r = dict(r)
-            mine_to, mine_from = base(r["to_call"]) == self.me, base(r["from_call"]) == self.me
+            mine_to, mine_from = self.to_me(r["to_call"]), base(r["from_call"]) == self.me
             if name == "inbox" and r["type"] == "P" and mine_to:
                 out.append(r)
             elif name == "sent" and mine_from and (r["type"] == "B" or not mine_to):
@@ -291,7 +295,7 @@ class MailStore:
         hidden = "id NOT IN (SELECT id FROM todo WHERE kind='kill')"
         inbox = [dict(r) for r in q(f"SELECT to_call, seen FROM messages WHERE type='P' "
                                     f"AND {hidden}")]
-        mine = [r for r in inbox if base(r["to_call"]) == self.me]
+        mine = [r for r in inbox if self.to_me(r["to_call"])]
         local: dict[str, list[int]] = {}
         for r in q("SELECT to_call, seen FROM messages WHERE type='B'"):
             c = local.setdefault(r[0], [0, 0])

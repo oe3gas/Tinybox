@@ -180,7 +180,7 @@ class Forwarding(unittest.TestCase):
         self.assertEqual(len(mails), 1)
         m = mails[0]
         self.assertEqual((m.to_call, m.from_call, m.subject),
-                         ("OE3XTC", "OE3XTC-1", "New rubric FUCHS offered by OE3GAS"))
+                         ("SYSOP", "OE3XTC-1", "New rubric FUCHS offered by OE3GAS"))
         self.assertIn("FUCHS = description", m.body)
         self.assertIn("Text of 1_X", m.body)
         self.assertIn("Subject: Subject 1_X", m.body)

@@ -48,7 +48,7 @@ class ShutdownTests(unittest.TestCase):
                 out = self.cmd("SHUTDOWN 2")
                 self.assertIn("Shutdown in 2 s, 3 station(s) warned", out)
                 text = ut.take()
-                self.assertIn("*** System message from OE3GAS: OE3GAS-1 goes down in "
+                self.assertIn("*** System message from SYSOP: OE3GAS-1 goes down in "
                               "2 seconds. Please finish and disconnect (B). ***", text)
                 self.assertTrue(text.startswith("\r") and text.endswith(") > "),
                                 repr(text))

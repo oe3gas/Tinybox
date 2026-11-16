@@ -8,7 +8,8 @@ values at once.
 
 Rules, section by section (attribute names of config.Config):
 
-  station   haddress, qth, freq, locator, sysop_via_radio      - rest: RESTART
+  station   haddress, qth, freq, locator, sysop_via_radio,
+            sysop_call (CR125: the list of sysops)              - rest: RESTART
   mailbox   everything (max_users also in the session registry)
   logging   level, debug, keep_days                            - rest: RESTART
   brocast   everything but publish
@@ -46,7 +47,7 @@ ALL = "*"
 
 # attribute of Config -> the fields taken over at runtime (ALL = every field)
 LIVE: dict[str, Any] = {
-    "station": {"haddress", "qth", "freq", "locator", "sysop_via_radio"},
+    "station": {"haddress", "qth", "freq", "locator", "sysop_via_radio", "sysop_call"},
     "mailbox": live_fields(config.MailboxCfg),     # declared in config.py (R7)
     "logging": {"level", "debug", "keep_days"},
     "brocast": ALL,                 # but publish, see NOT_LIVE

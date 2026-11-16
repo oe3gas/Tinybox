@@ -4778,7 +4778,7 @@ nach der Auflösung wie bisher grün (richtig) bzw. rot (falsch).
   überschrieben) – steht jetzt in `news/2026.11.13.txt`.
 - Herkunft der Karte: von OE3GAS selbst erstellt (mit KI), keine fremden Rechte (13.11.2026).
 
-## CR125 – Mehrere Sysops (bis zu 5) (offen)
+## CR125 – Mehrere Sysops (bis zu 5) (✅ 16.11.2026, Client 2026.11.16.4)
 
 **Wunsch (OE3GAS, 12.11.2026):** Eine TinyBox soll mehr als einen Sysop haben können, höchstens 5.
 Angelegt werden sie einfach in der `tinybox.conf`, ohne Konsolenbefehl und ohne Web-GUI.
@@ -4867,6 +4867,29 @@ Zusätzlich:
   gemeinsam, wie ein geteiltes Postfach; Löschen wirkt für alle.
 - Bestehende Post an das Rufzeichen des bisherigen Sysops bleibt, wie sie ist (keine Migration),
   oder auf `SYSOP` umschreiben? Vorschlag: bleibt.
+
+### Umgesetzt (16.11.2026)
+
+Beide offenen Punkte wie vorgeschlagen: **`SYSOP`-Post ist ein gemeinsames Postfach** (einer liest
+→ für alle gelesen, Löschen wirkt für alle), **bestehende Post bleibt** beim Rufzeichen.
+- `[station] sysop_call` nimmt bis zu 5 Rufzeichen (Komma und/oder Leerzeichen), gleiche
+  Basisrufzeichen zählen einmal; mehr als 5 oder ein ungültiges → `ConfigError`. `RELOAD`
+  übernimmt eine geänderte Liste.
+- `is_sysop_call()` prüft alle Einträge (jede SSID) und `SYSOP` selbst (die lokale Konsole) –
+  damit gelten alle Rechte der Tabelle oben für jeden Sysop.
+- Post an den Sysop: Empfänger `SYSOP` (Systemnachrichten und `S SYSOP` von Usern). Jeder Sysop
+  sieht sie als eigene Post (Liste, ungelesen, Client-Sync, Mail-Hinweis per UI an alle Sysops).
+  `SYSOP` ist nur lokal: mit `@` abgelehnt.
+- Lokale Sysop-Quellen (Konsole, Web-GUI, Inbox ohne Absender, `SHUTDOWN`/`RESTART`) handeln als
+  `SYSOP`. **Abweichung vom Vorschlag:** schreiben sie eine Nachricht, ist der Absender das
+  Rufzeichen der Box (`bbs_call`) statt `SYSOP` – eine Nachricht braucht ein echtes Rufzeichen
+  (R:-Zeilen, Forwarding an andere Mailboxen).
+- `//ADM` über den Client: die Sysop-Konsole läuft unter dem Rufzeichen des angemeldeten Sysops
+  („by“ in Log, Systemmeldung, `SHUTDOWN`).
+- Client: `SYSOP`-Post erscheint im Posteingang (die Box schickt sie nur an Sysops).
+- Tests: `tests/test_cr125.py` (Liste, Höchstzahl, gemeinsames Postfach, kein `@`, Absender).
+  **Funktest:** zweites Sysop-Rufzeichen in `tinybox.conf`, mit dem Client dieses Rufzeichens
+  anmelden (Schlüssel freigeben), Sysop-Funktionen und `SYSOP`-Post prüfen.
 
 ## CR126 – Prefix raten: Antwortzeit, Ergebnisse, Spielerliste; Scores aller Spiele löschen (✅ 13.11.2026, Client 2026.11.13.3)
 

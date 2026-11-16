@@ -117,7 +117,7 @@ class BoxLogin(unittest.TestCase):
         self.assertIn(f"//AUTHWAIT fp={self.key.fp}", t.take())
         self.assertEqual(self.app.store.key_get("OE3ABC", self.key.pub)["status"], "pending")
         self.assertTrue(any(self.key.fp in m.body for m in self.app.store.list_messages()
-                            if m.to_call == self.app.cfg.station.sysop_call))
+                            if m.to_call == self.app.cfg.station.sysop_mail_to))
         # the sysop releases it
         out = []
         SysopConsole(self.app, MonitorFilter(True), out.append).handle_line("USER OK oe3abc")

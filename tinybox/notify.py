@@ -19,6 +19,8 @@ import time
 
 from prcore.calls import base_call
 
+from .config import SYSOP
+
 log = logging.getLogger(__name__)
 
 UI_DEST = "TBMAIL"
@@ -37,7 +39,11 @@ class MailNotifier:
         if (msg is None or msg.type != "P" or msg.fwd != ""
                 or not self.app.cfg.client.mail_notify):
             return
-        self.notify(base_call(msg.to_call))
+        if msg.to_call == SYSOP:                 # CR125: every sysop's client
+            for call in self.app.cfg.station.sysops:
+                self.notify(base_call(call))
+        else:
+            self.notify(base_call(msg.to_call))
 
     def notify(self, call: str) -> None:
         send = self.app.service.chat.ui_send

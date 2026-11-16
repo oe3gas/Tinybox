@@ -8,7 +8,9 @@
 
 [station]
 mailbox_call = OE3GAS-1        # callsign + SSID the mailbox answers on
-sysop_call   = OE3GAS          # this call (any SSID) gets sysop rights
+sysop_call   = OE3GAS          # this call (any SSID) gets sysop rights. Up to 5 sysops,
+                               # all equal: sysop_call = OE3GAS, OE3TEC (CR125). Mail to
+                               # the sysop goes to SYSOP - every sysop reads it
 sysop_via_radio = no           # ignored since 10.11.2026: over the radio the sysop call is a
                                # guest (calls on the air are not authenticated); sysop
                                # locally, web GUI, later client with key (CR94)

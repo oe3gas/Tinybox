@@ -27,10 +27,14 @@ MOTD_MAX = 120              # characters of a board's message of the day (CR3)  
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
+SYSOP = "SYSOP"          # CR125: the address of all sysops (mail, local sysop sources)
+MAX_SYSOPS = 5
+
+
 @dataclass
 class StationCfg:
     mailbox_call: str
-    sysop_call: str
+    sysop_call: str           # CR125: one call or a list "OE3GAS, OE3TEC" (up to 5)
     sysop_via_radio: bool
     haddress: str = ""        # hierarchical address, e.g. OE3XTC.#NOE.AUT.EU ('' = call only)
     qth: str = ""             # shown in the R: line
@@ -46,24 +50,24 @@ class StationCfg:
     def address(self) -> str:
         return self.haddress or self.bbs_call
 
-    # --- the sysops (Refactoring R5, prepares CR125) --------------------------------
-    # Code never takes sysop_call itself but one of these four, so a list of sysops
-    # (CR125) changes only them.
+    # --- the sysops (Refactoring R5, CR125) ----------------------------------------
+    # Code never takes sysop_call itself but one of these four. All sysops are equal
+    # (CR125): no main sysop - mail to the sysop goes to SYSOP, which every sysop reads.
 
     @property
     def sysops(self) -> tuple[str, ...]:
-        """All sysop calls of this box (today one: [station] sysop_call)."""
-        return (self.sysop_call,)
+        """All sysop calls of this box ([station] sysop_call, up to 5)."""
+        return split_calls(self.sysop_call)
 
     @property
     def sysop_mail_to(self) -> str:
         """Recipient of the box's system mail to the sysop (held mail, key waits ...)."""
-        return self.sysop_call
+        return SYSOP
 
     @property
     def local_sysop(self) -> str:
         """Who acts for a local sysop source: console, web GUI, inbox, SHUTDOWN."""
-        return self.sysop_call
+        return SYSOP
 
     @property
     def sysop_text(self) -> str:
@@ -475,6 +479,28 @@ def _steps(value: str) -> tuple[float, ...]:
     return steps
 
 
+def split_calls(value: str) -> tuple[str, ...]:
+    """'OE3GAS, OE3TEC OE1ABC' -> ('OE3GAS', 'OE3TEC', 'OE1ABC'), normalized."""
+    return tuple(normalize_call(c) for c in value.replace(",", " ").split())
+
+
+def _require_sysops(value) -> str:
+    """CR125: [station] sysop_call - one call or up to 5, comma or space separated.
+    The same call twice (same base call) counts once."""
+    if not value or not value.strip():
+        raise ConfigError("[station] sysop_call is missing")
+    calls: list[str] = []
+    for c in split_calls(value):
+        if not is_valid_call(c):
+            raise ConfigError(f"[station] sysop_call: '{c}' is not a valid callsign")
+        if base_call(c) in {base_call(x) for x in calls}:
+            continue
+        calls.append(c)
+    if len(calls) > MAX_SYSOPS:
+        raise ConfigError(f"[station] sysop_call: at most {MAX_SYSOPS} sysops ({len(calls)} given)")
+    return ", ".join(calls)
+
+
 def _require_call(sec: str, key: str, value) -> str:
     if not value:
         raise ConfigError(f"[{sec}] {key} is missing")
@@ -697,8 +723,7 @@ def load(path: str | Path) -> Config:
     station = StationCfg(
         mailbox_call=_require_call("station", "mailbox_call",
                                    _get(cp, "station", "mailbox_call", None)),
-        sysop_call=_require_call("station", "sysop_call",
-                                 _get(cp, "station", "sysop_call", None)),
+        sysop_call=_require_sysops(_get(cp, "station", "sysop_call", None)),
         sysop_via_radio=_get(cp, "station", "sysop_via_radio", False, bool),
         qth=_get(cp, "station", "qth", "").strip(),
         freq=_get(cp, "station", "freq", "").strip(),

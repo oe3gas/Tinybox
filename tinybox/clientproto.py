@@ -513,7 +513,8 @@ def _admin(s: Session, command: str) -> None:
         s.out("//ADMEND refused")
         return
     lines: list[str] = []
-    console = SysopConsole(s.service.app, MonitorFilter(False), lines.append)
+    console = SysopConsole(s.service.app, MonitorFilter(False), lines.append,
+                           by=base_call(s.call))     # CR125: which sysop it was
     console.out = lambda *xs: lines.extend(xs)
     log.warning("%s: admin command over %s: %s", s.call, s.origin, visible(command)[:80])
     try:

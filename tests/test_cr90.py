@@ -84,7 +84,7 @@ class Suspect(unittest.TestCase):
         self.assertTrue(held.note.startswith(SPOOF_NOTE))
         self.assertIn("two stations", r.error)
         self.assertTrue(any("two stations" in m.subject for m in store.list_messages()
-                            if m.to_call == app.cfg.station.sysop_call))
+                            if m.to_call == app.cfg.station.sysop_mail_to))
 
 
 if __name__ == "__main__":

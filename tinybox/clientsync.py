@@ -528,8 +528,11 @@ def _sync(s: Session, parts: list[str]) -> None:
     known = set(kills or []) | set(reads or [])
     me = base_call(s.call)
 
+    sysop = svc.is_sysop_call(s.call)
+
     def mine(to: str, frm: str) -> bool:
-        return base_call(to) == me or base_call(frm) == me
+        # CR125: mail to SYSOP is every sysop's
+        return base_call(to) == me or base_call(frm) == me or (sysop and to == "SYSOP")
 
     rows: list[tuple[int, str, Message | None]] = []
     for m in store.changed_since(seq):

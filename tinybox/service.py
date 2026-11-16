@@ -18,7 +18,7 @@ from prcore.text import clean_text, defuse_lines
 from . import addressing, rights
 from .addressing import AddressError
 from .chat import ChatHub
-from .config import DEST_RE, NEWS_RUBRIC, Config
+from .config import DEST_RE, NEWS_RUBRIC, SYSOP, Config
 from .events import EventBus
 from .store import Message, Store, utc_now
 
@@ -54,11 +54,13 @@ class MessageService:
     # --- helpers --------------------------------------------------------
 
     def is_sysop_call(self, call: str) -> bool:
+        """One of the sysops (any SSID) - or SYSOP itself, the local sysop (CR125)."""
         base = base_call(call)
-        return any(base == base_call(s) for s in self.cfg.station.sysops)
+        return base == SYSOP or any(base == base_call(s) for s in self.cfg.station.sysops)
 
-    @staticmethod
-    def _is_addressee(msg: Message, call: str) -> bool:
+    def _is_addressee(self, msg: Message, call: str) -> bool:
+        if msg.to_call == SYSOP:              # CR125: every sysop reads mail to SYSOP
+            return self.is_sysop_call(call)  # (one mailbox: read by one = read)
         return base_call(msg.to_call) == base_call(call)
 
     @staticmethod
@@ -271,9 +273,9 @@ class MessageService:
         """Validate a destination before the user types the whole message.
         Returns the normalized destination."""
         to_call = normalize_call(to_call)
-        if type == "P" and to_call == "SYSOP":      # CR118: S SYSOP = the sysop of this box
-            to_call = base_call(self.cfg.station.sysop_mail_to)
-        if type == "P":
+        if type == "P" and to_call == SYSOP:
+            pass                    # CR118/CR125: S SYSOP = all sysops of this box, local
+        elif type == "P":
             if not is_valid_call(to_call):
                 raise ServiceError("invalid_call", to_call)
         elif type == "B":
@@ -306,7 +308,7 @@ class MessageService:
         out: list[str] = []
         for p in parts:
             call = self.check_send(from_call, p, type, sysop)
-            if type == "P" and not plausible_station(call):
+            if type == "P" and call != SYSOP and not plausible_station(call):
                 raise ServiceError("invalid_call", call)     # CR118: typed by a user
             if call not in out:
                 out.append(call)
@@ -365,6 +367,10 @@ class MessageService:
         if origin not in ORIGINS:
             raise ServiceError("invalid_value", f"origin {origin}")
         from_call = normalize_call(from_call)
+        if from_call == SYSOP and origin != "forward":
+            # CR125: a local sysop source (console, web GUI, inbox) writes as the box -
+            # a message needs a real call as author (R: lines, forwarding)
+            from_call = self.cfg.station.bbs_call
         if not is_valid_call(from_call):
             raise ServiceError("invalid_call", from_call)
         type = type.upper()
@@ -375,6 +381,8 @@ class MessageService:
         to_call = self.check_send(from_call, to_call, type, sysop or forwarded)
         if type == "B" and origin in ("inbox", "mqtt"):
             self.check_rubric(to_call)          # scripts and MQTT: only listed rubrics
+        if to_call == SYSOP and at_addr and origin != "forward":
+            raise ServiceError("invalid_value", "SYSOP is the sysops of this box - no @")
         at_addr, bid = self.check_address(type, at_addr, bid, origin)
 
         # CR95 (PLANUNG 29.9): any script, but no control/format characters, and a
