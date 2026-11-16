@@ -5699,3 +5699,92 @@ Ein Zug rund 10–25 Bytes; ein Spiel mit 5 Füchsen (rund 40 Züge) etwa 1,5 kB
 - Spätere Versionen: Gelände (Wald, Sumpf, Fluss), Abschwächer auf 2 m, Bake am Ziel, mehrere
   Spieler gleichzeitig (Wettlauf), Kartenbezug zum Standort der Box, Sprint/Foxoring.
 - Sprache nach CR129, keine Terminal-User nach CR128.
+
+## CR138 – Steuerkonsole: alle Programme der Station aus einem Fenster starten, stoppen, neu starten, deaktivieren (offen)
+
+**Wunsch OE3GAS (15./16.11.2026).** Heute gibt es als Zwischenlösung für das Release das Zip mit
+`TinyBox-Start.bat` → `release/start.ps1` (Menü 1–4, `git pull`, dann je Programm ein eigenes
+Fenster) und auf PC2 `start_alles.bat` mit den `*_dauerbetrieb.bat`. Gewünscht ist eine
+**Steuerkonsole**, aus der die einzelnen Komponenten gestartet, angehalten, neu gestartet oder
+deaktiviert werden.
+
+**Vorgaben (OE3GAS, 16.11.2026):**
+- **Eigenständige App, keine Web-App.** Start per Batch-Datei oder exe, ohne Browser.
+- Vorbild ist das **interaktive Konsolen-Statusboard von `start_eb200.py`** (Repo
+  oe3gas/eb200repo, MoniScope): ein Fenster, Kindprozesse, Tastenbedienung.
+- **brocast läuft auf einem PC immer nur als Station ODER als Listener** – daher **ein**
+  Eintrag „brocastd“; die Rolle kommt aus `brocast/brocastd.conf` und wird nur angezeigt.
+- Jedes Programm bleibt für sich allein startbar (PLANUNG 17.4). Die Steuerkonsole ist eine
+  Bequemlichkeit, keine Voraussetzung; die bisherigen Startdateien funktionieren weiter, bis
+  die Konsole sie ersetzt.
+
+### Komponenten (je eine Zeile)
+
+| Nr | Programm | Hinweis |
+|---|---|---|
+| 1 | Direwolf (TinyBox-Fork) | `direwolf\direwolf.exe`, nur wenn `tbstart.conf` direwolf = yes |
+| 2 | kisshub | nur wenn kisshub = yes (KISS-TNC statt Direwolf) |
+| 3 | TinyBox | braucht Direwolf oder kisshub |
+| 4 | TBClient | braucht Direwolf oder kisshub (oder Telnet/AXUDP zur Box) |
+| 5 | brocastd | Rolle Station oder Listener laut `brocastd.conf` |
+| 6 | dxfeed | optional (Dauerbetrieb), nur mit `dxfeed.conf` |
+
+Reihenfolge beim Start aus den Abhängigkeiten: zuerst Direwolf bzw. kisshub, warten bis der
+AGW- bzw. KISS-Port offen ist (Port-Prüfung statt fester `timeout /t 8`), dann die übrigen.
+
+### Anzeige (Konsole, Vorbild start_eb200.py)
+
+Ein Fenster, regelmäßig neu gezeichnet (ANSI, Windows-Konsole mit VT-Modus):
+- **Zone 1 – Programme:** Nummer (= Taste), Name, Zustand (startet / läuft / beendet (Exit n) /
+  Fehler / deaktiviert), Port-Prüfung (z. B. AGW :8000, Web :7744), PID, Laufzeit, Fehleranzahl,
+  bei brocastd die Rolle.
+- **Zone 2 – letzte Meldungen** aller Programme gemischt, mit `[name]` davor; filterbar.
+- **Zone 3 – letzter Fehlerblock** (Traceback) des gewählten Programms, blätterbar.
+- **Fußzeile:** Tastenbelegung, Pfad der eigenen Logdatei, Hinweis auf neue Version.
+
+### Bedienung (Tasten, ohne Enter)
+
+- `1`–`6` Programm wählen (filtert Zone 2/3), `a` alle
+- `s` gewähltes Programm starten, `x` stoppen, `r` neu starten, `R` alle neu starten
+  (in Abhängigkeitsreihenfolge)
+- `d` gewähltes Programm deaktivieren/aktivieren (dauerhaft, bleibt beim nächsten Start aus)
+- `e` nur Fehler zeigen, `n`/`p` durch Fehlerblöcke blättern
+- `w` Web-GUI des gewählten Programms im Browser öffnen (nur ein Komfort-Knopf – die Konsole
+  selbst braucht keinen Browser)
+- `u` Update: alles stoppen, `git pull`, wieder starten
+- `q` bzw. Strg+C: alles sauber beenden
+
+### Verhalten
+
+- Kindprozesse mit getrennten stdout/stderr-Pipes (Fehlererkennung wie start_eb200.py).
+- Lebenszeit-Kopplung über ein Windows-Job-Objekt (KILL_ON_JOB_CLOSE): schließt man die Konsole,
+  enden alle Programme – keine Waisen auf den Ports.
+- Stoppen: zuerst sauber (Programm bekommt die Chance, Verbindungen zu trennen und die DB zu
+  schließen), nach Zeitüberschreitung hart. Wie das „sauber“ unter Windows aussieht (Strg+Break
+  an eine eigene Prozessgruppe, oder ein Stopp-Befehl je Programm), ist bei der Umsetzung zu
+  klären – TerminateProcess allein ist kein sauberes Ende.
+- Automatischer Neustart nach unerwartetem Ende (heute 15 s in den `*_dauerbetrieb.bat`),
+  mit Obergrenze (z. B. 5 Versuche), dann Zustand „Fehler“.
+- Eigene Logdatei (Tagesdatei nach `prcore/dailylog.py`) mit allen Zeilen ungefiltert; die
+  Programme schreiben ihre eigenen Logs wie bisher.
+- Aktiv/deaktiviert und Startprofil in `tbstart.conf` (schon von `release/konfig.py`
+  geschrieben); Profile 1–4 aus dem heutigen Menü bleiben als Voreinstellung.
+- Plain-Modus ohne Konsole (Umleitung, Autostart, Dienst): Zeilenstrom ohne Tasten.
+- Autostart bei der Windows-Anmeldung wie heute `TinyBox-Start.bat 4`.
+
+### Umsetzung (Vorschlag)
+
+- Python-Modul im Repo (z. B. `tbstart/`), Start über `TinyBox-Start.bat` – es läuft mit dem
+  Python, das die Installation ohnehin braucht. Eine exe (PyInstaller o. ä.) nur, falls sie
+  einen echten Vorteil bringt; sie müsste bei jedem Update neu gebaut werden.
+- Gemeinsames nach `prcore` (PLANUNG 17.4), z. B. Konsolenfarben (`termcolor`), Tagesdatei,
+  Config-Lesen; die Konsole importiert keines der vier Programme.
+- Ersetzt danach `release/start.ps1` und `start_alles.bat`; NanoPi/Linux: dort bleibt systemd
+  der Weg, die Konsole kann später dessen Status anzeigen.
+
+### Offen
+
+- Steuerkonsole auch auf dem NanoPi (Terminal per SSH) oder nur Windows?
+- dxfeed und die GeoSphere-Aufgaben (Windows-Aufgabenplanung) mit anzeigen?
+- Sauberes Stoppen unter Windows (siehe oben) – ggf. ein kleiner gemeinsamer Stopp-Mechanismus
+  in `prcore`, den alle vier Programme verstehen.
