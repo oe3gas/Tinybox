@@ -400,12 +400,17 @@ def main() -> int:
     if mode == "1":
         print()
         print("Direwolf (Modem fuer die Soundkarte)")
-        print(f"  Mitgeliefert: {DW_DIR / 'direwolf-tinybox.exe'}")
+        bundled = (DW_DIR / "direwolf-tinybox.exe").is_file()
+        if bundled:
+            print(f"  Mitgeliefert: {DW_DIR / 'direwolf-tinybox.exe'}")
+        else:   # e.g. a git clone without the release package: no direwolf\ folder
+            print(f"  Kein mitgelieferter Direwolf gefunden ({DW_DIR / 'direwolf-tinybox.exe'}"
+                  " fehlt).")
         start_dw = yes("Direwolf beim Start automatisch mitstarten?", True)
         dw_dir = DW_DIR
         dw_exe = "direwolf-tinybox.exe"
         if start_dw:
-            if not yes("Mitgelieferten Direwolf verwenden?", True):
+            if not bundled or not yes("Mitgelieferten Direwolf verwenden?", True):
                 dw_dir = Path(ask("Ordner deines Direwolf", r"C:\direwolf",
                                   lambda a: Path(a).is_dir(), "Ordner gibt es nicht."))
                 dw_exe = ask("Programmdatei darin", "direwolf.exe",

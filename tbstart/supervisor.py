@@ -151,11 +151,16 @@ class Supervisor:
                 return
             run.wait_until = run.restart_at = None
             if run.prog.missing:
+                if run.state != MISSING:
+                    self.note(f"{run.prog.name} startet nicht: {run.prog.detail or run.prog.missing}")
                 run.state, run.note = MISSING, run.prog.missing
                 return
             if first and run.prog.port and port_open(run.prog.port):
                 run.state, run.note = EXTERNAL, "läuft schon außerhalb der Konsole"
                 return
+            # stdin: a pipe nobody writes to. Not DEVNULL - on Windows NUL counts as a
+            # console (isatty() is True), TinyBox would start its sysop console on it
+            # and read empty lines in a loop ("Unknown command").
             env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",
                        **run.prog.env)
             kw: dict = {}
@@ -168,7 +173,7 @@ class Supervisor:
                 kw["start_new_session"] = True
             try:
                 proc = subprocess.Popen(run.prog.cmd, cwd=run.prog.cwd, env=env,
-                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, **kw)
             except OSError as exc:
                 run.state, run.note = FAILED, f"Start fehlgeschlagen: {exc}"

@@ -36,7 +36,8 @@ class Program:
     role: str = ""
     url: str | None = None      # w: open in the browser
     modem: bool = False         # Direwolf/kisshub: the others wait for its port
-    missing: str = ""           # why it cannot start (file missing)
+    missing: str = ""           # why it cannot start (file missing) - short, for the row
+    detail: str = ""            # the same with the full path, for the lines below
     env: dict = field(default_factory=dict)
 
 
@@ -113,9 +114,13 @@ def programs(root: Path, settings: dict, python: str = sys.executable) -> list[P
                  settings["direwolf"], agw_port(dw_dir / "direwolf.conf"), "AGW", "Modem",
                  modem=True)
     if not dw_exe.is_file():
-        dw.missing = f"{dw_exe} fehlt"
+        dw.missing = f"{dw_exe.name} fehlt - k: Pfad einstellen"
+        dw.detail = (f"{dw_exe} gibt es nicht. Mitgeliefert liegt Direwolf in direwolf\\ des "
+                     "Installationsordners; ein eigener Direwolf: Taste k (Konfiguration) "
+                     "oder direwolf_dir/direwolf_exe in tbstart.conf")
     elif not (dw_dir / "direwolf.conf").is_file():
-        dw.missing = "direwolf.conf fehlt"
+        dw.missing = "direwolf.conf fehlt - k: Konfiguration"
+        dw.detail = f"{dw_dir / 'direwolf.conf'} gibt es nicht"
     if settings["direwolf"] or dw_exe.is_file():
         out.append(dw)
 

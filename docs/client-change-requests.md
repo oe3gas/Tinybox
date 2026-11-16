@@ -5814,3 +5814,9 @@ Anordnung nach dem Entwurf auf der Design-Fläche (Konsolenfenster), Blättern m
 - Tests: `tests/test_tbstart.py` (Programmliste, Neustart-Regeln mit Dummy-Programmen, Anzeige).
 - Bewusst nicht: Sysop-Konsole der TinyBox (stdin) unter der Steuerkonsole – dafür die Web-GUI.
 - Noch offen: NanoPi (systemd), GeoSphere-/dxfeed-Aufgaben der Aufgabenplanung anzeigen.
+- Nachtrag 16.11. (erster Test PC1): TinyBox schrieb endlos „Unknown command“ – unter Windows
+  gilt NUL als Konsole (`isatty()`), die Sysop-Konsole lief auf stdin=DEVNULL. Jetzt stdin =
+  Pipe. Fehlt Direwolf, zeigt die Zeile kurz den Grund, die Meldungen den vollen Pfad.
+  Mitgeliefert liegt Direwolf in `direwolf\direwolf-tinybox.exe` des Installationsordners
+  (install.ps1 kopiert ihn aus dem ZIP); in einem Git-Clone ohne Release-Paket fehlt er.
+  `konfig.py` prüft das jetzt und fragt sonst den Ordner des eigenen Direwolf ab.

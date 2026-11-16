@@ -97,6 +97,17 @@ class ProgramListTests(unittest.TestCase):
         p = programs.programs(self.root, s)[0]
         self.assertEqual((p.key, p.port, p.modem, p.missing, p.cwd), ("direwolf", 8010, True, "", dw))
 
+    def test_missing_direwolf_says_where_it_looked(self):
+        s = dict(programs.start_settings(self.root), direwolf=True,
+                 direwolf_dir=str(self.root / "direwolf"))
+        dw = programs.programs(self.root, s)[0]
+        self.assertEqual(dw.missing, "direwolf-tinybox.exe fehlt - k: Pfad einstellen")
+        self.assertIn(str(self.root / "direwolf" / "direwolf-tinybox.exe"), dw.detail)
+        sup = sv.Supervisor([dw])
+        sup.start_all(first=True)
+        self.assertEqual(sup.runs[0].state, sv.MISSING)
+        self.assertTrue(any("gibt es nicht" in m[3] for m in sup.messages))
+
     def test_profile_only_for_this_run(self):
         s = programs.start_settings(self.root)        # no tbstart.conf: client only
         self.assertEqual((s["tbclient"], s["tinybox"], s["exists"]), (True, False, False))
@@ -196,6 +207,13 @@ class SupervisorTests(unittest.TestCase):
             sup.start_all(first=True)
         self.assertEqual((sup.runs[0].state, sup.runs[0].proc), (sv.EXTERNAL, None))
         self.assertEqual((sup.runs[1].state, sup.runs[1].note), (sv.MISSING, "tinybox.conf fehlt"))
+
+    def test_stdin_is_a_pipe_not_nul(self):
+        """On Windows NUL is a console: TinyBox would run its sysop console on it."""
+        sup = sv.Supervisor([self.prog()])
+        with mock.patch.object(sv.subprocess, "Popen", side_effect=OSError("x")) as popen:
+            sup.start(sup.runs[0])
+        self.assertIs(popen.call_args.kwargs["stdin"], sv.subprocess.PIPE)
 
     def test_deactivate_stops(self):
         sup = sv.Supervisor([self.prog()])
