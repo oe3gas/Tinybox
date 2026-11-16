@@ -24,6 +24,8 @@ body.start main{width:calc(100% - 48px);max-width:440px;margin:0 24px 24px}
 @media (max-width:520px){.hero{margin:0 14px}main,body.start main{width:auto;margin-left:12px;margin-right:12px}body.start main{margin-bottom:16px}}
 details.help{background:var(--card);border-radius:10px;padding:8px 12px;margin:0 0 12px;font-size:17px;line-height:1.6}
 details.help summary{cursor:pointer;font-weight:600}
+main{position:relative}
+body:not(.start) .helpbody{position:absolute;left:14px;right:14px;top:58px;z-index:5;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:4px 16px 10px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 details.help h3{font-size:17px;margin:10px 0 2px}
 details.help ol,details.help ul{margin:2px 0 6px;padding-left:22px}
 details.help b{font-weight:600}
@@ -63,6 +65,7 @@ canvas#map{width:100%;display:block;border-radius:10px;border:1px solid var(--li
 <main>
 <details class="help">
 <summary>Spielanleitung</summary>
+<div class="helpbody">
 <h3>Steuerung</h3>
 <ul>
 <li><b>Gehen</b> = Klick auf den Zielpunkt, dann bewegt sich der Spielercursor</li>
@@ -79,6 +82,7 @@ canvas#map{width:100%;display:block;border-radius:10px;border:1px solid var(--li
 <li>Ins Ziel (Doppelkreis) laufen beendet das Spiel.</li>
 <li>Ton einschalten lohnt sich: der aktive Fuchs ist in CW zu hören, laut heißt nah.</li>
 </ol>
+</div>
 </details>
 
 <section id="setup">
@@ -319,20 +323,37 @@ $('toneBtn').addEventListener('click',()=>{
 });
 $('endBtn').addEventListener('click',()=>{
   if(G&&!G.over){finish(true);return;}
-  G=null;setKey(0);
+  G=null;setKey(0);document.querySelector('main').style.width='';
   $('game').classList.add('hidden');$('ctrl').classList.add('hidden');$('setup').classList.remove('hidden');document.body.classList.add('start');
 });
 
 // ---------- map ----------
 const cv=$('map'),ctx=cv.getContext('2d');let W=340,C=17;
 const sm=$('smeter'),sctx=sm.getContext('2d');
-function resize(){
-  W=Math.min(cv.parentElement.clientWidth,1000);
+function applySize(w){
+  W=Math.max(200,Math.floor(w));
   const dpr=window.devicePixelRatio||1;
-  cv.width=W*dpr;cv.height=W*dpr;cv.style.height=W+'px';
+  cv.width=W*dpr;cv.height=W*dpr;cv.style.width=W+'px';cv.style.height=W+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);C=W/N;
 }
+// Big screens: the map always fits completely into the window (also with the help open).
+function resize(){
+  const main=document.querySelector('main');
+  if(window.innerWidth>=1100){
+    for(let i=0;i<2;i++){
+      const other=main.offsetHeight-cv.offsetHeight;
+      const hero=document.querySelector('.hero').offsetHeight+12;
+      const w=Math.max(280,Math.min(window.innerHeight-hero-24-other,window.innerWidth*0.46,1000));
+      main.style.width=(Math.floor(w)+28)+'px';
+      applySize(w);
+    }
+  }else{
+    main.style.width='';cv.style.width='';
+    applySize(Math.min(cv.parentElement.clientWidth,1000));
+  }
+}
 window.addEventListener('resize',()=>{if(G)resize();});
+document.querySelector('details.help').addEventListener('toggle',()=>{if(G)resize();});
 cv.addEventListener('pointerdown',e=>{
   if(!G||G.over||G.paused||G.auto)return;
   const r=cv.getBoundingClientRect();
