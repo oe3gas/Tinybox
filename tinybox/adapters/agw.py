@@ -29,9 +29,9 @@ import time
 from collections import deque
 
 from prcore import linkq
-from prcore.agw import PID_NO_L3, AgwProtocolError, Frame, read_frame, via_data
+from prcore.agw import PID_NO_L3, Frame, via_data
+from prcore.agwport import AgwClient
 from prcore.calls import is_valid_call, normalize_call, plausible_call
-from prcore.termcolor import OK
 
 from .. import chatimg, framemon, linkguard, logsetup, texts
 from ..app import App
@@ -198,19 +198,19 @@ class AgwConnection:
                                     call_from=self.adapter.mycall, call_to=self.remote))
 
 
-class AgwAdapter:
+class AgwAdapter(AgwClient):
     conn_class = AgwConnection      # the KISS adapter plugs in its own connection type
     origin = "radio"                # Session.origin of incoming connects (AXUDP: "axudp")
     owns_ui = True                  # this adapter sends the chat's UI frames (the radio)
 
     def __init__(self, app: App) -> None:
+        super().__init__(log)                     # the AGW link itself: prcore/agwport.py (R9)
         self.app = app
         self.cfg = app.cfg
         self.mycall = app.cfg.station.mailbox_call
         self.radio_port = app.cfg.direwolf.agw_radio_port
         self.conns: dict[str, AgwConnection] = {}
         self._pending: dict[str, asyncio.Future] = {}   # outgoing connects (forward)
-        self._writer: asyncio.StreamWriter | None = None
         self.connected = asyncio.Event()  # AGW link up (used by tests)
         if self.owns_ui:
             app.service.chat.ui_send = self.send_ui
@@ -253,51 +253,31 @@ class AgwAdapter:
 
     # --- main loop --------------------------------------------------------
 
-    async def run(self) -> None:
+    # --- the AGW link (prcore/agwport.py runs the loop, R9) ------------------------
+
+    def agw_address(self) -> tuple[str, int, float]:
         dw = self.cfg.direwolf
-        warned = False
-        while True:
-            try:
-                reader, writer = await asyncio.open_connection(dw.agw_host, dw.agw_port)
-            except OSError as exc:
-                # warn once, then retry quietly until Direwolf is back
-                (log.debug if warned else log.error)(
-                    "Direwolf AGW %s:%d not reachable (%s), retrying every %ds",
-                    dw.agw_host, dw.agw_port, exc, dw.reconnect_sec)
-                warned = True
-                await asyncio.sleep(dw.reconnect_sec)
-                continue
-            warned = False
-            log.info("connected to Direwolf AGW %s:%d", dw.agw_host, dw.agw_port, extra=OK)
-            self._writer = writer
-            watchdog = asyncio.create_task(self._idle_watchdog())
-            self.q_supported = None
-            self.own_frames = False
-            quality = asyncio.create_task(self._quality_poll())
-            try:
-                self.send(Frame("R"))
-                self.send(Frame("X", self.radio_port, call_from=self.mycall))
-                self._monitor_on()
-                self.connected.set()
-                while True:
-                    frame = await read_frame(reader)
-                    try:
-                        self._dispatch(frame)
-                    except Exception:  # one bad frame must not take the radio link down
-                        log.exception("error handling AGW frame '%s' from %s",
-                                      frame.kind, frame.call_from)
-            except (asyncio.IncompleteReadError, ConnectionError, AgwProtocolError) as exc:
-                log.error("AGW connection lost: %s", exc or type(exc).__name__)
-            except Exception:
-                log.exception("AGW adapter error, reconnecting")
-            finally:
-                self.connected.clear()
-                watchdog.cancel()
-                quality.cancel()
-                self._drop_all()
-                self._writer = None
-                writer.close()
-            await asyncio.sleep(dw.reconnect_sec)
+        return dw.agw_host, dw.agw_port, dw.reconnect_sec
+
+    def agw_opened(self) -> None:
+        self._tasks = [asyncio.create_task(self._idle_watchdog()),
+                       asyncio.create_task(self._quality_poll())]
+        self.q_supported = None
+        self.own_frames = False
+        self.send(Frame("R"))
+        self.send(Frame("X", self.radio_port, call_from=self.mycall))
+        self._monitor_on()
+        self.connected.set()
+
+    def agw_frame(self, frame: Frame) -> None:
+        self._dispatch(frame)
+
+    def agw_closed(self) -> None:
+        self.connected.clear()
+        for task in getattr(self, "_tasks", ()):
+            task.cancel()
+        self._tasks = []
+        self._drop_all()
 
     # --- incoming frames ----------------------------------------------------
 

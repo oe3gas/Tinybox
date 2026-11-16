@@ -32,7 +32,7 @@ class FakeDirewolf:
         self.writer = writer
         try:
             while True:
-                f = await agw.read_frame(reader)
+                f = await agwcodec.read_frame(reader)
                 self.frames.append(f)
                 if f.kind == "R":
                     self.send(Frame("R", data=struct.pack("<hhhh", 1, 0, 7, 0)))

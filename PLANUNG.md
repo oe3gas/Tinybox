@@ -1486,6 +1486,14 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   gemeinsamer Mini-HTTP-Server für TinyBox, Client und kisshub – die drei sind verschieden genug
   (Long-Poll, SSE-Feed, Uploads, 1-Zeilen-Status), dass ein gemeinsamer Unterbau erst lohnt, wenn
   ein CR einen davon ohnehin umbaut (CR67 `/events`).
+- R9 AGW-Port ✅ (16.11.): `prcore/agwport.py` – `AgwClient` mit der gemeinsamen Schleife
+  (verbinden, einmal warnen, wiederholen, Frame für Frame lesen, ein kaputter Frame reißt die
+  Verbindung nicht ab, aufräumen) und `parse_fork()` für das 'F' des Forks. TinyBox
+  (`AgwAdapter`) und Client (`AgwPort`) liefern nur noch die Haken: Adresse, Eröffnungsframes,
+  Frame-Behandlung, Aufräumen. Was sie mit den Frames tun, bleibt getrennt (Box: Sitzungen,
+  Client: Kanäle). Nicht umgestellt: brocast `AgwLink` (eigene, einfachere Schleife nur für UI) und
+  fwdsim (Testpartner). **Funktest nötig:** Box und Client an Direwolf, Verbinden, Direwolf
+  beenden und neu starten (beide verbinden sich wieder), Fork-Anzeige im Client.
 
 
 ### 17.4 Das Paket: vier Programme, ein gemeinsamer Unterbau (entschieden 15.11.2026)

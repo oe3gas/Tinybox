@@ -8,6 +8,7 @@ import unittest
 
 from prcore import linkq
 from tinybox.adapters import agw
+from prcore.agw import read_frame
 from tinybox.adapters.agw import Frame
 
 from tests.test_agw import FakeDirewolf, MYCALL, stop
@@ -182,7 +183,7 @@ class QDirewolf(FakeDirewolf):
         self.writer = writer
         try:
             while True:
-                f = await agw.read_frame(reader)
+                f = await read_frame(reader)
                 self.frames.append(f)
                 if f.kind == "Q":
                     self.q_asked += 1

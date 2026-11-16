@@ -19,10 +19,9 @@ import logging
 import struct
 from typing import Any, Callable
 
-from prcore.termcolor import OK
-
 from prcore import linkq
-from prcore.agw import PID_NO_L3, Frame, read_frame, via_data
+from prcore.agw import PID_NO_L3, Frame, via_data
+from prcore.agwport import AgwClient, parse_fork
 from prcore.ax25.frame import ui_frame as ax25_ui_frame
 
 from . import radio
@@ -206,16 +205,16 @@ def own_ui(cfrom: str, cto: str, data: bytes) -> radio.RawFrame | None:
     return radio.decode(raw)
 
 
-class AgwPort:
+class AgwPort(AgwClient):
     """The TCP link to Direwolf's AGW port, shared by all connections (CR45: up
     to 5 at once). Registers mycall, switches the raw monitor on and hands every
     frame to the AgwLink of that station; raw frames go to on_frame."""
 
     def __init__(self, cfg: Config, on_frame, on_incoming=None) -> None:
+        super().__init__(log)                     # the link itself: prcore/agwport.py (R9)
         self.cfg = cfg
         self.on_frame = on_frame
         self.on_incoming = on_incoming            # remote -> AgwLink of a free channel, or None
-        self._writer: asyncio.StreamWriter | None = None
         self.agw_up = asyncio.Event()
         self.links: dict[str, "AgwLink"] = {}      # remote call -> its connection
         # CR78: Direwolf answers 'Q' (TinyBox fork)? None = not known yet
@@ -228,57 +227,36 @@ class AgwPort:
 
     def send(self, kind: str, call_from: str = "", call_to: str = "",
              data: bytes = b"", pid: int = 0) -> None:
-        w = self._writer
-        if w is not None and not w.is_closing():
-            w.write(Frame(kind, self.cfg.radio_port, pid, call_from, call_to, data).pack())
+        self.write_frame(Frame(kind, self.cfg.radio_port, pid, call_from, call_to, data))
 
-    async def run(self) -> None:
-        """Keep the TCP link to Direwolf open (reconnects by itself)."""
-        warned = False
-        while True:
-            try:
-                reader, writer = await asyncio.open_connection(self.cfg.agw_host,
-                                                               self.cfg.agw_port)
-            except OSError as exc:
-                if not warned:
-                    log.error("Direwolf AGW %s:%s not reachable (%s)",
-                                self.cfg.agw_host, self.cfg.agw_port, exc)
-                warned = True
-                await asyncio.sleep(5)
-                continue
-            warned = False
-            self._writer = writer
-            log.info("connected to Direwolf AGW %s:%s", self.cfg.agw_host, self.cfg.agw_port,
-                     extra=OK)
-            self.send("R")
-            self.send("X", self.cfg.mycall)
-            self.send("k")
-            self.send("m")          # monitor on: Direwolf reports our own UI frames as 'T'
-            self.q_supported = None                 # maybe another Direwolf now
-            self.fork, self.events, self.own_frames = {}, False, False
-            # CR112: TinyBox fork - what it can, events, own frames raw. An original
-            # Direwolf logs "Unexpected Command" for each once and answers nothing.
-            self.send("F")
-            self.send("E")
-            self.send("O")
-            self.agw_up.set()
-            try:
-                while True:
-                    f = await read_frame(reader)
-                    try:
-                        self._dispatch(f.kind, f.call_from, f.call_to, f.data)
-                    except Exception:
-                        log.exception("error handling AGW frame")
-            except (asyncio.IncompleteReadError, ConnectionError, OSError) as exc:
-                log.error("AGW connection lost: %s", exc or type(exc).__name__)
-            finally:
-                self.agw_up.clear()
-                self._writer = None
-                writer.close()
-                for link in list(self.links.values()):
-                    link.connecting = False
-                    link.drop("Direwolf connection lost")
-            await asyncio.sleep(5)
+    # --- the AGW link (prcore/agwport.py runs the loop, R9) ------------------------
+
+    def agw_address(self) -> tuple[str, int, float]:
+        return self.cfg.agw_host, self.cfg.agw_port, 5
+
+    def agw_opened(self) -> None:
+        self.send("R")
+        self.send("X", self.cfg.mycall)
+        self.send("k")
+        self.send("m")          # monitor on: Direwolf reports our own UI frames as 'T'
+        self.q_supported = None                 # maybe another Direwolf now
+        self.fork, self.events, self.own_frames = {}, False, False
+        # CR112: TinyBox fork - what it can, events, own frames raw. An original
+        # Direwolf logs "Unexpected Command" for each once and answers nothing.
+        self.send("F")
+        self.send("E")
+        self.send("O")
+        self.agw_up.set()
+
+    def agw_frame(self, f: Frame) -> None:
+        self._dispatch(f.kind, f.call_from, f.call_to, f.data)
+
+    def agw_closed(self) -> None:
+        self.agw_up.clear()
+        self._writer = None                     # the links below must not send any more
+        for link in list(self.links.values()):
+            link.connecting = False
+            link.drop("Direwolf connection lost")
 
     def _dispatch(self, kind: str, cfrom: str, cto: str, data: bytes) -> None:
         if kind == "K" and len(data) > 1:
@@ -295,9 +273,7 @@ class AgwPort:
                 self.on_frame(frame)
             return
         if kind == "F":                     # CR112: fork version and features
-            words = dict(w.split("=", 1) for w in data.decode("ascii", "replace").split() if "=" in w)
-            self.fork = {"version": words.get("fork", ""),
-                         "features": sorted(filter(None, words.get("features", "").split(",")))}
+            self.fork = parse_fork(data)
             if any(f.startswith("Q") for f in self.fork["features"]):
                 self.q_supported = True
             log.info("Direwolf TinyBox fork %s: %s", self.fork["version"],
