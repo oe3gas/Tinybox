@@ -5690,6 +5690,8 @@ Ein Zug rund 10–25 Bytes; ein Spiel mit 5 Füchsen (rund 40 Züge) etwa 1,5 kB
   analoges S-Meter, Stempel-Effekt mit Piepton beim Fund, Zwischenzeiten am Ende, nur die letzten
   3 Peilungen je Fuchs sichtbar, 80-m-Mehrdeutigkeit ohne Hinweis auf die richtige Seite (beide
   Richtungen gleich gezeichnet, im Protokoll aufsteigend sortiert).
+- Zielgerät ist der normale Bildschirm (wie CQ Contest und Prefix raten); eine Handy-Ansicht wird
+  später bearbeitet (OE3GAS, 16.11.2026).
 - Später getrennt ausprobieren: Peilen von Hand (Peilring drehen, Minimum hören), Idealroute in der
   Auswertung.
 
