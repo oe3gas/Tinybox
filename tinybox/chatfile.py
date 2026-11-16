@@ -30,13 +30,14 @@ time), never within the first hour.
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from prcore.chatimg import HASH_RE, parse_file_ref
 from prcore.filecheck import name_verdict
 from prcore.text import isnum
+
+from .blobs import Uploads, send_from     # the common part (R10)
 
 if TYPE_CHECKING:
     from .config import Config
@@ -45,7 +46,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-PARTIAL_TTL = 3600
 UNREF_GRACE_H = 1
 
 
@@ -53,7 +53,7 @@ class ChatFiles:
     def __init__(self, store: Store, cfg: Config) -> None:
         self.store = store
         self.cfg = cfg
-        self._partial: dict[str, list] = {}   # hash -> [how, size, bytearray, last, call]
+        self.uploads = Uploads()             # half uploads (blobs.py, R10; owner: CR96)
 
     def limit(self, s: Session) -> int:
         board = self.cfg.chat.board(s.chat_board or "")
@@ -91,35 +91,26 @@ class ChatFiles:
         if self.store.file_get(h) is not None:
             s.out(f"//FOK {h}")
             return
-        p = self._partial.get(h)
-        if p is not None and p[4] != s.call:
-            log.warning("%s: file upload %s refused - %s is uploading it", s.call, h, p[4])
+        p = self.uploads.begin(h, s.call, size, how)
+        if p is None:
+            log.warning("%s: file upload %s refused - %s is uploading it", s.call, h,
+                        self.uploads.owner(h))
             s.out("//ERR file busy")
             return
-        if p is None or p[0] != how or p[1] != size:
-            p = self._partial[h] = [how, size, bytearray(), time.monotonic(), s.call]
-        p[3] = time.monotonic()
-        s.out(f"//FGO {h} {len(p[2])}")
-        s.collect_raw(size - len(p[2]), lambda chunk: self._chunk(h, chunk),
-                      lambda: self._done(s, h), lambda: self._cancel(s, h))
-
-    def _chunk(self, h: str, chunk: bytes) -> None:
-        p = self._partial.get(h)
-        if p is not None:
-            p[2] += chunk
-            p[3] = time.monotonic()
+        s.out(f"//FGO {h} {p.have}")
+        self.uploads.receive(s, h, lambda: self._done(s, h), lambda: self._cancel(s, h))
 
     def _cancel(self, s: Session, h: str) -> None:
-        p = self._partial.get(h)
-        s.out(f"//ERR file timeout {len(p[2]) if p else 0}")
+        p = self.uploads.get(h)
+        s.out(f"//ERR file timeout {p.have if p else 0}")
 
     def _done(self, s: Session, h: str) -> None:
-        p = self._partial.pop(h, None)
-        if p is None or p[4] != s.call:
+        p = self.uploads.finish(h, s.call)
+        if p is None:
             s.out("//ERR file not_started")
             return
-        self.store.file_put(h, p[0], bytes(p[2]), s.call)
-        log.info("%s uploaded file %s (%d bytes, %s)", s.call, h, len(p[2]), p[0])
+        self.store.file_put(h, p.meta, bytes(p.data), s.call)
+        log.info("%s uploaded file %s (%d bytes, %s)", s.call, h, p.have, p.meta)
         s.out(f"//FOK {h}")
 
     # --- download -----------------------------------------------------------------
@@ -136,16 +127,11 @@ class ChatFiles:
             s.out(f"//NOBFILE {h}")
             return
         how, data = got
-        piece = data[offset:]
-        s.transport.write(f"//BF {h} {how} {offset} {len(data)}\r")
-        s.transport.write_bytes(piece)
-        log.info("%s > //FGET %s: %d bytes from %d of %d", s.call, h, len(piece), offset,
-                 len(data))
+        n = send_from(s, f"//BF {h} {how} {offset} {len(data)}", data, offset)
+        log.info("%s > //FGET %s: %d bytes from %d of %d", s.call, h, n, offset, len(data))
 
     def purge(self) -> int:
-        now = time.monotonic()
-        for h in [h for h, p in self._partial.items() if now - p[3] > PARTIAL_TTL]:
-            del self._partial[h]
+        self.uploads.purge()
         before = (datetime.now(timezone.utc) - timedelta(hours=UNREF_GRACE_H)
                   ).strftime("%Y-%m-%dT%H:%M:%SZ")
         return self.store.file_purge(before)

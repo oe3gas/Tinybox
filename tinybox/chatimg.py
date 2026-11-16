@@ -28,12 +28,13 @@ never within the first hour after the upload.
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from prcore.chatimg import HASH_RE, image_hash, image_type, parse_ref, size_code
 from prcore.text import isnum
+
+from .blobs import Uploads, send_from     # the common part (R10)
 
 if TYPE_CHECKING:
     from .config import Config
@@ -42,7 +43,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-PARTIAL_TTL = 3600                  # s a half uploaded image is kept
 RAW_TIMEOUT = 120                   # s without a byte: the upload is over for now
 UNREF_GRACE_H = 1                   # h a stored image survives without a chat line
 
@@ -51,10 +51,9 @@ class ChatImages:
     def __init__(self, store: Store, cfg: Config) -> None:
         self.store = store
         self.cfg = cfg
-        # hash -> [size, bytearray, last activity, call]: uploads under way. CR96 (TB-16):
-        # an upload belongs to the station that began it - no other may start,
-        # replace or finish it while it is kept
-        self._partial: dict[str, list] = {}
+        # uploads under way (blobs.py, R10). CR96 (TB-16): an upload belongs to the
+        # station that began it - no other may start, replace or finish it while kept
+        self.uploads = Uploads()
 
     # --- what a board allows -----------------------------------------------
 
@@ -93,42 +92,31 @@ class ChatImages:
         if self.store.image_size(h) is not None:
             s.out(f"//IMGOK {h}")
             return
-        p = self._partial.get(h)
-        if p is not None and p[3] != s.call:
-            log.warning("%s: upload of %s refused - %s is uploading it", s.call, h, p[3])
+        p = self.uploads.begin(h, s.call, size)
+        if p is None:
+            log.warning("%s: upload of %s refused - %s is uploading it", s.call, h,
+                        self.uploads.owner(h))
             s.out("//ERR img busy")
             return
-        if p is None or p[0] != size:
-            p = self._partial[h] = [size, bytearray(), time.monotonic(), s.call]
-        p[2] = time.monotonic()
-        s.out(f"//IMGGO {h} {len(p[1])}")
+        s.out(f"//IMGGO {h} {p.have}")
         # CR30: the others see "OE1ABC uploading picture" with a progress bar
         s.service.chat.upload_started(s, size_code(size), size)
         # everything that comes now is image data - the client holds back its
         # other lines until the last byte is out (CR12, 12.10.2026)
-        s.collect_raw(size - len(p[1]), lambda chunk: self._chunk(h, chunk),
-                      lambda: self._done(s, h), lambda: self._cancel(s, h))
-
-    def _chunk(self, h: str, chunk: bytes) -> None:
-        p = self._partial.get(h)
-        if p is not None:
-            p[1] += chunk
-            p[2] = time.monotonic()
+        self.uploads.receive(s, h, lambda: self._done(s, h), lambda: self._cancel(s, h))
 
     def _cancel(self, s: Session, h: str) -> None:
         """The bytes stopped coming: keep what is here, tell the client."""
-        p = self._partial.get(h)
-        log.info("%s: upload of %s stopped at %d bytes", s.call, h,
-                 len(p[1]) if p else 0)
-        s.out(f"//ERR img timeout {len(p[1]) if p else 0}")
+        p = self.uploads.get(h)
+        log.info("%s: upload of %s stopped at %d bytes", s.call, h, p.have if p else 0)
+        s.out(f"//ERR img timeout {p.have if p else 0}")
 
     def _done(self, s: Session, h: str) -> None:
-        p = self._partial.get(h)
-        if p is None or p[3] != s.call:
+        p = self.uploads.finish(h, s.call)
+        if p is None:
             s.out("//ERR img not_started")
             return
-        del self._partial[h]
-        data = bytes(p[1])
+        data = bytes(p.data)
         if image_hash(data) != h:
             s.out("//ERR img bad_hash")
             return
@@ -158,18 +146,13 @@ class ChatImages:
         if data is None:
             s.out(f"//NOIMG {h}")
             return
-        piece = data[offset:]
-        s.transport.write(f"//I {h} {offset} {len(data)}\r")
-        s.transport.write_bytes(piece)
-        log.info("%s > //IMG %s: %d bytes from %d of %d", s.call, h, len(piece), offset,
-                 len(data))
+        n = send_from(s, f"//I {h} {offset} {len(data)}", data, offset)
+        log.info("%s > //IMG %s: %d bytes from %d of %d", s.call, h, n, offset, len(data))
 
     # --- housekeeping ---------------------------------------------------------------
 
     def purge(self) -> int:
-        now = time.monotonic()
-        for h in [h for h, p in self._partial.items() if now - p[2] > PARTIAL_TTL]:
-            del self._partial[h]
+        self.uploads.purge()
         before = (datetime.now(timezone.utc) - timedelta(hours=UNREF_GRACE_H)
                   ).strftime("%Y-%m-%dT%H:%M:%SZ")
         return self.store.image_purge(before)

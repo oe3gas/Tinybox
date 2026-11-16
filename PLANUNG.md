@@ -1494,6 +1494,13 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   Client: Kanäle). Nicht umgestellt: brocast `AgwLink` (eigene, einfachere Schleife nur für UI) und
   fwdsim (Testpartner). **Funktest nötig:** Box und Client an Direwolf, Verbinden, Direwolf
   beenden und neu starten (beide verbinden sich wieder), Fork-Anzeige im Client.
+- R10 Blob-Baustein ✅ Box-Seite (16.11.): `tinybox/blobs.py` – `Uploads` (halbe Uploads je
+  Hash: Besitzer nach CR96, Wiederaufnahme ab `have`, neu bei anderer Größe/Packung, Ablauf nach
+  1 h) und `send_from()` (Kopfzeile + Bytes ab Offset). `chatimg.py` (Bilder) und `chatfile.py`
+  (Board-Dateien) nutzen ihn; Protokoll unverändert (//IMGPUT, //FPUT …). Die Client-Seite teilt
+  sich schon (`BoardFiles` erbt von `Images`); Peer-Dateien (`peerfile.py`) gehen direkt zwischen
+  zwei Clients und bleiben. CR105 (Profilfoto) setzt auf `blobs.py` auf. **Funktest:** Bild und
+  Datei in einem Board hochladen, Upload abbrechen und fortsetzen, herunterladen.
 
 
 ### 17.4 Das Paket: vier Programme, ein gemeinsamer Unterbau (entschieden 15.11.2026)
