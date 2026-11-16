@@ -16,6 +16,7 @@ body{margin:0;background:#2b3a1f;color:var(--fg);font:16px/1.55 system-ui,-apple
 main{max-width:560px;margin:12px 24px 24px;padding:14px;background:var(--panel);border-radius:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 body.start{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 body.start main{width:calc(100% - 48px);max-width:440px;margin:auto 24px 24px}
+@media (min-width:1100px){body:not(.start) main{max-width:none;width:calc(min(37vw,70vh) + 28px)}main .dash{grid-template-columns:240px 1fr}}
 @media (max-width:520px){.hero{margin:0 14px}main,body.start main{width:auto;margin-left:12px;margin-right:12px}body.start main{margin-bottom:16px}}
 details.help{background:var(--card);border-radius:10px;padding:8px 12px;margin:0 0 12px;font-size:17px;line-height:1.6}
 details.help summary{cursor:pointer;font-weight:600}
@@ -311,7 +312,7 @@ $('endBtn').addEventListener('click',()=>{
 const cv=$('map'),ctx=cv.getContext('2d');let W=340,C=17;
 const sm=$('smeter'),sctx=sm.getContext('2d');
 function resize(){
-  W=Math.min(cv.parentElement.clientWidth,560);
+  W=Math.min(cv.parentElement.clientWidth,1000);
   const dpr=window.devicePixelRatio||1;
   cv.width=W*dpr;cv.height=W*dpr;cv.style.height=W+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);C=W/N;
