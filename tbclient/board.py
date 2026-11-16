@@ -290,7 +290,9 @@ class BoardMixin:
         if pos in self.seen:
             return                                   # UI + I-frame, or a resend
         self.seen.add(pos)
-        if before is not None and pos > before + 1:
+        if before is not None and pos > before + 1 and not self.prefix.watching():
+            # CR128: while others play, the game events are not for us - a gap then is
+            # no loss (a chat line lost in that time is not fetched again)
             first, last = (before + 1) % 256, (pos - 1) % 256
             if pos - before - 1 <= MAX_GAP:
                 self.send_line(f"//RESEND {first:X}-{last:X}")
@@ -349,8 +351,12 @@ class BoardMixin:
                     self.quality[call] = b
         elif ev.kind == "system":
             pr = self.prefix.event(ev.text)              # CR123: Prefix raten
-            self._add({"id": pos, "seq": ev.seq, "kind": "system", "text": ev.text,
-                       "time": now, **({"pr": True} if pr else {})})
+            item = {"id": pos, "seq": ev.seq, "kind": "system", "text": ev.text, "time": now}
+            if pr:
+                item["pr"] = True
+                if self.prefix.watching():               # CR128: not for spectators' eyes
+                    item["pr_watch"] = True
+            self._add(item)
 
     def _set_number(self, num: int, call: str) -> None:
         """Member numbers are reused: a new holder pushes the old one out."""

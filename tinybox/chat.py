@@ -80,7 +80,9 @@ class ChatHub:
         self.cfg = cfg
         self._members: dict[str, list[Session]] = {}
         self._seq: dict[str, int] = {}                       # last number per board
-        self._recent: dict[str, deque[tuple[int, str, str]]] = {}  # (seq, line, old form)
+        # (seq, line, audience): the last events per board for //RESEND; audience =
+        # the calls an event was only for (CR128: a game's players), None = all
+        self._recent: dict[str, deque[tuple[int, str, frozenset | None]]] = {}
         self._numbers: dict[str, dict[str, int]] = {}         # board -> call -> member no.
         # set by the AGW adapter: ui_send(dest_call, text) sends one UI frame
         self.ui_send: Callable[[str, str], None] | None = None
@@ -286,26 +288,28 @@ class ChatHub:
         self.deliver(board, f"={self.member_no(board, session.call)}{tail}", None,
                      sender=session)
 
-    def replay(self, board: str, first: int, last: int) -> list[str]:
-        """Events first..last (inclusive, may wrap) still in memory."""
+    def replay(self, board: str, first: int, last: int, call: str | None = None) -> list[str]:
+        """Events first..last (inclusive, may wrap) still in memory - of those meant
+        only for some (CR128) just the ones call was among."""
         count = (last - first) % SEQ_MOD + 1
         wanted = {(first + i) % SEQ_MOD for i in range(min(count, 64))}
-        return [line for seq, line in self._recent.get(board, ()) if seq in wanted]
+        return [line for seq, line, only in self._recent.get(board, ())
+                if seq in wanted and (only is None or call in only)]
 
     # --- delivery -------------------------------------------------------
 
     def _line_of(self, board: str, ref: int) -> str:
-        for seq, line in self._recent.get(board, ()):
+        for seq, line, _only in self._recent.get(board, ()):
             if seq == ref:
                 text = line.split(" ", 1)[1] if " " in line else ""
                 return text if ":" in text.split(" ", 1)[0] else ""
         return ""
 
-    def _next_event(self, board: str, payload: str) -> str:
+    def _next_event(self, board: str, payload: str, only: frozenset | None = None) -> str:
         seq = (self._seq.get(board, -1) + 1) % SEQ_MOD
         self._seq[board] = seq
         line = f"#{seq:X} {payload}"
-        self._recent.setdefault(board, deque(maxlen=SEQ_MOD)).append((seq, line))
+        self._recent.setdefault(board, deque(maxlen=SEQ_MOD)).append((seq, line, only))
         return line
 
     def deliver(self, board: str, payload: str, human: str | None, sender: Session | None,
@@ -315,10 +319,11 @@ class ChatHub:
         audience (Refactoring R4): only members it says True for get the event -
         as I-frame or text; the UI frame goes out once if one of them listens to UI
         (radio is open: the others' clients ignore it). None = every member."""
-        line = self._next_event(board, payload)
         members = self.members(board)
         if audience is not None:
             members = [s for s in members if audience(s)]
+        line = self._next_event(board, payload,
+                                frozenset(s.call for s in members) if audience else None)
         ui_clients = [s for s in members if s.client and s.client.ui]
         n = self.number(board)
         sent_ui = False

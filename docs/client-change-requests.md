@@ -5079,7 +5079,7 @@ haben denselben Verlauf, also denselben Hash – ein ausgedachtes Spiel passt ni
   abgebrochene Spiele.
 - Tests `tests/test_cr127.py`.
 
-## CR128 – Spiele: keine Terminal-User, Zuschauer sehen nur „Spiel läuft“ (offen)
+## CR128 – Spiele: keine Terminal-User, Zuschauer sehen nur „Spiel läuft“ (✅ 16.11.2026, Client 2026.11.16.6)
 
 ### Erfassung (OE3GAS, 13.11.2026)
 
@@ -5111,6 +5111,25 @@ zusätzlich) und Terminals (Text).
   Terminals. Die Spieler selbst bekommen weiter alles (UI bzw. I-Frame).
 - Der UI-Frame bleibt (die Spieler brauchen ihn); UI-Zuschauer blenden im Client aus.
 - Echte Ersparnis über Funk: alle I-Frames an Zuschauer und Terminals während des Spiels.
+
+### Umgesetzt (16.11.2026) – Vorschlag und Nachtrag 14.11. zusammen
+
+- **Box, für alle Quiz-Spiele** (`QuizGame` in `tinybox/boardgame.py`, also auch das Elmer Quiz):
+  - Terminal-User spielen nicht: `/PR …` → „Games only with the TinyBox client.“, „mit“ ist für sie
+    eine gewöhnliche Chatzeile.
+  - Öffentlich (an alle im Board) sind nur `OPEN`, `GO`, `END`, `STOP` und – während der Anmeldung,
+    weil sie die Einladung ist – `IN`. Alles andere (`Q`, `TIP`, `RES`, `ALL`, `IN` später) geht
+    **nur an die Spieler**: als I-Frame bzw. im einen UI-Frame. Zuschauer ohne UI bekommen diese
+    I-Frames nicht mehr – die Ersparnis aus dem Nachtrag.
+  - Terminals im Board sehen eine Zeile beim Start („Prefix raten is running (OE3GAS) – games only
+    with the TinyBox client.“) und eine beim Ende („Prefix raten is over.“), ohne Ergebnisse.
+  - `//RESEND` liefert einem Zuschauer die Spielereignisse nicht nach (die Box merkt sich je
+    Ereignis, für wen es war).
+- **Client:** Zuschauer sehen statt Panel und Spielzeilen nur „🎯 Prefix raten läuft · n Spieler“
+  mit „Mitspielen“ (Einstieg ab dem nächsten Call) und am Ende „vorbei“ ohne Ergebnis. Lücken in
+  der Ereignisfolge während eines fremden Spiels lösen kein `//RESEND` aus (eine in der Zeit
+  verlorene Chatzeile wird dann nicht nachgeholt).
+- Tests: `tests/test_cr123.py` (Zuschauer, Resend, Terminal, Client-Zustand).
 
 ### Nachtrag 5 (OE3GAS, 13.11.2026): Startseite im Stil von „Prefix raten“ – umgesetzt (Client 2026.11.13.7) ✅
 

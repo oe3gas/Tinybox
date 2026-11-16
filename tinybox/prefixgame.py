@@ -74,12 +74,10 @@ class Game(QuizGame):
         self.used: set[int] = set()
 
     def open_event(self) -> tuple[str, str]:
-        reg = "+".join(self.regions)
         return (f"OPEN {self.starter} {self.stage} R{self.regions} {self.calls} "
                 f"{len(self.pool)} {self.SIGNUP_SEC} {self.tip_sec}",
-                f"Prefix raten: {self.starter} starts {pg.STAGE_NAME[self.stage]}, IARU R{reg}, "
-                f"{self.calls} calls from {len(self.pool)} entities, {self.tip_sec} s per call. "
-                f"Play along: /PR JOIN or 'mit' ({self.SIGNUP_SEC} s)")
+                f"Prefix raten is running ({self.starter}) - games only with the TinyBox "
+                "client.")                      # CR128: terminals cannot play
 
     def next_question(self) -> pg.Question:
         return pg.question(self.pool, self.used, self.rng)
@@ -109,6 +107,7 @@ _HUMAN_ERR = {
     "late": "Too late for this call.",
     "twice": "Already done.",
     "not_starter": "Only the one who started the game can do that.",
+    "terminal": "Games only with the TinyBox client.",
 }
 
 
@@ -157,6 +156,9 @@ def command(s: "Session", rest: str) -> None:
         _answer(s, err="no_board")
         return
     word = p[0].upper() if p else ""
+    if s.client is None:                # CR128: no games for terminal users
+        _answer(s, err="terminal")
+        return
     if word == "START":
         _start(s, p[1:])
         return
@@ -195,8 +197,8 @@ def chat_line(s: "Session", text: str) -> bool:
     """A chat line "mit" / "join" while a game runs in the board: play along
     instead of chat. True = taken."""
     g = game_in(s.chat_board or "")
-    if g is None or text.strip().upper() not in JOIN_WORDS:
-        return False
+    if g is None or s.client is None or text.strip().upper() not in JOIN_WORDS:
+        return False                   # terminals do not play (CR128): an ordinary line
     if s.call in g.scores:
         return False                   # already plays: an ordinary chat line
     g.join(s.call)

@@ -8,6 +8,12 @@ human text; it keeps its own timer.
     QuizGame    a quiz on top: signup -> question -> tips -> answer -> ... -> end,
                 scores, the statistics for the leaderboards (games.py, CR126)
 
+Who gets what (CR128): only TinyBox clients play - a terminal user cannot. Who does
+not play sees only THAT a game runs: the PUBLIC events (start, players, end) go to the
+whole board, everything else (questions, tips, answers, scores) only to the players -
+as I-frame or the one UI frame, which spectators' clients hide. Terminals get a line
+at the start and one at the end.
+
 A quiz only brings its questions and its texts (prefixgame.py: Prefix raten). The
 events of a quiz, with <EVENT> = PR for Prefix raten:
 
@@ -86,6 +92,7 @@ class BoardGame:
 class QuizGame(BoardGame):
     """Signup, then `calls` questions with three options each; a tip per player and
     question, the answer when all have tipped or the time is up."""
+    PUBLIC = ("OPEN", "GO", "END", "STOP")      # CR128: the rest only to the players
     TITLE = ""                 # 'Prefix raten' - in the human texts
     STORE = ""                 # the game in the leaderboards (games.py)
     LETTERS = "ABC"
@@ -125,6 +132,15 @@ class QuizGame(BoardGame):
 
     # --- who plays ------------------------------------------------------------------
 
+    def emit(self, text: str, human: str | None, audience: Callable | None = None) -> None:
+        """CR128: an event that is not PUBLIC goes only to the players."""
+        if audience is None and text.split(" ", 1)[0] not in self.PUBLIC:
+            audience = self.is_player
+        super().emit(text, human, audience)
+
+    def is_player(self, s) -> bool:
+        return s.call in self.scores
+
     def players_here(self) -> list[str]:
         here = self.present()
         return [c for c in self.scores if c in here]
@@ -149,7 +165,8 @@ class QuizGame(BoardGame):
         self.stat[call] = {"asked": 0, "tries": 0, "hits": 0}
         if self.phase == "ask":
             self.late.add(call)
-        self.emit(f"IN {call}", f"{self.TITLE}: {call} plays along.")
+        # in the signup everybody sees who is in (it is the invitation), later only players
+        self.emit(f"IN {call}", None, (lambda s: True) if self.phase == "signup" else None)
         return ""
 
     def go(self) -> None:
@@ -157,8 +174,7 @@ class QuizGame(BoardGame):
         if not players:
             self.stop("no_players")
             return
-        self.emit("GO " + " ".join(players),
-                  f"{self.TITLE}: " + ", ".join(players) + " - here we go!")
+        self.emit("GO " + " ".join(players), None)    # terminals: start and end only
         self.ask()
 
     def ask(self) -> None:
@@ -218,10 +234,9 @@ class QuizGame(BoardGame):
         ranked = self._ranked()
         best = ranked[0][1] if ranked else 0
         winners = [c for c, n in ranked if n == best]
+        # CR128: who did not play does not care for the results - terminals get one line
         self.emit("END " + " ".join(f"{c}={n}/{self.stat[c]['asked']}" for c, n in ranked),
-                  f"{self.TITLE} over: " +
-                  ", ".join(f"{c} {n}/{self.stat[c]['asked']}" for c, n in ranked) +
-                  (f" - winner {' and '.join(winners)}" if best else ""))
+                  f"{self.TITLE} is over.")
         self.finish()
         self._record(winners if best else [])
         log.info("%s in %s over: %s", self.TITLE, self.board, self._table())

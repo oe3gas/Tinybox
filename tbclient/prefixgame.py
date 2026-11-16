@@ -105,6 +105,13 @@ class PrefixGame:
             g.update(phase="over", stopped=rest or "?", at=now, winners=[])
         return True
 
+    def watching(self) -> bool:
+        """CR128: a game runs in the board and we do not play - the box sends us only
+        its start, players and end; questions, tips and results are not for us."""
+        g = self.g
+        return g is not None and g["phase"] in ("ask", "wait") \
+            and self._mycall() not in g["scores"]
+
     def answer(self, rest: str) -> None:
         """//PR OK ... / //PR ERR ... from the box."""
         word, _, what = rest.partition(" ")

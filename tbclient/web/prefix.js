@@ -259,6 +259,38 @@ const Prefix = (() => {
   }
   const MEDAL = ["🥇", "🥈", "🥉"];
 
+  // CR128: who does not play sees only THAT a game runs - and can join from the next call
+  function drawWatch(box, g, k, o) {
+    const c = card("game");
+    const inner = mk("div", "pr-gin");
+    const n = Object.keys(g.scores).length;
+    const h = mk("div", "pr-bar");
+    const t = mk("span", "pr-bartitle");
+    t.append(mk("b", "", "🎯 Prefix raten läuft"), ` · ${n} Spieler`);
+    const tools = mk("span", "pr-tools");
+    if (!g.me_plays) tools.append(btn("Mitspielen", () => o.act("join"), "pr-cta small"));
+    h.append(t, tools);
+    inner.append(h, mk("div", "pr-hint", g.me_plays ? "Du bist ab dem nächsten Call dabei ✓"
+                                                     : "Einstieg ab dem nächsten Call."),
+                 mk("div", "pr-err", ERR[k.err] || k.err || ""));
+    c.append(inner);
+    box.append(c);
+  }
+
+  function drawWatchOver(box, g, o) {
+    const c = card("game");
+    const h = mk("div", "pr-bar");
+    const t = mk("span", "pr-bartitle");
+    t.append(mk("b", "", "🎯 Prefix raten"), g.stopped ? " · abgebrochen" : " · vorbei");
+    const tools = mk("span", "pr-tools");
+    tools.append(btn("✕", () => o.act("close"), "pr-sec small"));
+    h.append(t, tools);
+    const inner = mk("div", "pr-gin");
+    inner.append(h);
+    c.append(inner);
+    box.append(c);
+  }
+
   function drawOver(box, g, k, o) {                  // CR126: the overview at the end, for everybody
     const c = card("game");
     const inner = mk("div", "pr-gin");
@@ -397,7 +429,9 @@ const Prefix = (() => {
       return;
     }
     if (g.phase === "signup") drawSignup(box, g, k, o);
+    else if ((!g.me_plays || !g.q) && g.phase !== "over") drawWatch(box, g, k, o);   // CR128
     else if ((g.phase === "ask" || g.phase === "wait") && g.q) drawGame(box, g, k, o);
+    else if (g.phase === "over" && !g.me_plays) drawWatchOver(box, g, o);   // CR128: no results
     else if (g.phase === "over") drawOver(box, g, k, o);
     else {                                           // GO received, the first call is coming
       const c = card("game");

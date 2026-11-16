@@ -151,10 +151,12 @@ class BoardTests(unittest.TestCase):
         self.assertIn("//PR OK START", ta.take())
         ev = self.events(tw)
         self.assertTrue(ev[0].startswith("OPEN OE3GAS OM R12 2 215 60"), ev)
+        self.events(tb)
         type_lines(b, "mit")                                 # the chat word joins
-        self.assertEqual(self.events(tw), ["IN OE3TEC"])
+        self.assertEqual(self.events(tb), ["IN OE3TEC"])
         self.timers.fire()                                   # signup over
-        ev = self.events(tw)
+        self.assertEqual(self.events(tw), ["IN OE3TEC", "GO OE3GAS OE3TEC"])   # CR128: no Q
+        ev = self.events(tb)
         self.assertEqual(ev[0], "GO OE3GAS OE3TEC")
         q = ev[1].split(" ", 4)
         self.assertEqual(q[0:2], ["Q", "1/2"])
@@ -164,36 +166,52 @@ class BoardTests(unittest.TestCase):
         wrong = "ABC"[(g.q.right + 1) % 3]
         type_lines(a, f"//PR {right}")
         self.assertIn(f"//PR OK TIP 1 {right}", ta.take())
-        self.assertEqual(self.events(tw), ["TIP OE3GAS"])    # without the letter
+        self.assertEqual(self.events(tb), ["TIP OE3GAS"])    # without the letter
         type_lines(w, "//PR A")                              # a watcher: no tip
         self.assertIn("//PR ERR not_player", tw.take())
         type_lines(b, f"//PR {wrong}")                       # all tipped: the answer at once
-        ev = self.events(tw)
+        ev = self.events(tb)
         self.assertEqual(ev[0], "TIP OE3TEC")
         self.assertEqual(ev[1], f"RES 1 {right} 1/2 OE3GAS=1+ OE3TEC=0")
         self.timers.fire()                                   # the pause: question 2
-        ev = self.events(tw)
+        ev = self.events(tb)
         self.assertTrue(ev[0].startswith("Q 2/2 "))
         self.timers.fire()                                   # nobody tips: time is up
-        ev = self.events(tw)
+        ev = self.events(tb)
         self.assertTrue(ev[0].startswith("RES 2 "))
         self.assertEqual(ev[1], "END OE3GAS=1/2 OE3TEC=0/2")
         self.assertEqual(ev[2], "ALL OE3GAS=1/100 OE3TEC=1/0")     # CR126: games/quote (right of the tips)
         self.assertIsNone(box.game_in("TREFF"))
+        # CR128: the watcher saw only THAT a game ran - start, players, end
+        self.assertEqual([e.split()[0] for e in self.events(tw)], ["END"])
 
-    def test_terminal_plays_and_reads_text(self):
-        a, ta = self.terminal("OE3GAS")
-        type_lines(a, "/PR START s=NC r=1 n=1")
-        out = ta.take()
-        self.assertIn("Prefix raten: OE3GAS starts Newcomer, IARU R1, 1 calls from 79", out)
+    def test_watcher_resend_gets_no_game_events(self):          # CR128
+        a, ta = self.client("OE3GAS")
+        w, tw = self.client("OE1XYZ")
+        type_lines(a, "//PR START s=OM r=1 n=1")
+        self.timers.fire()                                   # GO + Q (Q only to OE3GAS)
+        type_lines(w, "//RESEND 0-FF")
+        self.assertNotIn("!PR Q ", tw.take())
+        type_lines(a, "//RESEND 0-FF")
+        self.assertIn("!PR Q ", ta.take())
+
+    def test_terminal_cannot_play_sees_start_and_end(self):    # CR128
+        t, tt = self.terminal("OE3NIX")
+        type_lines(t, "/PR START s=NC r=1 n=1")
+        self.assertIn("Games only with the TinyBox client.", tt.take())
+        a, ta = self.client("OE3GAS")
+        type_lines(a, "//PR START s=NC r=1 n=1")
+        self.assertIn("Prefix raten is running (OE3GAS)", tt.take())
+        type_lines(t, "mit")                                 # an ordinary chat line
+        self.assertNotIn("OE3NIX", box.game_in("TREFF").scores)
+        tt.take()
         self.timers.fire()
-        out = ta.take()
-        self.assertIn("Prefix raten 1/1:", out)
         g = box.game_in("TREFF")
-        type_lines(a, "/PR " + "ABC"[g.q.right])
-        out = ta.take()
-        self.assertIn("Tip", out)
-        self.assertIn("Prefix raten over: OE3GAS 1/1 - winner OE3GAS", out)
+        type_lines(a, "//PR " + "ABC"[g.q.right])
+        out = tt.take()
+        self.assertNotIn("Prefix raten 1/1", out)            # no question, no answer
+        self.assertIn("Prefix raten is over.", out)
+        self.assertNotIn("winner", out)
 
     def test_errors_and_stop(self):
         a, ta = self.client("OE3GAS")
@@ -317,3 +335,23 @@ class ClientTests(unittest.TestCase):
         finally:
             boardgame.schedule, box.rng_factory = boardgame._later, random.Random
             boardgame.GAMES.clear()
+
+
+class WatcherClientTests(unittest.TestCase):
+    """CR128, client side: who does not play hides the game and asks for no resend."""
+
+    def test_watching(self):
+        from tbclient.prefixgame import PrefixGame
+        sent = []
+        g = PrefixGame(sent.append, lambda: "OE1XYZ")
+        g.event("PR OPEN OE3GAS OM R1 5 100 60 30")
+        self.assertFalse(g.watching())                     # the signup: an invitation
+        g.event("PR GO OE3GAS OE3TEC")
+        self.assertTrue(g.watching())
+        g.event("PR IN OE1XYZ")                            # joined: plays from the next call
+        self.assertFalse(g.watching())
+        g2 = PrefixGame(sent.append, lambda: "OE1XYZ")
+        g2.event("PR OPEN OE3GAS OM R1 5 100 60 30")
+        g2.event("PR GO OE3GAS")
+        g2.event("PR END OE3GAS=3/5")
+        self.assertFalse(g2.watching())                    # over

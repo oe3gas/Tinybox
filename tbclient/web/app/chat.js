@@ -599,14 +599,15 @@ function renderMessages() {
   for (const m of S.messages) {
     if (m.history && !inHistory) { ol.append(el("li", "divider", `history (${S.board.keep})`)); inHistory = true; }
     if (!m.history && inHistory) { ol.append(el("li", "divider", "now")); inHistory = false; }
-    if (m.kind === "join" && m.terminal) {              // CR120: once per entering
-      ol.append(el("li", "sys", `${m.call} enters chat. ${TERMINAL_TIP}. · ${hhmm(m.time)}`));
-    } else if (m.kind === "join" || m.kind === "leave") {
-      ol.append(el("li", "sys", `${m.call} ${m.kind === "join" ? "joined" : "left"} · ${hhmm(m.time)}`));
+    if (m.kind === "join" || m.kind === "leave") {
+      ol.append(el("li", "sys", m.kind === "join" && m.terminal        // CR120: once per entering
+        ? `${m.call} enters chat. ${TERMINAL_TIP}. · ${hhmm(m.time)}`
+        : `${m.call} ${m.kind === "join" ? "joined" : "left"} · ${hhmm(m.time)}`));
       prevCall = null; continue;
     }
     if (m.kind === "system" && m.pr) {               // CR123: Prefix raten, foldable
-      if (!Prefix.folded()) ol.append(el("li", "sys pr-line", Prefix.line(m.text)));
+      // CR128: who does not play sees only that a game runs (the panel), no game lines
+      if (!Prefix.folded() && !m.pr_watch) ol.append(el("li", "sys pr-line", Prefix.line(m.text)));
       prevCall = null; continue;
     }
     if (m.kind === "system") { ol.append(el("li", "sys", wireToText(m.text))); prevCall = null; continue; }
