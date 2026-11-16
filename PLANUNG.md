@@ -1471,6 +1471,8 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
   (`reload.LIVE["client"]` aus der Deklaration); kisshub liest die globalen Abschnitte über
   `get_value`; der Client meldet jeden Tippfehler in einer Zahl als `ConfigError` mit Abschnitt
   und Schlüssel statt mit einem Traceback (vorher z. B. `[web] port = 77x4` → ValueError).
+  Mit CR125/CR129 (16.11.): `[station] sysop_call` als Liste geprüft, `[games]` deklariert
+  (`GamesCfg`, RELOAD übernimmt die Sprache).
   **Offen:** die übrigen Abschnitte (TinyBox `[station]`, `[web]`,
   `[chat]`, `[brocast]` …, Client, kisshub) – je Abschnitt ein kleiner Schritt, wenn ein CR ihn
   ohnehin berührt (z. B. CR125 `[station]`, CR129 `[games]`). Danach kann der Installer
@@ -2357,6 +2359,13 @@ Amateurfunktechnik.
 **Offen:**
 
 - Erste Fragensammlung (etwa 50 geprüfte Fragen) mit Quellen.
+
+**Nachtrag 16.11.2026 (CR129, CR128):** Das Elmer Quiz wird auf `QuizGame` (`tinybox/boardgame.py`)
+gebaut und erbt damit, was für alle Quiz-Spiele gilt: Zuschauer bekommen nur Start, Spieler und
+Ende (CR128); die Sprache gibt die Box vor (`[games] language`), jeder Client darf eine eigene
+haben (CR129). Wie bei Prefix raten (DXCC-Nummern) schickt die Box nur **Nummern** – die Nummer
+der Frage, bei erzeugten Rechenaufgaben nur die Zahlen. Fragen und Antworten liegen in beiden
+Sprachen beim Client; neue Fragen brauchen ein Client-Update.
 
 ## 34. brocast-Statistik mit Vorschlag fürs Karussell (entschieden und umgesetzt 13.11.2026)
 

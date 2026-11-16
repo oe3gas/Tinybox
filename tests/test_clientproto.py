@@ -31,7 +31,7 @@ class ClientProtoTests(unittest.TestCase):
         t.take()
         type_lines(s, f"//CLIENT TB1 v={clientnews.client_version()} caps=CHAT,UI,FOO sym=/-")
         out = t.take()
-        self.assertTrue(out.startswith("\r//OK TB1 caps=CHAT\r"), out)
+        self.assertTrue(out.startswith("\r//OK TB1 caps=CHAT lang=de\r"), out)
         self.assertNotIn("TinyBox (", out)            # no prompt in client mode
         self.assertEqual(s.client.symbol, "/-")
 

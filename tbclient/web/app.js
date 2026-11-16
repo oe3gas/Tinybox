@@ -31,6 +31,7 @@ async function poll() {
       const endAt = Math.max(0, ...(S.channels || []).map((c) => (c.ended ? c.ended.at : 0)));   // CR44
       if (endAt !== lastEndAt) { lastEndAt = endAt; if (!$("sheet").classList.contains("hidden")) loadConnlog(); }
       since = S.version;
+      if (S.lang) { Contest.setLang(S.lang); Prefix.setLang(S.lang); Chess.setLang(S.lang); }   // CR129
       render();
       checkMentions();                                   // CR85
       if (!$("sheet").classList.contains("hidden")) renderSymbols();

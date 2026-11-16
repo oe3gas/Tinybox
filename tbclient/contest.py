@@ -19,6 +19,20 @@ from . import gamereport
 
 PREFIX = "//CT "
 
+# CR129: the chat notes in the language of the games (German / English)
+NOTES = {
+    "de": {"win": "gewonnen", "loss": "verloren", "draw": "unentschieden", "resigned": "aufgegeben",
+           "they resigned": "{opp} hat aufgegeben - gewonnen", "over": "vorbei",
+           "result": "📻 CQ Contest: {res} ({w}:{l})", "new": "📻 neuer CQ Contest mit {opp} - Stationen setzen",
+           "declined": "📻 CQ Contest abgelehnt", "invites": "📻 {opp} lädt zum CQ Contest ein",
+           "they_declined": "📻 {opp} hat den CQ Contest abgelehnt"},
+    "en": {"win": "won", "loss": "lost", "draw": "draw", "resigned": "resigned",
+           "they resigned": "{opp} resigned - won", "over": "over",
+           "result": "📻 CQ contest: {res} ({w}:{l})", "new": "📻 new CQ contest with {opp} - place the stations",
+           "declined": "📻 CQ contest declined", "invites": "📻 {opp} invites to the CQ contest",
+           "they_declined": "📻 {opp} declined the CQ contest"},
+}
+
 
 def my_center(core) -> str:
     """The own square: from the profile, else the locator in tbclient.conf."""
@@ -57,6 +71,11 @@ class ContestSlot:
         self.core.save_settings()
         self.core.changed()
 
+    def _t(self, key: str, **v) -> str:
+        core = self.core
+        lang = core.game_lang() if hasattr(core, "game_lang") else "de"
+        return NOTES.get(lang, NOTES["en"])[key].format(**v)
+
     def _send(self, lines: list[str]) -> None:
         for line in lines:
             self._send_line(PREFIX + line)
@@ -64,10 +83,8 @@ class ContestSlot:
     def _done(self, before: str, g: contest.Game) -> None:
         s = g.s
         if before != "end" and s["st"] == "end":
-            res = {"win": "gewonnen", "loss": "verloren", "draw": "unentschieden",
-                   "resigned": "aufgegeben", "they resigned": f"{s['opp']} hat aufgegeben - gewonnen"}
-            self._note(f"📻 CQ Contest: {res.get(s['res'], 'vorbei')} "
-                       f"({g.worked()}:{g.lost()})")
+            res = self._t(s["res"] if s["res"] in NOTES["en"] else "over", opp=s["opp"])
+            self._note(self._t("result", res=res, w=g.worked(), l=g.lost()))
             self._report(s)
 
     def _report(self, s: dict) -> None:
@@ -95,7 +112,7 @@ class ContestSlot:
             self._save(state)
             self._send([f"NEW h={1 if hints else 0}" + (f" c={center}" if center else "")
                         + (f" id={gid}" if gid else "")])
-            self._note(f"📻 neuer CQ Contest mit {self._opp()} - Stationen setzen")
+            self._note(self._t("new", opp=self._opp()))
             return True
         state = self.state
         if state is None:
@@ -108,7 +125,7 @@ class ContestSlot:
             else:
                 self._save(None)
                 self._send(["NO"])
-                self._note("📻 CQ Contest abgelehnt")
+                self._note(self._t("declined"))
             return True
         if act == "close":
             if state["st"] == "invited":
@@ -172,14 +189,14 @@ class ContestSlot:
             if len(gid) == 16 and all(ch in "0123456789abcdef" for ch in gid):
                 state["gid"] = gid                # CR127: the id of the game for the box
             self._save(state)
-            self._note(f"📻 {self._opp()} lädt zum CQ Contest ein")
+            self._note(self._t("invites", opp=self._opp()))
             return
         if word == "NO":
             state = self.state
             if state is not None and state["first"] and state["st"] == "setup":
                 self._save(None)
                 self.err = f"{self._opp()} hat den CQ Contest abgelehnt."
-                self._note(f"📻 {self._opp()} hat den CQ Contest abgelehnt")
+                self._note(self._t("they_declined", opp=self._opp()))
             return
         state = self.state
         if state is None:

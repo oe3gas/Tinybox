@@ -196,7 +196,8 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
                                        lambda: self.target, self.send_line, lambda: "",
                                        lambda text: self.console.append("*** " + text))
         self.relay_contests: dict[str, ContestSlot] = {}      # CR122: through the box
-        self.prefix = PrefixGame(self.send_line, lambda: self.cfg.mycall.upper())   # CR123
+        self.prefix = PrefixGame(self.send_line, lambda: self.cfg.mycall.upper(),    # CR123
+                                 self.game_lang)
         self.leaderboard = Leaderboard(self.send_line)                                 # CR126
         self.reports = Reports(self)                                               # CR127
 
@@ -573,6 +574,11 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
         """CR78: ask the TBClient in channel ch whom it hears."""
         chan = self.channels.get(ch)
         return chan is not None and chan.ask_heard()
+
+    def game_lang(self) -> str:
+        """CR129: the language of the games - the own setting, else the one of the box
+        (the last one we were at), else English."""
+        return self.cfg.game_lang or self.settings.get("box_lang") or "en"
 
     def playing(self) -> bool:
         """CR130: in a game right now - CQ contest (box or relay), chess, Prefix raten."""
@@ -996,6 +1002,10 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
             self.qcfg = {"frames": int(q.group(1)), "minutes": int(q.group(2)),
                          "min_frames": int(q.group(3)),
                          "steps": [float(x) for x in q.group(4).split(",") if x]}
+        lang = re.search(r"\blang=(de|en)\b", rest)                   # CR129
+        if lang and self.settings.get("box_lang") != lang.group(1):
+            self.settings["box_lang"] = lang.group(1)      # also for games between clients
+            self.save_settings()
         self._update_info(rest)
         self.send_line("//BOARDS")
         self.profiles.on_ok(rest)                # CR73: profile only if it differs
@@ -1098,6 +1108,7 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
             "peerchat": self._peerchat_of(ch),                          # CR78
             "client": self.handshake_done and bool(self.caps or self.boards),
             "term_ok": self.term_ok(),                                  # CR130
+            "lang": self.game_lang(),                                   # CR129: the games
             "ui": "UI" in self.caps,
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),

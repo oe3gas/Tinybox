@@ -165,6 +165,10 @@ lotw_release  = no             # yes: a NEW client key confirmed with LoTW (CR11
                                # once, without USER OK; no: the sysop releases it and sees
                                # "LoTW" in the key list. Needs ARRL certificates (LOTW ADD)
 
+[games]
+language      = de             # de | en: the language of all games of this box (CR129) -
+                               # a client may choose its own ([games] in tbclient.conf)
+
 [chat]
 enabled       = yes            # command C: chat boards for logged-in users
 history_lines = 20             # max lines per history request (/H n, client)

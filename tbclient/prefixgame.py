@@ -12,15 +12,17 @@ from __future__ import annotations
 
 import time
 
+from prcore import prefixgame as pg
 from prcore.text import isnum
 
 KEEP_OVER_SEC = 15 * 60          # a finished game stays visible this long
 
 
 class PrefixGame:
-    def __init__(self, send, mycall) -> None:
+    def __init__(self, send, mycall, lang=lambda: "en") -> None:
         self._send = send            # line -> to the box
         self._mycall = mycall        # () -> own call
+        self._lang = lang            # () -> "de" | "en": the names of the entities (CR129)
         self.g: dict | None = None
         self.err = ""
 
@@ -56,9 +58,11 @@ class PrefixGame:
         elif word == "Q" and len(p) >= 3:
             k, _, n = p[0].partition("/")
             opts = rest.split(" ", 3)[3].split("|") if len(rest.split(" ", 3)) > 3 else []
+            # CR129: the box sends DXCC numbers, the names come from prcore/prefixraten.csv
+            dxcc = [_int(o) for o in opts] if opts and all(isnum(o) for o in opts) else []
             g.update(phase="ask", k=_int(k), calls=_int(n) or g["calls"], tipped=[], mytip="",
                      res=None, q={"call": p[1], "secs": _int(p[2]), "until": now + _int(p[2]),
-                                  "options": opts})
+                                  "options": opts, "dxcc": dxcc})
         elif word == "TIP" and p:
             if p[0] not in g["tipped"]:
                 g["tipped"].append(p[0])
@@ -82,6 +86,7 @@ class PrefixGame:
             i = "ABC".find(p[1])
             if q and 0 <= i < len(q.get("options", [])) and not any(x["k"] == _int(p[0]) for x in g["log"]):
                 g["log"].append({"k": _int(p[0]), "call": q["call"], "name": q["options"][i],
+                                 "dxcc": q["dxcc"][i] if q.get("dxcc") else 0,
                                  "right": len(right) if n_right is None else n_right,
                                  "asked": n_asked})
         elif word == "END":
@@ -163,7 +168,18 @@ class PrefixGame:
         if g is None:
             return None
         me = self._mycall()
-        return dict(g, me_plays=me in g["scores"], me_starter=me == g["starter"], now=now, self=me)
+        out = dict(g, me_plays=me in g["scores"], me_starter=me == g["starter"], now=now, self=me)
+        lang, stage = self._lang(), g["stage"]          # CR129: names in my language
+        if g.get("q") and g["q"].get("dxcc"):
+            out["q"] = dict(g["q"], options=[self._name(d, stage, lang) for d in g["q"]["dxcc"]])
+        out["log"] = [dict(x, name=self._name(x["dxcc"], stage, lang)) if x.get("dxcc") else x
+                      for x in g["log"]]
+        return out
+
+    @staticmethod
+    def _name(dxcc: int, stage: str, lang: str) -> str:
+        e = pg.by_dxcc().get(dxcc)
+        return pg.label(e, stage, lang) if e else f"DXCC {dxcc}"   # an older list: the number
 
 
 def _int(x: str) -> int:

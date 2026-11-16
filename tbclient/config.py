@@ -46,6 +46,7 @@ class Config:
     web_allow: str = "lan"            # CR100: who may call the web GUI (tbclient/webguard.py)
     web_hosts: str = ""               # CR100: extra names the browser may use for the client
     color: str = "auto"               # [console] color: auto | yes | no
+    game_lang: str = ""               # CR129 [games] language: "" = the box's, de | en
     data_dir: Path = Path("data/tbclient")
     update_check: bool = True         # [update] check: GitHub once a day (PLANUNG 24)
     sync_chunk: int = 1024            # bytes per request of a mailbox sync (radio)
@@ -226,6 +227,9 @@ def _load(path: str | Path) -> Config:
         cfg.color = termcolor.check_mode(get("console", "color", cfg.color))
     except ValueError as exc:
         raise ConfigError(str(exc)) from None
+    cfg.game_lang = get("games", "language", "").lower()
+    if cfg.game_lang not in ("", "de", "en"):
+        raise ConfigError("[games] language: empty (the box's), de or en")
     data_dir = Path(get("storage", "data_dir", str(cfg.data_dir)))
     cfg.data_dir = data_dir if data_dir.is_absolute() else path.parent / data_dir
 

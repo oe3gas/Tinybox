@@ -5153,7 +5153,7 @@ zusätzlich) und Terminals (Text).
   zu entscheiden). Die Chat-Notizen in `tbclient/contest.py` sind vorerst nur deutsch.
 - Funk-Jargon bleibt: „QRZ?“, „5NN“, „73 de … · gl next time“, „tnx fer the contest“, „QRV“.
 
-## CR129 – Sprache der Spiele: die Box gibt sie vor, jeder Client darf eine eigene wählen; Prefix raten mit DXCC-Nummern (offen)
+## CR129 – Sprache der Spiele: die Box gibt sie vor, jeder Client darf eine eigene wählen; Prefix raten mit DXCC-Nummern (✅ 16.11.2026, Client 2026.11.16.8)
 
 ### Erfassung (OE3GAS, 14.11.2026)
 
@@ -5237,6 +5237,27 @@ Sprache aus `[games] language` – mit CR128 spielen Terminal-User ohnehin nicht
 - Prefix raten: zwei Clients mit `de` und `en` im selben Spiel bekommen dieselbe `PR Q`-Zeile und
   zeigen die Namen in ihrer Sprache; älterer Client ohne `PR2` (Verhalten wie entschieden).
 - Jede DXCC-Nummer der CSV hat einen deutschen und einen englischen Namen.
+
+### Umgesetzt (16.11.2026)
+
+- **Box:** `[games] language = de|en` (Standard `de`, deklariert, `RELOAD` übernimmt sie);
+  die Box meldet sie im Handshake: `//OK TB1 caps=… lang=de`.
+- **Client:** `[games] language` in `tbclient.conf` (leer = die der Box). Gültig ist: eigene
+  Einstellung, sonst die Sprache der Box (gemerkt, gilt auch für Spiele zwischen zwei Clients),
+  sonst Englisch. Im Snapshot `S.lang`; `app.js` setzt damit Contest, Prefix raten und Schach.
+- **Prefix raten:** `PR Q <k>/<n> <call> <sec> <dxcc>|<dxcc>|<dxcc>` – der Client nimmt die Namen
+  aus `prcore/prefixraten.csv` in seiner Sprache; eine unbekannte Nummer (ältere Liste) zeigt
+  „DXCC <n>“. Die Chatzeile zur Frage zeigt nur `k/n: <call>?`, die Namen stehen im Panel.
+  Keine Cap `PR2` – keine Rücksicht auf alte Clients (R15).
+- **Liste:** Die bisherige Spalte `anzeige` war schon **englisch** (ARRL-Schreibweise), nicht
+  deutsch wie oben angenommen. Neu ist daher `anzeige_de` mit den deutschen Namen (306 Einträge,
+  gängige deutsche Bezeichnungen; wo es keine gibt, bleibt der Eigenname, z. B. „Market Reef“).
+  Bitte gelegentlich durchsehen.
+- **Texte:** `prefix.js` deutsch/englisch (Tabelle `EN`, Schlüssel ist der deutsche Text),
+  Schach in `chess.js` (Tabelle `DE`, Schlüssel englisch), CQ Contest schon vorhanden
+  (`TX.de`/`TX.en`) und jetzt verdrahtet; die Chat-Notizen des Contests (`tbclient/contest.py`)
+  ebenfalls zweisprachig. Die übrige Oberfläche bleibt englisch.
+- Tests: `tests/test_cr129.py`.
 
 
 ## CR130 – TinyBox-Terminal: Eingaben gehen immer an die Mailbox, Terminal gesperrt bei Spielen und ohne Verbindung (✅ 16.11.2026, Client 2026.11.16.7)

@@ -577,6 +577,7 @@ def _client_ok(s: Session, info: ClientInfo) -> None:
         caps.discard("ADM")           # CR94: only the sysop with his own released key
     if "PROF" in caps:                # CR73: the client sends or fetches only on a change
         extra += f" prof={pf.crc(profiles.get(s.service.store, s.call))}"
+    extra += f" lang={s.cfg.games.language}"   # CR129: the language of the games here
     # the human prompt is still on the line: start the answer on a fresh line
     s.out("", f"//OK {tbproto.PROTO} caps={','.join(sorted(caps))}{extra}")
     if s.chat_board is not None:

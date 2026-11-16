@@ -124,13 +124,13 @@ class HandshakeTests(unittest.TestCase):
     def test_old_client_gets_version_and_bulletin(self):
         line = self.ok_line("//CLIENT TB1 v=2026.1.1 caps=CHAT")
         self.assertEqual(line, f"//OK TB1 caps=CHAT cur={VERSION} "
-                               f"news={self.app.service.client_news_id}")
+                               f"news={self.app.service.client_news_id} lang=de")
         # a client from before CR18 sends no v= at all: also "older"
         self.assertIn(f"cur={VERSION}", self.ok_line("//CLIENT TB1 caps=CHAT"))
 
     def test_current_client_gets_nothing_extra(self):
-        self.assertEqual(self.ok_line(f"//CLIENT TB1 v={VERSION} caps=CHAT"), "//OK TB1 caps=CHAT")
-        self.assertEqual(self.ok_line("//CLIENT TB1 v=2099.1.1 caps=CHAT"), "//OK TB1 caps=CHAT")
+        self.assertEqual(self.ok_line(f"//CLIENT TB1 v={VERSION} caps=CHAT"), "//OK TB1 caps=CHAT lang=de")
+        self.assertEqual(self.ok_line("//CLIENT TB1 v=2099.1.1 caps=CHAT"), "//OK TB1 caps=CHAT lang=de")
 
 
 class ClientHintTests(unittest.TestCase):

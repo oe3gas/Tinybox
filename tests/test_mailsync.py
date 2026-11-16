@@ -72,7 +72,7 @@ class ServerTests(unittest.TestCase):
         type_lines(s, "//MLIST")
         self.assertIn("//ERR", t.take())                  # not a client yet
         type_lines(s, f"//CLIENT TB1 v={VERSION} caps=CHAT,SYNC,Z")   # current client
-        self.assertIn("//OK TB1 caps=CHAT,SYNC\r", t.take())   # Z only on radio
+        self.assertIn("//OK TB1 caps=CHAT,SYNC lang=de\r", t.take())   # Z only on radio
         type_lines(s, "//MLIST")
         rows = t.take().split("\r")[:-1]
         self.assertEqual(rows[-1], "//MEND 2 0")

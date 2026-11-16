@@ -19,7 +19,8 @@ so older clients show readable text; terminals get human text:
     PR OPEN <starter> <stage> R<regions> <calls> <entities> <signup sec> <tip sec>
     PR IN <call>                 plays (in the signup, or from the next call on)
     PR GO <call> ...             signup over, the players
-    PR Q <k>/<n> <call> <sec> <A>|<B>|<C>      the question; the client counts down
+    PR Q <k>/<n> <call> <sec> <A>|<B>|<C>      the question (A, B, C: DXCC numbers, CR129 -
+                                 the client shows the names); the client counts down
     PR TIP <call>                has tipped (without the letter)
     PR RES <k> <letter> <right>/<asked> <call>=<score>[+] ...  the right answer, + = right
                                  this time; right/asked: how many of the players asked
@@ -83,8 +84,9 @@ class Game(QuizGame):
         return pg.question(self.pool, self.used, self.rng)
 
     def question_event(self) -> tuple[str, str]:
+        # CR129: DXCC numbers on the air - every client shows the names in its language
         names = [pg.label(e, self.stage) for e in self.q.options]
-        return (f"{self.q.call} {self.tip_sec} " + "|".join(names),
+        return (f"{self.q.call} {self.tip_sec} " + "|".join(str(e.dxcc) for e in self.q.options),
                 f"Prefix raten {self.k}/{self.calls}: {self.q.call}?  " +
                 "  ".join(f"{LETTERS[i]} {n}" for i, n in enumerate(names)) +
                 f"  ({self.tip_sec} s, /PR A|B|C)")

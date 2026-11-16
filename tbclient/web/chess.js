@@ -132,5 +132,24 @@ const Chess = (() => {
 
   const GLYPH = { K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙",
                   k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
-  return { play, sq, name, GLYPH, colorOf };
+  // CR129: the texts of the chess view (peer.js) - English, German for lang "de"
+  let lang = "en";
+  const DE = {
+    "New game - you play: ": "Neues Spiel - du spielst: ", "white ♔": "Weiß ♔", "black ♚": "Schwarz ♚",
+    "game over: {r}": "Spiel vorbei: {r}", "checkmate - you lost": "schachmatt - verloren",
+    "checkmate - you won!": "schachmatt - gewonnen!", "stalemate - draw": "Patt - remis",
+    "your move": "du bist am Zug", "waiting for {c}": "warten auf {c}", " · check!": " · Schach!",
+    "you play {c} · move {n}": "du spielst {c} · Zug {n}", "white": "Weiß", "black": "Schwarz",
+    " · (a move did not follow the rules)": " · (ein Zug war regelwidrig)", "Resign": "Aufgeben",
+    "Close game": "Spiel schließen", "♟ Chess": "♟ Schach", "Play chess over packet": "Schach über Packet Radio",
+    "♟ your move": "♟ du bist am Zug", "you resigned": "du hast aufgegeben", "they resigned": "Gegner hat aufgegeben",
+    "mate": "schachmatt", "stalemate": "Patt",
+  };
+  const t = (s, v) => {
+    let out = lang === "de" ? (DE[s] ?? s) : s;
+    for (const [k, x] of Object.entries(v || {})) out = out.split("{" + k + "}").join(String(x));
+    return out;
+  };
+  const setLang = (l) => { if (l === "de" || l === "en") lang = l; };
+  return { play, sq, name, GLYPH, colorOf, t, setLang };
 })();

@@ -1,0 +1,2 @@
+- Spiele deutsch oder englisch: Sprache der Box, eigene in [games] (CR129)
+- Prefix raten: Laendernamen in der eigenen Sprache

@@ -139,6 +139,6 @@ class ClientTests(unittest.TestCase):
         pg.event("PR ALL OE3GAS=3/80", 103.0)
         g = pg.summary(104.0)
         self.assertEqual(g["tip"], 15)
-        self.assertEqual(g["log"], [{"k": 1, "call": "DL1ABC", "name": "Germany", "right": 1, "asked": 1}])
+        self.assertEqual(g["log"], [{"k": 1, "call": "DL1ABC", "name": "Germany", "dxcc": 0, "right": 1, "asked": 1}])
         self.assertEqual(g["asked"], {"OE3GAS": 1})
         self.assertEqual(g["totals"], {"OE3GAS": {"games": 3, "quote": 80}})

@@ -17,6 +17,7 @@ Rules, section by section (attribute names of config.Config):
   beacon    everything (enabled starts / stops the beacon)
   update    announce                                           - check: RESTART
   client    everything
+  games     language (CR129)
   chat      history_lines, max_line, image_max                 - enabled: RESTART
   boards    new boards (at the end) and changed ones; removed boards and a
             new order need a RESTART (the clients know the boards by number)
@@ -55,6 +56,7 @@ LIVE: dict[str, Any] = {
     "beacon": ALL,
     "update": {"announce"},
     "client": live_fields(config.ClientCfg),       # declared (R7)
+    "games": live_fields(config.GamesCfg),         # CR129
     "chat": {"history_lines", "max_line", "image_max"},
     "forward": {"bid_days", "aliases", "publish_to_brocast"},
 }

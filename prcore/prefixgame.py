@@ -1,7 +1,8 @@
 """Prefix raten (CR123, PLANUNG 31): the rules, for the box (and tests).
 
 The game list prefixraten.csv (next to this file) has one row per DXCC entity
-with a unique prefix: display text, pattern for the calls, IARU region, the
+with a unique prefix: display text (anzeige English, anzeige_de German - CR129),
+pattern for the calls, IARU region, the
 stages it belongs to. A round takes the entities of the chosen stage and
 regions; with fewer than MIN_POOL it fills up from the next weaker stage
 (DX-God -> Pro -> OM -> Newcomer), the rarest first, only up to MIN_POOL. If
@@ -38,20 +39,36 @@ _RARITY = {"geloescht": 0, "1-34": 1, "35-68": 2, "69-102": 3, "103-204": 4, "20
 @dataclass(frozen=True)
 class Entity:
     dxcc: int
-    name: str              # shown as answer A/B/C
+    name: str              # shown as answer A/B/C - English (column anzeige)
     patterns: tuple[str, ...]
     region: str            # "1", "2", "3"
     stages: frozenset[str]
     rarity: int
     deleted: bool = False
+    name_de: str = ""      # German (column anzeige_de, CR129)
+
+    def name_in(self, lang: str) -> str:
+        return self.name_de if lang == "de" and self.name_de else self.name
 
 
 ALT = " (alt)"
 
 
-def label(e: Entity, stage: str) -> str:
+def label(e: Entity, stage: str, lang: str = "en") -> str:
     """The answer text: deleted entities marked, except in DX-God (CR135)."""
-    return e.name + ALT if e.deleted and stage != "GOD" else e.name
+    name = e.name_in(lang)
+    return name + ALT if e.deleted and stage != "GOD" else name
+
+
+_by_dxcc: dict[int, Entity] | None = None
+
+
+def by_dxcc() -> dict[int, Entity]:
+    """CR129: the box sends DXCC numbers, the client looks the names up here."""
+    global _by_dxcc
+    if _by_dxcc is None:
+        _by_dxcc = {e.dxcc: e for e in entities()}
+    return _by_dxcc
 
 
 def stage_of(word: str) -> str | None:
@@ -68,13 +85,16 @@ def load(path: Path | str = DATA_FILE) -> list[Entity]:
                                if x.strip() in names)
             if not pats or not stages or r["iaru"] not in ("1", "2", "3"):
                 continue
-            name = r["anzeige"].strip()
-            if name.endswith(ALT):
-                name = name[:-len(ALT)].strip()
+            name, name_de = (_bare(r.get(k) or "") for k in ("anzeige", "anzeige_de"))
             out.append(Entity(int(r["dxcc"]), name, pats, r["iaru"],
                               stages, _RARITY.get(r["rangbereich"], 5),
-                              r["status"].strip() == "geloescht"))
+                              r["status"].strip() == "geloescht", name_de))
     return out
+
+
+def _bare(name: str) -> str:
+    name = name.strip()
+    return name[:-len(ALT)].strip() if name.endswith(ALT) else name
 
 
 _cache: list[Entity] | None = None

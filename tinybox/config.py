@@ -369,6 +369,20 @@ class BeaconCfg:
     first_after_sec: int = 60     # the first one this long after the start
 
 
+GAME_LANGS = ("de", "en")
+
+
+def _game_lang(value: str) -> str | None:
+    return None if value in GAME_LANGS else f"'{value}' - {' or '.join(GAME_LANGS)}"
+
+
+@dataclass
+class GamesCfg:
+    """[games] - declared (R7, CR129): the language of all games of this box (where it
+    stands); every client may still choose its own."""
+    language: str = setting("de", check=_game_lang, live=True)
+
+
 @dataclass
 class ChatCfg:
     enabled: bool = False
@@ -448,6 +462,7 @@ class Config:
     forward: ForwardCfg = field(default_factory=ForwardCfg)
     client: ClientCfg = field(default_factory=ClientCfg)
     beacon: BeaconCfg = field(default_factory=BeaconCfg)
+    games: GamesCfg = field(default_factory=GamesCfg)        # CR129
     update: release.UpdateCfg = field(default_factory=release.UpdateCfg)   # PLANUNG 24
     radio: RadioCfg = field(default_factory=RadioCfg)
     kiss: KissCfg = field(default_factory=KissCfg)
@@ -856,6 +871,7 @@ def load(path: str | Path) -> Config:
                   forward=forward, radio=radio, kiss=kiss, ax25=ax25,
                   sources=rad.sources, hints=rad.hints, kiss_fixed=kiss_fixed,
                   client=load_section(cp, "client", ClientCfg),
+                  games=load_section(cp, "games", GamesCfg),
                   beacon=_load_beacon(cp), update=_load_update(cp), axudp=axudp)
 
 

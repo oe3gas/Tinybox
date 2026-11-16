@@ -181,7 +181,7 @@ function peerFunRow(f, c) {
     btn("Ping", "Round trip time to the other station", () => fun("ping"), f.pinging),
     btn("Speed test", "1 kB each way, net bytes per second", () => speedConfirm(c, f.last && f.last.st),
         f.st && f.st.state === "running"),
-    btn("♟ Chess", "Play chess over packet", () => { chessOpen = !chessOpen; render(); }),
+    btn(Chess.t("♟ Chess"), Chess.t("Play chess over packet"), () => { chessOpen = !chessOpen; render(); }),
     ...(f.ct ? [btn("📻 " + Contest.t("name"), Contest.t("tip"),
                     () => { contestOpen = !contestOpen; render(); })] : []),
     btn("QSL", "Send a digital QSL card (into the chat)", () => sendQsl(c)));
@@ -243,9 +243,9 @@ function renderPeerSide(c, p) {
     sec.append(item("Speed test …", "1 kB each way, net bytes per second", () => speedConfirm(c, last.st), st,
                     sres, !st && last.st ? line("muted ago", "tested " + agoText(last.st[2])) : null));
     const g = f.chess;
-    const cres = g && g.my_turn ? line("", el("span", "ph-move", "♟ your move"))
-      : g && !g.result ? line("muted", `waiting for ${c.target}`) : null;
-    sec.append(item("♟ Chess", "Play chess over packet", () => { chessOpen = !chessOpen; render(); }, false, cres));
+    const cres = g && g.my_turn ? line("", el("span", "ph-move", Chess.t("♟ your move")))
+      : g && !g.result ? line("muted", Chess.t("waiting for {c}", { c: c.target })) : null;
+    sec.append(item(Chess.t("♟ Chess"), Chess.t("Play chess over packet"), () => { chessOpen = !chessOpen; render(); }, false, cres));
     if (f.ct) {                                                  // CR122
       const k = f.contest;
       const kres = k && k.my_turn ? line("", el("span", "ph-move", Contest.t("moveChip")))
@@ -398,8 +398,8 @@ function renderChess(c, p) {
   box.replaceChildren();
   if (!g) {
     const r = el("div", "chess-new");
-    r.append(el("span", "", "New game - you play: "));
-    for (const [col, txt] of [["w", "white ♔"], ["b", "black ♚"]]) {
+    r.append(el("span", "", Chess.t("New game - you play: ")));
+    for (const [col, txt] of [["w", Chess.t("white ♔")], ["b", Chess.t("black ♚")]]) {
       const b = el("button", "sm", txt); b.type = "button"; b.disabled = !on;
       b.onclick = () => fun("chess-new", col);
       r.append(b);
@@ -430,17 +430,19 @@ function renderChess(c, p) {
     };
     board.append(d);
   }
-  const st = g.result ? `game over: ${g.result}` : game.status === "mate"
-    ? (g.my_turn ? "checkmate - you lost" : "checkmate - you won!")
-    : game.status === "stalemate" ? "stalemate - draw"
-      : (g.my_turn ? "your move" : `waiting for ${c.target}`) + (game.status === "check" ? " · check!" : "");
+  const T = Chess.t;                                    // CR129: German or English
+  const st = g.result ? T("game over: {r}", { r: T(g.result) }) : game.status === "mate"
+    ? (g.my_turn ? T("checkmate - you lost") : T("checkmate - you won!"))
+    : game.status === "stalemate" ? T("stalemate - draw")
+      : (g.my_turn ? T("your move") : T("waiting for {c}", { c: c.target })) + (game.status === "check" ? T(" · check!") : "");
   const side = el("div", "chess-side");
   side.append(el("div", "chess-st", `♟ ${st}`), el("div", "small muted",
-    `you play ${mine === "w" ? "white" : "black"} · move ${Math.floor(g.moves.length / 2) + 1}` + (game.ok ? "" : " · (a move did not follow the rules)")));
+    T("you play {c} · move {n}", { c: T(mine === "w" ? "white" : "black"), n: Math.floor(g.moves.length / 2) + 1 })
+    + (game.ok ? "" : T(" · (a move did not follow the rules)"))));
   const acts = el("div", "chess-acts");
   const mk = (txt, fn, dis) => { const b = el("button", "sm", txt); b.type = "button"; b.disabled = !!dis; b.onclick = fn; acts.append(b); };
-  if (!g.result && !["mate", "stalemate"].includes(game.status)) mk("Resign", () => fun("chess-resign"), !on);
-  mk("Close game", () => { chessOpen = false; fun("chess-close"); });
+  if (!g.result && !["mate", "stalemate"].includes(game.status)) mk(T("Resign"), () => fun("chess-resign"), !on);
+  mk(T("Close game"), () => { chessOpen = false; fun("chess-close"); });
   side.append(acts);
   box.append(board, side);
 }
