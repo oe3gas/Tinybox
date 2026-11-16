@@ -18,6 +18,8 @@ from typing import Any, Callable
 
 import yaml
 
+from prcore import dailylog, stopsignal
+
 from . import advisor, colorlog, config, dictimport, dicttransfer, fragment, txlog, zdict
 from .agw import AgwLink
 from .ax25 import UIFrame
@@ -526,19 +528,20 @@ TAG = "[brocst]"
 
 
 def setup_logging(cfg: config.Config) -> None:
-    """Console, plus a log file per start (brocastd_log_<date>_<time>.log) if log_dir is set."""
+    """Console, plus a day file (brocastd-<date>.log, prcore/dailylog.py) if log_dir is set."""
     root = logging.getLogger()
     root.setLevel(cfg.log_level)
     console = colorlog.console_handler(TAG, cfg.color)
     root.addHandler(console)
     if cfg.log_dir is not None:
         cfg.log_dir.mkdir(parents=True, exist_ok=True)
-        name = f"brocastd_log_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log"
-        fh = logging.FileHandler(cfg.log_dir / name, encoding="utf-8")
+        # one file per day, kept 14 days - as TinyBox and client (R13, PLANUNG 17.4)
+        fh = dailylog.DailyFileHandler(cfg.log_dir, prefix="brocastd-",
+                                       legend=("# brocastd log - time, level, module: message",))
         fh.setFormatter(colorlog.FileFormatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s",
                                                "%Y-%m-%d %H:%M:%S"))
         root.addHandler(fh)
-        cfg.log_file = cfg.log_dir / name               # shown in the start block
+        cfg.log_file = fh.path                          # shown in the start block
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -563,11 +566,7 @@ def main(argv: list[str] | None = None) -> int:
         # create the daemon inside the running loop (asyncio.Event on Python 3.9)
         await Daemon(cfg).run()
 
-    try:                                         # CR138: Ctrl+Break von tbstart = Strg+C
-        from prcore import stopsignal            # (brocast laeuft auch ohne prcore)
-        stopsignal.install()
-    except ImportError:
-        pass
+    stopsignal.install()                         # CR138: Ctrl+Break von tbstart = Strg+C
     try:
         asyncio.run(run())
     except (KeyboardInterrupt, asyncio.CancelledError):

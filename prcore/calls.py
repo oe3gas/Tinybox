@@ -16,8 +16,8 @@ all of that compares calls, so all of it goes through the same functions here.
                         prefix + digits + suffix - not 70CM, QO100, ABCDEF
 
 The checks expect a normalized call (upper case); they do not normalize themselves.
-Stand-alone parts (brocast, fwdsim, release/konfig.py, dxfeed) keep their own copies
-on purpose (PLANUNG 17.1).
+TinyBox, client, kisshub and brocast use these (PLANUNG 17.4); fwdsim, release/konfig.py
+and dxfeed keep their own copies on purpose.
 """
 
 from __future__ import annotations

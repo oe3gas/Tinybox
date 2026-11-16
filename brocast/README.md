@@ -376,7 +376,7 @@ Aufrufe mit fremden Domainnamen im Host-Header werden weiter abgewiesen
   nach einem Absturz automatisch neu gestartet.
 - Autostart: Verknüpfung zu `start_alles.bat` in den Autostart-Ordner legen
   (Win+R → `shell:startup`).
-- `logs\brocastd_log_<Datum>_<Zeit>.log`: Programm-Log, eine Datei pro Start.
+- `logs\brocastd-<Datum>.log`: Programm-Log, eine Datei pro Tag (14 Tage aufbewahrt).
 - `logs\Sendeprotokoll_<JJJJ-MM>.txt`: jeder gesendete Frame mit Zeit (UTC),
   Rufzeichen, Seite, Revision, Teil, Bytes, Sendezeit, Lieferant und Titel.
   Nachweis für den Betrieb, wird nie automatisch gelöscht.

@@ -8,22 +8,19 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from prcore.calls import is_valid_call
+from prcore.conf import ConfigError          # one error class for all programs (17.4)
+
 from . import colorlog
 
-# Callsign as used in an AX.25 address field: 3-6 chars, letters and digits,
-# at least one digit and one letter, optional SSID 0-15.
-AX25_CALL_RE = re.compile(
-    r"^(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$")
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 MODES = ("station", "listener")
 
 
-class ConfigError(Exception):
-    """brocastd.conf is missing or invalid."""
-
-
 def is_ax25_call(call: str) -> bool:
-    return bool(AX25_CALL_RE.match(call))
+    """A station or digipeater call: 3-6 characters with a digit and a letter, SSID 0-15
+    (prcore/calls.py; PLANUNG 17.4)."""
+    return is_valid_call(call)
 
 
 INTERFACES = ("agw", "kiss")
@@ -118,7 +115,7 @@ class Config:
     log_level: str = "INFO"
     color: str = "auto"                  # [console] color: auto | yes | no
     log_file: Path | None = None         # this start's log file (set by setup_logging)
-    log_dir: Path | None = None          # program log, one file per start; None = console only
+    log_dir: Path | None = None          # program log, one file per day; None = console only
     txlog_dir: Path | None = None        # Sendeprotokoll (station); None = aus
     db_flush_sec: int = 600              # flüchtige DB-Daten so oft schreiben (PLANUNG 11.9)
     direwolf: DirewolfCfg = field(default_factory=DirewolfCfg)

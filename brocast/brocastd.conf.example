@@ -95,7 +95,7 @@ check     = yes               ; 1x täglich bei GitHub nach neuem TinyBox-Releas
 color     = auto              ; Farben im Konsolenfenster: auto | yes | no
 
 [logging]
-log_dir   = logs              ; Programm-Log, eine Datei pro Start (leer = nur Konsole)
+log_dir   = logs              ; Programm-Log, eine Datei pro Tag, 14 Tage (leer = nur Konsole)
 txlog_dir = logs              ; Sendeprotokoll (Station): Sendeprotokoll_<JJJJ-MM>.txt,
                               ; jeder gesendete Frame mit Zeit (UTC); wird nie automatisch gelöscht;
                               ; leer = kein Sendeprotokoll

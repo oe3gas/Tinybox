@@ -1516,10 +1516,27 @@ setzen die CRs (125, 120, 128, 129, Elmer Quiz …) darauf auf.
 - Die Hinweise „brocast behält bewusst eigene Kopien“ in 17.3 (R6, R8) gelten damit nicht mehr;
   brocast wird schrittweise nachgezogen (Refactoring-Etappe 6, siehe unten).
 
-**Etappe 6 – brocast an `prcore` (offen):** 6a Start so, dass `prcore` gefunden wird (ohne
+**Etappe 6 – brocast an `prcore` (umgesetzt 16.11.2026, Funktest offen):** 6a Start so, dass `prcore` gefunden wird (ohne
 Verhaltensänderung); 6b AX.25/KISS/AGW-Kopien durch `prcore` ersetzen; 6c Rufzeichen,
 `webguard`, `conf`, `dailylog`. Je ein Commit, Tests vorher und nachher grün, danach Funktest
 mit brocastd (Station und Listener).
+
+Stand 16.11.2026:
+- 6a ✅ `brocast/brocast/__init__.py` macht `prcore` importierbar (einzige Stelle); die drei
+  `sys.path`-Stellen und die Ersatzkopie in `colorlog.py` sind weg.
+- 6b ✅ `ax25.py` nimmt Adressen, `AX25Error`, PID aus `prcore/ax25/frame.py` (`UIFrame` bleibt
+  brocast-eigen), `kiss.py` Framing aus `prcore/kiss.py`, `agw.py` den Kopf aus `prcore/agw.py`.
+  Byte-gleich gegen die alten Kopien geprüft (3000 Zufallsframes, Decoder über beliebige
+  Schnittstellen). Einziger Unterschied: prcore verwirft Müll-Adressen strenger (Nicht-ASCII,
+  Erweiterungsbit mitten im Rufzeichen) – bei Zufallsbytes 71 von 20 000 Fällen, die vorher als
+  UI-Frame durchgingen und jetzt verworfen werden.
+- 6c ✅ Rufzeichen über `prcore.calls.is_valid_call` (Unterschied: zweistellige „Rufzeichen“
+  wie `A1` gelten nicht mehr – gibt es nicht); `ConfigError` aus `prcore/conf.py`; Programm-Log
+  als Tagesdatei `brocastd-<Datum>.log` (14 Tage) über `prcore/dailylog.py` statt einer Datei je
+  Start. **Bewusst behalten:** die Host-Prüfung der brocast-Web-API – sie ist strenger als
+  `prcore/webguard.py` (nur Loopback, im LAN-Modus nur IP-Adressen und die eigenen Rechnernamen),
+  wie die TinyBox-Web-GUI eine eigene Regel hat.
+- Bleibt: `release/konfig.py`, fwdsim, tbtest, dxfeed-Hilfsskripte mit eigenen Kopien (17.4).
 
 ## 18. Quellenangabe über das Dictionary (brocast v3, entschieden 19.10.2026)
 
