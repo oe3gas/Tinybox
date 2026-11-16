@@ -5,43 +5,70 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fuchsjagd – TinyBox ARDF</title>
 <style>
-:root{--bg:#fafaf7;--card:#f1efe8;--map:#fbfbf8;--fg:#1f1f1d;--mut:#6b6a65;--line:#d3d1c7;--acc:#185FA5;--danger:#A32D2D;--ok:#3B6D11;--course:#B8327E}
-@media (prefers-color-scheme:dark){:root{--bg:#1c1c1a;--card:#2a2a27;--map:#232321;--fg:#ecebe6;--mut:#a3a29b;--line:#444441;--acc:#85B7EB;--danger:#F09595;--ok:#97C459;--course:#E27BB6}}
+:root{--bg:#fafaf7;--panel:rgba(250,250,247,.93);--card:#ecebe4;--map:#fbfbf8;--fg:#141413;--mut:#4a4945;--line:#bdbbb1;--acc:#185FA5;--danger:#A32D2D;--ok:#3B6D11;--course:#B8327E}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1c1a;--panel:rgba(24,24,22,.9);--card:#2e2e2b;--map:#232321;--fg:#f4f3ee;--mut:#c4c3bc;--line:#55544f;--acc:#85B7EB;--danger:#F09595;--ok:#97C459;--course:#E27BB6}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
-main{max-width:560px;margin:0 auto;padding:12px}
-h1{font-size:20px;font-weight:600;margin:4px 0 2px}
-.sub{color:var(--mut);font-size:13px;margin:0 0 14px}
+body{margin:0;background:#2b3a1f;color:var(--fg);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+.bgimg{position:fixed;inset:0;z-index:-1;background:#2b3a1f url(fuchs.jpg) 62% center/cover no-repeat}
+.hero{max-width:560px;margin:0 auto;padding:18px 14px 0;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.75)}
+.hero h1{font-size:30px;font-weight:700;margin:0}
+.hero p{margin:2px 0 0;font-size:15px}
+main{max-width:560px;margin:12px auto 24px;padding:14px;background:var(--panel);border-radius:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+body.start main{margin-top:min(42vh,320px)}
+details.help{background:var(--card);border-radius:10px;padding:8px 12px;margin:0 0 12px;font-size:17px;line-height:1.6}
+details.help summary{cursor:pointer;font-weight:600}
+details.help h3{font-size:17px;margin:10px 0 2px}
+details.help ol,details.help ul{margin:2px 0 6px;padding-left:22px}
+details.help b{font-weight:600}
 button{font:inherit;font-size:14px;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;touch-action:manipulation}
 button:active{transform:scale(.97)}
 button.on{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 button.primary{background:var(--fg);color:var(--bg);border-color:var(--fg);padding:9px 22px}
 .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
-.lbl{width:70px;color:var(--mut);font-size:13px}
-.hint{color:var(--mut);font-size:13px;margin:4px 0 14px}
+.lbl{width:70px;color:var(--mut);font-size:15px;font-weight:600}
+.hint{color:var(--mut);font-size:15px;margin:4px 0 14px}
 .bar{display:flex;align-items:center;gap:8px;margin:0 0 8px}
 .chips{display:flex;flex-wrap:wrap;gap:5px;flex:1}
-.chip{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--card);color:var(--mut);border:1.5px solid var(--line);white-space:nowrap;transition:background .15s,color .15s}
+.chip{font-size:14px;padding:3px 9px;border-radius:999px;background:var(--card);color:var(--mut);border:1.5px solid var(--line);white-space:nowrap;transition:background .15s,color .15s}
 .chip.act{color:#fff;animation:pulse .9s ease-in-out infinite}
 @keyframes pulse{50%{filter:brightness(1.18)}}
 .secs{font:600 22px ui-monospace,SFMono-Regular,Consolas,monospace;min-width:44px;text-align:right}
 canvas#map{width:100%;display:block;border-radius:10px;border:1px solid var(--line);touch-action:manipulation;cursor:crosshair}
 .dash{display:grid;grid-template-columns:150px 1fr;gap:10px;margin:10px 0}
 .card{background:var(--card);border-radius:10px;padding:8px 10px}
-.k{font-size:12px;color:var(--mut)}
+.k{font-size:14px;color:var(--mut)}
 .v{font:600 18px ui-monospace,SFMono-Regular,Consolas,monospace}
-.log{font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--mut);margin-top:6px;min-height:20px}
-.msg{font-size:14px;min-height:21px;margin:2px 0 6px}
+.log{font:14px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--mut);margin-top:6px;min-height:20px}
+.msg{font-size:16px;font-weight:500;min-height:21px;margin:2px 0 6px}
 .res{background:var(--card);border-radius:10px;padding:12px 14px;margin:10px 0}
 .res table{border-collapse:collapse;font:14px ui-monospace,SFMono-Regular,Consolas,monospace;margin-top:6px}
 .res td{padding:2px 14px 2px 0}
 .hidden{display:none}
 </style>
 </head>
-<body>
+<body class="start">
+<div class="bgimg"></div>
+<header class="hero"><h1>Fuchsjagd</h1><p>ARDF-Prototyp für TinyBox · eigenständig, ohne Funk</p></header>
 <main>
-<h1>Fuchsjagd</h1>
-<p class="sub">ARDF-Prototyp für TinyBox · eigenständig, ohne Funk</p>
+<details class="help">
+<summary>Spielanleitung</summary>
+<h3>Steuerung</h3>
+<ul>
+<li><b>Gehen</b> = Klick auf den Zielpunkt, dann bewegt sich der Spielercursor</li>
+<li><b>Peilen</b> = dauert 6 s und zeigt beide Signal-Richtungen</li>
+<li><b>Peilen/Seite</b> = Peilung mit Seitenbestimmung, dauert 10 s</li>
+</ul>
+<h3>Regeln</h3>
+<ol>
+<li>Ein Feld ist 100 × 100 m, die gesamte Karte 2 × 2 km.</li>
+<li>Gehen kostet 1 min je Feld (diagonal 1,4 min).</li>
+<li>Jeder Fuchs sendet 1 min, dann der nächste.</li>
+<li>Feld antippen zum Gehen.</li>
+<li>Über ein Fuchsfeld laufen stempelt ihn.</li>
+<li>Ins Ziel (Doppelkreis) laufen beendet das Spiel.</li>
+<li>Ton einschalten lohnt sich: der aktive Fuchs ist in CW zu hören, laut heißt nah.</li>
+</ol>
+</details>
 
 <section id="setup">
   <div class="row"><span class="lbl">Band</span><span class="seg" data-k="band"><button data-v="80" class="on">80 m</button> <button data-v="2">2 m</button></span></div>
@@ -49,7 +76,6 @@ canvas#map{width:100%;display:block;border-radius:10px;border:1px solid var(--li
   <div class="row"><span class="lbl">Tempo</span><span class="seg" data-k="f"><button data-v="1">1×</button> <button data-v="5">5×</button> <button data-v="10" class="on">10×</button> <button data-v="20">20×</button></span></div>
   <p class="hint" id="tempoHint"></p>
   <div class="row"><button class="primary" id="startBtn">Start</button></div>
-  <p class="hint">Ein Feld sind 100 m, die Karte 2 × 2 km. Gehen kostet 1 min je Feld (diagonal 1,4 min), Peilen 6 s, auf 80 m mit Seitenbestimmung 10 s (Spielzeit). Jeder Fuchs sendet 1 min, dann der nächste. Feld antippen zum Gehen, über ein Fuchsfeld laufen stempelt ihn. Ins Ziel (Doppelkreis) laufen beendet das Spiel. Ton einschalten lohnt sich: der aktive Fuchs ist in CW zu hören, laut heißt nah.</p>
 </section>
 
 <section id="game" class="hidden">
@@ -64,7 +90,7 @@ canvas#map{width:100%;display:block;border-radius:10px;border:1px solid var(--li
   </div>
   <div class="row">
     <button id="pBtn">Peilen</button>
-    <button id="psBtn">Peilen + Seite</button>
+    <button id="psBtn">Peilen/Seite</button>
     <button id="pauseBtn">Pause</button>
     <button id="toneBtn" class="on">Ton an</button>
     <button id="endBtn">Aufgeben</button>
@@ -177,7 +203,7 @@ $('startBtn').addEventListener('click',()=>{
   const f=place(cfg.n);
   G={band:cfg.band,n:cfg.n,F:cfg.f,f,pos:{...START},target:null,t:0,lim:30+12*cfg.n,
      lines:[],path:[{...START}],log:[],over:false,paused:false,peil:null,dist:0,stamps:[],sm:0};
-  $('setup').classList.add('hidden');$('game').classList.remove('hidden');
+  $('setup').classList.add('hidden');$('game').classList.remove('hidden');document.body.classList.remove('start');
   $('result').classList.add('hidden');$('log').innerHTML='';
   $('psBtn').classList.toggle('hidden',G.band!=='80');
   $('pauseBtn').textContent='Pause';$('endBtn').textContent='Aufgeben';
@@ -243,7 +269,7 @@ function finishPeil(){
   if(amb){const a=[b,(b+180)%360].sort((x,y)=>x-y);txt=d3(a[0])+'/'+d3(a[1]);}
   else txt=d3(b);
   addLog(`F${p.k+1} ${txt} ${sText(d)}`);
-  say(amb?'Minimum ist zweideutig (±180°). Peilen + Seite klärt die Richtung.':`Fuchs ${p.k+1} gepeilt.`);
+  say(amb?'Minimum ist zweideutig (±180°). Peilen/Seite klärt die Richtung.':`Fuchs ${p.k+1} gepeilt.`);
 }
 
 function finish(resign){
@@ -276,7 +302,7 @@ $('toneBtn').addEventListener('click',()=>{
 $('endBtn').addEventListener('click',()=>{
   if(G&&!G.over){finish(true);return;}
   G=null;setKey(0);
-  $('game').classList.add('hidden');$('setup').classList.remove('hidden');
+  $('game').classList.add('hidden');$('setup').classList.remove('hidden');document.body.classList.add('start');
 });
 
 // ---------- map ----------
