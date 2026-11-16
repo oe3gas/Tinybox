@@ -171,25 +171,12 @@ def _float(text: str, what: str) -> float:
 
 
 def release_module():
-    """prcore/release.py of the TinyBox repo for the update check (PLANUNG 24);
-    None when brocast runs without the repo around it."""
-    import sys
-    root = Path(__file__).resolve().parents[2]
-    if (root / "prcore" / "release.py").is_file() and str(root) not in sys.path:
-        sys.path.append(str(root))
-    try:
-        from prcore import release
-    except ImportError:
-        return None
+    """prcore/release.py for the update check (PLANUNG 24)."""
+    from prcore import release
     return release
 
 
 def _direwolfconf():
-    """prcore/direwolfconf.py of the TinyBox repo (brocast sits in its folder)."""
-    import sys
-    root = Path(__file__).resolve().parents[2]
-    if (root / "prcore" / "direwolfconf.py").is_file() and str(root) not in sys.path:
-        sys.path.append(str(root))
     from prcore import direwolfconf
     return direwolfconf
 
