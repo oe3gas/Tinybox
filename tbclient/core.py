@@ -574,6 +574,34 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
         chan = self.channels.get(ch)
         return chan is not None and chan.ask_heard()
 
+    def playing(self) -> bool:
+        """CR130: in a game right now - CQ contest (box or relay), chess, Prefix raten."""
+        g = self.prefix.g
+        if g is not None and g["phase"] != "over" and self.cfg.mycall.upper() in g["scores"]:
+            return True
+        games = [self.box_contest.summary()]
+        games += [slot.summary() for slot in self.relay_contests.values()]
+        if any(s is not None and not s.get("res") for s in games):
+            return True
+        for chan in self.channels.values():          # chess: with the partner on a channel
+            peer = getattr(chan, "peer", None) if chan.state == "online" else None
+            game = peer.fun.game if peer is not None else None
+            if game and not game.get("result"):
+                return True
+        return False
+
+    def term_ok(self) -> bool:
+        """CR130: may the TinyBox terminal be opened? Not offline, not before the
+        handshake, not in a game, not while a picture or a file goes out."""
+        chan = self.chan
+        if chan is None or chan.state != "online" or not self.handshake_done \
+                or "CMD" not in self.caps:
+            return False
+        for up in (self.images.upload, self.bfiles.upload):
+            if up and up.get("state") not in ("done", "error"):
+                return False
+        return not self.playing()
+
     def send_raw(self, text: str, ch: int | None = None) -> bool:
         chan = self.chan if ch is None else self.channels.get(ch)
         return chan.send_raw(text) if chan is not None else False
@@ -1069,6 +1097,7 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
             "term": self._term_of(ch), "term_n": self._term_n_of(ch),
             "peerchat": self._peerchat_of(ch),                          # CR78
             "client": self.handshake_done and bool(self.caps or self.boards),
+            "term_ok": self.term_ok(),                                  # CR130
             "ui": "UI" in self.caps,
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),

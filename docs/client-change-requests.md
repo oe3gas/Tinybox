@@ -5239,7 +5239,7 @@ Sprache aus `[games] language` – mit CR128 spielen Terminal-User ohnehin nicht
 - Jede DXCC-Nummer der CSV hat einen deutschen und einen englischen Namen.
 
 
-## CR130 – TinyBox-Terminal: Eingaben gehen immer an die Mailbox, Terminal gesperrt bei Spielen und ohne Verbindung (offen)
+## CR130 – TinyBox-Terminal: Eingaben gehen immer an die Mailbox, Terminal gesperrt bei Spielen und ohne Verbindung (✅ 16.11.2026, Client 2026.11.16.7)
 
 Gilt nur für das **Terminal zur eigenen TinyBox** (Client-Modus, „TinyBox terminal“) – nicht für
 Terminals zu anderen Stationen (zweite TinyBox, fremde BBS, eingehende Connects, TBClient, CR43/45/46/78).
@@ -5309,6 +5309,26 @@ Das Terminal schickt jede Zeile roh an die Box. Was daraus wird, hängt vom Zust
 - Button deaktiviert: offline, vor dem Handshake, während CQ Contest / Schach / Prefix raten (Mitspieler),
   während eines Bild-/Datei-Uploads.
 - Terminal offen: Spiel-Buttons deaktiviert, kein Start und kein Beitritt möglich.
+
+### Umgesetzt (16.11.2026)
+
+- **Box:** Cap `CMD`, `//CMD <Zeile>` führt die Zeile als Mailbox-Befehl aus – im Befehlsmodus
+  und im Board; die Sitzung bleibt im Board, die anderen bekommen nichts. Danach `//P` (CR134),
+  damit das Terminal seinen Prompt zeigt. Protokollzeilen (`//CMD //…`) und andere Zustände
+  (Nachricht schreiben, Profilfragen) → `//ERR cmd`. Die Sperre aus CR93 gilt weiter.
+- **Client:** jede Terminal-Zeile zur eigenen Box geht als `//CMD <Zeile>` hinaus (Leerzeilen und
+  `//`-Zeilen unverändert); im Terminal steht nur das Getippte.
+- **Sperre:** „TinyBox terminal“ (Leiste und Willkommens-Dialog) ist ohne Meldung deaktiviert, wenn
+  der Box-Kanal nicht online ist, vor dem Handshake, ohne `CMD` bei der Box, während ein Bild oder
+  eine Datei hinausgeht und während man spielt (CQ Contest gegen/über die Box, Schach mit einer
+  verbundenen Station, Prefix raten als Mitspieler). Wird es gesperrt, während es offen ist, geht
+  die Ansicht zurück in den Chat.
+- **Umgekehrt (Terminal offen → kein Spiel):** Das Terminal ersetzt die Chat-Ansicht, in der die
+  Spiel-Knöpfe liegen – solange es offen ist, kommt man an sie nicht heran. Eine eigene Sperre im
+  Client war dafür nicht nötig.
+- **Nicht umgesetzt:** Einladungen anderer, die bei offenem Terminal ankommen, werden noch nicht
+  mit „beschäftigt“ abgelehnt (Vorschlag, nicht entschieden) – sie erscheinen wie bisher.
+- Tests: `tests/test_cr130.py`.
 
 
 ## CR131 – brocastd: Wiederholungen bei Benutzerbetrieb gedrosselt senden; AXUDP zählt nicht als Verbindung (offen)

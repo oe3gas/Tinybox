@@ -1,0 +1,2 @@
+- TinyBox-Terminal: Befehle gehen auch im Board an die Mailbox (CR130)
+- Terminal gesperrt offline, beim Spielen und beim Senden von Bild/Datei

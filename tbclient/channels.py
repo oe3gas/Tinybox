@@ -108,6 +108,10 @@ class Channel:
         if self.peer is not None and not text.startswith("//"):
             self.peer.text("tx", text)                  # CR78: the chat history
         if self.core.chan is self:
+            if "CMD" in self.core.caps and text.strip() and not text.startswith("//"):
+                # CR130: the TinyBox terminal - always a mailbox command, also in a
+                # board (where the line would otherwise be chat text to everybody)
+                text = f"//CMD {text}"
             self.core.send_line(text)             # an image upload may hold lines back
         else:
             self.core.console.append(f"[{self.n}]> {text}")

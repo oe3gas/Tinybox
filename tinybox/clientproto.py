@@ -75,6 +75,8 @@ station ignores the line or calls it an unknown command.
 
 Other client commands:
     //BOARDS              -> //B <n> <board> <keep> <users> <description> ... //BEND
+    //CMD <line>          (cap CMD, CR130) the line as a mailbox command - also inside a
+                          board, which the session does not leave; never chat text
     //RESEND <a>-<b>      (inside a board) events a..b again, only to this client
     //LOST <a>-<b>        (inside a board) events a..b missed, too many to send again:
                           only counted for the receive quote (PLANUNG.md 14.3)
@@ -313,6 +315,7 @@ COMMANDS: dict[str, Command] = {
     "TRUST?": Command(lambda s, c: _trust_list(s)),
     "ADM": Command(lambda s, c: _admin(s, c.rest)),
     "BOARDS": Command(lambda s, c: _boards(s)),
+    "CMD": Command(lambda s, c: _cmd(s, c.rest), cap="CMD"),               # CR130
     "RESEND": Command(lambda s, c: _resend(s, c.args)),
     "LOST": Command(lambda s, c: _resend(s, c.args, replay=False)),
     "SYM": Command(lambda s, c: _symbol(s, c.args)),
@@ -684,6 +687,29 @@ def _boards(s: Session) -> None:
             rows.append(f"//B {i} {b.name} {b.keep_label} {len(hub.members(b.name))} "
                         f"{b.description}".rstrip())
     s.out(*rows, "//BEND")
+
+
+def _cmd(s: Session, line: str) -> None:
+    """CR130: the TinyBox terminal of the client - a mailbox command in any state. In a
+    board the session stays there: the others notice nothing (no leave, no join)."""
+    from . import commands
+    from .session import State
+    line = line.strip()
+    if not line or line.startswith("//"):
+        s.out("//ERR cmd")
+        return
+    board, state = s.chat_board, s.state
+    if state not in (State.COMMAND, State.CHAT):
+        s.out("//ERR cmd")                  # writing a message, the profile questions ...
+        return
+    s.state = State.COMMAND
+    try:
+        commands.dispatch(s, line)
+    finally:
+        if s.state == State.COMMAND and board is not None and s.chat_board == board:
+            s.state = State.CHAT            # still in the board: back to the chat
+    if s._prompt_mark():
+        s.out(tbproto.PROMPT_MARK)          # CR134: the terminal shows its prompt
 
 
 def _resend(s: Session, parts: list[str], replay: bool = True) -> None:

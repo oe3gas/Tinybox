@@ -34,6 +34,12 @@ function renderViewBtns() {
   $("nav-monitor").classList.toggle("active", view === "term" && activeCh === 0);
   $("nav-terminal").classList.toggle("active", (view === "term" || view === "peer") && activeCh !== 0);
   $("nav-stats").classList.toggle("active", view === "stats");
+  // CR130: the TinyBox terminal only online, after the handshake, not in a game and not
+  // while a picture or a file goes out - without a word, the button is just off
+  const termOk = !!(S && S.chat_ch && S.term_ok);
+  $("nav-terminal").disabled = !termOk;
+  $("wl-term").disabled = !termOk;
+  if (!termOk && S && view === "term" && S.chat_ch && activeCh === S.chat_ch && curCh().chat) setView("chat");
 }
 
 function goChat() {

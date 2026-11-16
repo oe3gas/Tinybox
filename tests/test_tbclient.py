@@ -373,7 +373,7 @@ class EndToEndTests(unittest.TestCase):
                 await asyncio.wait_for(core.link.agw_up.wait(), 5)
                 await core.connect()
                 await until(lambda: core.boards, 10)
-                self.assertEqual(core.caps, {"CHAT", "UI", "SYNC", "SYNC2", "SHORT", "Z", "IMG", "NUM", "HAVE", "PROF", "HSEQ", "BFILE", "LOTW", "CT", "CTR", "PR", "GAMES", "GAME", "PRM"})
+                self.assertEqual(core.caps, {"CHAT", "UI", "SYNC", "SYNC2", "SHORT", "Z", "IMG", "NUM", "HAVE", "PROF", "HSEQ", "BFILE", "LOTW", "CT", "CTR", "PR", "GAMES", "GAME", "PRM", "CMD"})
                 self.assertTrue(core.join(1))
                 await until(lambda: core.board and "OE3GAS" in core.members)
                 self.assertEqual(core.members, {"OE3XYZ": "*", "OE3GAS": "/-"})   # CR120
@@ -439,7 +439,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertEqual((await http("POST", "/api/connect", headers=False))[0], 403)
                 self.assertEqual((await http("POST", "/api/connect"))[0], 200)
                 await until(lambda: core.boards, 10)
-                self.assertEqual(core.caps, {"CHAT", "SYNC", "SYNC2", "SHORT", "NUM", "HAVE", "PROF", "HSEQ", "LOTW", "CT", "CTR", "PR", "GAMES", "GAME", "PRM"})   # telnet: no UI, no Z
+                self.assertEqual(core.caps, {"CHAT", "SYNC", "SYNC2", "SHORT", "NUM", "HAVE", "PROF", "HSEQ", "LOTW", "CT", "CTR", "PR", "GAMES", "GAME", "PRM", "CMD"})   # telnet: no UI, no Z
                 await http("POST", "/api/join", {"board": 2})
                 await until(lambda: core.board is not None)
                 await http("POST", "/api/say", {"text": "per telnet ~01"})
