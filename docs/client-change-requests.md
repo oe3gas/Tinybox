@@ -5661,22 +5661,40 @@ Amateurfunkpeilen (ARDF, „Fuchsjagd“) als weiteres Spiel im TBClient. Erste 
 - Das Spiel endet im Ziel (oder mit Aufgabe). Wertung wie bei ARDF: zuerst die Zahl der gefundenen
   Füchse, dann die kürzere Zeit. Am Ende zeigt die Box alle Fuchspositionen.
 
-### Protokoll (Vorschlag, Zeilen `//FJ …`, Fähigkeit `FJ`, bei der Box in `//CLIENT`/`//OK`)
+### Protokoll: Spiel läuft lokal im Client (entschieden OE3GAS, 16.11.2026)
 
-Die Box führt Position und Zeit selbst (Client sendet nur Wünsche), damit niemand schummeln kann.
-Zeiten in Zehntelminuten.
+Der Client rechnet das ganze Spiel selbst (Gehen, Peilen, Stempeln, Uhr). Über Funk gehen nur Start
+und Ergebnis – kein Verkehr während des Spiels, keine Wartezeit, jedes Tempo möglich. Bewusst in Kauf
+genommen: Wer den Client-Code liest, kann die Füchse finden; die Bestenliste ist daher „ohne Gewähr“.
 
-    //FJ NEW b=<80|2> n=<1..5>          neues Spiel
-    //FJ OK b=.. n=.. s=10,18 z=10,1 l=<limit>
-    //FJ GO <x> <y>                      gehen
-    //FJ AT <x> <y> t=<t> [F=<k>]        neue Position, ggf. Fuchs k gefunden
-    //FJ P [S]                           peilen (S = mit Seitenbestimmung, nur 80 m)
-    //FJ B <k> <grad> <S> t=<t> [A]      Peilung auf Fuchs k; A = mehrdeutig (±180°); S 1–9, 10 = S9+
-    //FJ END                             im Ziel (Box prüft die Position) / //FJ RESIGN
-    //FJ RES f=<gefunden> t=<t> w=<0|1> <k:x,y,...>   Ergebnis, w=0 außer Wertung, Fuchspositionen
+    //FJ NEW b=<80|2> n=<1..5> f=<tempo>     Spiel anfordern
+    //FJ OK id=<spiel> seed=<zahl> l=<limit>  Box vergibt Spiel-Nr. und Zufallszahl
+    //FJ RES id=.. f=<gefunden> t=<zeit> d=<strecke> w=<0|1> [log=<züge>]   Ergebnis an die Box
     //FJ ERR no_game | bad | busy
 
-Ein Zug rund 10–25 Bytes; ein Spiel mit 5 Füchsen (rund 40 Züge) etwa 1,5 kB über Funk.
+- Fuchspositionen: Client und Box erzeugen sie aus `seed` mit demselben einfachen Zufallsgenerator
+  (z. B. mulberry32, in Python und JS gleich). So steht nichts im Klartext auf dem Kanal und die Box
+  kennt die Positionen trotzdem.
+- Zeiten in Zehntelminuten (Spielzeit), Strecke in Zehntelfeldern.
+- `log` (optional, für die Bestenliste): Wegpunkte und Peilzeitpunkte, kompakt kodiert (rund 300–500 Byte).
+  Die Box prüft damit nur Plausibilität (nicht schneller als 1 Feld/min, Stempel liegen auf dem Weg,
+  Zeit ≥ Strecke + Peilzeiten) – Zeitmanipulation fällt auf, Kenntnis der Fuchspositionen nicht.
+- Verkehr pro Spiel: 2–4 Pakete, unter 1 kB.
+
+### Verkehrsabschätzung (16.11.2026), verworfene Variante „Box ist Schiedsrichter je Zug“
+
+Annahmen: 5 Füchse, 70 min Spielzeit, ~50 Gehbefehle + 35 Peilungen = 85 Anfragen/85 Antworten,
+~85 RR, 20 Byte AX.25-Overhead je Frame, TXDELAY 300 ms (1200 Bd) / 100 ms (9600 Bd), kein Digi.
+Rund 255 Aussendungen, ~8,3 kB; Sendezeit ~2¼ min (1200 Bd) bzw. ~½ min (9600 Bd).
+
+| Tempo | Dauer echt | Kanalbelegung 1200 Bd | 9600 Bd |
+|---|---|---|---|
+| 1× | 70 min | ~3 % | ~1 % |
+| 5× | 14 min | ~16 % | ~4 % |
+| 10× | 7 min | ~32 % | ~8 % |
+| 20× | 3½ min | ~64 % | ~16 % |
+
+Dazu 2–4 s Antwortzeit je Anfrage auf 1200 Bd (bei 10× = 20–40 s Spielzeit). Daher verworfen.
 
 ### Entscheidungen (OE3GAS, 15.11.2026, nach dem ersten Prototyp)
 
