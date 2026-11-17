@@ -601,8 +601,11 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
         """CR130: may the TinyBox terminal be opened? Not offline, not before the
         handshake, not in a game, not while a picture or a file goes out."""
         chan = self.chan
-        if chan is None or chan.state != "online" or not self.handshake_done \
-                or "CMD" not in self.caps:
+        if chan is None or chan.state != "online":
+            return False
+        if self.auth.get("state") in ("wait", "refused") and not self.caps:
+            return True     # CR141: no client mode, the box is in its plain terminal (CR133)
+        if not self.handshake_done or "CMD" not in self.caps:
             return False
         for up in (self.images.upload, self.bfiles.upload):
             if up and up.get("state") not in ("done", "error"):

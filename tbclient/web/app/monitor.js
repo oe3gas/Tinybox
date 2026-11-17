@@ -278,6 +278,7 @@ async function saveFreq(e) {
 }
 
 function openTerm() {
+  if (!(S && S.chat_ch && S.term_ok)) return;     // CR141: locked (CR130) - no endless setView loop
   $("sheet").classList.add("hidden");
   if (!curCh().chat && S.chat_ch) switchCh(S.chat_ch);
   manualTerm = true;

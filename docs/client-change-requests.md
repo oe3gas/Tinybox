@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 17.11.2026 (CR139; CR137; CR131; CR130; CR129; CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 17.11.2026 (CR141; CR139; CR137; CR131; CR130; CR129; CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -6045,3 +6045,25 @@ PTT); die Steuerkonsole zeigt das, der Client nicht. Die Version eines Original-
   Ohne Fork bleiben die Werte aus der direwolf.conf.
 - Tests: `tests/test_prcore_agwport.py` (test_parse_hw).
 - Offen: Funktest unter Windows mit echtem Gerät (Fork-Exe im Release-Zip).
+
+## CR141 – „Open TinyBox terminal“ auf der Willkommens-Karte ohne Funktion (✅ 17.11.2026, Client 2026.11.17.4)
+
+### Befund (OE3GAS, 17.11.2026)
+
+- Client OE3GAS-8 an OE3GAS-1, Schlüssel unbestätigt (`auth.state = wait`): der Button
+  „Open TinyBox terminal“ der Willkommens-Karte (CR133) tut nichts.
+- Ursache: CR130 sperrt das Terminal „vor dem Handshake“ (`term_ok` verlangt `//OK` mit `CMD`). Im
+  Zustand `wait`/`refused` kommt kein `//OK` – der Button war deaktiviert (ohne sichtbaren Unterschied).
+  Das war in CR133 unter „Offen“ schon vermerkt.
+- Zusätzlich: Wird `openTerm()` bei gesperrtem Terminal aufgerufen bzw. greift die Sperre bei offenem
+  Terminal, laufen `renderViewBtns()` (→ Chat) und `autoTerm()` (→ Terminal, `manualTerm`) im Kreis –
+  „Maximum call stack size exceeded“.
+
+### Umsetzung
+
+- `core.term_ok()`: online und `auth.state` `wait`/`refused` ohne Fähigkeiten → erlaubt. Die Zeilen
+  gehen roh (kein `CMD`), die Box ist im normalen Terminalbetrieb (CR133/CR134).
+- `openTerm()` kehrt bei gesperrtem Terminal sofort zurück; `renderViewBtns()` setzt `manualTerm`
+  zurück, bevor es auf den Chat schaltet (keine Endlosschleife mehr).
+- `button.primary:disabled` sichtbar abgeblendet.
+- Test: `tests/test_cr130.py` (test_term_ok_while_the_key_waits).

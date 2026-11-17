@@ -1,0 +1,1 @@
+- Terminal oeffnet wieder, solange der Sysop den Client noch nicht bestaetigt hat (CR141)

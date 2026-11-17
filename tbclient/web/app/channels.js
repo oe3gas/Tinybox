@@ -39,7 +39,10 @@ function renderViewBtns() {
   const termOk = !!(S && S.chat_ch && S.term_ok);
   $("nav-terminal").disabled = !termOk;
   $("wl-term").disabled = !termOk;
-  if (!termOk && S && view === "term" && S.chat_ch && activeCh === S.chat_ch && curCh().chat) setView("chat");
+  if (!termOk && S && view === "term" && S.chat_ch && activeCh === S.chat_ch && curCh().chat) {
+    manualTerm = false;                            // CR141: else autoTerm() wants "term" again - endless
+    setView("chat");
+  }
 }
 
 function goChat() {

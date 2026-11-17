@@ -66,6 +66,25 @@ class ClientSideTests(unittest.TestCase):
         ch.send_raw("L")
         self.assertEqual(sent, ["//CMD L", "//MOTD", "", "L"])
 
+    def test_term_ok_while_the_key_waits(self):
+        """CR141: key not yet confirmed (//AUTHWAIT, no //OK) - the box is in its plain
+        terminal, the TinyBox terminal must open (CR133)."""
+        from tbclient.core import ClientCore as Core
+        c = Core.__new__(Core)
+        c.chan = SimpleNamespace(state="online")
+        c.handshake_done, c.caps = True, set()
+        c.images = SimpleNamespace(upload=None)
+        c.bfiles = SimpleNamespace(upload=None)
+        c.playing = lambda: False
+        for st, ok in (("wait", True), ("refused", True), ("", False), ("ok", False)):
+            c.auth = {"state": st}
+            self.assertEqual(c.term_ok(), ok, st)
+        c.auth, c.caps = {"state": "ok"}, {"CMD"}
+        self.assertTrue(c.term_ok())
+        c.chan.state = "offline"
+        c.auth, c.caps = {"state": "wait"}, set()
+        self.assertFalse(c.term_ok())
+
 
 if __name__ == "__main__":
     unittest.main()
