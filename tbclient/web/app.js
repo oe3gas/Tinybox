@@ -160,6 +160,7 @@ async function start() {
   };
   $("btn-menu").onclick = () => openSheet();
   initActbar();                                               // CR110: status bar
+  initSetCards();                                             // CR140: cards open/close
   initLotw();                                                 // CR113: LoTW confirmation
   $("nav-settings").onclick = () => openSheet();
   $("nav-monitor").onclick = () => switchCh(0);              // CR50: the monitor channel

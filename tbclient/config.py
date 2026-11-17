@@ -76,6 +76,9 @@ class Config:
     ax25_v20_digi_paclen: int = 128           # longest I field over such a digi
     # CR70: one owner per value - over AGW direwolf.conf, over KISS kisshub
     direwolf_conf: str = ""           # resolved path, "" = not given
+    # CR140: from direwolf.conf for the settings card (as written, not checked)
+    dw_audio: tuple = ()              # (input, output) of ADEVICE, () = not given
+    dw_ptt: str = ""                  # PTT line of the channel, e.g. "COM20 RTS"
     img_rate_fixed: bool = False      # [images] bytes_per_sec set: no estimate
     kiss_fixed: frozenset = frozenset()   # LinkCfg fields set here (win over kisshub)
     sources: dict = field(default_factory=dict)
@@ -212,6 +215,9 @@ def _load(path: str | Path) -> Config:
     cfg.agw_port = int(pick([("agw", "port"), ("direwolf", "agw_port")], agw_default))
     cfg.radio_port = int(pick([("agw", "channel"), ("direwolf", "radio_port")],
                               str(cfg.radio_port)))
+    if dw:                                                  # CR140
+        cfg.dw_audio = dw.audio(cfg.radio_port) or ()
+        cfg.dw_ptt = dw.channel(cfg.radio_port).ptt or ""
     sources["agw_port"] = ("tbclient.conf" if has("agw", "port") or has("direwolf", "agw_port")
                            else "direwolf.conf" if dw and dw.agw_port else "default")
 

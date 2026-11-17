@@ -47,6 +47,10 @@ Zuletzt dazugekommen
   (Queue, UI/I, Qualitaet) je Kanal, im Monitor eine Zeile je Kanal;
   Fertiges wird gruen und verblasst. Kopfzeile: Direwolf, TX, RX.
   Ein/aus mit dem Knopf oben oder in den Settings.
+- Settings (CR140): jede Karte per Klick auf den Titel auf-/zuklappbar,
+  oben "Expand all / Shrink all" (im Browser gespeichert). Karte Direwolf
+  (Fork ja/nein mit Version, Audio-Eingang/-Ausgang und PTT laut
+  direwolf.conf, AGW) bzw. kisshub (Version, TNC, serieller Port, Baud).
 - CQ contest (CR122): Schiffe versenken mit Contest-Stationen auf 8 x 8
   Grossfeldern um die Box bzw. den Einladenden, 5 Stationen je Spieler mit
   passenden Rufzeichen, Zug = CQ <Grossfeld>, Ausbreitungshinweis "QRZ?".

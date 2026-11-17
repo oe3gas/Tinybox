@@ -308,3 +308,83 @@ function renderLotw() {
   form.classList.toggle("hidden", st.state === "ok" || !local);
   if (!local && st.state !== "ok") $("lotw-note").textContent = "Open the client on this PC (http://127.0.0.1:7744/) to sign – the .p12 does not go over the network.";
 }
+
+// ---------------------------------------------------------------- settings cards (CR140)
+// Each card opens and closes with a click on its title; "Expand all / Shrink all"
+// in the head. The closed cards are saved in this browser (key: data-key or title).
+const FOLD_KEY = "tbc-setfold";
+let foldClosed = new Set();
+try { foldClosed = new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || "[]")); } catch (e) { /* ok */ }
+const cardKey = (c) => c.dataset.key || (c.querySelector("h3") || {}).textContent || "";
+const setCards = () => [...document.querySelectorAll("#sheet .set-card")];
+
+function saveFold() {
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify([...foldClosed])); } catch (e) { /* ok */ }
+}
+function applyFold() {
+  const cards = setCards();
+  cards.forEach((c) => c.classList.toggle("closed", foldClosed.has(cardKey(c))));
+  const anyOpen = cards.some((c) => !c.classList.contains("hidden") && !c.classList.contains("closed"));
+  $("set-fold-all").textContent = anyOpen ? "Shrink all" : "Expand all";
+}
+function initSetCards() {
+  setCards().forEach((c) => {
+    const h = c.querySelector("h3");
+    if (!h) return;
+    h.title = "Open / close";
+    h.onclick = () => {
+      const k = cardKey(c);
+      if (foldClosed.has(k)) foldClosed.delete(k); else foldClosed.add(k);
+      saveFold(); applyFold();
+    };
+  });
+  $("set-fold-all").onclick = () => {
+    const shrink = $("set-fold-all").textContent === "Shrink all";
+    foldClosed = shrink ? new Set(setCards().map(cardKey)) : new Set();
+    saveFold(); applyFold();
+  };
+  applyFold();
+}
+
+// CR140: the card "Direwolf" or "kisshub" - how the client reaches the radio
+function renderRadioCard() {
+  const card = $("radio-card"), r = S && S.radio;
+  const via = r && r.via;
+  card.classList.toggle("hidden", via !== "agw" && via !== "kiss");
+  if (via !== "agw" && via !== "kiss") return;
+  const rows = [];
+  const row = (k, v) => { if (v !== undefined && v !== null && v !== "") rows.push([k, String(v)]); };
+  let note = "";
+  if (via === "agw") {
+    $("radio-title").textContent = "Direwolf";
+    row("State", r.up ? "reachable" : "not reachable");
+    row("Version", r.fork ? `TinyBox fork ${r.fork}` : (r.up ? "original Direwolf (no TinyBox fork)" : "-"));
+    if (r.fork) row("Fork features", (r.features || []).join(", ") || "-");
+    row("AGW", `${r.agw}, channel ${r.channel}`);
+    const a = r.audio || [];
+    row("Audio input", a[0] || "-");
+    row("Audio output", a[1] || "-");
+    row("PTT", r.ptt || "-");
+    row("direwolf.conf", r.conf || "not given");
+    note = r.conf ? "Audio and PTT as written in direwolf.conf. If a device is missing, Direwolf "
+      + "takes the Windows default device or runs without PTT - see its window or the console."
+      : "Set [agw] direwolf_conf in tbclient.conf to see audio devices and PTT here.";
+  } else {
+    $("radio-title").textContent = "kisshub";
+    row("State", r.up ? "reachable" : "not reachable");
+    row("Version", r.hub || "-");
+    row("KISS", r.kiss);
+    row("TNC", r.tnc ? `${r.tnc}${r.tnc_state ? " (" + r.tnc_state + ")" : ""}` : "-");
+    row("Serial port", r.port || "-");
+    row("Air baud", r.air_baud);
+    if (r.error) row("Last error", r.error);
+    note = r.status_port ? "" : "kisshub status is off ([kiss] status_port = 0): no TNC details.";
+  }
+  $("radio-kv").replaceChildren(...rows.map(([k, v]) => {
+    const tr = el("tr");
+    tr.append(el("th", "", k), el("td", "", v));
+    return tr;
+  }));
+  $("radio-note").textContent = note;
+  applyFold();
+}

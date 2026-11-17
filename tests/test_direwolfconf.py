@@ -54,6 +54,17 @@ class DirewolfConfTests(unittest.TestCase):
             with self.assertRaises(dwc.DirewolfConfError):
                 dwc.read(Path(d) / "nothing.conf")
 
+    def test_audio_and_ptt(self):
+        """CR140: ADEVICE (in, out) per radio and PTT per channel, as written."""
+        dw = dwc.parse('ADEVICE "Microham USB" "Line 2 (VAC)"\nCHANNEL 0\nPTT COM20 RTS\n'
+                       'ADEVICE1 plughw:2,0  # one name: in and out\nPTT GPIO 25\n')
+        self.assertEqual(dw.audio(0), ("Microham USB", "Line 2 (VAC)"))
+        self.assertEqual(dw.audio(1), ("Microham USB", "Line 2 (VAC)"))
+        self.assertEqual(dw.audio(2), ("plughw:2,0", "plughw:2,0"))
+        self.assertIsNone(dw.audio(4))
+        self.assertEqual((dw.channel(0).ptt, dw.channel(2).ptt), ("COM20 RTS", "GPIO 25"))
+        self.assertIsNone(dwc.parse("MODEM 1200\n").channel(0).ptt)
+
     def test_empty(self):
         dw = dwc.parse("# nothing\n\n")
         self.assertIsNone(dw.agw_port)

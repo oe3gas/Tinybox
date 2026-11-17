@@ -5979,3 +5979,40 @@ Die Konsole prüfte nur den AGW-Port.
 - Tests: `tests/test_tbstart.py` (DirewolfProblemTests).
 - Bewusst nicht: Direwolf nicht starten oder anhalten – mit dem Standardgerät kann ein Testbetrieb
   gewollt sein; die Konsole sagt es nur deutlich.
+
+## CR140 – Settings: Karten aufklappbar, „Expand all / Shrink all“, Karte Direwolf bzw. kisshub (✅ 17.11.2026, Client 2026.11.17)
+
+**Wunsch OE3GAS (17.11.2026).** In den Settings des TBClient die einzelnen Karten aufklappbar
+machen, oben im Kopf ein Knopf „Expand all / Shrink all“. Zusätzliche Karte „Direwolf“ bzw.
+„kisshub“, je nachdem, wie der Client verbunden ist. Bei Direwolf: ist es der Fork und welche
+Version, gewählte Audio-Geräte, welcher COM-Port (PTT).
+
+**Umsetzung.**
+- Jede Karte öffnet und schließt mit einem Klick auf den Titel (▾ / ▸). Im Kopf neben ✕ der
+  Knopf „Shrink all“ bzw. „Expand all“ (zeigt, was er tut: solange eine Karte offen ist
+  „Shrink all“). Welche Karten zu sind, merkt sich der Browser (`tbc-setfold`); Standard: alle
+  offen.
+- Neue Karte in der linken Spalte unter „Connection status“, Titel je nach `link`:
+  - **Direwolf** (`link = agw`): Zustand, Version („TinyBox fork 2026-11-15“ mit Features aus
+    der AGW-Antwort 'F', sonst „original Direwolf (no TinyBox fork)“), AGW-Adresse und Kanal,
+    Audio-Eingang, Audio-Ausgang, PTT (z. B. `COM20 RTS`), Pfad der direwolf.conf.
+  - **kisshub** (`link = kiss`): Zustand, kisshub-Version, KISS-Adresse, TNC mit Zustand,
+    serieller Port mit Baudrate, Luft-Baud, letzter Fehler (aus kisshub `/status`).
+  - Bei telnet keine Karte.
+- `prcore/direwolfconf.py`: liest jetzt auch `ADEVICE`/`ADEVICEn` (Eingang, Ausgang; ein Name =
+  beide; Namen in "…" mit Leerzeichen) je Radio und `PTT …` je Kanal, so wie sie in der Datei
+  stehen. `tbclient/config.py`: `dw_audio`, `dw_ptt` für den Kanal des Clients.
+- `core.radio_state()` (Snapshot `radio`) liefert die Werte; `kisslink` übernimmt Version, Port
+  und Luft-Baud aus kisshub `/status`.
+- Tests: `tests/test_direwolfconf.py` (test_audio_and_ptt).
+
+**Grenzen.** Audio und PTT sind die **Sollwerte aus der direwolf.conf** – ohne
+`[agw] direwolf_conf` in tbclient.conf bleiben sie „-“ (Hinweis in der Karte). Ob Direwolf die
+Geräte wirklich gefunden hat, weiß nur Direwolf (CR139: sonst Windows-Standardgerät bzw. ohne
+PTT); die Steuerkonsole zeigt das, der Client nicht. Die Version eines Original-Direwolf ist
+über AGW nicht abfragbar ('R' liefert feste AGWPE-Werte).
+
+### Offen
+- Fork erweitern: in der 'F'-Antwort die **tatsächlich geöffneten** Audio-Geräte und den
+  PTT-Zustand mitschicken (z. B. `adev_in=… adev_out=… ptt=ok|fail`), dann zeigt die Karte Ist
+  statt Soll und warnt wie die Steuerkonsole.

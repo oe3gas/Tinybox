@@ -315,7 +315,7 @@
 </div>
 <div id="sheet" class="sheet hidden" role="dialog" aria-label="Settings">
   <div class="sheet-body">
-    <div class="sheet-head"><h2>Settings</h2><button id="btn-close" class="icon-btn" aria-label="Close">✕</button></div>
+    <div class="sheet-head"><h2>Settings</h2><span class="sheet-tools"><button id="set-fold-all" class="sm" title="Open or close all cards (saved in this browser)">Shrink all</button><button id="btn-close" class="icon-btn" aria-label="Close">✕</button></span></div>
 
     <div class="set-cols">
       <div class="set-col">
@@ -330,6 +330,11 @@
         <p id="conn-info" class="muted"></p>
         <p id="auth-info" class="muted small"></p>
         <p id="mb-info" class="muted small"></p>
+      </section>
+      <section class="set-card hidden" id="radio-card" data-key="modem">
+        <h3 id="radio-title">Modem</h3>
+        <table class="kv small" id="radio-kv"></table>
+        <p id="radio-note" class="muted small"></p>
       </section>
       <section class="set-card" id="lotw-card">
         <h3>LoTW confirmation</h3>

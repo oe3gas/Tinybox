@@ -8,6 +8,7 @@ fixed values (server.c: "Fake it to keep application happy").
     dw.agw_port, dw.kiss_port              # AGWPORT / KISSPORT (None if not set)
     ch = dw.channel(0)                     # the radio channel
     ch.baud, ch.txdelay_ms, ch.paclen, ch.maxframe, ch.emaxframe ...
+    dw.audio(0), ch.ptt                    # CR140: ADEVICE (in, out) and PTT, as written
 
 direwolf.conf: one directive per line, '#' starts a comment, names are not
 case sensitive. CHANNEL n switches the channel the following MODEM, TXDELAY,
@@ -18,6 +19,7 @@ in the file are None - the caller keeps its own default.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -34,6 +36,7 @@ class Channel:
     txdelay_ms: int | None = None    # TXDELAY <10 ms units>
     persist: int | None = None       # PERSIST 0..255
     slottime_ms: int | None = None   # SLOTTIME <10 ms units>
+    ptt: str | None = None           # CR140: PTT ... as written, e.g. "COM20 RTS"
 
 
 @dataclass
@@ -47,6 +50,14 @@ class DirewolfConf:
     frack_sec: int | None = None     # Direwolf's T1 (only shown: Direwolf does AX.25 over AGW)
     retry: int | None = None         # Direwolf's N2
     channels: dict[int, Channel] = field(default_factory=dict)
+    # CR140: ADEVICE<n> per radio n: (input, output) as written (the output = the input
+    # when only one name is given). Only what the file says - Direwolf takes the
+    # Windows default device when a name matches nothing (CR139).
+    adevices: dict[int, tuple[str, str]] = field(default_factory=dict)
+
+    def audio(self, chan: int = 0) -> tuple[str, str] | None:
+        """CR140: (input, output) of the radio that channel chan belongs to."""
+        return self.adevices.get(chan // 2)
 
     def channel(self, n: int = 0) -> Channel:
         """The values of radio channel n (empty Channel if not described)."""
@@ -78,6 +89,14 @@ def _int(word: str) -> int | None:
         return None
 
 
+_WORD = re.compile(r'"([^"]*)"|(\S+)')
+
+
+def _words(line: str) -> list[str]:
+    """Split like Direwolf: "a name with blanks" is one word."""
+    return [q if q or b == "" else b for q, b in _WORD.findall(line)]
+
+
 def parse(text: str, path: Path = Path(FILE_NAME)) -> DirewolfConf:
     dw = DirewolfConf(path=path)
     chan = 0
@@ -92,6 +111,12 @@ def parse(text: str, path: Path = Path(FILE_NAME)) -> DirewolfConf:
             # ADEVICE (first radio, channel 0) or ADEVICE<n>: radio n, channels 2n, 2n+1
             n = _int(key[7:]) if len(key) > 7 else 0
             chan = 2 * n if n is not None else chan
+            if n is not None:
+                aw = _words(line)[1:3]
+                if aw:
+                    dw.adevices[n] = (aw[0], aw[1] if len(aw) > 1 else aw[0])
+        elif key == "PTT" and args:
+            dw.channels.setdefault(chan, Channel()).ptt = " ".join(args)
         elif key == "CHANNEL" and first is not None:
             chan = first
         elif key == "MODEM" and first is not None:

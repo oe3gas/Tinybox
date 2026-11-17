@@ -130,12 +130,18 @@ class KissPort(SharedKissPort):
                 self.cfg.img_rate = estimate_rate(self.link_cfg.air_baud)
         tnc = status.get("tnc") or {}
         self.hub = {"tnc": tnc.get("name"), "state": tnc.get("state"),
-                    "error": tnc.get("last_error")}
+                    "error": tnc.get("last_error"),
+                    # CR140: for the kisshub card in the settings
+                    "version": status.get("version"), "port": tnc.get("port"),
+                    "air_baud": status.get("air_baud")}
 
     def radio_state(self) -> dict:
         h = self.hub or {}
         return {"via": "kiss", "up": self.kiss.connected.is_set(), "tnc": h.get("tnc"),
-                "tnc_state": h.get("state"), "error": h.get("error")}
+                "tnc_state": h.get("state"), "error": h.get("error"),
+                "kiss": f"{self.cfg.kiss_host}:{self.cfg.kiss_port}",          # CR140
+                "hub": h.get("version"), "port": h.get("port"),
+                "air_baud": h.get("air_baud"), "status_port": self.cfg.kiss_status_port}
 
 
 class AxudpPort(KissPort):

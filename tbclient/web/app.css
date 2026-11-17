@@ -473,6 +473,16 @@ li.msg.flash .bubble { outline: 2px solid var(--accent); transition: outline-col
 .set-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   padding: 2px 14px 10px; margin-top: 12px; min-width: 0; }
 .set-card h3 { margin-top: 12px; }
+/* CR140: cards open and close with a click on the title */
+.set-card > h3 { cursor: pointer; user-select: none; }
+.set-card > h3::before { content: "▾"; display: inline-block; width: 1.1em; color: var(--muted); }
+.set-card.closed > h3::before { content: "▸"; }
+.set-card.closed > :not(h3) { display: none; }
+.set-card.closed { padding-bottom: 2px; }
+.sheet-tools { display: inline-flex; gap: 8px; align-items: center; }
+.kv { border-collapse: collapse; margin: 2px 0 6px; }
+.kv th { text-align: left; font-weight: normal; color: var(--muted); padding: 1px 12px 1px 0; vertical-align: top; white-space: nowrap; }
+.kv td { padding: 1px 0; word-break: break-word; }
 .set-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }
 .set-col { min-width: 0; }
 @media (max-width: 640px) { .set-cols { grid-template-columns: 1fr; } }

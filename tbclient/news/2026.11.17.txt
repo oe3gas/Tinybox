@@ -1,0 +1,2 @@
+- Settings: Karten auf-/zuklappbar, oben Expand all/Shrink all (CR140)
+- Neue Karte Direwolf bzw. kisshub: Fork/Version, Audio, PTT bzw. TNC, Port

@@ -13,6 +13,7 @@ function render() {
   renderViewBtns();
   renderActbar();                                   // CR110
   renderModem();
+  renderRadioCard();                                // CR140
   renderLotw();                                     // CR113
   renderFreq();
   autoTerm();

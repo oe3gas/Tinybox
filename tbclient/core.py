@@ -1224,7 +1224,13 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
         if isinstance(self.port, KissPort):
             return self.port.radio_state()
         if self.port is not None:
-            return {"via": "agw", "up": self.port.agw_up.is_set()}
+            fork = getattr(self.port, "fork", None) or {}
+            c = self.cfg
+            return {"via": "agw", "up": self.port.agw_up.is_set(),
+                    # CR140: for the Direwolf card in the settings
+                    "agw": f"{c.agw_host}:{c.agw_port}", "channel": c.radio_port,
+                    "fork": fork.get("version", ""), "features": fork.get("features", []),
+                    "conf": c.direwolf_conf, "audio": list(c.dw_audio), "ptt": c.dw_ptt}
         return {"via": "telnet", "up": True}
 
     def _term_of(self, ch: int | None) -> list:
