@@ -196,6 +196,7 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
                                        lambda: self.target, self.send_line, lambda: "",
                                        lambda text: self.console.append("*** " + text))
         self.relay_contests: dict[str, ContestSlot] = {}      # CR122: through the box
+        self.forecast: dict | None = None                     # CR72: the last forecast
         self.prefix = PrefixGame(self.send_line, lambda: self.cfg.mycall.upper(),    # CR123
                                  self.game_lang)
         self.leaderboard = Leaderboard(self.send_line)                                 # CR126
@@ -926,6 +927,44 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
 
     # --- the lines of the TinyBox (R1); login: login.py, board: board.py, games: gameplay.py
 
+    # --- CR72: the weather forecast for a locator ----------------------------------
+
+    def forecast_act(self, act: str, loc: str = "") -> bool:
+        """get: ask the box (//GETFC; without a locator it takes the one of the
+        profile), close: forget it."""
+        if act == "close":
+            self.forecast = None
+        elif act == "get":
+            if "FC" not in self.caps or not self.handshake_done:
+                return False
+            loc = loc.strip().upper()[:8]
+            self.forecast = {"pending": True, "loc": loc, "at": time.time()}
+            self.send_line(f"//GETFC {loc}".rstrip())
+        else:
+            return False
+        self.changed()
+        return True
+
+    def _c_fc(self, cmd: str, rest: str, line: str) -> None:
+        """//FC <loc> <run> <lat> <lon> <steps> or //FC - <reason> (tinybox/forecast.py)."""
+        p = rest.split(" ", 4)
+        if p[0] == "-":
+            self.forecast = {"err": rest[2:].strip(), "at": time.time()}
+        elif len(p) == 5:
+            def num(x, scale=10):
+                return None if x == "" else int(x) / scale
+            steps = []
+            for st in p[4].split(";"):
+                f = (st.split(",") + [""] * 7)[:7]
+                if not isnum(f[0]):
+                    continue
+                steps.append({"t": int(f[0]), "sky": num(f[1], 1), "temp": num(f[2]),
+                              "wdir": num(f[3], 1), "wspd": num(f[4]), "gust": num(f[5]),
+                              "rr": num(f[6])})
+            self.forecast = {"loc": p[0], "run": p[1], "lat": p[2], "lon": p[3],
+                             "steps": steps, "at": time.time()}
+        self.changed()
+
     def _control(self, line: str) -> None:
         """A //-line of the TinyBox goes to its handler (_CONTROL, Refactoring R1).
         Anything else - e.g. //CLIENT echoed by a terminal - is ignored."""
@@ -957,6 +996,7 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
         "OUT": "_c_out",
         "SYS": "_c_sys",
         "CT": "_c_ct",
+        "FC": "_c_fc",                  # CR72: the weather forecast
         "GAME": "_c_game",
         "GAMES": "_c_games",
         "PR": "_c_pr",
@@ -1109,6 +1149,8 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
             "client": self.handshake_done and bool(self.caps or self.boards),
             "term_ok": self.term_ok(),                                  # CR130
             "lang": self.game_lang(),                                   # CR129: the games
+            "fc_ok": "FC" in self.caps and self.handshake_done,          # CR72
+            "forecast": self.forecast,
             "ui": "UI" in self.caps,
             "boards": self.boards, "board": self.board,
             "members": sorted(self.members),

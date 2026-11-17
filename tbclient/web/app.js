@@ -33,6 +33,7 @@ async function poll() {
       since = S.version;
       if (S.lang) { Contest.setLang(S.lang); Prefix.setLang(S.lang); Chess.setLang(S.lang); }   // CR129
       render();
+      renderForecast();                                  // CR72
       checkMentions();                                   // CR85
       if (!$("sheet").classList.contains("hidden")) renderSymbols();
       if (linkCall) renderLink();

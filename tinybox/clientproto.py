@@ -75,6 +75,7 @@ station ignores the line or calls it an unknown command.
 
 Other client commands:
     //BOARDS              -> //B <n> <board> <keep> <users> <description> ... //BEND
+    //GETFC [loc]         (cap FC, CR72) weather forecast -> //FC <loc> <run> ... (forecast.py)
     //CMD <line>          (cap CMD, CR130) the line as a mailbox command - also inside a
                           board, which the session does not leave; never chat text
     //RESEND <a>-<b>      (inside a board) events a..b again, only to this client
@@ -144,7 +145,7 @@ from prcore.calls import base_call
 from prcore.release import RELEASE
 from prcore.text import isnum
 
-from . import clientnews, clientsync, contest, gamereport, games, prefixgame, profiles
+from . import clientnews, clientsync, contest, forecast, gamereport, games, prefixgame, profiles
 
 if TYPE_CHECKING:
     from .session import Session
@@ -316,6 +317,7 @@ COMMANDS: dict[str, Command] = {
     "ADM": Command(lambda s, c: _admin(s, c.rest)),
     "BOARDS": Command(lambda s, c: _boards(s)),
     "CMD": Command(lambda s, c: _cmd(s, c.rest), cap="CMD"),               # CR130
+    "GETFC": Command(lambda s, c: forecast.client_getfc(s, c.rest), cap="FC"),   # CR72
     "RESEND": Command(lambda s, c: _resend(s, c.args)),
     "LOST": Command(lambda s, c: _resend(s, c.args, replay=False)),
     "SYM": Command(lambda s, c: _symbol(s, c.args)),
@@ -573,6 +575,8 @@ def _client_ok(s: Session, info: ClientInfo) -> None:
             extra += f" news={s.service.client_news_id}"
     if "NUM" in caps:                 # CR33: how the TinyBox turns the counters into bars
         extra += " " + s.service.chat.quality_config()
+    if not forecast.available():
+        caps.discard("FC")            # CR72: without the GeoSphere scripts no forecast
     if "ADM" in caps and not admin_allowed(s):
         caps.discard("ADM")           # CR94: only the sysop with his own released key
     if "PROF" in caps:                # CR73: the client sends or fetches only on a change

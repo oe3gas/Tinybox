@@ -1,0 +1,1 @@
+- Wetterprognose 48 h fuer den eigenen Locator: Station > Weather forecast (CR72)

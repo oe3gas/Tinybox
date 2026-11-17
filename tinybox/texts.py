@@ -45,6 +45,7 @@ HELP = [
     "             e.g. SP OE1ABC @ OE1XAB.#WIE.AUT.EU",
     "  QSO        Your last connects to this mailbox (QSO 30: the last 30)",
     "  STAT       Link quality of your radio connection (STAT ALL: all stations)",
+    "  GETFC [loc] Weather forecast 48 h for your locator (or loc, e.g. JN88BN)",
     "  VERsion    Version of this TinyBox",
     "Capital letters: enough to type, e.g. MYL for MYLoc (CR134).",
 ]

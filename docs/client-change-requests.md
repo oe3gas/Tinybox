@@ -2078,7 +2078,7 @@ Die Klarheit eines eigenen Felds liefert eine Vorschau unter dem Eingabefeld.
   Digipeater → TinyBox über KISS, beide Richtungen durch den Digi). Client 2026.10.18.7.
 - **Funktest und Abnahme** (OE3GAS, 18.10.2026): getestet und abgenommen ✅
 
-## CR72 – Wetterprognose auf Anfrage: User fordert die Prognose für seinen Locator an (offen, erfasst 24.10.2026)
+## CR72 – Wetterprognose auf Anfrage: User fordert die Prognose für seinen Locator an (✅ 17.11.2026, Client 2026.11.17.3)
 
 ### Erfassung (OE3GAS, 24.10.2026)
 
@@ -2104,6 +2104,29 @@ Aufgabenplanung (Weg 1, PLANUNG Abschnitt 20).
   automatisch in Weg 1 aufnehmen?
 - Offen: Nur für angemeldete User oder für jeden Connect? Ausgabe-Schritte (3 h / 48 h wie
   Weg 1, im Terminal evtl. 24 h)?
+
+### Entscheidungen (OE3GAS, 17.11.2026)
+
+1. Befehl **`GETFC [Locator]`** (nicht `WX` – das ist die Rubrik).
+2. **Alle** dürfen anfragen, jeder Connect.
+3. **48 h** in 3-h-Schritten, auch im Terminal.
+4. Oft angefragte Locators kommen **nicht** automatisch in die Prognose-Bulletins.
+
+### Umgesetzt (17.11.2026)
+
+- `tinybox/forecast.py`: `GETFC [Locator]` im Terminal (ohne Locator der aus dem Profil, MYLOC),
+  Antwort sofort „Forecast for … is fetched …“, dann der Text von `geosphere_prognose.bericht()`
+  und der Prompt. Abruf im Hintergrund-Thread mit 25 s Zeitlimit; Fehler als eine Zeile.
+- Client: Cap `FC`, `//GETFC [Locator]` → `//FC <loc> <lauf> <lat> <lon> <schritt>;…` (Zahlen
+  in 0,1-Einheiten, etwa 300–400 Bytes statt rund 1 kB Text) bzw. `//FC - <Grund>`. Im Client
+  „Weather forecast“ unter „Station“ (nur wenn die Box `FC` hat): Dialog mit Locator (vorbelegt
+  aus dem Profil) und Tabelle 48 h. Die Grafik (Meteogramm wie im Listener) kann später kommen.
+- Zwischenspeicher je Locator 1 h (das Modell rechnet alle 3 h), höchstens 6 Anfragen je
+  Station und Stunde. Kein Bulletin, keine brocast-Seite.
+- **Nur wo die GeoSphere-Skripte liegen:** `geosphere_prognose.py` ist nicht im Release-Paket
+  (`!/geosphere_*`). Ohne das Skript meldet `GETFC` „this box has no forecast“, und die Box
+  bietet dem Client `FC` nicht an.
+- Tests: `tests/test_cr72.py` (mit der gespeicherten API-Antwort, ohne Netz).
 
 ## CR73 – Benutzerprofil: Name, Locator, Home-BBS in TinyBox und Client (✅ umgesetzt 24.10.2026, Funktest offen)
 
@@ -5980,7 +6003,7 @@ Die Konsole prüfte nur den AGW-Port.
 - Bewusst nicht: Direwolf nicht starten oder anhalten – mit dem Standardgerät kann ein Testbetrieb
   gewollt sein; die Konsole sagt es nur deutlich.
 
-## CR140 – Settings: Karten aufklappbar, „Expand all / Shrink all“, Karte Direwolf bzw. kisshub (✅ 17.11.2026, Client 2026.11.17)
+## CR140 – Settings: Karten aufklappbar, „Expand all / Shrink all“, Karte Direwolf bzw. kisshub (✅ 17.11.2026, Client 2026.11.17.3)
 
 **Wunsch OE3GAS (17.11.2026).** In den Settings des TBClient die einzelnen Karten aufklappbar
 machen, oben im Kopf ein Knopf „Expand all / Shrink all“. Zusätzliche Karte „Direwolf“ bzw.

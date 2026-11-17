@@ -1208,3 +1208,16 @@ button.ct-fold { padding: 2px 10px; font-size: 14px; line-height: 1.2; }
 /* CR120: a terminal user in "In this board" */
 .pill-term { display: inline-block; font-size: 10px; font-weight: 600; line-height: 15px;
   padding: 0 6px; border-radius: 8px; background: #f5d14a; color: #3a2e00; vertical-align: 1px; }
+
+/* CR72: the weather forecast */
+.fc-dlg { width: min(560px, calc(100vw - 32px)); border: 0; border-radius: 12px; padding: 18px 22px; }
+.fc-dlg::backdrop { background: rgba(17, 24, 33, .45); }
+.fc-head { display: flex; justify-content: space-between; align-items: center; }
+.fc-head h2 { margin: 0; font-size: 18px; }
+.fc-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+.fc-form input { width: 9ch; text-transform: uppercase; }
+.fc-tab { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fc-tab th { text-align: right; font-weight: 600; padding: 3px 6px; border-bottom: 1px solid #ccd; }
+.fc-tab td { text-align: right; padding: 2px 6px; }
+.fc-tab tr.fc-day td { text-align: left; font-weight: 600; padding-top: 8px; }
+.fc-err { color: #a3261f; }

@@ -62,6 +62,7 @@
       <button id="nav-terminal" class="nav-item" title="Type TinyBox commands (L, R, F, QSO ...) directly - the TinyBox of the chat channel"><span><span class="ic">▸</span> TinyBox terminal</span></button>
       <button id="nav-monitor" class="nav-item" title="Monitor: everything heard (Alt+0)"><span><span class="ic">▸</span> Monitor</span></button>
       <button id="nav-stats" class="nav-item" title="APRS statistics of the channel: stations, devices, digipeaters, sins"><span><span class="ic">▸</span> APRS statistics</span></button>
+      <button id="nav-fc" class="nav-item hidden" title="Weather forecast 48 h for your locator - from the TinyBox (GeoSphere Austria)"><span><span class="ic">▸</span> Weather forecast</span></button>
     </section>
     <section id="nav-games" class="navsec sec-games hidden" aria-label="Spiele">
       <div class="nav-h"><span>Spiele</span></div>
@@ -259,6 +260,16 @@
       <div class="st-btns"><button value="no">Cancel</button><button value="yes" class="primary">Start test</button></div>
     </form>
   </dialog>
+  <dialog id="fc-dlg" class="fc-dlg" aria-labelledby="fc-h">
+    <div class="fc-head"><h2 id="fc-h">Weather forecast</h2><button id="fc-close" class="icon-btn" aria-label="Close">✕</button></div>
+    <form id="fc-form" class="fc-form">
+      <label for="fc-loc">Locator</label>
+      <input id="fc-loc" maxlength="8" placeholder="your locator" autocomplete="off" spellcheck="false">
+      <button type="submit" class="primary">Fetch</button>
+      <span class="small muted">48 h in 3-h steps, from the TinyBox</span>
+    </form>
+    <div id="fc-body"></div>
+  </dialog>
   <aside id="people" class="people" aria-label="Stations">
     <div class="people-head"><span class="nav-h">In this board</span><button id="people-close" class="icon-btn" aria-label="Close">✕</button></div>
     <ul id="members" class="plist"></ul>
@@ -425,6 +436,7 @@
 <script src="/app/peer.js"></script>
 <script src="/app/monitor.js"></script>
 <script src="/app/status.js"></script>
+<script src="/app/forecast.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

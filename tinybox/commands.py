@@ -11,7 +11,7 @@ from prcore.calls import base_call
 from prcore.profile import CALL_RE as BASE_CALL_RE, ProfileError
 from prcore.text import client_safe, isnum
 
-from . import addressing, chatcmd, dictfile, profiles, rights, texts
+from . import addressing, chatcmd, dictfile, forecast, profiles, rights, texts
 from .service import ServiceError
 from .store import Message
 
@@ -385,6 +385,7 @@ COMMANDS: dict[str, Callable[[Session, str], None]] = {
     "E": cmd_edit,
     "F": cmd_find,
     "FIND": cmd_find,
+    "GETFC": forecast.cmd_getfc,          # CR72: weather forecast for a locator
     "H": cmd_help,
     "?": cmd_help,
     "HELP": cmd_help,

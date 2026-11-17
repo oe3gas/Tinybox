@@ -320,6 +320,8 @@ class WebServer:
                                       str(data.get("to", ""))[:12])
             elif path == "/api/games":             # CR126: {"act": top|close, "arg": game} leaderboards
                 ok = core.games_act(str(data.get("act", "")), str(data.get("arg", ""))[:20])
+            elif path == "/api/forecast":          # CR72: {"act": get|close, "loc"}
+                ok = core.forecast_act(str(data.get("act", "")), str(data.get("loc", "")))
             elif path == "/api/prefix":            # CR123: {"act", "arg"} Prefix raten in the board
                 ok = core.prefix_act(str(data.get("act", "")), str(data.get("arg", ""))[:40])
             elif path == "/api/peer/clear":        # CR78: {"ch": n} - delete the chat history

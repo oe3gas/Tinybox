@@ -39,6 +39,7 @@ CAPS = {
     "GAME": "signed game results (CR127)",
     "PRM": "//P after a terminal command: the client shows the prompt (CR134)",
     "CMD": "//CMD <line>: a mailbox command also inside a board (CR130)",
+    "FC": "//GETFC [locator] -> //FC: the weather forecast, compact (CR72)",
     "Z": "compressed texts (binary: AX.25 only)",
     "IMG": "images in a board (binary)",
     "BFILE": "files in a board (binary, CR86)",
