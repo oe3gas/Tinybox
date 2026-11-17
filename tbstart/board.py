@@ -94,11 +94,14 @@ def row(r: sv.Run, selected: bool, now: float) -> str:
     state = r.state
     if state == sv.ENDED and r.exit_code is not None:
         state = f"beendet ({r.exit_code})"
+    warn = bool(r.warnings) and r.alive()
+    if warn:
+        state += " ⚠"
     pid = str(r.pid) if r.pid else "–"
     up = duration(now - r.started) if r.alive() else "–"
     cells = [f"{r.nr:>3}", r.prog.name, r.prog.role or "–", state, port_text(r), pid, up,
              str(len(r.errors))]
-    color = STATE_COLOR.get(r.state, "")
+    color = YELLOW if warn and r.state == sv.RUNNING else STATE_COLOR.get(r.state, "")
     parts = []
     for (_, w), text, i in zip(COLS, cells, range(len(cells))):
         cell = fit(text, w - 1) + " "
@@ -112,6 +115,8 @@ def row(r: sv.Run, selected: bool, now: float) -> str:
     text = "".join(parts)
     if r.note:
         text += c(GREY, r.note)
+    elif warn:
+        text += c(YELLOW, " · ".join(r.warnings))
     if selected:
         text = SELECT + text.replace(RESET, RESET + SELECT)
     return text

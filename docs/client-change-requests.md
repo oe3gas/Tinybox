@@ -1,7 +1,7 @@
 # TinyBox-Client – Change Requests
 
 Gesammelt beim ersten Test PC1 ↔ PC2 (OE3GAS, OE3TEC) am 09.10.2026, ergänzt laufend.
-Stand: 15.11.2026 (CR137; CR131; CR130; CR129; CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
+Stand: 17.11.2026 (CR139; CR137; CR131; CR130; CR129; CR128; CR127; CR126; CR124; CR123; CR122; CR87–CR100 aus dem Security-Audit erfasst, PLANUNG 29; CR103 PLANUNG 30; CR104, CR105, CR106; CR110)
 
 ## Übersicht
 
@@ -5950,3 +5950,32 @@ Anordnung nach dem Entwurf auf der Design-Fläche (Konsolenfenster), Blättern m
     PTT, TNC-Profil, COM-Port und Baudrate. `-` leert einen optionalen Wert. Vorhandene Dateien
     bekommen die Antworten eingetragen statt aus der Vorlage neu (Chat-Boards, Bake … bleiben);
     `tbstart.conf` behält `tbclient`/`dxfeed`. Test: `tests/test_konfig.py`.
+
+## CR139 – Steuerkonsole: Direwolf ohne Soundkarte oder PTT-Port nicht als „läuft“ zeigen (✅ 17.11.2026, tbstart 2026.11.17)
+
+**Beobachtung OE3GAS (17.11.2026, PC1).** Auf PC1 muss vor Direwolf der microHAM „USB Device
+Router“ laufen; erst er stellt die Soundkarte („Microham vom/zum TS-790“) und den virtuellen
+COM20 für die PTT bereit. Ohne Router startete Direwolf trotzdem, und die Steuerkonsole zeigte
+„läuft“ mit AGW :8000 ✓.
+
+**Ursache.** Direwolf (Windows) bricht in beiden Fällen nicht ab:
+- `ADEVICE Microham` passt auf kein Gerät → Meldung `"Microham" doesn't match any of the input
+  devices.` (bzw. output) und Direwolf nimmt das **Windows-Standardgerät** (Log 16.11. 20:18:
+  Empfang „Mikrofon (USB Audio CODEC)“, Senden „Line 2 (Virtual Audio Cable)“).
+- `PTT COM20 RTS`, COM20 fehlt → `ERROR can't open device COM20 for channel 0 PTT control.` und
+  Direwolf läuft ohne PTT weiter – der Sender wird nicht getastet.
+Die Konsole prüfte nur den AGW-Port.
+
+**Umsetzung.**
+- `tbstart/supervisor.py`: `DIREWOLF_PROBLEMS` erkennt in der Ausgabe von Direwolf: Audio-Eingang/
+  -Ausgang nicht gefunden (Name oder Nummer), Audio-Gerät lässt sich nicht öffnen, PTT-Port lässt
+  sich nicht öffnen. Je Problem einmal eine Zeile `[WARN] Direwolf: …` in den Meldungen (auch
+  mit `e` „nur Fehler“ sichtbar und im Log), die Direwolf-Zeile selbst wird ein Fehlerblock
+  (Zone 3, Fehleranzahl). Beim nächsten Start von Direwolf sind die Warnungen weg.
+- `tbstart/board.py`: Zustand **gelb „läuft ⚠“**, dahinter die Warnungen in Kurzform, z. B.
+  `Audio-Eingang "Microham" nicht gefunden - Windows-Standardgerät · PTT-Port COM20 lässt sich
+  nicht öffnen - kein Senden`.
+- Abhilfe für den Betreiber: microHAM-Router starten, dann Direwolf mit `r` neu starten.
+- Tests: `tests/test_tbstart.py` (DirewolfProblemTests).
+- Bewusst nicht: Direwolf nicht starten oder anhalten – mit dem Standardgerät kann ein Testbetrieb
+  gewollt sein; die Konsole sagt es nur deutlich.

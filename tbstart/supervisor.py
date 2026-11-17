@@ -43,6 +43,34 @@ MAX_BLOCK = 40
 JOIN_WITHIN = 0.5      # s: error starts this close together are one block
 MAX_BLOCKS = 50
 
+# Direwolf only warns and carries on when the sound card or the PTT port is not there
+# (e.g. microHAM USB Device Router not started): no match for ADEVICE -> Windows
+# default device, PTT port cannot be opened -> no PTT. The console used to show
+# "läuft" anyway (AGW port open). These lines mark Direwolf yellow (CR139).
+DIREWOLF_PROBLEMS = (
+    (re.compile(r'"(?P<dev>[^"]*)" doesn\'t match any of the input devices'),
+     'Audio-Eingang "{dev}" nicht gefunden - Windows-Standardgerät'),
+    (re.compile(r'"(?P<dev>[^"]*)" doesn\'t match any of the output devices'),
+     'Audio-Ausgang "{dev}" nicht gefunden - Windows-Standardgerät'),
+    (re.compile(r"Invalid input \(receive\) audio device number (?P<dev>-?\d+)"),
+     "Audio-Eingang Nr. {dev} gibt es nicht"),
+    (re.compile(r"Invalid output \(transmit\) audio device number (?P<dev>-?\d+)"),
+     "Audio-Ausgang Nr. {dev} gibt es nicht"),
+    (re.compile(r"Could not open audio device for (?P<dev>input|output)"),
+     "Audio-Gerät ({dev}) lässt sich nicht öffnen"),
+    (re.compile(r"can't open device (?P<dev>\S+) for channel \d+ PTT control"),
+     "PTT-Port {dev} lässt sich nicht öffnen - kein Senden"),
+)
+
+
+def direwolf_problem(line: str) -> str | None:
+    """The short warning for a Direwolf start line, or None."""
+    for pattern, text in DIREWOLF_PROBLEMS:
+        m = pattern.search(line)
+        if m:
+            return text.format(dev=m.group("dev"))
+    return None
+
 # states (shown as they are)
 OFF, READY, WAITING, STARTING, RUNNING = "aus", "bereit", "wartet", "startet", "läuft"
 STOPPING, STOPPED, ENDED, RESTARTING = "stoppt", "gestoppt", "beendet", "Neustart"
@@ -66,6 +94,7 @@ class Run:
     killed: bool = False                         # the last stop needed kill()
     note: str = ""
     login_url: str | None = None
+    warnings: list = field(default_factory=list)   # Direwolf: sound card/PTT missing
     errors: list = field(default_factory=list)     # blocks: [time, [lines]]
     _block: list | None = None
 
@@ -107,10 +136,15 @@ class Supervisor:
     def line(self, run: Run | None, channel: str, text: str) -> None:
         text = ANSI.sub("", text.rstrip("\r\n"))
         tag = run.prog.tag if run else "tbstart"
+        new_warning = None
         with LOCK:
             self.messages.append((time.time(), tag, channel, text))
             if run is not None:
-                self._watch_errors(run, text)
+                problem = direwolf_problem(text) if run.prog.key == "direwolf" else None
+                self._watch_errors(run, text, problem is not None)
+                if problem and problem not in run.warnings:
+                    run.warnings.append(problem)
+                    new_warning = problem
                 m = LOGIN.search(text)
                 if m:
                     run.login_url = m.group(0)
@@ -119,16 +153,19 @@ class Supervisor:
             self.log.info("%s", shown)
         if self.sink is not None:
             self.sink(run, channel, text)
+        if new_warning is not None:
+            self.note(f"[WARN] {run.prog.name}: {new_warning}")
 
     def note(self, text: str) -> None:
         """A line of the console itself."""
         self.line(None, "out", f"[tbstart] {time.strftime('%H:%M:%S')} {text}")
 
-    def _watch_errors(self, run: Run, text: str) -> None:
-        if is_error_start(text) and run._block is not None and run.errors \
+    def _watch_errors(self, run: Run, text: str, problem: bool = False) -> None:
+        start = problem or is_error_start(text)
+        if start and run._block is not None and run.errors \
                 and time.time() - run.errors[-1][0] < JOIN_WITHIN:
             run._block.append(text)       # [ERROR] on stdout + its traceback on stderr:
-        elif is_error_start(text):       # two pipes, either may come first - one block
+        elif start:                      # two pipes, either may come first - one block
             run._block = [text]
             run.errors.append([time.time(), run._block])
             del run.errors[:-MAX_BLOCKS]
@@ -183,6 +220,7 @@ class Supervisor:
             run.state, run.note, run.port_ok, run.stopping = STARTING, "", None, False
             run.killed = False
             run._block = None
+            run.warnings = []
         for stream, channel in ((proc.stdout, "out"), (proc.stderr, "err")):
             threading.Thread(target=self._pump, args=(run, proc, stream, channel),
                              daemon=True).start()

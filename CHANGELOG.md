@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- **Steuerkonsole: Direwolf ohne Soundkarte oder PTT-Port** (CR139, tbstart 2026.11.17): findet Direwolf
+  das Audio-Gerät aus `ADEVICE` nicht (es nimmt dann still das Windows-Standardgerät) oder lässt sich der
+  PTT-Port nicht öffnen (z. B. microHAM-Router nicht gestartet), zeigt die Konsole Direwolf gelb
+  „läuft ⚠“ mit dem Grund und eine `[WARN]`-Zeile statt nur „läuft“.
+
 - **Dokumentation überarbeitet** (PLANUNG 32a): README nur noch Überblick, Schnellstart und Liste der
   Unterlagen. MANUAL neu mit 1.3 „Woher die Inhalte kommen“ (Eingangsordner, TinyBox → brocast, Station
   oder Listener) und Kapitel 6 „TinyBox im Betrieb“ (Starten, Telnet, Web-GUI, vollständige

@@ -295,5 +295,62 @@ class BoardTests(unittest.TestCase):
         self.assertNotIn("11:00:00 one", text)
 
 
+class DirewolfProblemTests(unittest.TestCase):
+    """CR139: Direwolf starts without the sound card / PTT port - say so."""
+
+    START = ('"Microham" doesn\'t match any of the input devices.',
+             '"Microham" doesn\'t match any of the output devices.',
+             "Available audio input devices for receive (*=selected):",
+             " *  3: Mikrofon (USB Audio CODEC )   (channel 0)",
+             "ERROR can't open device COM20 for channel 0 PTT control.",
+             "Channel 0: 1200 baud, AFSK 1200 & 2200 Hz, A+, 48000 sample rate, Tx AX.25.")
+
+    def make(self):
+        prog = programs.Program("direwolf", "Direwolf", "dwolf", ["x"], Path("."), True,
+                                8000, "AGW", "Modem", modem=True)
+        return sv.Supervisor([prog])
+
+    def test_the_lines_direwolf_prints(self):
+        self.assertEqual(sv.direwolf_problem(self.START[0]),
+                         'Audio-Eingang "Microham" nicht gefunden - Windows-Standardgerät')
+        self.assertEqual(sv.direwolf_problem(self.START[4]),
+                         "PTT-Port COM20 lässt sich nicht öffnen - kein Senden")
+        self.assertEqual(sv.direwolf_problem("Invalid output (transmit) audio device number 7."),
+                         "Audio-Ausgang Nr. 7 gibt es nicht")
+        self.assertIsNone(sv.direwolf_problem(self.START[5]))
+
+    def test_warnings_error_block_and_board(self):
+        sup = self.make()
+        r = sup.runs[0]
+        for t in self.START + self.START:                     # twice: only once each
+            sup.line(r, "out", t)
+        self.assertEqual(len(r.warnings), 3)
+        warn = [m[3] for m in sup.messages if "[WARN]" in m[3]]
+        self.assertEqual(len(warn), 3)
+        self.assertIn("Direwolf: PTT-Port COM20", warn[-1])
+        self.assertTrue(r.errors)                              # zone 3 shows the lines
+        r.state = sv.RUNNING
+        with mock.patch.object(sv.Run, "alive", return_value=True):
+            row = board.row(r, False, time.monotonic())
+            text = "\n".join(board.ANSI.sub("", x)
+                             for x in board.render(sup, board.UI(only_errors=True), 160, 40, "PC1"))
+        self.assertIn(board.YELLOW + "läuft ⚠", row)
+        self.assertIn("PTT-Port COM20", board.ANSI.sub("", row))
+        self.assertIn("[WARN] Direwolf: Audio-Ausgang", text)
+
+    def test_only_direwolf_and_cleared_on_start(self):
+        prog = programs.Program("tbclient", "TBClient", "tbcli", ["x"], Path("."), True)
+        sup = sv.Supervisor([prog])
+        sup.line(sup.runs[0], "out", self.START[4])
+        self.assertEqual(sup.runs[0].warnings, [])
+        sup = self.make()
+        r = sup.runs[0]
+        sup.line(r, "out", self.START[4])
+        r.prog.cmd = [sys.executable, "-c", "pass"]
+        sup.start(r)
+        self.assertEqual(r.warnings, [])
+        sup.stop(r, wait=True)
+
+
 if __name__ == "__main__":
     unittest.main()
