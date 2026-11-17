@@ -90,6 +90,14 @@ class AgwClientTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertGreater(len(logs.records), 1)                       # the rest quietly
 
+    def test_parse_hw(self):
+        """CR140: the fork's 'A' answer, values with blanks up to the end of the line."""
+        hw = agwport.parse_hw(b"v=1\nadev0_in=Mikrofon (USB Audio CODEC)\nadev0_in_ok=0\n"
+                              b"ptt0=COM20 RTS\nrubbish\n")
+        self.assertEqual(hw, {"v": "1", "adev0_in": "Mikrofon (USB Audio CODEC)",
+                              "adev0_in_ok": "0", "ptt0": "COM20 RTS"})
+        self.assertEqual(agwport.parse_hw(b""), {})
+
     def test_parse_fork(self):
         self.assertEqual(agwport.parse_fork(b"fork=2026-11-15 features=Q,O,E"),
                          {"version": "2026-11-15", "features": ["E", "O", "Q"]})

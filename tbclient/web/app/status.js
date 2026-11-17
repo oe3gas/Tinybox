@@ -361,13 +361,24 @@ function renderRadioCard() {
     row("Version", r.fork ? `TinyBox fork ${r.fork}` : (r.up ? "original Direwolf (no TinyBox fork)" : "-"));
     if (r.fork) row("Fork features", (r.features || []).join(", ") || "-");
     row("AGW", `${r.agw}, channel ${r.channel}`);
-    const a = r.audio || [];
-    row("Audio input", a[0] || "-");
-    row("Audio output", a[1] || "-");
-    row("PTT", r.ptt || "-");
+    const a = r.audio || [], hw = r.hw;
+    if (hw) {                                     // the fork's 'A': as really opened
+      const dev = (name, okv, cfg) => name + (okv === false
+        ? `  ⚠ "${cfg || "?"}" not found` : "");
+      row("Audio input", dev(hw.in || "-", hw.in_ok, a[0]));
+      row("Audio output", dev(hw.out || "-", hw.out_ok, a[1]));
+      row("PTT", hw.ptt === "none" ? "none (VOX or no PTT)" : (hw.ptt || "-"));
+    } else {
+      row("Audio input", a[0] || "-");
+      row("Audio output", a[1] || "-");
+      row("PTT", r.ptt || "-");
+    }
     row("direwolf.conf", r.conf || "not given");
-    note = r.conf ? "Audio and PTT as written in direwolf.conf. If a device is missing, Direwolf "
-      + "takes the Windows default device or runs without PTT - see its window or the console."
+    note = hw ? (hw.in_ok === false || hw.out_ok === false
+        ? "A device name from direwolf.conf matches nothing: Direwolf uses the Windows default device. "
+          + "Start the device (e.g. the USB router) and restart Direwolf." : "Audio and PTT as opened by Direwolf.")
+      : r.conf ? "Audio and PTT as written in direwolf.conf (Direwolf without the TinyBox fork 2026.11.17 "
+        + "cannot tell what it really opened)."
       : "Set [agw] direwolf_conf in tbclient.conf to see audio devices and PTT here.";
   } else {
     $("radio-title").textContent = "kisshub";

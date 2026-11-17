@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 from prcore import linkq
 from prcore.agw import PID_NO_L3, Frame, via_data
-from prcore.agwport import AgwClient, parse_fork
+from prcore.agwport import AgwClient, parse_fork, parse_hw
 from prcore.ax25.frame import ui_frame as ax25_ui_frame
 
 from . import radio
@@ -221,6 +221,7 @@ class AgwPort(AgwClient):
         self.q_supported: bool | None = None
         # CR112: the fork tells what it can ('F'), sends events ('E') and own frames ('O')
         self.fork: dict = {}                      # {"version", "features"} from 'F'
+        self.hw: dict = {}                        # CR140: audio devices and PTT from 'A'
         self.events = False                       # 'E' switched on
         self.own_frames = False                   # 'O' switched on: 'T' not needed
         self.on_event = None                      # (call_from, call_to, text) -> None
@@ -241,6 +242,7 @@ class AgwPort(AgwClient):
         self.send("m")          # monitor on: Direwolf reports our own UI frames as 'T'
         self.q_supported = None                 # maybe another Direwolf now
         self.fork, self.events, self.own_frames = {}, False, False
+        self.hw = {}
         # CR112: TinyBox fork - what it can, events, own frames raw. An original
         # Direwolf logs "Unexpected Command" for each once and answers nothing.
         self.send("F")
@@ -278,6 +280,12 @@ class AgwPort(AgwClient):
                 self.q_supported = True
             log.info("Direwolf TinyBox fork %s: %s", self.fork["version"],
                      ",".join(self.fork["features"]))
+            if "A" in self.fork["features"]:          # CR140: devices as really opened
+                self.send("A")
+            return
+        if kind == "A":                     # CR140: audio devices and PTT (fork)
+            self.hw = parse_hw(data)
+            log.info("Direwolf audio/PTT: %s", ", ".join(f"{k}={v}" for k, v in self.hw.items()))
             return
         if kind == "E":                     # CR112: events (PTT, DCD, link, rx level)
             if not data:

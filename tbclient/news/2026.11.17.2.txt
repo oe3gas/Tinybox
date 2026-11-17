@@ -1,0 +1,1 @@
+- Karte Direwolf: Audio und PTT wie wirklich geoeffnet (Fork 2026.11.17, AGW A)

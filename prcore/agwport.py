@@ -30,6 +30,17 @@ def parse_fork(data: bytes) -> dict:
             "features": sorted(filter(None, words.get("features", "").split(",")))}
 
 
+def parse_hw(data: bytes) -> dict:
+    """'A' answer of the TinyBox Direwolf fork (CR140): one "key=value" per line, the
+    value up to the end of the line -> {"adev0_in": "Mikrofon (USB Audio CODEC)", ...}."""
+    out = {}
+    for line in data.decode("utf-8", "replace").splitlines():
+        k, sep, v = line.partition("=")
+        if sep and k.strip():
+            out[k.strip()] = v.strip()
+    return out
+
+
 class AgwClient:
     """Base class: keeps the AGW connection open. Subclasses fill in the hooks."""
 

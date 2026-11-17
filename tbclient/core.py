@@ -1219,6 +1219,19 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
         self.monitor.clear()
         self.changed()
 
+    def _dw_hw(self) -> dict | None:
+        """CR140: what the Direwolf fork really opened ('A') for the client's channel:
+        {"in", "out", "in_ok", "out_ok", "ptt"} - None without the fork's answer."""
+        hw = getattr(self.port, "hw", None) or {}
+        if not hw:
+            return None
+        ch = self.cfg.radio_port
+        a = f"adev{ch // 2}_"
+        ok = lambda v: {"1": True, "0": False}.get(v)
+        return {"in": hw.get(a + "in", ""), "out": hw.get(a + "out", ""),
+                "in_ok": ok(hw.get(a + "in_ok", "")), "out_ok": ok(hw.get(a + "out_ok", "")),
+                "ptt": hw.get(f"ptt{ch}", "")}
+
     def radio_state(self) -> dict:
         """The way to the radio: Direwolf (AGW), kisshub (KISS, with the TNC) or telnet."""
         if isinstance(self.port, KissPort):
@@ -1230,7 +1243,8 @@ class ClientCore(LoginMixin, BoardMixin, GamesMixin):
                     # CR140: for the Direwolf card in the settings
                     "agw": f"{c.agw_host}:{c.agw_port}", "channel": c.radio_port,
                     "fork": fork.get("version", ""), "features": fork.get("features", []),
-                    "conf": c.direwolf_conf, "audio": list(c.dw_audio), "ptt": c.dw_ptt}
+                    "conf": c.direwolf_conf, "audio": list(c.dw_audio), "ptt": c.dw_ptt,
+                    "hw": self._dw_hw()}
         return {"via": "telnet", "up": True}
 
     def _term_of(self, ch: int | None) -> list:

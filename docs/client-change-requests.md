@@ -6012,7 +6012,13 @@ Geräte wirklich gefunden hat, weiß nur Direwolf (CR139: sonst Windows-Standard
 PTT); die Steuerkonsole zeigt das, der Client nicht. Die Version eines Original-Direwolf ist
 über AGW nicht abfragbar ('R' liefert feste AGWPE-Werte).
 
-### Offen
-- Fork erweitern: in der 'F'-Antwort die **tatsächlich geöffneten** Audio-Geräte und den
-  PTT-Zustand mitschicken (z. B. `adev_in=… adev_out=… ptt=ok|fail`), dann zeigt die Karte Ist
-  statt Soll und warnt wie die Steuerkonsole.
+### Nachtrag: Ist statt Soll (✅ 17.11.2026, Client 2026.11.17.2, Fork 2026.11.17)
+- **Fork** (oe3gas/direwolf-tinybox `6ab1a0d`, Fork-Version 2026.11.17): neue AGW-Abfrage **`A`**, Feature `A`
+  in der 'F'-Antwort. Antwort je Zeile `key=value`: `adevN_in`/`adevN_out` (das Gerät, das Direwolf wirklich
+  genommen hat, sonst `Windows default device`), `adevN_in_cfg`/`_out_cfg` (aus ADEVICE), `adevN_in_ok`/`_out_ok`
+  (1/0, Linux `?`), `pttC` (z. B. `COM20 RTS`, `none`). Format in `TINYBOX.md` des Forks.
+- **Client:** fragt `A`, wenn der Fork es kann (`links.py`, `prcore/agwport.parse_hw`); die Karte zeigt dann die
+  geöffneten Geräte und den PTT-Port, bei nicht gefundenem Namen `⚠ "<name>" not found` und einen Hinweis.
+  Ohne Fork bleiben die Werte aus der direwolf.conf.
+- Tests: `tests/test_prcore_agwport.py` (test_parse_hw).
+- Offen: Funktest unter Windows mit echtem Gerät (Fork-Exe im Release-Zip).
