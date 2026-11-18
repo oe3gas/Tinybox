@@ -454,6 +454,10 @@ table.um-table tr.um-detail td { white-space: normal; padding: 0 10px 10px 10px;
 .um-detail .um-ssids { margin: 2px 0 0 0; padding-left: 60px; }
 .um-detail .um-key { margin-left: 60px; }
 .um-ssids { font-size: 12px; }
+.um-detail .um-log { margin: 8px 0 0 60px; }
+.um-loghead { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
+.um-logscroll { max-height: 260px; }
+.um-log tr.warn td { color: #8A5A00; }
 .um-key { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center;
   font-size: 13px; margin: 8px 0 0 96px; padding-top: 6px; border-top: 1px dashed var(--line, #ddd); }
 .um-key.wait { font-weight: 600; }
@@ -463,4 +467,4 @@ table.um-table tr.um-detail td { white-space: normal; padding: 0 10px 10px 10px;
 .um-btns { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 .um-key .ok { color: #1E6B35; }
 .um-key .warn { color: #8A5A00; font-weight: 600; }
-@media (max-width: 700px) { .um-key, .um-ssids { margin-left: 0; padding-left: 0; } }
+@media (max-width: 700px) { .um-key, .um-ssids, .um-detail .um-log { margin-left: 0; padding-left: 0; } }

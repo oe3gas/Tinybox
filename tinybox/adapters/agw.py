@@ -384,12 +384,15 @@ class AgwAdapter(AgwClient):
             return
         if self.app.service.ban_of(remote):            # CR115: shut out by the sysop
             log.warning("%s: connect refused - banned", remote)
+            self.app.service.user_event(remote, self.origin, "refused", "banned")
             conn.write(texts.BANNED.format(call=remote) + "\r")
             conn.close()
             return
         other = self._connected_elsewhere(remote)
         if other:
             log.warning("%s: already connected via %s, connect refused", remote, other)
+            self.app.service.user_event(remote, self.origin, "refused",
+                                        f"already connected via {other}")
             conn.write(texts.BUSY + "\r")
             conn.close()
             return
@@ -403,6 +406,7 @@ class AgwAdapter(AgwClient):
                           sysop=sysop)
         if not self.app.registry.add(session):
             log.info("%s: busy (max_users reached)", remote)
+            self.app.service.user_event(remote, self.origin, "refused", "busy")
             conn.write(texts.BUSY + "\r")
             conn.close()
             return

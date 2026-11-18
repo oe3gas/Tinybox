@@ -2,6 +2,14 @@
 
 ## Unveröffentlicht
 
+- **Web-GUI: Token-Anmeldung optional** (`[web] token_login`, Standard `no`): ohne Eintrag öffnet sich
+  die Sysop-Web-GUI ohne Login-Link (nur Loopback, CSRF- und Host-Prüfung bleiben); mit `yes` wie bisher
+  nur mit dem Token aus `data/web.token`.
+- **User-Log:** jeder Login eines Benutzers wird festgehalten – Login, Client-Login (Schlüssel/Zertifikat),
+  wartender Schlüssel, fehlgeschlagener Client-Login, Abweisung (gesperrt, belegt, anderswo verbunden)
+  und Logout mit Dauer. Web-GUI „User management“: Klick auf den Benutzer zeigt seine Logins, Export als
+  CSV; Konsole `USER LOG call [n]`. Neue Tabelle `user_log` (Schema 18), bleibt auch bei Purge.
+
 - **Steuerkonsole: Direwolf ohne Soundkarte oder PTT-Port** (CR139, tbstart 2026.11.17): findet Direwolf
   das Audio-Gerät aus `ADEVICE` nicht (es nimmt dann still das Windows-Standardgerät) oder lässt sich der
   PTT-Port nicht öffnen (z. B. microHAM-Router nicht gestartet), zeigt die Konsole Direwolf gelb

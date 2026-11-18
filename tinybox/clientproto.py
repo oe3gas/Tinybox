@@ -413,6 +413,7 @@ def _auth(s: Session, parts: list[str]) -> None:
     box, call = s.cfg.station.mailbox_call, base_call(s.call)
     if not auth.verify(pub, auth.login_message(box, call, nonce), sig):
         log.warning("%s: client login with a wrong signature", s.call)
+        s.service.user_event(s.call, s.origin, "auth_fail", "wrong signature")
         s.out("", "//ERR auth bad_signature")
         return
     store, pub64, fp = s.service.store, auth.b64e(pub), auth.fingerprint(pub)
@@ -421,6 +422,7 @@ def _auth(s: Session, parts: list[str]) -> None:
     if row is not None and dev and row["device"] != dev:
         store.key_device(row["id"], dev)
     if row is not None and row["status"] == "revoked":
+        s.service.user_event(s.call, s.origin, "auth_fail", f"revoked key {fp}")
         s.out("", "//ERR auth revoked")
         return
     if row is not None and row["status"] == "active":
@@ -435,17 +437,21 @@ def _auth(s: Session, parts: list[str]) -> None:
             _logged_in(s, info, pub, nonce, issuer)
             return
         log.warning("%s: certificate not taken (%s)", s.call, why)
+        s.service.user_event(s.call, s.origin, "auth_fail", f"certificate {issuer}: {why}")
     if row is None or row["status"] == "cert":
         # a new device, or its certificate is gone: waits for the sysop
         if row is None and len([k for k in store.keys_of(call)
                                 if k["status"] != "revoked"]) >= MAX_KEYS:
             log.warning("%s: new client key %s refused - %d keys already", s.call, fp, MAX_KEYS)
+            s.service.user_event(s.call, s.origin, "auth_fail", f"new key {fp}: too many keys")
             s.out("", "//ERR auth too_many_keys")
             return
         store.key_put(call, pub64, "pending", device=dev, note=f"from {s.call} via {s.origin}")
         log.warning("%s: new client key %s%s - waits for the sysop (USER OK %s %s)", s.call, fp,
                     f" ({dev})" if dev else "", call, fp[:4])
         s.service.key_waiting(call, fp, s.call, dev)
+    s.service.user_event(s.call, s.origin, "auth_wait",
+                         f"key {fp}{f' ({dev})' if dev else ''} waits for release")
     s._wait_pub, s._wait_nonce = pub, nonce      # CR113: LoTW may still release it
     s.out("", f"//AUTHWAIT fp={fp}")
 
@@ -470,6 +476,8 @@ def _logged_in(s: Session, info: ClientInfo, pub: bytes, nonce: str, issuer: str
     s._client_wait = None
     log.info("%s: client login, key %s%s", s.call, auth.fingerprint(pub),
              f", certificate of {issuer}" if issuer else "")
+    s.service.user_event(s.call, s.origin, "auth", f"key {auth.fingerprint(pub)}"
+                         + (f", certificate of {issuer}" if issuer else ""))
     _client_ok(s, info)
 
 

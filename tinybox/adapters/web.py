@@ -4,8 +4,9 @@ Security model (the browser is the risky part, not the network):
   * listens on loopback only (checked in config)
   * Host header must be 127.0.0.1/localhost/[::1] with our port
     -> blocks DNS rebinding
-  * login with a secret token (data/web.token), then an HttpOnly,
-    SameSite=Strict session cookie
+  * login with a secret token (data/web.token) if [web] token_login = yes
+    (default no: /login hands out a session without a token), then an
+    HttpOnly, SameSite=Strict session cookie
   * every POST needs the session's CSRF token in the X-CSRF-Token header
     and, if the browser sends one, a matching Origin
   * strict Content-Security-Policy (no inline script), no framing,
@@ -16,7 +17,9 @@ Security model (the browser is the risky part, not the network):
 from __future__ import annotations
 
 import asyncio
+import csv
 import hmac
+import io
 import json
 import logging
 import secrets
@@ -51,6 +54,7 @@ MAX_HEADER = 16 * 1024
 MAX_BODY = 128 * 1024
 MAX_WEB_SESSIONS = 20      # remembered logins (data/web.sessions)
 SSE_PING_SEC = 15
+USERLOG_FIELDS = ("t", "call", "via", "event", "detail")
 BACKLOG_LINES = 600
 
 SECURITY_HEADERS = {
@@ -210,7 +214,9 @@ class WebServer:
             framemon.home = aprs.locator_to_latlon(self.cfg.station.locator)
         self.app.bus.subscribe("*", lambda name, data: self.hub.push(
             {"type": "event", "name": name}))
-        self.app.web_login_url = f"http://127.0.0.1:{self.port}/login?token={self.token}"
+        self.app.web_login_url = (f"http://127.0.0.1:{self.port}/login?token={self.token}"
+                                  if self.cfg.web.token_login else
+                                  f"http://127.0.0.1:{self.port}/")
         termcolor.kv(log, "Web GUI", f"http://127.0.0.1:{self.port}/", url=True)
 
     def close(self) -> None:
@@ -321,14 +327,15 @@ class WebServer:
             raise HttpError(403, "bad origin")
 
     async def _login(self, writer, token: str) -> None:
-        if not hmac.compare_digest(token.encode(), self.token.encode()):
+        if self.cfg.web.token_login and not hmac.compare_digest(token.encode(),
+                                                                self.token.encode()):
             log.warning("web login with wrong token")
             await asyncio.sleep(1)  # slow down guessing
             raise HttpError(403, "wrong token")
         sid = secrets.token_urlsafe(32)
         self.sessions[sid] = secrets.token_urlsafe(24)
         self._save_sessions()
-        log.info("web login")
+        log.info("web login" if self.cfg.web.token_login else "web login (no token_login)")
         self._redirect(writer, "/", {"Set-Cookie":
             f"tb_session={sid}; HttpOnly; SameSite=Strict; Path=/"})
 
@@ -336,8 +343,8 @@ class WebServer:
 
     async def _route(self, writer, method, path, query, headers, body) -> None:
         if path == "/login":
-            if method == "GET" and "token" in query:
-                return await self._login(writer, query["token"][0])
+            if method == "GET" and ("token" in query or not self.cfg.web.token_login):
+                return await self._login(writer, query.get("token", [""])[0])
             if method == "POST":
                 form = parse_qs(body.decode("utf-8", "replace"))
                 return await self._login(writer, form.get("token", [""])[0])
@@ -376,6 +383,8 @@ class WebServer:
             return self._json(writer, 200, [self._msg(m) for m in found])
         if method == "GET" and parts in (["connlog.csv"], ["connlog.adi"]):   # CR44 export
             return self._connlog_file(writer, parts[0], query)
+        if method == "GET" and parts in (["userlog"], ["userlog.csv"]):     # user log
+            return self._userlog(writer, parts[0], query)
         result = self._api(method, parts, data)
         self._json(writer, 200, result)
 
@@ -559,6 +568,26 @@ class WebServer:
             ctype = "text/plain; charset=us-ascii"
         fname = f"tinybox-connlog-{stamp}{('-' + call) if call else ''}{name[7:]}"
         self._send(writer, 200, body.encode("utf-8"), ctype,
+                   {"Content-Disposition": f'attachment; filename="{fname}"'})
+
+    def _userlog(self, writer, name: str, query: dict) -> None:
+        """User log: every login of a station (?call=OE3TEC, without SSID), newest
+        first - JSON (the last 200) or the whole as CSV."""
+        call = "".join(c for c in (query.get("call") or [""])[0].upper()
+                       if c.isascii() and (c.isalnum() or c == "-"))[:9]   # goes into a header
+        base = base_call(call) if call else None
+        if name == "userlog":
+            return self._json(writer, 200, self.app.store.userlog_list(base, limit=200))
+        rows = self.app.store.userlog_list(base)
+        buf = io.StringIO()
+        w = csv.writer(buf, lineterminator="\r\n")
+        w.writerow(USERLOG_FIELDS)
+        for r in rows:
+            # no formula injection in a spreadsheet (a certificate issuer comes from outside)
+            w.writerow(["'" + v if str(v)[:1] in "=+-@" and v else v
+                        for v in (r[k] for k in USERLOG_FIELDS)])
+        fname = f"tinybox-userlog-{time.strftime('%Y%m%d')}{('-' + base) if base else ''}.csv"
+        self._send(writer, 200, buf.getvalue().encode("utf-8"), "text/csv; charset=utf-8",
                    {"Content-Disposition": f'attachment; filename="{fname}"'})
 
     @staticmethod

@@ -141,12 +141,14 @@ class TelnetConnection:
             cfg = self.app.cfg
             if self.app.service.ban_of(call):          # CR115: shut out by the sysop
                 log.warning("telnet %s: login refused - banned", call)
+                self.app.service.user_event(call, "telnet", "refused", "banned")
                 transport.write(texts.BANNED.format(call=call) + "\r")
                 return
             sysop = self.app.service.is_sysop_call(call)
             session = Session(call, self.app.service, cfg, transport,
                               origin="telnet", sysop=sysop)
             if not self.app.registry.add(session):
+                self.app.service.user_event(call, "telnet", "refused", "busy")
                 transport.write(texts.BUSY + "\r")
                 session = None
                 return

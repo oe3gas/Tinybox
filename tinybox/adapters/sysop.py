@@ -130,7 +130,9 @@ class SysopConsole:
         url = self.app.web_login_url
         if url:
             termcolor.kv(tlog, "Web GUI", url.split("/login?", 1)[0] + "/", url=True)
-            termcolor.kv_print("[tinyb]", "Web GUI login", url, self.app.cfg.console.color, url=True)
+            if self.app.cfg.web.token_login:
+                termcolor.kv_print("[tinyb]", "Web GUI login", url, self.app.cfg.console.color,
+                                   url=True)
         else:
             termcolor.kv(tlog, "Web GUI", "off ([web] enabled = no)")
 
@@ -261,7 +263,9 @@ class SysopConsole:
 
     def cmd_web(self, arg: str) -> None:
         # shown on the console only - it contains the secret token
-        self.out(f"Web GUI login: {self.app.web_login_url}" if self.app.web_login_url
+        self.out((f"Web GUI login: {self.app.web_login_url}" if self.app.cfg.web.token_login
+                  else f"Web GUI (no login, [web] token_login = no): {self.app.web_login_url}")
+                 if self.app.web_login_url
                  else "Web GUI is disabled ([web] enabled = no).")
 
     def cmd_fwd(self, arg: str) -> None:
@@ -446,7 +450,7 @@ class SysopConsole:
 
     def cmd_user(self, arg: str) -> None:
         """CR93: client keys, one per device. USER [LIST] | USER OK|REVOKE|DEL|SHOW
-        <call> [fingerprint]"""
+        <call> [fingerprint] | USER LOG <call> [n] (user log: his logins)"""
         from .. import keys
         svc = self.app.service
         words = arg.strip().upper().split()
@@ -459,6 +463,15 @@ class SysopConsole:
                 lw = f"LoTW {r['lotw']}" if r["lotw"] else ""
                 self.out(f"{r['call']:<8} {r['status']:<8} {r['fp']}  {r['device'] or '-':<16} "
                          f"{r['changed'][:16]}  {lw:<15} {r['note']}")
+            return
+        if word == "LOG" and len(words) >= 2:
+            n = int(words[2]) if len(words) > 2 and isnum(words[2]) else 20
+            rows = self.app.store.userlog_list(base_call(words[1]), limit=max(1, min(n, 500)))
+            if not rows:
+                self.out(f"{base_call(words[1])}: no login logged.")
+            for r in reversed(rows):                     # oldest first, the newest at the bottom
+                self.out(f"{r['t'][:19].replace('T', ' ')}  {r['call']:<9} {r['via']:<7} "
+                         f"{r['event']:<9} {r['detail']}")
             return
         if len(words) < 2 or word not in (*keys.USER_ACTIONS, "SHOW"):
             self.out(texts.USAGE_USER)

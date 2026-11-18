@@ -847,6 +847,14 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   oben in „Users“, gelb markiert („waits for you“, Knopf **Release**); die Seitenleiste zeigt ihre Zahl.
   Ein Klick auf ein Rufzeichen im **JLOG** oder im **Connection log** (Dashboard) öffnet „User management“
   mit diesem Rufzeichen im Suchfeld.
+- **User-Log:** jeder Login eines Benutzers wird festgehalten – auch abgewiesene. Ein Klick auf die
+  Zeile in „Users“ zeigt unter den Schlüsseln die Tabelle **Logins** (die letzten 200, neueste oben;
+  Knopf **CSV** = alle). Ereignisse: `login`, `client login` (mit Schlüssel bzw. Zertifikat),
+  `key waiting`, `client login failed` (falsche Signatur, widerrufener Schlüssel, Zertifikat nicht
+  angenommen, zu viele Schlüssel), `refused` (gesperrt, belegt, schon über einen anderen Weg
+  verbunden) und `logout` (Art des Endes, Dauer). Fehlschläge und Abweisungen sind gelb. Auf der
+  Konsole: `USER LOG call [n]`. Das User-Log bleibt wie das Connection log dauerhaft – auch bei
+  **Purge**; die Sysop-Konsole selbst wird nicht eingetragen.
 - **Freigabe (Sysop-Konsole oder Web-GUI „User management“):** den Fingerabdruck mit dem Benutzer vergleichen – am Telefon, im
   QSO, auf Papier, **nicht** über dieselbe Verbindung –, dann:
 
@@ -857,6 +865,7 @@ Terminal-Benutzer ohne Client sind Gäste (3.7b).
   | `USER REVOKE call [fp]` | einen widerrufen (Gerät verloren); die anderen Geräte bleiben |
   | `USER DEL call [fp]` | einen vergessen – sein nächster Login wartet wieder |
   | `USER SHOW call` | alle Schlüssel von call |
+  | `USER LOG call [n]` | User-Log: die letzten n (20) Logins von call, auch abgewiesene |
 
   `fp` = die ersten Zeichen des Fingerabdrucks (z. B. `0C57`); nur nötig, wenn mehrere Schlüssel
   passen – die Box sagt dann, welche es gibt. In der Web-GUI hat jeder Schlüssel eigene Knöpfe.
@@ -1144,12 +1153,18 @@ Windows mit PuTTY: Host `127.0.0.1`, Port `6300`, Connection type **Telnet**. Li
 
 ### 6.3 Sysop-Web-GUI
 
-Beim Start zeigt das TinyBox-Fenster den Login-Link (`http://127.0.0.1:8080/login?token=...`);
-die Steuerkonsole öffnet ihn mit `w`. Der Token liegt in `data\web.token` und bleibt über
-Neustarts gleich; neuer Token: Datei löschen und neu starten. Konsolenbefehl `WEB` zeigt den
-Link erneut. Erreichbar nur am eigenen Rechner (`[web]`). Die Seitenleiste: Dashboard
+Beim Start zeigt das TinyBox-Fenster die Adresse (`http://127.0.0.1:8080/`); die Steuerkonsole
+öffnet sie mit `w`, Konsolenbefehl `WEB` zeigt sie erneut. Erreichbar nur am eigenen Rechner
+(`[web]`, nur Loopback).
+
+**Token-Anmeldung (optional):** Standard ist `[web] token_login = no` – die Web-GUI öffnet sich
+ohne Anmeldung; Host-Prüfung, Session-Cookie und CSRF-Schutz bleiben. Mit `token_login = yes`
+geht es nur mit dem geheimen Token: das Fenster zeigt dann den Login-Link
+(`http://127.0.0.1:8080/login?token=...`), `WEB` ebenso. Der Token liegt in `data\web.token` und
+bleibt über Neustarts gleich; neuer Token: Datei löschen und neu starten. Sinnvoll, wenn mehrere
+Personen am Rechner angemeldet sind. Die Seitenleiste: Dashboard
 (Verbindungen, Connection log, JLOG, Live-Monitor), Messages, Rubriken, Monitor,
-„User management“ (3.7a) und Settings; oben die Knöpfe **Reload** (wie `RELOAD`), **Restart**
+„User management“ (3.7a, mit User-Log) und Settings; oben die Knöpfe **Reload** (wie `RELOAD`), **Restart**
 und **Shutdown**.
 
 ### 6.4 Sysop-Konsole

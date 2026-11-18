@@ -95,7 +95,10 @@ peers   = OE3GAS 127.0.0.1:10094   # CALL ip:port, several separated by commas;
 [web]
 enabled = yes                  # sysop web GUI in the browser
 host    = 127.0.0.1            # loopback only
-port    = 8080                 # login link is shown in the TinyBox window
+port    = 8080                 # address is shown in the TinyBox window
+token_login = no               # yes: login only with the secret token (data/web.token),
+                               # the login link is shown in the TinyBox window;
+                               # no: the GUI opens without a login (loopback only)
 
 [console]
 enabled = yes                  # sysop console in the TinyBox window

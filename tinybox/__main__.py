@@ -72,8 +72,9 @@ async def run(cfg: config.Config, control: logsetup.LogControl,
     if cfg.web.enabled:
         web_server = await web.start(app)
         # the login link contains the secret token: console only, never the log file
-        termcolor.kv_print("[tinyb]", "Web GUI login", app.web_login_url,
-                           cfg.console.color, url=True)
+        if cfg.web.token_login:                    # else: no login, the address is enough
+            termcolor.kv_print("[tinyb]", "Web GUI login", app.web_login_url,
+                               cfg.console.color, url=True)
     if cfg.radio.interface == "kiss":              # own AX.25 layer 2 (PLANUNG.md 15)
         from .adapters import kiss
         app.agw = kiss.KissAdapter(app)

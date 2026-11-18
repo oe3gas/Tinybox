@@ -1486,12 +1486,40 @@ function viewKeys(find) {
   // One table row per user (OE3GAS 12.11.2026); a click on the row opens his keys below it.
   // Chips left of the call: black key chip = a released key, LoTW chip left of it.
   const open = new Map();                         // call -> open?  (survives the re-render)
+  // User log: every login of the user, loaded when his row is opened (newest first)
+  const logs = new Map();                         // call -> rows | null (loading)
+  const EVENTS = { login: "login", auth: "client login", auth_wait: "key waiting",
+                   auth_fail: "client login failed", refused: "refused", logout: "logout" };
+  function logBlock(call) {
+    if (!logs.has(call)) {
+      logs.set(call, null);
+      api("userlog?call=" + encodeURIComponent(call))
+        .then((rows) => { logs.set(call, rows); renderPeople(); })
+        .catch((e) => { logs.delete(call); toast(e.message, true); });
+    }
+    const rows = logs.get(call);
+    const head = h("div", { class: "um-loghead" }, h("strong", { text: "Logins" }),
+      h("a", { class: "btn sm", text: "CSV", href: "/api/userlog.csv?call=" + encodeURIComponent(call),
+               title: "The whole user log of " + call + " as CSV" }));
+    if (rows === null) return h("div", { class: "um-log" }, head, h("div", { class: "muted", text: "loading ..." }));
+    if (!rows.length) return h("div", { class: "um-log" }, head, h("div", { class: "muted", text: "No logins logged yet." }));
+    return h("div", { class: "um-log" }, head,
+      h("div", { class: "scroll um-logscroll" }, h("table", { class: "data" },
+        h("thead", {}, h("tr", {}, ["Time (UTC)", "Call", "Via", "Event", "Detail"].map((x) => h("th", { text: x })))),
+        h("tbody", {}, ...rows.map((r) => h("tr", { class: r.event === "refused" || r.event === "auth_fail" ? "warn" : "" },
+          h("td", { class: "mono", text: fullDate(r.t) + r.t.slice(16, 19) }),
+          h("td", { class: "mono", text: r.call }),
+          h("td", { text: r.via }),
+          h("td", { text: EVENTS[r.event] || r.event }),
+          h("td", { text: r.detail })))))),
+      rows.length >= 200 ? h("div", { class: "muted", text: "The last 200 - CSV has all." }) : "");
+  }
   const cols = ["", "Call", "Name", "Locator", "Home BBS", "First login", "Last login", "Connects", "# of keys", ""];
   function personRows(p) {
     const released = p.keys.some((k) => k.status === "active");
     const isOpen = open.has(p.call) ? open.get(p.call) : p.waiting > 0;   // waiting keys: open
     const row = h("tr", { class: "um-row click" + (p.waiting ? " wait" : "") + (isOpen ? " open" : ""),
-      title: isOpen ? "Hide the keys" : "Show the keys",
+      title: isOpen ? "Hide keys and logins" : "Show keys and logins",
       onclick: () => { open.set(p.call, !isOpen); renderPeople(); } },
       h("td", { class: "um-chips" },
         ...(p.lotw ? [h("span", { class: "um-chip lotw", text: "LoTW", title: "key confirmed with LoTW" })] : []),
@@ -1514,7 +1542,8 @@ function viewKeys(find) {
     if (!isOpen) return [row];
     return [row, h("tr", { class: "um-detail" + (p.waiting ? " wait" : "") }, h("td", { colspan: cols.length },
       ...(p.ssids.length > 1 ? [h("div", { class: "um-ssids muted mono", text: "SSIDs " + p.ssids.join(" · ") })] : []),
-      ...(p.keys.length ? p.keys.map(keyRow) : [h("div", { class: "um-ssids muted", text: "No key." })])))];
+      ...(p.keys.length ? p.keys.map(keyRow) : [h("div", { class: "um-ssids muted", text: "No key." })]),
+      logBlock(p.call)))];
   }
   function renderPeople() {
     const q = filter.value.trim().toUpperCase();
@@ -1531,6 +1560,7 @@ function viewKeys(find) {
   }
   async function update() {
     try { data = await api("keys"); } catch (e) { toast(e.message, true); return; }
+    logs.clear();                                 // open rows load their logins anew
     const d = data;
     renderPeople();
     me.replaceChildren("This box ", h("strong", { class: "mono", text: d.box.box }),

@@ -682,7 +682,18 @@ class MessageService:
     def login(self, call: str, origin: str) -> None:
         self.store.jlog_touch(call)
         self.store.user_login(call)
+        self.user_event(call, origin, "login")
         self.bus.publish("session.connected", call=call, origin=origin)
+
+    def user_event(self, call: str, via: str, event: str, detail: str = "") -> None:
+        """User log: login, client login (auth / auth_wait / auth_fail), refused,
+        logout. The local sysop console is no user. Never breaks a session."""
+        if via == "sysop":
+            return
+        try:
+            self.store.userlog_add(call, via, event, detail)
+        except Exception:
+            log.exception("user log: row not written")
 
     def logout(self, call: str, origin: str) -> None:
         self.bus.publish("session.disconnected", call=call, origin=origin)

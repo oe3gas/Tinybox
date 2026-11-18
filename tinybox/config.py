@@ -236,6 +236,9 @@ class WebCfg:
     enabled: bool = setting(True)
     host: str = setting("127.0.0.1")
     port: int = setting(8080, check=_tcp_port)
+    # login with the secret token (data/web.token); no = the GUI opens without a
+    # login - it listens on loopback only, POSTs still need the CSRF token
+    token_login: bool = setting(False)
 
 
 @dataclass

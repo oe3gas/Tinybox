@@ -2400,6 +2400,29 @@ Kommandozeile; **nur Empfehlung**, `brocastd.conf` bleibt unangetastet.
   (`--json`, `--stunden`), liest die Dateien und die DB nur lesend.
 - Tests: `brocast/tests/test_advisor.py` (ein Betriebstag mit dem echten Karussell).
 
+## 35. Token-Anmeldung optional und User-Log (entschieden und umgesetzt 18.11.2026)
+
+**Wunsch (Gerhard):** (1) Token-Anmeldung der Sysop-Web-GUI optional, per Eintrag in
+`tinybox.conf`, Standard aus. (2) User-Management: ein User-Log mit allen Logins eines Users.
+
+- **`[web] token_login = no|yes`** (Standard `no`). `no`: `/login` gibt ohne Token eine Session
+  aus, `/` leitet wie bisher dorthin – die Web-GUI öffnet sich direkt. Was bleibt: nur Loopback,
+  Host-Prüfung (DNS-Rebinding), HttpOnly/SameSite=Strict-Cookie, CSRF-Token bei jedem POST, CSP.
+  Ein Angriff aus einer fremden Webseite kommt damit weiterhin nicht durch; offen ist die GUI nur
+  für Programme/Personen am selben Rechner. `yes`: wie bisher mit `data/web.token`, Login-Link im
+  Fenster und bei `WEB`.
+- **User-Log** – Tabelle `user_log` (Schema 18): Zeit, Rufzeichen mit SSID, Basis-Rufzeichen, Weg,
+  Ereignis, Detail. Ereignisse: `login`, `auth` (Client-Login mit Schlüssel/Zertifikat), `auth_wait`,
+  `auth_fail` (falsche Signatur, widerrufen, Zertifikat abgelehnt, zu viele Schlüssel), `refused`
+  (gesperrt, belegt, anderswo verbunden) und `logout` (bye/disc/lost, Dauer, Client). Eingetragen
+  über `MessageService.user_event()`, das nie eine Sitzung bricht; die Sysop-Konsole nicht.
+  Bewusst auch die Fehlschläge – das Log dient der Nachvollziehbarkeit (Audit), nicht nur der
+  Statistik. Bleibt dauerhaft wie das Connection log, auch bei Purge.
+- Anzeige: Web-GUI „User management“, Klick auf den User → Tabelle „Logins“ (letzte 200) + CSV
+  (`/api/userlog.csv?call=`, ohne Formel-Injektion); Konsole `USER LOG call [n]`.
+- Offen: Aufbewahrungsfrist (heute unbegrenzt), Telnet hat keine Passwortabfrage – daher keine
+  „falsches Passwort“-Einträge.
+
 ## Quellen
 
 - Security-Advisory TinyBox (9V1NE, 09.11.2026): https://gist.github.com/nnamon/3d93af6dd520d5f4b392c3fb57407d63

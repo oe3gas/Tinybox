@@ -46,7 +46,8 @@ class WebTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.app = make_app()
         self.app.cfg.storage = dataclasses.replace(self.app.cfg.storage, data_dir=Path(self.tmp.name))
-        self.app.cfg.web = dataclasses.replace(self.app.cfg.web, port=0)
+        # these tests log in with the token: [web] token_login = yes (default no)
+        self.app.cfg.web = dataclasses.replace(self.app.cfg.web, port=0, token_login=True)
         self.app.stop_event = asyncio.Event()
 
     def tearDown(self):

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 17  # 17: LoTW (CR113); 16: banned (CR115); 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
+SCHEMA_VERSION = 18  # 18: user_log; 17: LoTW (CR113); 16: banned (CR115); 4: chat_lines; 5: forwarding fields, bids, fwd_queue; 6: fwd_partial
                      # 7: seq/cseq + sync_gone (delta sync of the client, CR26)
                      # 8: chat_images (small images in the chat, CR12)
                      # 9: profiles (name, locator, home BBS of a station, CR73)
@@ -115,6 +115,17 @@ CREATE TABLE IF NOT EXISTS connlog (                 -- CR44: one row per connec
     ended   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS connlog_base ON connlog (base, id);
+CREATE TABLE IF NOT EXISTS user_log (                -- every login of a user, kept forever:
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,        -- also refused ones (audit trail)
+    t       TEXT NOT NULL,                            -- UTC ISO
+    call    TEXT NOT NULL,                            -- with SSID
+    base    TEXT NOT NULL,                            -- without SSID
+    via     TEXT NOT NULL,                            -- radio | telnet | kiss | axudp ...
+    event   TEXT NOT NULL,                            -- login | auth | auth_wait | auth_fail
+                                                      -- | refused | logout
+    detail  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS user_log_base ON user_log (base, id);
 CREATE TABLE IF NOT EXISTS users (
     call       TEXT PRIMARY KEY,
     last_login TEXT NOT NULL
@@ -983,6 +994,24 @@ class Store:
         return [{"call": r["call"], "via": r["via"], "start": r["t_on"], "end": r["t_off"],
                  "secs": r["secs"], "rx": r["rx"], "tx": r["tx"], "air_tx": r["air_tx"],
                  "air_rx": r["air_rx"], "ended": r["ended"]} for r in self._db.execute(sql, args)]
+
+    # --- user log: every login of a user ---------------------------------------
+
+    def userlog_add(self, call: str, via: str, event: str, detail: str = "") -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO user_log (t, call, base, via, event, detail) VALUES (?, ?, ?, ?, ?, ?)",
+                (utc_now(), call, call.split("-", 1)[0], via, event, detail[:120]))
+
+    def userlog_list(self, base: str | None = None, limit: int | None = None) -> list[dict]:
+        """Newest first. base = only this station (call without SSID)."""
+        sql = "SELECT * FROM user_log" + (" WHERE base = ?" if base else "") + " ORDER BY id DESC"
+        args: list = [base] if base else []
+        if limit:
+            sql += " LIMIT ?"
+            args.append(limit)
+        return [{"t": r["t"], "call": r["call"], "via": r["via"], "event": r["event"],
+                 "detail": r["detail"]} for r in self._db.execute(sql, args)]
 
     def jlog_list(self, limit: int = 20) -> list[JlogEntry]:
         rows = self._db.execute(

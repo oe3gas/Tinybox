@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Protocol
 
 from prcore.calls import base_call
-from prcore import tbproto
+from prcore import connlog, tbproto
 from prcore.profile import ProfileError
 
 from . import logsetup, profiles, rights, texts
@@ -306,14 +306,19 @@ class Session:
         self._logged = True
         t = self.transport
         q = getattr(getattr(t, "quality", None), "last", None) or {}
+        secs = int(time.monotonic() - self._t0)
+        ended = "bye" if self._closed_by_us else "lost" if lost else "disc"
+        self.service.user_event(self.call, self.origin, "logout",
+                                f"{ended}, {connlog.duration(secs)}"
+                                + (", client" if self.client is not None else ""))
         air_tx = (q.get("bytes_new", 0) + q.get("bytes_retry", 0)) if q else None
         try:
             self.service.store.connlog_add({
                 "call": self.call, "via": self.origin, "start": self.started, "end": utc_now(),
-                "secs": int(time.monotonic() - self._t0),
+                "secs": secs,
                 "rx": getattr(t, "rx_bytes", None), "tx": getattr(t, "tx_bytes", None),
                 "air_tx": air_tx, "air_rx": q.get("bytes_rx") if q.get("bytes_rx") else None,
-                "ended": "bye" if self._closed_by_us else "lost" if lost else "disc"})
+                "ended": ended})
         except Exception:                 # the logbook must never break a disconnect
             logging.getLogger("tinybox.session").exception("connection log: row not written")
 

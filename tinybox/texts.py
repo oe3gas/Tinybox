@@ -264,6 +264,7 @@ HELP_CONSOLE = [
     "  USER OK call [fp]  Release a key of call - one per device (compare the fingerprint!)",
     "  USER REVOKE call [fp]  Revoke one (lost device) / USER DEL call [fp]: forget it",
     "  USER SHOW call    All keys of call: status, fingerprint, device",
+    "  USER LOG call [n] User log: the last n (20) logins of call, also refused ones",
     "  TRUST          Key of this box, other TinyBoxen whose certificates count here",
     "  TRUST ADD box key  Trust box (compare its fingerprint with its sysop first!)",
     "  TRUST DEL box  No longer",
@@ -345,7 +346,8 @@ FWQ_EMPTY = "Forward queue is empty."
 FWQ_HEADER = "Partner  Msg#  State  Since (UTC)"
 FWQ_ROW = "{partner:<8} {id:>4}  {state:<6} {changed}"
 USAGE_HOLD = "Usage: HOLD n  /  REL n"
-USAGE_USER = "Usage: USER [LIST]  /  USER OK|REVOKE|DEL|SHOW call [fingerprint]"
+USAGE_USER = ("Usage: USER [LIST]  /  USER OK|REVOKE|DEL|SHOW call [fingerprint]"
+              "  /  USER LOG call [n]")
 USAGE_MOVE = "Usage: MOVE n[,n...] RUBRIC   (bulletins into another rubric, new number)"
 USAGE_COPY = "Usage: COPY n[,n...] RUBRIC   (a copy in another rubric)"
 USAGE_FILES = "Usage: FILES  /  FILES DEL hash   (files in the chat boards)"
