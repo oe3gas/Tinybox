@@ -6067,3 +6067,19 @@ PTT); die Steuerkonsole zeigt das, der Client nicht. Die Version eines Original-
   zurück, bevor es auf den Chat schaltet (keine Endlosschleife mehr).
 - `button.primary:disabled` sichtbar abgeblendet.
 - Test: `tests/test_cr130.py` (test_term_ok_while_the_key_waits).
+
+## CR142 – Client zu Client: keine Chatboards und Rubriken in der Seitenleiste (✅ 18.11.2026, Client 2026.11.18)
+
+### Wunsch (OE3GAS, 18.11.2026)
+
+- Ist der aktive Kanal mit einem anderen TBClient verbunden (Client zu Client), haben die Abschnitte
+  „Chat boards“ und „Bulletins“ (Rubriken) in der Seitenleiste dort nichts zu suchen. Sie erscheinen nur,
+  wenn der Kanal zu einer TinyBox (oder Kanal 0, Monitor) gehört.
+
+### Umsetzung
+
+- `render()` (chat.js) setzt an `#app` die Klasse `peer-ch`, wenn der aktive Kanal einen Peer hat
+  (`curCh().peer`, auch nach dem Disconnect und im rohen Terminal – CR78).
+- CSS: `#app.peer-ch #nav .sec-chat, .sec-bul { display: none }`. Mail und Station bleiben.
+- Die Ordnerliste der Mailansicht am Handy (`mvf-list`) ist unverändert.
+

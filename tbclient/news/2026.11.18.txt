@@ -1,0 +1,1 @@
+- Client zu Client: keine Chatboards und Rubriken in der Seitenleiste (CR142)

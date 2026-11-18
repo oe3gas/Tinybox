@@ -558,6 +558,8 @@ button.danger:hover { color: var(--bad); border-color: var(--bad); }
 .navsec { --sec: #52606e; --sec-hi: var(--sec); border: 1.5px solid var(--sec-hi); border-radius: 10px;
   overflow: hidden; margin: 0 0 10px; padding-bottom: 4px; }
 .sec-chat { --sec: #6d4bd1; } .sec-mail { --sec: #0b7f86; } .sec-bul { --sec: #b06a00; } .sec-station { --sec: #52606e; } .sec-games { --sec: #a3365c; }
+/* CR142: with another TBClient (client to client) no chat boards and no rubrics in the side bar */
+#app.peer-ch #nav .sec-chat, #app.peer-ch #nav .sec-bul { display: none; }
 @media (prefers-color-scheme: dark) { .navsec { --sec-hi: color-mix(in srgb, var(--sec) 60%, white); } }
 .navsec > .nav-h { margin: 0 0 4px; padding: 3px 5px 3px 10px; min-height: 22px; background: var(--sec);
   color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 6px; }

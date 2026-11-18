@@ -11,6 +11,8 @@ function render() {
   $("me-avatar").replaceChildren(avatar(S.mycall, S.my_symbol, true));
   renderTop();
   renderViewBtns();
+  // CR142: client to client - chat boards and rubrics belong to a TinyBox, not to the other TBClient
+  $("app").classList.toggle("peer-ch", activeCh !== 0 && !!curCh().peer);
   renderActbar();                                   // CR110
   renderModem();
   renderRadioCard();                                // CR140

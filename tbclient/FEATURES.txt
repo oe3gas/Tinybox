@@ -17,6 +17,8 @@ und im Leser "Sysop": in der TinyBox loeschen, Bulletins verschieben und
 kopieren (CR21). Zwei TBClients pruefen beim Connect gegenseitig ihre
 Schluessel (CR99): bestaetigt durch die Heimat-BBS, bekannt oder anderer
 Schluessel (Warnung) - Verlauf, Bilder und Dateien nur mit vertrautem Peer.
+Mit einem anderen TBClient verbunden, zeigt die Seitenleiste keine
+Chatboards und Rubriken - die gibt es nur an einer TinyBox (CR142).
 Im TBClient-Chat gibt es alles wie im Chatboard (CR107): Shoutout, Sticker,
 Kommentar mit Zitat, Reaktionen, Links, grosses Einzel-Emoji, Avatar und
 den Alarm bei neuen Zeilen, wenn das Fenster nicht vorne ist.
