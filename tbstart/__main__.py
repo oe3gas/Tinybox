@@ -158,7 +158,7 @@ class Console:
     def head(self) -> str:
         prof = self.args.profile
         p = f" · Profil {prof} ({programs.PROFILES[prof]})" if prof in programs.PROFILES else ""
-        return f"{socket.gethostname()} · Release {release.RELEASE}{p}"
+        return f"{socket.gethostname()} · Release {release.RELEASE} · {self.root}{p}"
 
     def draw(self) -> None:
         w, h = shutil.get_terminal_size(fallback=(100, 32))
